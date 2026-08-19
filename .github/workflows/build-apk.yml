@@ -1,9 +1,7 @@
 name: Build Memory Palace APK
 
 on:
-  # 手动触发：仓库页面 → Actions → Build Memory Palace APK → Run workflow
   workflow_dispatch:
-  # 改动到前端/Android 工程时自动触发
   push:
     branches: [main]
     paths:
@@ -33,23 +31,20 @@ jobs:
           node-version: '20'
           cache: npm
 
-      # 装回 capacitor 原生模块（android/capacitor.settings.gradle 引用 node_modules）
       - name: 安装 npm 依赖
         run: npm ci
 
-      # 关键：assets/public、res/xml/config.xml、capacitor-cordova-android-plugins/
-      # 是 cap sync 生成的目录（VPS 上靠磁盘现成文件能编，GitHub 上没有），
-      # 所以必须跑 cap sync 重新生成，否则 gradle 找不到文件
       - name: 同步 Capacitor 原生工程
         run: npx cap sync android
 
-      # 关键：build.gradle 里 debug 和 release 都指向 keystore/memory-palace.keystore，
-      # 签名固定（CN=Memory Palace / e24ec557），可直接覆盖安装旧版
+      # GitHub runner 上默认 1G 堆 + 256M Metaspace 不够，会 OOM 杀掉 daemon
       - name: 构建 APK
+        env:
+          GRADLE_OPTS: -Xmx3g -XX:MaxMetaspaceSize=768m -Dorg.gradle.daemon=false
         run: |
           cd android
-          chmod +x gradlew   # Windows 提交可能丢了执行位，这里补上
-          ./gradlew assembleRelease --no-daemon
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: 上传 APK 到 Actions 产物
         uses: actions/upload-artifact@v4
@@ -58,7 +53,6 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
-      # 打 tag（如 v1.0.1）时额外生成一个 Release，给手机直接下载的链接
       - name: 创建 GitHub Release（仅打 tag 时）
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
