@@ -226,6 +226,16 @@
       background: var(--bg); color: var(--sub); font-size: 14px; font-weight: 500; cursor: pointer;
     }
     
+    
+    /* ─── 共读 ─── */
+    .anno-reader { line-height:1.75; font-size:0.95rem; padding:12px; border-radius:12px; background:var(--card,#fff); border:1px solid var(--border,#e8dfd6); max-height:55vh; overflow-y:auto; -webkit-user-select:text; user-select:text; }
+    .anno-hl { border-radius:3px; padding:0 1px; }
+    .anno-hl.me { background:rgba(196,167,125,0.35); }
+    .anno-hl.ai { background:rgba(122,158,142,0.35); }
+    .anno-mark-item { padding:8px 0; border-bottom:1px solid var(--border,#eee); font-size:0.82rem; }
+    .anno-q { color:var(--text); }
+    .anno-n { color:var(--sub); margin-top:4px; }
+
     /* ─── 情侣日历 ─── */
     .cal-nav { display:flex; align-items:center; justify-content:space-between; margin:8px 0 10px; }
     .cal-ym { font-weight:600; color:var(--text); font-size:0.95rem; }
@@ -4804,6 +4814,7 @@ ${guideText}`;
   const puzzleBlock = (typeof puzzleStatusPromptBlock === "function") ? puzzleStatusPromptBlock() : "";
   const tipsyBlock = (typeof tipsyStatusPromptBlock === "function") ? tipsyStatusPromptBlock() : "";
   const calendarBlock = (typeof calendarPromptBlock === "function") ? calendarPromptBlock() : "";
+  const annoBlock = (typeof annoPromptBlock === "function") ? annoPromptBlock() : "";
   const flightChessBlock = (typeof flightChessPromptBlock === "function") ? flightChessPromptBlock() : "";
   const truthDareBlock = (typeof truthDarePromptBlock === "function") ? truthDarePromptBlock() : "";
   const divinationBlock = (typeof divinationSkillPromptBlock === "function") ? divinationSkillPromptBlock() : "";
@@ -4888,6 +4899,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + (dreamTraceBlock ? "\n\n"+dreamTraceBlock : "")
     + musicBlock
     + (calendarBlock ? "\n\n"+calendarBlock : "")
+    + (annoBlock ? "\n\n"+annoBlock : "")
     + (flightChessBlock ? "\n\n"+flightChessBlock : "")
     + (truthDareBlock ? "\n\n"+truthDareBlock : "")
     + (divinationBlock ? "\n\n"+divinationBlock : "")
@@ -5358,6 +5370,7 @@ function renderHomeFeat(){
         {key:"baby",     icon:"baby", label:"育儿模拟", desc:"加速成长·共同养育"},
         {key:"roleplay", icon:"theater", label:"角色扮演", desc:"情趣设定·应用进聊天"},
         {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
+        {key:"anno", icon:"book-open", label:"共读", desc:"一起看书·划线批注"},
         {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"八版本 · 聊天里掷骰走格"},
         {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
@@ -5985,6 +5998,179 @@ window.flightChessOpen = function(){
 };
 // AI 回复暗号：⟪飞行棋⟫ 开局弹棋盘 / ⟪掷骰⟫ 让机掷骰
 
+
+// ═══ 共读 Anno（VPS）═══
+const ANNO_API_BASE = "http://115.29.237.172:8795";
+const ANNO_API_TOKEN = "a0bd852963347811ff3293009542012b402af1599794cd86";
+
+function ensureAnno(){
+  if(!state.anno || typeof state.anno!=="object"){
+    state.anno = LS.get("couple_anno_v1", null) || { books: [], bookId: null, book: null, marks: [], err: null };
+  }
+  return state.anno;
+}
+function annoSave(){
+  try{ LS.set("couple_anno_v1", { books: state.anno.books, bookId: state.anno.bookId, err: state.anno.err }); }catch(e){}
+}
+function annoApi(path, opts){
+  const headers = Object.assign({ "X-Anno-Token": ANNO_API_TOKEN }, (opts && opts.headers) || {});
+  if(opts && opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData))
+    headers["Content-Type"] = "application/json";
+  return fetch(ANNO_API_BASE + path, Object.assign({}, opts||{}, { headers }))
+    .then(async r => {
+      let data = null;
+      try{ data = await r.json(); }catch(e){}
+      return { ok: r.ok, status: r.status, data };
+    })
+    .catch(e => ({ ok: false, status: 0, error: String(e) }));
+}
+async function annoLoadBooks(){
+  const a = ensureAnno();
+  const res = await annoApi("/api/v1/anno/books");
+  if(!res.ok){ a.err = (res.data && res.data.detail) || res.error || "加载失败"; annoSave(); return false; }
+  a.books = (res.data && res.data.books) || [];
+  a.err = null; annoSave(); return true;
+}
+async function annoOpenBook(id){
+  const a = ensureAnno();
+  const res = await annoApi("/api/v1/anno/books/" + encodeURIComponent(id));
+  if(!res.ok){ a.err = "打开失败"; return false; }
+  a.bookId = id;
+  a.book = res.data.book;
+  a.marks = res.data.marks || [];
+  annoSave(); return true;
+}
+async function annoAddMark({ start, end, quote, note, by }){
+  const a = ensureAnno();
+  if(!a.bookId) return null;
+  const res = await annoApi("/api/v1/anno/marks", {
+    method: "POST",
+    body: JSON.stringify({
+      book_id: a.bookId,
+      start_offset: start,
+      end_offset: end,
+      quote: quote || "",
+      note: note || "",
+      by: by || "user"
+    })
+  });
+  if(res.ok && res.data && res.data.mark){
+    a.marks = (a.marks||[]).concat([res.data.mark]);
+    return res.data.mark;
+  }
+  return null;
+}
+function annoPromptBlock(){
+  const a = ensureAnno();
+  if(!a.book) return "";
+  const recent = (a.marks||[]).slice(-6).map(m=>{
+    const who = m.by==="ai"?"机":"你";
+    return `- [${who}] ${(m.quote||"").slice(0,36)}${m.note?" → "+m.note.slice(0,30):""}`;
+  });
+  return `\n\n【共读】正在读《${a.book.title}》\n${recent.length?"最近批注：\n"+recent.join("\n"):"（尚无批注）"}\n- 可写 ⟪共读批:起始偏移:结束偏移:摘句:想法⟫（偏移为正文字符下标，不确定可只聊内容）\n- 暗号会被擦除。`;
+}
+function handleAnnoMarkers(body){
+  let text = String(body||"");
+  // ⟪共读批:start:end:quote:note⟫
+  text = text.replace(/[⟪《【\[]\s*共读批\s*[:：]\s*(\d+)\s*[:：]\s*(\d+)\s*[:：]\s*([^⟫》】\]]*?)(?:[:：]([^⟫》】\]]*?))?\s*[⟫》】\]]/g, (_, s, e, q, n)=>{
+    const a = ensureAnno();
+    if(a.bookId){
+      annoAddMark({ start: +s, end: +e, quote: (q||"").trim(), note: (n||"").trim(), by: "ai" });
+    }
+    return "";
+  });
+  return text.replace(/\n{3,}/g,"\n\n").trim();
+}
+function annoRenderContent(content, marks){
+  if(!content) return "";
+  const ms = (marks||[]).slice().sort((x,y)=>x.start_offset-y.start_offset);
+  let html = "", pos = 0;
+  const esc = (typeof window.esc==="function") ? window.esc : (s=>String(s).replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])));
+  for(const m of ms){
+    const a0 = Math.max(0, m.start_offset|0), a1 = Math.max(a0, m.end_offset|0);
+    if(a0 < pos) continue;
+    if(a0 > content.length) break;
+    html += esc(content.slice(pos, a0)).replace(/\n/g,"<br/>");
+    const cls = m.by==="ai" ? "anno-hl ai" : "anno-hl me";
+    html += `<mark class="${cls}" data-mark="${esc(m.id||"")}" title="${esc(m.note||"")}">${esc(content.slice(a0, Math.min(a1, content.length))).replace(/\n/g,"<br/>")}</mark>`;
+    pos = Math.min(a1, content.length);
+  }
+  html += esc(content.slice(pos)).replace(/\n/g,"<br/>");
+  return html;
+}
+function renderAnno(){
+  const a = ensureAnno();
+  if(a.book && a.bookId){
+    const marksList = (a.marks||[]).map(m=>{
+      const who = m.by==="ai"?"机":"我";
+      return `<div class="anno-mark-item"><span class="cal-badge">${who}</span> <span class="anno-q">“${esc((m.quote||"").slice(0,48))}”</span>${m.note?`<div class="anno-n">${esc(m.note)}</div>`:""}</div>`;
+    }).join("") || `<div class="cal-empty-day">选中正文片段后点「划线」</div>`;
+    return `<div class="page">
+      ${subHeader('<i data-lucide="book-open"></i> '+esc(a.book.title))}
+      <p class="page-sub">${a.book.author?esc(a.book.author)+" · ":""}${(a.book.content||"").length} 字 · <button type="button" class="btn-ghost" id="anno-back-list" style="display:inline;padding:2px 8px">返回书架</button></p>
+      <div class="anno-reader" id="anno-reader">${annoRenderContent(a.book.content, a.marks)}</div>
+      <div class="anno-tools card" style="padding:12px;margin-top:12px">
+        <div style="font-size:0.75rem;color:var(--sub);margin-bottom:6px">手机：长按选中文字后点划线；也可手动填摘句</div>
+        <input id="anno-quote" placeholder="摘句（可粘贴选中的句子）" autocomplete="off"/>
+        <input id="anno-note" placeholder="想法 / 批注（可选）" style="margin-top:8px" autocomplete="off"/>
+        <button type="button" class="btn" id="anno-mark-btn" style="margin-top:8px;width:100%">划线并保存</button>
+      </div>
+      <div style="margin-top:12px"><div style="font-weight:600;margin-bottom:6px">本页批注</div>${marksList}</div>
+    </div>`;
+  }
+  const list = (a.books||[]).map(b=>`
+    <button type="button" class="anno-book card" data-anno-open="${esc(b.id)}" style="width:100%;text-align:left;padding:14px;margin-bottom:8px">
+      <div style="font-weight:600">${esc(b.title)}</div>
+      <div style="font-size:0.75rem;color:var(--sub);margin-top:4px">${esc(b.author||"")} · ${b.chars||0} 字</div>
+    </button>`).join("") || `<div class="cal-empty-day">书架是空的，下面贴一段文字建书</div>`;
+  return `<div class="page">
+    ${subHeader('<i data-lucide="book-open"></i> 共读')}
+    <p class="page-sub">${a.err ? "连接："+esc(a.err) : "与机同一书架 · VPS 同步"}</p>
+    ${list}
+    <div class="card" style="padding:12px;margin-top:12px">
+      <input id="anno-new-title" placeholder="书名" autocomplete="off"/>
+      <textarea id="anno-new-content" rows="5" placeholder="粘贴正文（纯文本）" style="margin-top:8px;width:100%"></textarea>
+      <button type="button" class="btn" id="anno-create-btn" style="margin-top:8px;width:100%">添加到书架</button>
+    </div>
+  </div>`;
+}
+function bindAnno(){
+  const a = ensureAnno();
+  if(!a.bookId){
+    annoLoadBooks().then(()=>render());
+  }
+  document.querySelectorAll("[data-anno-open]").forEach(el=>{
+    el.onclick = ()=>{
+      annoOpenBook(el.getAttribute("data-anno-open")).then(ok=>{ if(ok) render(); });
+    };
+  });
+  const back = document.getElementById("anno-back-list");
+  if(back) back.onclick = ()=>{ a.bookId=null; a.book=null; a.marks=[]; annoSave(); render(); };
+  const create = document.getElementById("anno-create-btn");
+  if(create) create.onclick = async ()=>{
+    const title = (document.getElementById("anno-new-title")||{}).value||"";
+    const content = (document.getElementById("anno-new-content")||{}).value||"";
+    if(!title.trim()||!content.trim()){ if(typeof showToast==="function") showToast("书名和正文都要填"); return; }
+    const res = await annoApi("/api/v1/anno/books", { method:"POST", body: JSON.stringify({ title: title.trim(), content }) });
+    if(res.ok){ await annoLoadBooks(); render(); if(typeof showToast==="function") showToast("已加入书架"); }
+    else if(typeof showToast==="function") showToast("上传失败");
+  };
+  const markBtn = document.getElementById("anno-mark-btn");
+  if(markBtn) markBtn.onclick = async ()=>{
+    const quote = ((document.getElementById("anno-quote")||{}).value||"").trim();
+    const note = ((document.getElementById("anno-note")||{}).value||"").trim();
+    if(!quote){ if(typeof showToast==="function") showToast("先写摘句"); return; }
+    const content = (a.book && a.book.content) || "";
+    let start = content.indexOf(quote);
+    if(start < 0) start = 0;
+    const end = start + quote.length;
+    const m = await annoAddMark({ start, end, quote, note, by: "user" });
+    if(m){ render(); if(typeof showToast==="function") showToast("已保存"); }
+    else if(typeof showToast==="function") showToast("保存失败");
+  };
+}
+
+
 // ═══ 情侣日历（本地 localStorage，无需 VPS）═══
 // 在一起日起写死：6 月 24 日（年份按 COUPLE_START）
 const COUPLE_START = "2026-06-24"; // 在一起：2026-06-24（只改这一处）
@@ -6414,6 +6600,7 @@ function renderSubPage(){
     baby: renderBaby,
     roleplay: renderRoleplay,
     calendar: renderCoupleCalendar,
+    anno: renderAnno,
     flightchess: renderFlightChess,
     puzzle: renderPuzzleRoom,
     captivity: renderCaptivity,
@@ -17266,6 +17453,7 @@ if(!window.__mpDelegated){
 function bindEvents(){
   bindCoreNav();
   if(typeof bindCoupleCalendar==="function" && state.subPage==="calendar") bindCoupleCalendar();
+  if(typeof bindAnno==="function" && state.subPage==="anno") bindAnno();
 
   document.querySelectorAll(".bottom-nav button").forEach(btn=>{
     btn.onclick=()=>{
@@ -20571,6 +20759,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
   cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
+  cleanBody = handleAnnoMarkers(cleanBody); // 共读批注
   cleanBody = handleTruthDareMarkers(cleanBody);   // 真心话大冒险：⟪真心话⟫/⟪大冒险⟫/⟪抽卡⟫
   // NSFW 人称兜底：模型老爱用第三人称写自己，这里硬性改成「我/你」
   if(state.nsfwOn) cleanBody = nsfwFirstPersonRewrite(cleanBody);
