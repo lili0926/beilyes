@@ -6023,6 +6023,26 @@ function ensureAnno(){
 function annoSave(){
   try{ LS.set("couple_anno_v1", { books: state.anno.books, bookId: state.anno.bookId, err: state.anno.err }); }catch(e){}
 }
+
+async function readLoadMarks(remoteId){
+  const box = document.getElementById("read-marks-list");
+  if(!box || !remoteId || typeof annoApi!=="function") return;
+  box.textContent = "加载批注…";
+  const res = await annoApi("/api/v1/anno/books/" + encodeURIComponent(remoteId));
+  if(!res.ok){ box.textContent = "批注加载失败"; return; }
+  const marks = (res.data && res.data.marks) || [];
+  if(!marks.length){ box.textContent = "本页还没有云端批注"; return; }
+  box.innerHTML = marks.slice(-20).map(m=>{
+    const who = m.by==="ai"?"机":"我";
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="cal-badge">${who}</span> “${esc((m.quote||"").slice(0,40))}”${m.note?`<div style="margin-top:2px">${esc(m.note)}</div>`:""}</div>`;
+  }).join("");
+  // 供聊天注入
+  ensureAnno();
+  state.anno.bookId = remoteId;
+  state.anno.book = res.data.book;
+  state.anno.marks = marks;
+}
+
 function annoApi(path, opts){
   const headers = Object.assign({ "X-Anno-Token": ANNO_API_TOKEN }, (opts && opts.headers) || {});
   if(opts && opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData))
@@ -6073,6 +6093,11 @@ async function annoAddMark({ start, end, quote, note, by }){
 }
 function annoPromptBlock(){
   const a = ensureAnno();
+  // 一起读打开中也注入
+  if(!a.book && state.readingNow){
+    const b = (state.books||[]).find(x=>x.id===state.readingNow.bookId);
+    if(b) return `\n\n【一起读】正在读《${b.title}》第${(state.readingNow.chapterIdx||0)+1}页。可以聊这一页，或用 ⟪共读批:0:0:摘句:想法⟫ 留下批注（有 remoteId 时会写入 VPS）。`;
+  }
   if(!a.book) return "";
   const recent = (a.marks||[]).slice(-6).map(m=>{
     const who = m.by==="ai"?"机":"你";
@@ -8631,10 +8656,17 @@ function renderRead(){
       </div>
       <div style="font-size:12px;color:var(--sub);margin-bottom:6px">${esc(ch.title||"")}</div>
       <div class="read-progress"><i style="width:${pagePct}%"></i></div>
-      <div id="read-scroll-box" class="status-card" style="max-height:50vh;overflow-y:auto;white-space:pre-wrap;font-size:14px;line-height:1.75;color:var(--text)">${esc(ch.content||"")}</div>
+      <div id="read-scroll-box" class="status-card" style="max-height:42vh;overflow-y:auto;white-space:pre-wrap;font-size:14px;line-height:1.75;color:var(--text)">${esc(ch.content||"")}</div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button id="read-prev-ch" class="btn-ghost" style="flex:1;padding:10px" ${idx<=0?"disabled":""}>‹ 上一页</button>
         <button id="read-next-ch" class="btn-accent" style="flex:1;padding:10px" ${idx>=chs.length-1?"disabled":""}>下一页 ›</button>
+      </div>
+      <div class="status-card" style="padding:12px;margin-top:10px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">共读批注${book&&book.remoteId?"":"（上传同步后可云端保存）"}</div>
+        <input id="read-mark-quote" placeholder="摘句（粘贴本页句子）" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);outline:none"/>
+        <input id="read-mark-note" placeholder="想法（可选）" style="width:100%;margin-top:8px;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);outline:none"/>
+        <button type="button" class="btn-accent" id="read-mark-save" style="width:100%;margin-top:8px;padding:10px">划线保存</button>
+        <div id="read-marks-list" style="margin-top:10px;font-size:12px;color:var(--sub)"></div>
       </div>
       <button id="read-to-chat" class="btn-accent2" style="width:100%;margin-top:8px;padding:10px">带着这一页去聊天</button>
       <button id="read-radio" class="btn-ghost" style="width:100%;margin-top:8px;padding:10px"><i data-lucide="moon"></i> 睡前电台 · 读给我听</button>
@@ -8650,7 +8682,7 @@ function renderRead(){
             <div class="mem-card-inner" style="align-items:center;gap:10px">
               <div style="flex:1;min-width:0">
                 <div style="font-weight:700;color:var(--text)">${esc(b.title)}</div>
-                <div style="font-size:11px;color:var(--sub);margin-top:2px">${n} 页/章${on?` · 读到 ${page}/${n}`:""}</div>
+                <div style="font-size:11px;color:var(--sub);margin-top:2px">${n} 页/章${on?` · 读到 ${page}/${n}`:""}${b.remoteId?" · 已同步VPS":""}</div>
               </div>
               <button class="btn-accent" style="padding:6px 10px" data-read-open="${b.id}">读</button>
               <button class="mem-del" data-read-del="${b.id}">×</button>
@@ -19333,8 +19365,46 @@ function bindEvents(){
     };
     reader.onerror = ()=>{ alert("读取文件失败"); };
     // 用 ArrayBuffer 再解码，才能正确识别 GBK 等中文小说常见编码
-    reader.readAsArrayBuffer(f);
+    
+reader.readAsArrayBuffer(f);
   };
+
+  // 共读：划线保存到 VPS
+  const readMarkSave = document.getElementById("read-mark-save");
+  if(readMarkSave) readMarkSave.onclick = async ()=>{
+    const quote = (document.getElementById("read-mark-quote")||{}).value||"";
+    const note = (document.getElementById("read-mark-note")||{}).value||"";
+    const now = state.readingNow;
+    const books = state.books||[];
+    const b = now ? books.find(x=>x.id===now.bookId) : null;
+    if(!quote.trim()){ if(typeof showToast==="function") showToast("先写摘句"); return; }
+    if(!b || !b.remoteId){
+      if(typeof showToast==="function") showToast("请先导入并等同步到 VPS（书架显示已同步VPS）");
+      return;
+    }
+    const chs = b.chapters||[];
+    const idx = Math.min(Math.max(0, now.chapterIdx||0), Math.max(0,chs.length-1));
+    const content = (chs[idx]&&chs[idx].content)||"";
+    let start = content.indexOf(quote.trim());
+    if(start<0) start = 0;
+    const end = start + quote.trim().length;
+    if(typeof annoApi!=="function"){ alert("共读接口未加载"); return; }
+    const res = await annoApi("/api/v1/anno/marks", {
+      method:"POST",
+      body: JSON.stringify({ book_id: b.remoteId, start_offset:start, end_offset:end, quote:quote.trim(), note:note.trim(), by:"user" })
+    });
+    if(res&&res.ok){
+      if(typeof showToast==="function") showToast("批注已保存到 VPS");
+      readLoadMarks(b.remoteId);
+    } else if(typeof showToast==="function") showToast("保存失败");
+  };
+  // 打开阅读页时拉批注
+  if(state.readTab==="read" && state.readingNow){
+    const b = (state.books||[]).find(x=>x.id===state.readingNow.bookId);
+    if(b && b.remoteId) readLoadMarks(b.remoteId);
+  }
+
+  c
 
   const watchFloatOpen = document.getElementById("watch-float-open");
   if(watchFloatOpen) watchFloatOpen.onclick = ()=>{ state.tab="home"; state.subPage="watch"; render(); };
