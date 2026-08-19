@@ -1,0 +1,24 @@
+{
+  "name": "memory-palace-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor shell for Memory Palace (local web assets)",
+  "scripts": {
+    "sync": "npx cap sync android",
+    "open": "npx cap open android",
+    "build:apk": "cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/background-runner": "^2.3.1",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/preferences": "^6.0.4",
+    "@capacitor/push-notifications": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "typescript": "^5.7.2"
+  }
+}

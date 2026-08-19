@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "701811546533",
+    "project_id": "aiweb-642b7",
+    "storage_bucket": "aiweb-642b7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:701811546533:android:f2b1a6769788861391704c",
+        "android_client_info": {
+          "package_name": "com.personal.memorypalace"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBybnUjmrexEOYQZwIGTgQUdpQJm9utD1k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

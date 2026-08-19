@@ -1,0 +1,57 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath 'com.google.gms:google-services:4.4.0'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// 统一 JVM 目标：background-runner 插件把 Java 设成 21 但 Kotlin 默认 17，编译冲突；
+// 且容器 JDK 是 17，Java target 21 本来就编不过，所以全部对齐 17。
+// 踩坑记录：
+//  - 不能用 android { kotlinOptions {} }：报 "Could not find method kotlinOptions() on android"。
+//  - 不能用 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile)：该类不在根
+//    buildscript classpath（Kotlin 插件只在各模块），Groovy 报 "Could not get unknown property 'org'"。
+//  - 不能用 tasks.withType("org.jetbrains.kotlin.gradle.tasks.KotlinCompile")：TaskContainer
+//    没有 withType(String) 重载，报 "Could not find method withType()"。
+// 正确姿势：compileOptions 设 17 + tasks.configureEach 按任务名匹配，KotlinCompile 任务
+// 运行时自身有 kotlinOptions 属性（动态访问，不需要类在根 classpath）。
+subprojects {
+    afterEvaluate {
+        if (project.plugins.hasPlugin("com.android.library") || project.plugins.hasPlugin("com.android.application")) {
+            android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        tasks.configureEach { task ->
+            if (task.name == 'compileDebugKotlin' || task.name == 'compileReleaseKotlin') {
+                task.kotlinOptions.jvmTarget = '17'
+            }
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
