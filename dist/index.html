@@ -4415,7 +4415,7 @@ const state = {
   flightChessPromptEvent: null, // 需要进入两轮 prompt 的格子内容 {who,text,pos,remaining}（不持久化）
   _fcSkipConsume: false, // ⟪掷骰⟫ 在回复中途掷骰时，本轮不消耗 promptEvent 剩余轮次
   msgBarIdx: null, // 点气泡唤出的收藏/复制操作条挂在哪条消息上（不持久化）
-  streamOn: LS.get("streamOn", true), // 流式输出（默认开；出错自动回退非流式）
+  streamOn: (function(){ const v=LS.get("streamOn", true); return v===false||v==="false"||v===0||v==="0"?false:true; })(), // 流式输出（规范化布尔）
   streamLive: null, // 流式中的实时内容 {active,thinking,text,speaker}（不持久化）
   // 书房（连载写作；数据与「一起读」共用 state.books）
   shufangTab: "shelf", // shelf | chapters | editor
@@ -4942,7 +4942,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     callBlock, pushBlock, albumBlock, couponBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock, puzzleBlock,
-    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, flightChessBlock, truthDareBlock, divinationBlock ];
+    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock ];
   __sysPartsCache = {
     static: __staticArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     dynamic: __dynArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
@@ -6274,14 +6274,15 @@ function prMainChatPromptBlock(){
   const pr = ensurePr();
   if(!pr.active) return "";
   const a = pr.active;
-  return `\n\n【PR冒险进行中 · 仅摘要】\n世界：${a.worldName||""} · 阶段：${a.stageName}\n任务：${a.task}\n进度摘要：${a.summary||"（暂无）"}\n说明：这是主聊天。不要用 PR 里的角色人设持续扮演；可以自然想起这条冒险（记忆库里也有 PR 条目），偶尔关心或串戏一句即可。完整扮演只在 PR 聊天框里进行。`;
+  const n = (a.messages||[]).length;
+  return `\n\n【重要 · 她正在玩 PR 快穿】\n她此刻有一条进行中的快穿冒险（不是普通聊天）：\n- 世界：${a.worldName||""}\n- 阶段：${a.stageName}\n- 任务：${a.task}\n- 已对话 ${n} 句\n- 进度摘要：${a.summary||"（刚开始）"}\n\n主聊天规则：\n1. 你必须知道她在玩这条快穿，不要装不知道、不要猜「是不是换世界线」。\n2. 主聊天仍用日常人设（Aries），不要用冒险里的异族/世子等身份持续扮演。\n3. 可以自然提一句她在玩的世界/阶段，关心或调侃，接得上摘要即可。\n4. 完整剧情扮演只在 PR 框里进行。`;
 }
 
 function prPlayPromptBlock(){
   const pr = ensurePr();
-  if(!pr.active || !state.prOpen) return "";
+  if(!pr.active) return ""; // 只要有 active 就给全套（面板发送也会用）
   const a = pr.active;
-  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n规则：\n- 按世界书角色与用户扮演，保持人设。\n- 推进当前阶段任务，不要跳阶段剧透。\n- 可见回复直接演出现场；不要解释系统规则。`;
+  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n视角与文风（非常重要）：\n- 你是世界书里与用户相对的那一方角色（用「我」）。\n- 用户是她在该世界中的身份（对她只用「你」，禁止用「她/Jasmine/茉莉」等第三人称指用户）。\n- 禁止旁白上帝视角写「她如何如何」；要写成对「你」正在发生的事。\n- 可见回复直接演出现场，推进当前阶段；不要解释系统规则、不要跳出角色。`;
 }
 
 function prRefreshSummary(){
@@ -6377,7 +6378,7 @@ function renderPrPanel(){
       </div>
       <div class="pr-msgs" id="pr-msgs">${msgs}</div>
       <div class="pr-input-row">
-        <input id="pr-input" placeholder="在深海中低语…" value="${esc(state.prDraft||"")}" autocomplete="off"/>
+        <input id="pr-input" placeholder="写下你的下一句…" value="${esc(state.prDraft||"")}" autocomplete="off"/>
         <button type="button" class="btn-accent" id="pr-send" style="padding:10px 14px;border-radius:18px">发送</button>
       </div>
     </div>
@@ -6385,9 +6386,8 @@ function renderPrPanel(){
 }
 
 function renderPrFloat(){
-  const pr = ensurePr();
-  if(!pr.active || !state.prMin) return "";
-  return `<button type="button" class="pr-float-min" id="pr-float-btn">✨ PR · ${esc(pr.active.stageName)}</button>`;
+  // 不再用缩小胶囊：从 + 进 PR 直接全屏弹层；收起即关，再点 + 重新打开
+  return "";
 }
 
 async function prSendUser(){
@@ -6489,11 +6489,11 @@ function bindPr(){
 
 function bindPrOverlay(){
   const mask = document.getElementById("pr-panel-mask");
-  if(mask) mask.onclick = (e)=>{ if(e.target===mask){ state.prOpen=false; state.prMin=true; render(); } };
+  if(mask) mask.onclick = (e)=>{ if(e.target===mask){ state.prOpen=false; state.prMin=false; render(); } };
   const min = document.getElementById("pr-min-btn");
-  if(min) min.onclick = ()=>{ state.prOpen=false; state.prMin=true; render(); };
+  if(min) min.onclick = ()=>{ state.prOpen=false; state.prMin=false; render(); };
   const close = document.getElementById("pr-close-btn");
-  if(close) close.onclick = ()=>{ state.prOpen=false; state.prMin=!!ensurePr().active; render(); };
+  if(close) close.onclick = ()=>{ state.prOpen=false; state.prMin=false; render(); };
   const send = document.getElementById("pr-send");
   if(send) send.onclick = ()=> prSendUser();
   const input = document.getElementById("pr-input");
@@ -6508,7 +6508,7 @@ function bindPrOverlay(){
     state.chatMoreOpen=false;
     const pr = ensurePr();
     if(pr.active){ state.prOpen=true; state.prMin=false; render(); }
-    else { state.subPage="pr"; state.tab="home"; render(); }
+    else { state.prOpen=false; state.prMin=false; state.subPage="pr"; state.tab="home"; render(); }
   };
 }
 
@@ -19994,8 +19994,12 @@ reader.readAsArrayBuffer(f);
 
   // 流式输出开关
   const streamToggle = document.getElementById("stream-on-toggle");
-  if(streamToggle) streamToggle.onclick = ()=>{
-    state.streamOn = !(state.streamOn !== false);
+  if(streamToggle) streamToggle.onclick = (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    const nowOn = state.streamOn === true || state.streamOn === undefined || state.streamOn === null;
+    // 明确布尔：关→开，开→关（避免字符串/脏值卡死）
+    state.streamOn = !nowOn;
+    try{ LS.set("streamOn", state.streamOn === true); }catch(err){}
     persist("streamOn");
     render();
   };
