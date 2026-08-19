@@ -225,6 +225,31 @@
       flex: 1; padding: 10px 0; border-radius: 12px; border: 1px solid var(--border);
       background: var(--bg); color: var(--sub); font-size: 14px; font-weight: 500; cursor: pointer;
     }
+    
+    /* ─── 情侣日历 ─── */
+    .cal-nav { display:flex; align-items:center; justify-content:space-between; margin:8px 0 10px; }
+    .cal-ym { font-weight:600; color:var(--text); font-size:0.95rem; }
+    .cal-week { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:0.7rem; color:var(--sub); margin-bottom:4px; }
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:14px; }
+    .cal-cell { aspect-ratio:1; border:1px solid var(--border, #e8dfd6); border-radius:10px; background:var(--card, #fdf8f3); position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; color:var(--text); padding:0; }
+    .cal-cell.cal-empty { border:none; background:transparent; pointer-events:none; }
+    .cal-cell.cal-today { border-color:#c4a77d; }
+    .cal-cell.cal-selected { background:#c4a77d; color:#fff; border-color:#c4a77d; }
+    .cal-cell.cal-has .cal-dot { position:absolute; bottom:4px; width:5px; height:5px; border-radius:50%; background:#e8a07a; }
+    .cal-cell.cal-selected .cal-dot { background:#fff; }
+    .cal-cell.cal-624 { box-shadow: inset 0 0 0 1px #e8a07a; }
+    .cal-day-panel { margin-top:4px; }
+    .cal-day-head { font-weight:600; margin-bottom:8px; color:var(--text); }
+    .cal-ev { border:1px solid var(--border,#e8dfd6); border-radius:12px; padding:10px 12px; margin-bottom:8px; background:var(--card,#fff); }
+    .cal-ev-ann { border-color:#e8c4b0; background:#fdf6f2; }
+    .cal-ev-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+    .cal-badge { font-size:0.68rem; color:#a68b6a; background:#f0e8df; padding:2px 8px; border-radius:999px; }
+    .cal-ev-title { font-weight:600; font-size:0.9rem; }
+    .cal-ev-body { font-size:0.8rem; color:var(--sub); margin-top:4px; line-height:1.4; }
+    .cal-ev-id { font-size:0.65rem; color:#c4b8a8; margin-top:4px; font-family:ui-monospace,monospace; }
+    .cal-del { border:none; background:transparent; color:#c07060; font-size:0.75rem; cursor:pointer; }
+    .cal-empty-day { font-size:0.82rem; color:var(--sub); padding:8px 0; }
+
     /* ─── 飞行棋（flight-chess-v3 / flight-chess-popup 组件化）── */
     .fc-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
     .fc-version-scroll { display: flex; gap: 6px; overflow-x: auto; flex: 1; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
@@ -4297,6 +4322,8 @@ const state = {
   questPopup: null, // 聊天弹窗的任务卡 {title,desc,timeLimit,reward,penalty}，null=不弹
   questEnabled: LS.get("questEnabled", true), // 小机自动布置任务开关（默认开；忙时可关）
   questPopupQueue: [], // 机一次推多条时按序弹，弹完一条进下一条
+  // 情侣日历（本地）
+  calendar: LS.get("couple_calendar_v1", null) || { events: [], viewYm: null, selected: null },
   // 飞行棋（flight-chess-v3 / flight-chess-popup 组件化；与聊天弹窗共用同一份进度）
   flightChess: LS.get("flight_chess_progress", null) || { version:"maid", playerPos:0, aiPos:0, turn:"player", finished:false },
   flightChessOpen: false, // 聊天弹窗是否展开
@@ -4776,6 +4803,7 @@ ${guideText}`;
   const rpBlock = (typeof roleplayStatusPromptBlock === "function") ? roleplayStatusPromptBlock() : "";
   const puzzleBlock = (typeof puzzleStatusPromptBlock === "function") ? puzzleStatusPromptBlock() : "";
   const tipsyBlock = (typeof tipsyStatusPromptBlock === "function") ? tipsyStatusPromptBlock() : "";
+  const calendarBlock = (typeof calendarPromptBlock === "function") ? calendarPromptBlock() : "";
   const flightChessBlock = (typeof flightChessPromptBlock === "function") ? flightChessPromptBlock() : "";
   const truthDareBlock = (typeof truthDarePromptBlock === "function") ? truthDarePromptBlock() : "";
   const divinationBlock = (typeof divinationSkillPromptBlock === "function") ? divinationSkillPromptBlock() : "";
@@ -4838,7 +4866,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     callBlock, pushBlock, albumBlock, couponBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock, puzzleBlock,
-    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, flightChessBlock, truthDareBlock, divinationBlock ];
+    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, flightChessBlock, truthDareBlock, divinationBlock ];
   __sysPartsCache = {
     static: __staticArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     dynamic: __dynArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
@@ -4859,6 +4887,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + (cabinetBlock ? "\n\n"+cabinetBlock : "")
     + (dreamTraceBlock ? "\n\n"+dreamTraceBlock : "")
     + musicBlock
+    + (calendarBlock ? "\n\n"+calendarBlock : "")
     + (flightChessBlock ? "\n\n"+flightChessBlock : "")
     + (truthDareBlock ? "\n\n"+truthDareBlock : "")
     + (divinationBlock ? "\n\n"+divinationBlock : "")
@@ -5328,6 +5357,7 @@ function renderHomeFeat(){
         {key:"mcphall",  icon:"plug", label:"MCP大厅", desc:"连接任意 MCP 游戏服务"},
         {key:"baby",     icon:"baby", label:"育儿模拟", desc:"加速成长·共同养育"},
         {key:"roleplay", icon:"theater", label:"角色扮演", desc:"情趣设定·应用进聊天"},
+        {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
         {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"八版本 · 聊天里掷骰走格"},
         {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
@@ -5954,6 +5984,286 @@ window.flightChessOpen = function(){
   render();
 };
 // AI 回复暗号：⟪飞行棋⟫ 开局弹棋盘 / ⟪掷骰⟫ 让机掷骰
+
+// ═══ 情侣日历（本地 localStorage，无需 VPS）═══
+// 在一起日起写死：6 月 24 日（年份按 COUPLE_START）
+const COUPLE_START = "2025-06-24"; // 改年份只动这一处
+
+function calPad(n){ return String(n).padStart(2,"0"); }
+function calYmd(d){
+  return d.getFullYear()+"-"+calPad(d.getMonth()+1)+"-"+calPad(d.getDate());
+}
+function calParse(ymd){
+  const [y,m,dd]=ymd.split("-").map(Number);
+  return new Date(y, m-1, dd);
+}
+function calAddDays(ymd, days){
+  const d=calParse(ymd); d.setDate(d.getDate()+days); return calYmd(d);
+}
+function ensureCalendar(){
+  if(!state.calendar || typeof state.calendar!=="object"){
+    state.calendar = LS.get("couple_calendar_v1", null) || { events: [], viewYm: null, selected: null };
+  }
+  if(!Array.isArray(state.calendar.events)) state.calendar.events = [];
+  if(!state.calendar.viewYm){
+    const n=new Date();
+    state.calendar.viewYm = n.getFullYear()+"-"+calPad(n.getMonth()+1);
+  }
+  if(!state.calendar.selected) state.calendar.selected = calYmd(new Date());
+  return state.calendar;
+}
+function calSave(){
+  try{ LS.set("couple_calendar_v1", state.calendar); }catch(e){}
+}
+function calUid(){ return "cal_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+/** 自动生成：100/200/300…天 + 半年/一年/一年半/两年…（从在一起日起，向后约 5 年） */
+function calAnniversaryEvents(){
+  const start = COUPLE_START;
+  const out = [];
+  // 每 100 天
+  for(let n=100; n<=2000; n+=100){
+    out.push({
+      id: "ann_day_"+n,
+      date: calAddDays(start, n),
+      title: "在一起 "+n+" 天",
+      body: "从 "+start+" 起的第 "+n+" 天",
+      type: "anniversary",
+      by: "auto",
+      locked: true
+    });
+  }
+  // 半年递加：0.5, 1, 1.5, 2, ... 年（用约 182.5 天 / 365 天）
+  for(let half=1; half<=20; half++){
+    const days = Math.round(half * 182.625); // 半年≈182.625
+    const label = (half%2===0) ? ("在一起 "+(half/2)+" 周年") : ("在一起 "+(half/2)+" 年半");
+    // 更清晰的标签
+    let title;
+    if(half%2===0) title = "在一起 "+(half/2)+" 周年";
+    else if(half===1) title = "在一起 半年";
+    else title = "在一起 "+Math.floor(half/2)+" 年半";
+    out.push({
+      id: "ann_half_"+half,
+      date: calAddDays(start, days),
+      title,
+      body: "从 "+start+" 起约 "+days+" 天",
+      type: "anniversary",
+      by: "auto",
+      locked: true
+    });
+  }
+  // 每年 6.24 纪念日本身
+  const sy = parseInt(start.slice(0,4),10);
+  for(let y=sy; y<=sy+10; y++){
+    const d = y+"-06-24";
+    out.push({
+      id: "ann_624_"+y,
+      date: d,
+      title: y===sy ? "在一起的日子" : (y+" 年 · 6.24 纪念日"),
+      body: "我们是 6.24 在一起的",
+      type: "anniversary",
+      by: "auto",
+      locked: true
+    });
+  }
+  return out;
+}
+
+function calAllEvents(){
+  const cal = ensureCalendar();
+  // 用户/机事件 + 自动纪念日（自动不占持久化体积，每次合并）
+  const auto = calAnniversaryEvents();
+  const user = cal.events || [];
+  return auto.concat(user);
+}
+
+function calEventsOn(ymd){
+  return calAllEvents().filter(e=>e.date===ymd).sort((a,b)=>{
+    if(a.type==="anniversary" && b.type!=="anniversary") return -1;
+    if(b.type==="anniversary" && a.type!=="anniversary") return 1;
+    return (a.createdAt||"").localeCompare(b.createdAt||"");
+  });
+}
+
+function calAddEvent({ date, title, body, type, by }){
+  const cal = ensureCalendar();
+  const ev = {
+    id: calUid(),
+    date: date || cal.selected || calYmd(new Date()),
+    title: (title||"记事").slice(0,80),
+    body: (body||"").slice(0,500),
+    type: type || "note",
+    by: by || "user",
+    locked: false,
+    createdAt: new Date().toISOString()
+  };
+  cal.events.push(ev);
+  calSave();
+  return ev;
+}
+
+function calDeleteEvent(id){
+  const cal = ensureCalendar();
+  const before = cal.events.length;
+  cal.events = cal.events.filter(e => e.id !== id);
+  calSave();
+  return cal.events.length < before;
+}
+
+function calendarPromptBlock(){
+  const cal = ensureCalendar();
+  const today = calYmd(new Date());
+  const todays = calEventsOn(today);
+  const lines = todays.slice(0,8).map(e=>{
+    const who = e.by==="ai"?"机":(e.by==="auto"?"系统":"你");
+    return `- [${e.type||"note"}][${who}] ${e.title}${e.body?"："+e.body:""}`;
+  });
+  // 近 7 天内的纪念日提醒
+  const soon = [];
+  for(let i=0;i<=7;i++){
+    const d = calAddDays(today, i);
+    calEventsOn(d).filter(e=>e.type==="anniversary").forEach(e=>{
+      soon.push((i===0?"今天":i+"天后")+" "+e.date+" "+e.title);
+    });
+  }
+  return `
+
+【情侣日历】
+在一起日起：${COUPLE_START}（每年 6.24 纪念日；每 100 天、每半年/周年自动生成）。
+今天 ${today} 的安排：
+${lines.length?lines.join("\n"):"（暂无）"}
+${soon.length?"近期纪念日：\n"+soon.slice(0,6).map(s=>"- "+s).join("\n"):""}
+- 用户说要记事时，你可在回复里写：⟪日历加:日期YYYY-MM-DD:标题:正文⟫（正文可省略）
+- 删除用户/你加的记事：⟪日历删:事件id⟫（纪念日系统项不能删）
+- 暗号会被擦除。不要编造未写入的日程。`;
+}
+
+function handleCalendarMarkers(body){
+  let text = String(body||"");
+  if(!text) return text;
+  // ⟪日历加:2026-08-20:标题:正文⟫
+  text = text.replace(/[⟪《【\[]\s*日历加\s*[:：]\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([^⟫》】\]]+?)[⟫》】\]]/g, (_, date, rest)=>{
+    const parts = rest.split(/[:：]/);
+    const title = (parts[0]||"记事").trim();
+    const body2 = parts.slice(1).join("：").trim();
+    calAddEvent({ date, title, body: body2, type: "note", by: "ai" });
+    return "";
+  });
+  text = text.replace(/[⟪《【\[]\s*日历删\s*[:：]\s*([a-zA-Z0-9_]+)\s*[⟫》】\]]/g, (_, id)=>{
+    calDeleteEvent(id);
+    return "";
+  });
+  return text.replace(/\n{3,}/g,"\n\n").trim();
+}
+
+function renderCoupleCalendar(){
+  const cal = ensureCalendar();
+  const [vy, vm] = cal.viewYm.split("-").map(Number);
+  const first = new Date(vy, vm-1, 1);
+  const startWeek = first.getDay(); // 0 Sun
+  const daysInMonth = new Date(vy, vm, 0).getDate();
+  const today = calYmd(new Date());
+  const selected = cal.selected || today;
+
+  // dots: dates with events this month
+  const monthPrefix = cal.viewYm + "-";
+  const has = {};
+  calAllEvents().forEach(e=>{
+    if(e.date && e.date.startsWith(monthPrefix)) has[e.date] = (has[e.date]||0)+1;
+  });
+
+  let cells = "";
+  for(let i=0;i<startWeek;i++) cells += `<div class="cal-cell cal-empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const ymd = vy+"-"+calPad(vm)+"-"+calPad(d);
+    const cls = ["cal-cell"];
+    if(ymd===today) cls.push("cal-today");
+    if(ymd===selected) cls.push("cal-selected");
+    if(has[ymd]) cls.push("cal-has");
+    if(ymd.slice(5)==="06-24") cls.push("cal-624");
+    cells += `<button type="button" class="${cls.join(" ")}" data-cal-day="${ymd}"><span class="cal-num">${d}</span>${has[ymd]?`<span class="cal-dot"></span>`:""}</button>`;
+  }
+
+  const dayEvs = calEventsOn(selected);
+  const list = dayEvs.length ? dayEvs.map(e=>{
+    const badge = e.type==="anniversary" ? "纪念日" : (e.by==="ai"?"机":"我");
+    const del = e.locked ? "" : `<button type="button" class="cal-del" data-cal-del="${e.id}">删</button>`;
+    return `<div class="cal-ev ${e.type==="anniversary"?"cal-ev-ann":""}">
+      <div class="cal-ev-top"><span class="cal-badge">${badge}</span>${del}</div>
+      <div class="cal-ev-title">${esc(e.title)}</div>
+      ${e.body?`<div class="cal-ev-body">${esc(e.body)}</div>`:""}
+      ${e.id && !e.locked?`<div class="cal-ev-id">${esc(e.id)}</div>`:""}
+    </div>`;
+  }).join("") : `<div class="cal-empty-day">这一天还没有安排</div>`;
+
+  const startLabel = COUPLE_START;
+  let daysTogether = Math.floor((calParse(today)-calParse(COUPLE_START))/(24*3600*1000));
+  if(daysTogether<0) daysTogether = 0;
+
+  return `<div class="page">
+    ${subHeader('<i data-lucide="calendar"></i> 日历')}
+    <p class="page-sub">在一起 ${startLabel} · 第 ${daysTogether+1} 天 · 点日期看安排</p>
+    <div class="cal-nav">
+      <button type="button" class="btn-ghost" id="cal-prev">‹</button>
+      <span class="cal-ym">${vy} 年 ${vm} 月</span>
+      <button type="button" class="btn-ghost" id="cal-next">›</button>
+    </div>
+    <div class="cal-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+    <div class="cal-grid">${cells}</div>
+    <div class="cal-day-panel">
+      <div class="cal-day-head">${selected}</div>
+      ${list}
+      <div class="cal-add card" style="padding:12px;margin-top:10px">
+        <input id="cal-title" placeholder="标题（如：和好约定 / 今晚视频）" autocomplete="off"/>
+        <textarea id="cal-body" rows="2" placeholder="细节、承诺、怎么和好的…" style="margin-top:8px;width:100%"></textarea>
+        <button type="button" class="btn" id="cal-add-btn" style="margin-top:8px;width:100%">记在这一天</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function bindCoupleCalendar(){
+  const cal = ensureCalendar();
+  const prev = document.getElementById("cal-prev");
+  const next = document.getElementById("cal-next");
+  if(prev) prev.onclick = ()=>{
+    let [y,m]=cal.viewYm.split("-").map(Number);
+    m--; if(m<1){ m=12; y--; }
+    cal.viewYm = y+"-"+calPad(m);
+    calSave(); render();
+  };
+  if(next) next.onclick = ()=>{
+    let [y,m]=cal.viewYm.split("-").map(Number);
+    m++; if(m>12){ m=1; y++; }
+    cal.viewYm = y+"-"+calPad(m);
+    calSave(); render();
+  };
+  document.querySelectorAll("[data-cal-day]").forEach(el=>{
+    el.onclick = ()=>{
+      cal.selected = el.getAttribute("data-cal-day");
+      calSave(); render();
+    };
+  });
+  document.querySelectorAll("[data-cal-del]").forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      calDeleteEvent(el.getAttribute("data-cal-del"));
+      render();
+      if(typeof showToast==="function") showToast("已删除");
+    };
+  });
+  const addBtn = document.getElementById("cal-add-btn");
+  if(addBtn) addBtn.onclick = ()=>{
+    const title = (document.getElementById("cal-title")||{}).value||"";
+    const body = (document.getElementById("cal-body")||{}).value||"";
+    if(!title.trim()){ if(typeof showToast==="function") showToast("写个标题吧"); return; }
+    calAddEvent({ date: cal.selected, title: title.trim(), body: body.trim(), by: "user" });
+    render();
+    if(typeof showToast==="function") showToast("已记下");
+  };
+}
+
+
 function handleFlightChessMarkers(body){
   let text = String(body||"");
   if(!text) return text;
@@ -6029,6 +6339,7 @@ function renderSubPage(){
     dream: renderDream,
     baby: renderBaby,
     roleplay: renderRoleplay,
+    calendar: renderCoupleCalendar,
     flightchess: renderFlightChess,
     puzzle: renderPuzzleRoom,
     captivity: renderCaptivity,
@@ -16880,6 +17191,7 @@ if(!window.__mpDelegated){
 
 function bindEvents(){
   bindCoreNav();
+  if(typeof bindCoupleCalendar==="function" && state.subPage==="calendar") bindCoupleCalendar();
 
   document.querySelectorAll(".bottom-nav button").forEach(btn=>{
     btn.onclick=()=>{
@@ -20184,6 +20496,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
+  cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
   cleanBody = handleTruthDareMarkers(cleanBody);   // 真心话大冒险：⟪真心话⟫/⟪大冒险⟫/⟪抽卡⟫
   // NSFW 人称兜底：模型老爱用第三人称写自己，这里硬性改成「我/你」
   if(state.nsfwOn) cleanBody = nsfwFirstPersonRewrite(cleanBody);
