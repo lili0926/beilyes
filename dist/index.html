@@ -5988,6 +5988,9 @@ window.flightChessOpen = function(){
 // ═══ 情侣日历（本地 localStorage，无需 VPS）═══
 // 在一起日起写死：6 月 24 日（年份按 COUPLE_START）
 const COUPLE_START = "2026-06-24"; // 在一起：2026-06-24（只改这一处）
+// VPS 日历 API（无域名用 IP；Token 与服务器 .env 一致）
+const CAL_API_BASE = "http://115.29.237.172:8788";
+const CAL_API_TOKEN = "8f7e6d5c4b3a2910f8e7d6c5b4a392817f6e5d4c3b2a1908f";
 
 function calPad(n){ return String(n).padStart(2,"0"); }
 function calYmd(d){
@@ -6085,6 +6088,52 @@ function calEventsOn(ymd){
   });
 }
 
+function calApi(path, opts){
+  const headers = Object.assign({ "X-Calendar-Token": CAL_API_TOKEN }, (opts && opts.headers) || {});
+  if(opts && opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  return fetch(CAL_API_BASE + path, Object.assign({}, opts || {}, { headers }))
+    .then(r => r.json().then(j => ({ ok: r.ok, status: r.status, data: j })))
+    .catch(e => ({ ok: false, status: 0, error: String(e) }));
+}
+
+/** 从 VPS 拉区间事件，合并进本地（失败则静默用本地） */
+async function calSyncFromServer(){
+  const cal = ensureCalendar();
+  const [y,m] = (cal.viewYm || calYmd(new Date()).slice(0,7)).split("-").map(Number);
+  const from = y + "-" + calPad(m) + "-01";
+  const last = new Date(y, m, 0).getDate();
+  const to = y + "-" + calPad(m) + "-" + calPad(last);
+  const res = await calApi("/api/v1/calendar/events?from=" + from + "&to=" + to + "&include_anniversaries=false");
+  if(!res.ok || !res.data || !res.data.events){
+    cal.syncError = (res.data && res.data.detail) || res.error || "离线";
+    calSave();
+    return false;
+  }
+  const remote = res.data.events.filter(e => e && e.id && !(e.id+"").startsWith("ann_"));
+  // 以服务器为准合并：同 id 覆盖，本地仅有的保留为 pending 上传
+  const byId = {};
+  remote.forEach(e => {
+    byId[e.id] = {
+      id: e.id,
+      date: e.date,
+      title: e.title,
+      body: e.body || "",
+      type: e.type || "note",
+      by: e.by || "user",
+      locked: false,
+      createdAt: e.created_at || e.createdAt || new Date().toISOString()
+    };
+  });
+  (cal.events || []).forEach(e => {
+    if(!byId[e.id] && e._localOnly) byId[e.id] = e;
+  });
+  cal.events = Object.values(byId);
+  cal.syncError = null;
+  cal.lastSync = new Date().toISOString();
+  calSave();
+  return true;
+}
+
 function calAddEvent({ date, title, body, type, by }){
   const cal = ensureCalendar();
   const ev = {
@@ -6095,10 +6144,27 @@ function calAddEvent({ date, title, body, type, by }){
     type: type || "note",
     by: by || "user",
     locked: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    _localOnly: true
   };
   cal.events.push(ev);
   calSave();
+  // 异步同步到 VPS
+  calApi("/api/v1/calendar/events", {
+    method: "POST",
+    body: JSON.stringify({ date: ev.date, title: ev.title, body: ev.body, type: ev.type, by: ev.by })
+  }).then(res => {
+    if(res.ok && res.data && res.data.event){
+      const cal2 = ensureCalendar();
+      const i = cal2.events.findIndex(x => x.id === ev.id);
+      if(i >= 0){
+        cal2.events[i].id = res.data.event.id;
+        cal2.events[i]._localOnly = false;
+        cal2.events[i].createdAt = res.data.event.created_at || cal2.events[i].createdAt;
+        calSave();
+      }
+    }
+  });
   return ev;
 }
 
@@ -6107,6 +6173,9 @@ function calDeleteEvent(id){
   const before = cal.events.length;
   cal.events = cal.events.filter(e => e.id !== id);
   calSave();
+  if(id && !(id+"").startsWith("ann_")){
+    calApi("/api/v1/calendar/events/" + encodeURIComponent(id), { method: "DELETE" });
+  }
   return cal.events.length < before;
 }
 
@@ -6202,7 +6271,7 @@ function renderCoupleCalendar(){
 
   return `<div class="page">
     ${subHeader('<i data-lucide="calendar"></i> 日历')}
-    <p class="page-sub">在一起 ${startLabel} · 第 ${daysTogether+1} 天 · 点日期看安排</p>
+    <p class="page-sub">在一起 ${startLabel} · 第 ${daysTogether+1} 天 · ${cal.syncError ? "离线缓存" : (cal.lastSync ? "已同步 VPS" : "点日期看安排")}</p>
     <div class="cal-nav">
       <button type="button" class="btn-ghost" id="cal-prev">‹</button>
       <span class="cal-ym">${vy} 年 ${vm} 月</span>
@@ -6224,6 +6293,11 @@ function renderCoupleCalendar(){
 
 function bindCoupleCalendar(){
   const cal = ensureCalendar();
+  // 打开日历页时从 VPS 拉一次
+  if(!cal._syncing){
+    cal._syncing = true;
+    calSyncFromServer().then(() => { cal._syncing = false; render(); }).catch(() => { cal._syncing = false; });
+  }
   const prev = document.getElementById("cal-prev");
   const next = document.getElementById("cal-next");
   if(prev) prev.onclick = ()=>{
