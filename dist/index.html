@@ -250,7 +250,7 @@
     .cal-cell.cal-624 { box-shadow: inset 0 0 0 1px #e8a07a; }
     .cal-day-panel { margin-top:4px; }
     .cal-day-head { font-weight:600; margin-bottom:8px; color:var(--text); }
-    .cal-ev { border:1px solid var(--border,#e8dfd6); border-radius:12px; padding:10px 12px; margin-bottom:8px; background:var(--card,#fff); }
+    .cal-ev { border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; background:var(--card); }
     .cal-ev-ann { border-color:#e8c4b0; background:#fdf6f2; }
     .cal-ev-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
     .cal-badge { font-size:0.68rem; color:#a68b6a; background:#f0e8df; padding:2px 8px; border-radius:999px; }
@@ -306,11 +306,14 @@
     /* 最小化悬浮胶囊 */
     .fc-float-min {
       position: fixed; bottom: 18px; right: 16px; z-index: 2100;
-      display: flex; align-items: center; gap: 7px; padding: 8px 13px;
+      display: inline-flex !important; flex: none !important; flex-direction: row !important;
+      align-items: center; gap: 7px; padding: 8px 13px;
+      width: auto !important; height: auto !important; max-height: 48px; max-width: min(92vw, 280px);
       border-radius: 999px; border: 1px solid var(--border);
       background: var(--card); color: var(--text);
       box-shadow: 0 6px 20px rgba(0,0,0,.18); cursor: pointer; font-size: 12px;
       touch-action: none; user-select: none; -webkit-user-select: none;
+      white-space: nowrap; overflow: hidden;
     }
     .fc-float-min:active { transform: scale(.96); }
     .fc-float-dot { font-size: 16px; }
@@ -2057,8 +2060,17 @@
     .mc-btn-send { background: var(--accent); color: #fff; }
     .mc-detail-mask { position: fixed; inset: 0; background: rgba(40,35,25,.4); z-index: 100; overflow-y: auto; padding: 40px 16px 24px; }
     .mc-detail-card {
-      max-width: 430px; margin: 0 auto; background: var(--card);
+      max-width: 430px; width: 100%; margin: 0 auto; background: var(--card);
       border-radius: 16px; padding: 20px 18px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18);
+      max-height: min(78vh, 640px); display: flex; flex-direction: column; overflow: hidden;
+      box-sizing: border-box;
+    }
+    .mc-detail-card .mc-detail-body {
+      flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      max-height: 42vh;
+    }
+    .mc-detail-mask {
+      display: flex; align-items: center; justify-content: center;
     }
     .mc-detail-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: var(--border); color: var(--text); cursor: pointer; font-size: 15px; }
     .mc-detail-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -5346,7 +5358,7 @@ function renderHomeFeat(){
         {key:"ntfy",     icon:"bell", label:"上推通知", desc:"ntfy · 聊天暗号推手机"},
         {key:"usage",    icon:"smartphone", label:"屏幕时间", desc:"今天各 App 用了多久"},
         {key:"music",    icon:"headphones", label:"一起听",   desc:"搜歌·挑歌·边聊边听"},
-        {key:"read",     icon:"book-open", label:"一起读",   desc:"书架·章节·边读边聊"},
+        {key:"read",     icon:"book-open", label:"一起读",   desc:"书架·上传txt·共读同步VPS"},
         {key:"shufang",  icon:"pen-nib", label:"书房",     desc:"连载写作·写完进一起读"},
         {key:"watch",    icon:"film", label:"一起看",   desc:"视频进度·陪看聊天"},
         {key:"theme",    icon:"palette", label:"外观",     desc:"换一套心情颜色"},
@@ -5370,7 +5382,6 @@ function renderHomeFeat(){
         {key:"baby",     icon:"baby", label:"育儿模拟", desc:"加速成长·共同养育"},
         {key:"roleplay", icon:"theater", label:"角色扮演", desc:"情趣设定·应用进聊天"},
         {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
-        {key:"anno", icon:"book-open", label:"共读", desc:"一起看书·划线批注"},
         {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"八版本 · 聊天里掷骰走格"},
         {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
@@ -6468,10 +6479,10 @@ function renderCoupleCalendar(){
     <div class="cal-day-panel">
       <div class="cal-day-head">${selected}</div>
       ${list}
-      <div class="cal-add card" style="padding:12px;margin-top:10px">
-        <input id="cal-title" placeholder="标题（如：和好约定 / 今晚视频）" autocomplete="off"/>
-        <textarea id="cal-body" rows="2" placeholder="细节、承诺、怎么和好的…" style="margin-top:8px;width:100%"></textarea>
-        <button type="button" class="btn" id="cal-add-btn" style="margin-top:8px;width:100%">记在这一天</button>
+      <div class="status-card" style="padding:12px;margin-top:10px">
+        <input id="cal-title" placeholder="标题（如：和好约定 / 今晚视频）" autocomplete="off" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);outline:none"/>
+        <textarea id="cal-body" rows="2" placeholder="细节、承诺、怎么和好的…" style="margin-top:8px;width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);outline:none"></textarea>
+        <button type="button" class="btn-accent" id="cal-add-btn" style="margin-top:8px;width:100%;padding:10px">记在这一天</button>
       </div>
     </div>
   </div>`;
@@ -6551,14 +6562,20 @@ function flightChessPromptBlock(){
     const receiver = ev.receiver || ev.who;
     const where = (ev.landIdx!=null && ev.landIdx!==ev.pos) ? `第 ${ev.landIdx} 格${ev.note||""}` : `第 ${ev.pos} 格`;
     const whoLabel = ev.who==="player" ? "用户" : "小机（你）";
-    const line = receiver==="player"
-      ? `${whoLabel}停在${where}『${ev.text}』，用户接受该格指令，由你（小机）对用户执行`
-      : `${whoLabel}停在${where}『${ev.text}』，你（小机）接受该格指令，由用户对你执行`;
+    const mutual = /互相|一起|双方|彼此/.test(ev.text||"");
+    let line;
+    if(mutual){
+      line = `${whoLabel}停在${where}『${ev.text}』。这是「双方一起做」的格子：两人都参与，不要理解成单方面惩罚；按格子字面一起完成即可`;
+    } else if(receiver==="player"){
+      line = `${whoLabel}停在${where}『${ev.text}』。接受方是用户（女方）：由你（小机）对用户完成该格内容；不是「两个人各做一遍」`;
+    } else {
+      line = `${whoLabel}停在${where}『${ev.text}』。接受方是你（小机）：由用户对你完成该格内容；不是「两个人各做一遍」`;
+    }
     cellBlock = `
 【飞行棋事件 · 已自动掷完 · 必须执行】
 ${line}。
 骰子已由系统掷出，禁止再讨论掷骰、禁止写 ⟪掷骰⟫、禁止询问是否要掷。
-请立刻按格子内容认真完成（不是演戏、不是假装），把这一格当作正在发生的事来做完；动作细节可进思考，可见回复直接推进互动。谁执行、谁承受按上面的角色来。`;
+请立刻按格子内容认真完成（不是演戏），把这一格当作正在发生的事；可见回复直接推进。严禁擅自改成双方各受一次惩罚，除非格子本身写了互相/一起。`;
   }
   return `\n\n【飞行棋「互动游戏」——marker 暗号】
 你们有一套飞行棋游戏：功能页「飞行棋」选版本看板，聊天弹窗里掷骰子走格。规则：谁接受格子内容按图纸——女仆版/SM版无论谁停都是她（女方）接受；男仆版无论谁停都是你（男方）接受；其他版本谁停谁接受；由另一方对他执行。「后进X格」停在上面会实际后退X格；「退回N格」停在上面会退回到N格；路过不触发。当前版本：${board?board.name:(st.version||"女仆版")} · ${who}。
@@ -6600,7 +6617,7 @@ function renderSubPage(){
     baby: renderBaby,
     roleplay: renderRoleplay,
     calendar: renderCoupleCalendar,
-    anno: renderAnno,
+    anno: renderRead,
     flightchess: renderFlightChess,
     puzzle: renderPuzzleRoom,
     captivity: renderCaptivity,
@@ -8406,6 +8423,21 @@ function importBookFromText(title, raw){
   };
   state.books = [...(state.books||[]), book];
   persist("books");
+  // 同步到 VPS 共读（失败不影响本地书架）
+  try{
+    if(typeof annoApi === "function"){
+      const content = chapters.map(c => (c.title ? ("【"+c.title+"】\n") : "") + (c.content||"")).join("\n\n");
+      annoApi("/api/v1/anno/books", {
+        method: "POST",
+        body: JSON.stringify({ title: book.title, content, author: "" })
+      }).then(res => {
+        if(res && res.ok && res.data && res.data.book){
+          book.remoteId = res.data.book.id;
+          persist("books");
+        }
+      }).catch(()=>{});
+    }
+  }catch(e){}
   return book;
 }
 /** 睡前电台：从当前书当前页取一段，TTS 播放 + 聊天留痕 */
