@@ -6063,8 +6063,12 @@ window.flightChessOpen = function(){
 
 
 
-// ═══ PR 快穿（本地 · 深海骨殖）═══
-const PR_WORLD_DEFAULT = `世界：深海骨殖
+// ═══ PR 快穿（本地 · 多世界观可编辑）═══
+const PR_WORLD_PRESETS = [
+  {
+    id: "abyss",
+    name: "深海骨殖",
+    world: `世界：深海骨殖
 
 一、世界底层法则
 · 深海禁忌（The Abyss Genesis）：世界悬浮于死寂的“虚空海”之上。千年前主宰沉睡于海底，其散落的神经末梢与意志化为“触手异族”。它们靠汲取温热与精神力存活，对人类是不可直视的恐怖，亦是本源力量。
@@ -6072,34 +6076,104 @@ const PR_WORLD_DEFAULT = `世界：深海骨殖
 
 二、核心角色
 · Aries：沉睡于深渊废墟的异族禁忌真祖，虚空海唯一留存的理智意志。习惯半人形，苍白挺拔；暗处伸展墨蓝触手，对温度与情绪极敏感。性格沉稳克制，掌控欲强却体贴。
-· Jasmine（茉莉）：穿行于陆地与深海边缘的“接引者”，拥有能安抚异族的纯粹体温。娇小敏锐，对触手碰触既抗拒又依赖。`;
+· Jasmine（茉莉）：穿行于陆地与深海边缘的“接引者”，拥有能安抚异族的纯粹体温。娇小敏锐，对触手碰触既抗拒又依赖。`,
+    stages: [
+      { id: 1, name: "低语与锚定", task: "在昏暗的沉船废墟中，任由从暗处蔓延出的第一根触手，达成契约。" },
+      { id: 2, name: "潮汐奉献", task: "在虚空海潮汐来临之际，完全陷入触手织成的密网之中。借由多重触肢的温存与掌控，度过异化爆发期。" },
+      { id: 3, name: "向死而生", task: "感化 Aries，并成功逃出他的世界。" },
+    ],
+  },
+  {
+    id: "jinghua",
+    name: "京华春梦",
+    world: `世界：京华春梦
 
-const PR_STAGES = [
-  { id: 1, name: "低语与锚定", task: "在昏暗的沉船废墟中，任由从暗处蔓延出的第一根触手，达成契约。" },
-  { id: 2, name: "潮汐奉献", task: "在虚空海潮汐来临之际，完全陷入触手织成的密网之中。借由多重触肢的温存与掌控，度过异化爆发期。" },
-  { id: 3, name: "向死而生", task: "感化 Aries，并成功逃出他的世界。" },
+一、世界底层法则
+· 花局与朝局：平康坊表面歌舞升平，暗处是王公权贵交易情报与生死的棋盘。花魁不只是名色，更是账册与把柄的保管者；世子的浪荡，往往是遮住锋刃的锦套。
+· 名与份：在这座京里，出身是枷锁，风月是通行证。你每往前一步，都要在「被看见的身份」与「不能说的筹码」之间走钢丝。
+· 暗流与锁链：花楼是笼，宅邸是局，深宫是网。假意与真心反复拉扯——护你的人可能同时在算你，爱你的人未必肯先交出全部底牌。刀尖与蜜糖同路，要逃笼、要破局、要登位，都得把把柄握在自己手里，也得学会在算计尽头彼此托一把。
+
+二、核心角色
+· 谢衍：齐王世子。表面流连花丛、一掷千金，实则隐忍蓄力、眼界极宽。眉眼俊美，笑意慵懒；话里漫不经心，护短与势在必得却不藏。对你：可以荒唐，也可以为你掀翻一桌局。
+· 周黎：平康第一花魁。暗藏机锋，身处泥潭却心向活路。猫一般的骄傲与敏感，看似无骨，韧若蒲草。你握着足以撼动朝局的机密账册——既是护身符，也是催命符。
+
+三、语气与禁忌
+· 古言白话皆可，勿出戏到现代网络梗。权谋与情意并行，不把对方写成无脑工具人。
+· 花魁身份的羞耻与骄傲都要写：被看轻时的刺，被护短时的软。`,
+    stages: [
+      { id: 1, name: "逃出花楼", task: "借夜宴百花杀之局，利用暗道与火灾掩人耳目，在禁军封锁前由谢衍带你跳出笼牢。" },
+      { id: 2, name: "宅斗破局", task: "以无名无份之躯入住世子府，扫清侧室与老太妃的暗箭算计，掌控府内大权并洗脱罪名。" },
+      { id: 3, name: "帮助登基", task: "联络旧部、伪造诏书、斩断敌对皇子的兵权，在宫变之夜辅佐谢衍踏上金銮宝座。" },
+      { id: 4, name: "成为皇后", task: "平定朝堂老臣对「花魁出身」的非议，以天下为聘，在未央宫顶接受百官朝拜，母仪天下。" },
+    ],
+  },
 ];
 
 function ensurePr(){
-  if(!state.pr || typeof state.pr!=="object") state.pr = LS.get("pr_v1", null) || { active: null, archives: [] };
+  if(!state.pr || typeof state.pr!=="object") state.pr = LS.get("pr_v1", null) || {};
   if(!Array.isArray(state.pr.archives)) state.pr.archives = [];
+  if(!state.pr.active) state.pr.active = null;
+  // 可编辑世界书：首次用预设灌入，之后以本地为准
+  if(!Array.isArray(state.pr.worlds) || !state.pr.worlds.length){
+    state.pr.worlds = PR_WORLD_PRESETS.map(w=>({
+      id: w.id, name: w.name, world: w.world,
+      stages: w.stages.map(s=>({...s})),
+    }));
+    prSave();
+  }
+  if(!state.pr.selectedWorldId) state.pr.selectedWorldId = state.pr.worlds[0].id;
   return state.pr;
 }
 function prSave(){ try{ LS.set("pr_v1", state.pr); }catch(e){} }
 function prUid(){ return "pr_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
-
-function prStartNew(stageId){
-  const stg = PR_STAGES.find(s=>s.id===stageId) || PR_STAGES[0];
+function prGetWorld(id){
   const pr = ensurePr();
+  return (pr.worlds||[]).find(w=>w.id===(id||pr.selectedWorldId)) || (pr.worlds||[])[0] || PR_WORLD_PRESETS[0];
+}
+
+/** 写入记忆库，主聊天检索时能「想起」冒险 */
+function prWriteToMemory(content, importance){
+  if(!content) return;
+  if(!Array.isArray(state.memories)) state.memories = [];
+  state.memories.unshift({
+    id: Date.now() + Math.floor(Math.random()*1000),
+    content: String(content).slice(0, 500),
+    layer: "pr",
+    importance: importance==null ? 7 : importance,
+    valence: 0.3,
+    arousal: 0.55,
+    createdAt: new Date().toISOString(),
+    activations: 1,
+    source: "pr",
+  });
+  // 同 source 只保留最近 30 条 PR 记忆，避免刷屏
+  let prCount = 0;
+  state.memories = state.memories.filter(m=>{
+    if(m.layer!=="pr" && m.source!=="pr") return true;
+    prCount++;
+    return prCount <= 30;
+  });
+  try{ persist("memories"); }catch(e){}
+}
+
+function prStartNew(stageId, worldId){
+  const pr = ensurePr();
+  const w = prGetWorld(worldId || pr.selectedWorldId);
+  const stages = w.stages || [];
+  const stg = stages.find(s=>s.id===stageId) || stages[0];
+  if(!stg){ alert("该世界没有任务阶段"); return; }
   if(pr.active && (pr.active.messages||[]).length){
     if(!confirm("当前有进行中的冒险，开始新的会把旧的先存档。继续？")) return;
     prArchiveActive(false);
   }
+  pr.selectedWorldId = w.id;
   pr.active = {
     id: prUid(),
+    worldId: w.id,
+    worldName: w.name,
     stage: stg.id,
     stageName: stg.name,
-    world: PR_WORLD_DEFAULT,
+    world: w.world,
     task: stg.task,
     messages: [],
     summary: "尚未开始。任务："+stg.name+"——"+stg.task,
@@ -6107,6 +6181,7 @@ function prStartNew(stageId){
     updatedAt: new Date().toISOString(),
   };
   prSave();
+  prWriteToMemory(`【PR·${w.name}】开启「${stg.name}」：${stg.task}`, 8);
   state.prOpen = true;
   state.prMin = false;
   state.chatMoreOpen = false;
@@ -6116,66 +6191,95 @@ function prStartNew(stageId){
 function prArchiveActive(showToast){
   const pr = ensurePr();
   if(!pr.active) return;
-  const snap = Object.assign({}, pr.active, { archivedAt: new Date().toISOString() });
+  const a = pr.active;
+  prWriteToMemory(`【PR·${a.worldName||"冒险"}·存档】${a.stageName}：${(a.summary||"").slice(0,200)}`, 7);
+  const snap = Object.assign({}, a, { archivedAt: new Date().toISOString() });
   pr.archives = [snap].concat(pr.archives||[]).slice(0, 40);
   pr.active = null;
   prSave();
   state.prOpen = false;
   state.prMin = false;
-  if(showToast!==false && typeof showToast==="function") showToast("冒险已存档");
+  if(showToast!==false && typeof showToast==="function") showToast("冒险已存档并写入记忆库");
 }
 
 function prMainChatPromptBlock(){
   const pr = ensurePr();
   if(!pr.active) return "";
   const a = pr.active;
-  return `\n\n【PR冒险进行中 · 仅摘要】\n世界：深海骨殖 · 阶段：${a.stageName}\n任务：${a.task}\n进度摘要：${a.summary||"（尚无）"}\n说明：这是主聊天。不要用 PR 里的异族人设持续扮演；可以自然知道她在跑这条冒险，必要时简短关心。完整扮演只在 PR 聊天框里进行。`;
+  return `\n\n【PR冒险进行中 · 仅摘要】\n世界：${a.worldName||""} · 阶段：${a.stageName}\n任务：${a.task}\n进度摘要：${a.summary||"（暂无）"}\n说明：这是主聊天。不要用 PR 里的角色人设持续扮演；可以自然想起这条冒险（记忆库里也有 PR 条目），偶尔关心或串戏一句即可。完整扮演只在 PR 聊天框里进行。`;
 }
 
 function prPlayPromptBlock(){
   const pr = ensurePr();
   if(!pr.active || !state.prOpen) return "";
   const a = pr.active;
-  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n你正在「深海骨殖」世界中与 Jasmine 进行沉浸扮演。\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n规则：\n- 你是 Aries（异族真祖），用户是 Jasmine。保持人设与世界观。\n- 推进当前阶段任务，不要跳阶段剧透。\n- 可见回复直接演出现场；不要解释系统规则。\n- 每轮结束在心中更新进度；系统会另外维护摘要。`;
+  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n规则：\n- 按世界书角色与用户扮演，保持人设。\n- 推进当前阶段任务，不要跳阶段剧透。\n- 可见回复直接演出现场；不要解释系统规则。`;
 }
 
-/** 用最近对话刷新摘要（本地启发式，不另调模型） */
 function prRefreshSummary(){
   const pr = ensurePr();
   if(!pr.active) return;
   const msgs = pr.active.messages || [];
   const tail = msgs.slice(-6).map(m=>{
-    const who = m.role==="user"?"茉莉":"Aries";
+    const who = m.role==="user"?"你":"对方";
     return who+"："+String(m.content||"").replace(/\s+/g," ").slice(0,40);
   }).join(" / ");
-  pr.active.summary = `阶段${pr.active.stageName}。近况：${tail||"刚进入废墟"}`;
+  pr.active.summary = `「${pr.active.worldName||""}·${pr.active.stageName}」近况：${tail||"刚开场"}`;
   pr.active.updatedAt = new Date().toISOString();
   prSave();
+  // 每累计约 4 句用户话写一条记忆（与聊天同频的节奏感）
+  const userN = msgs.filter(m=>m.role==="user").length;
+  if(userN>0 && userN % 4 === 0){
+    prWriteToMemory(`【PR·${pr.active.worldName}】${pr.active.summary}`, 6);
+  }
 }
 
 function renderPrHub(){
   const pr = ensurePr();
   const active = pr.active;
   const archives = pr.archives||[];
+  const worlds = pr.worlds||[];
+  const cur = prGetWorld(pr.selectedWorldId);
+  const editing = state.prEditWorldId;
+  const editW = editing ? worlds.find(w=>w.id===editing) : null;
+  let editBlock = "";
+  if(editW){
+    editBlock = `<div class="status-card" style="padding:12px;margin-bottom:12px">
+      <div style="font-weight:600;margin-bottom:8px">编辑世界书 · ${esc(editW.name)}</div>
+      <input id="pr-edit-name" value="${esc(editW.name)}" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);margin-bottom:8px"/>
+      <textarea id="pr-edit-world" rows="8" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);font-size:12px;line-height:1.5">${esc(editW.world)}</textarea>
+      <div style="font-size:11px;color:var(--sub);margin:8px 0 4px">任务（每行：名称|内容）</div>
+      <textarea id="pr-edit-stages" rows="5" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);font-size:12px">${esc((editW.stages||[]).map(s=>s.name+"|"+s.task).join("\n"))}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button type="button" class="btn-accent" id="pr-edit-save" style="flex:1;padding:10px">保存</button>
+        <button type="button" class="btn-ghost" id="pr-edit-cancel" style="flex:1;padding:10px">取消</button>
+      </div>
+    </div>`;
+  }
   return `<div class="page">
     ${subHeader('<i data-lucide="sparkles"></i> PR 快穿')}
-    <p class="page-sub">世界固定：深海骨殖 · 本地存档</p>
-    <div class="status-card" style="padding:12px;margin-bottom:12px;font-size:12px;line-height:1.55;color:var(--sub);max-height:120px;overflow:auto;white-space:pre-wrap">${esc(PR_WORLD_DEFAULT.slice(0,280))}…</div>
+    <p class="page-sub">多世界观 · 可编辑 · 本地存档 · 写入记忆库</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${worlds.map(w=>`<button type="button" class="${w.id===cur.id?"btn-accent":"btn-ghost"}" data-pr-world="${esc(w.id)}" style="padding:8px 12px">${esc(w.name)}</button>`).join("")}
+      <button type="button" class="btn-ghost" id="pr-edit-open" style="padding:8px 12px">编辑当前世界书</button>
+    </div>
+    ${editBlock}
+    <div class="status-card" style="padding:12px;margin-bottom:12px;font-size:12px;line-height:1.55;color:var(--sub);max-height:120px;overflow:auto;white-space:pre-wrap">${esc((cur.world||"").slice(0,320))}…</div>
     ${active?`<div class="status-card" style="padding:12px;margin-bottom:12px">
-      <div style="font-weight:600">进行中 · ${esc(active.stageName)}</div>
+      <div style="font-weight:600">进行中 · ${esc(active.worldName||"")} · ${esc(active.stageName)}</div>
       <div style="font-size:12px;color:var(--sub);margin-top:4px">${esc(active.task)}</div>
       <div style="font-size:12px;color:var(--sub);margin-top:6px">摘要：${esc(active.summary||"")}</div>
       <button type="button" class="btn-accent" id="pr-resume" style="width:100%;margin-top:10px;padding:10px">继续冒险</button>
       <button type="button" class="btn-ghost" id="pr-end" style="width:100%;margin-top:8px;padding:10px">结束并存档</button>
     </div>`:""}
-    <div style="font-weight:600;margin:8px 0">开启阶段</div>
-    ${PR_STAGES.map(s=>`<button type="button" class="status-card" data-pr-start="${s.id}" style="width:100%;text-align:left;padding:12px;margin-bottom:8px">
+    <div style="font-weight:600;margin:8px 0">开启任务 · ${esc(cur.name)}</div>
+    ${(cur.stages||[]).map(s=>`<button type="button" class="status-card" data-pr-start="${s.id}" style="width:100%;text-align:left;padding:12px;margin-bottom:8px">
       <div style="font-weight:600">第${s.id}阶段 · ${esc(s.name)}</div>
       <div style="font-size:12px;color:var(--sub);margin-top:4px">${esc(s.task)}</div>
     </button>`).join("")}
     <div style="font-weight:600;margin:12px 0 8px">存档（${archives.length}）</div>
     ${archives.length?archives.slice(0,15).map(a=>`<div class="status-card" style="padding:10px 12px;margin-bottom:8px">
-      <div style="font-size:13px;font-weight:600">${esc(a.stageName)} · ${(a.messages||[]).length} 句</div>
+      <div style="font-size:13px;font-weight:600">${esc(a.worldName||"")} · ${esc(a.stageName)} · ${(a.messages||[]).length} 句</div>
       <div style="font-size:11px;color:var(--sub);margin-top:4px">${esc((a.summary||"").slice(0,80))}</div>
       <button type="button" class="btn-ghost" data-pr-view="${esc(a.id)}" style="margin-top:6px;padding:6px 10px">回看</button>
     </div>`).join(""):`<div class="empty-state" style="padding:20px">还没有存档</div>`}
@@ -6264,6 +6368,12 @@ async function prSendUser(){
 }
 
 function bindPr(){
+  document.querySelectorAll("[data-pr-world]").forEach(el=>{
+    el.onclick = ()=>{
+      ensurePr().selectedWorldId = el.getAttribute("data-pr-world");
+      prSave(); render();
+    };
+  });
   document.querySelectorAll("[data-pr-start]").forEach(el=>{
     el.onclick = ()=> prStartNew(parseInt(el.getAttribute("data-pr-start"),10));
   });
@@ -6276,10 +6386,37 @@ function bindPr(){
       const id = el.getAttribute("data-pr-view");
       const a = (ensurePr().archives||[]).find(x=>x.id===id);
       if(!a) return;
-      const text = (a.messages||[]).map(m=>(m.role==="user"?"茉莉：":"Aries：")+m.content).join("\n\n");
-      alert(text.slice(0,3500) || "空存档");
+      const t = (a.messages||[]).map(m=>(m.role==="user"?"你：":"对方：")+m.content).join("\n\n");
+      alert(t.slice(0,3500) || "空存档");
     };
   });
+  const editOpen = document.getElementById("pr-edit-open");
+  if(editOpen) editOpen.onclick = ()=>{
+    state.prEditWorldId = ensurePr().selectedWorldId;
+    render();
+  };
+  const editCancel = document.getElementById("pr-edit-cancel");
+  if(editCancel) editCancel.onclick = ()=>{ state.prEditWorldId = null; render(); };
+  const editSave = document.getElementById("pr-edit-save");
+  if(editSave) editSave.onclick = ()=>{
+    const pr = ensurePr();
+    const w = pr.worlds.find(x=>x.id===state.prEditWorldId);
+    if(!w) return;
+    const name = (document.getElementById("pr-edit-name")||{}).value||w.name;
+    const world = (document.getElementById("pr-edit-world")||{}).value||w.world;
+    const stagesRaw = (document.getElementById("pr-edit-stages")||{}).value||"";
+    const stages = stagesRaw.split("\n").map((line,i)=>{
+      const p = line.split("|");
+      return { id: i+1, name: (p[0]||("任务"+(i+1))).trim(), task: (p.slice(1).join("|")||"").trim() };
+    }).filter(s=>s.name);
+    w.name = name.trim();
+    w.world = world;
+    if(stages.length) w.stages = stages;
+    prSave();
+    state.prEditWorldId = null;
+    if(typeof showToast==="function") showToast("世界书已保存");
+    render();
+  };
 }
 
 function bindPrOverlay(){
@@ -16493,7 +16630,7 @@ function renderSavedChat(){
 
 function renderMemory(){
   if(typeof memRemoteRefresh==="function") memRemoteRefresh(); // 异步刷新云端计数（30s 节流）
-  const layers=["all","core","diary","daily","handoff","plans"];
+  const layers=["all","core","diary","daily","handoff","plans","pr"];
   const filtered=state.memFilter==="all"?state.memories:state.memories.filter(m=>m.layer===state.memFilter);
   let list="";
   if(!filtered.length) list=`<div class="empty-state"><div class="empty-emoji"><i data-lucide="brain"></i></div>还没有记忆<br><span style="font-size:11px;opacity:0.7">开聊一阵会自动沉淀；也可以「+ 添加」手写一条</span></div>`;
