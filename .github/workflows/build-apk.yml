@@ -37,11 +37,11 @@ jobs:
       - name: 安装 npm 依赖
         run: npm ci
 
-      # 把最新前端资源塞进 APK 的 assets/public（和 VPS 上 build_apk.sh 一样的做法）
-      - name: 同步前端资源
-        run: |
-          mkdir -p android/app/src/main/assets/public
-          cp -r dist/* android/app/src/main/assets/public/
+      # 关键：assets/public、res/xml/config.xml、capacitor-cordova-android-plugins/
+      # 是 cap sync 生成的目录（VPS 上靠磁盘现成文件能编，GitHub 上没有），
+      # 所以必须跑 cap sync 重新生成，否则 gradle 找不到文件
+      - name: 同步 Capacitor 原生工程
+        run: npx cap sync android
 
       # 关键：build.gradle 里 debug 和 release 都指向 keystore/memory-palace.keystore，
       # 签名固定（CN=Memory Palace / e24ec557），可直接覆盖安装旧版
