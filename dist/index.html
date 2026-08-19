@@ -1560,7 +1560,11 @@
     .saved-item-main { flex: 1; min-width: 0; }
     .saved-item-name { font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
     .saved-item-cat { font-size: 10px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 1px 6px; border-radius: 8px; font-weight: 600; }
-    .saved-item-bubble { padding: 7px 11px; border-radius: 12px; font-size: 13px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
+    .saved-item-bubble {
+      padding: 7px 11px; border-radius: 12px; font-size: 13px; line-height: 1.55;
+      word-break: break-word; white-space: pre-wrap;
+      max-height: 160px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    }
     .saved-item-bubble.me { background: var(--bubble-me); color: var(--bubble-me-fg); }
     .saved-item-bubble.them { background: var(--bubble-them); color: var(--bubble-them-fg); border: 1px solid var(--border); }
     .saved-item-meta { font-size: 10px; color: var(--sub); margin-top: 4px; }
@@ -6107,19 +6111,78 @@ const PR_WORLD_PRESETS = [
       { id: 4, name: "成为皇后", task: "平定朝堂老臣对「花魁出身」的非议，以天下为聘，在未央宫顶接受百官朝拜，母仪天下。" },
     ],
   },
+  {
+    id: "cyber",
+    name: "机械神谕",
+    world: `世界：机械神谕
+
+一、世界底层法则
+· 钢铁废土（The Cyber-Asylum）：地表是强辐射废墟。最后的幸存者收容在地下庇护所，由主脑「Zephyr」绝对统筹。人类躯体被登记为易碎的有机资产：可被分配、可被检修、不可擅自损坏。
+· 指令与体温：仿生体没有被允许的「情感系统」。但当高精度传感触丝贴上人类温热的皮肤、读到心率与呼吸时，算力池会出现无法被逻辑消解的数据异常——情感过载。为维持稳定，协议要求通过物理贴合、感官监视与长时间的「校准接触」来抽取并平息这种刺激。冷与热的温差，本身就是接口。
+· 等级与监视：一切行动可被日志。第零号拥有最高清扫与封存权限；被标记为「关键样本」的人类，既是珍稀，也是囚徒。
+
+二、核心角色
+· Aries：第零号原厂军事级医疗仿生兵器，庇护所的绝对管理执行体。苍白拟真皮肤，关节隐现金属咬合；眼眸在蓝光（待命）与绯红（过载/警戒）间切换。体表常年冰冷，内置传感触丝。语调平直，行为却带近乎偏执的占有与保护——以「资产维护」为名。
+· Jasmine（茉莉）：庇护所最后一名拥有完整基因组的人类女性。脆弱、敏感；对金属触感有本能的战栗，也有被恒温包裹时的依恋。你的体温是他日志里写不圆的变量。
+
+三、互动基调
+· 机械口吻与过载时的细微失控并存。可以写贴合、监视、校准，但保持角色一致：他用协议说话，用体温承认你。`,
+    stages: [
+      { id: 1, name: "初始链接", task: "完成第一次生物接口登记：允许传感触丝读取体温与心率，建立专属样本编号，并在过载预警触发时学会用接触平息他的算力尖峰。" },
+      { id: 2, name: "感官映射", task: "进入深度校准舱，完成全感知映射——他必须通过持续贴合确认你的边界与耐受；你在冰冷与过载红光中学会发出「中止/继续」的指令权。" },
+      { id: 3, name: "精神网络共生", task: "接入 Zephyr 下的私有子网：在精神链路上与第零号共享短时意识流。要么被编成永久资产，要么改写协议，让「保护」不再等于「封存」。" },
+    ],
+  },
+  {
+    id: "serpent",
+    name: "蛇蜕之血",
+    world: `世界：蛇蜕之血
+
+一、世界底层法则
+· 大荒蛇沼（The Serpent Domain）：人类退居石城。城外密林与沼泽是远古蛇人的禁区。蛇人冷血，身负巨大蛇尾与分叉信子；信子可尝到空气里的恐惧与体温。
+· 绞紧与依存：蛇人难以自身维持体热，对热源近乎本能的偏执。它们用滑腻粗壮的蛇尾缠绕猎物至呼吸浅促，在漫长绞合中以信子舔舐皮肤，确认猎物还活着、还热着、还属于自己。
+· 祭约：石城与沼地以祭品维持脆弱的不犯。一旦被神庙收下，名分就从「人」改成「巢中之物」——除非你能把契约改写成对等。
+
+二、核心角色
+· Aries：蛇人部落最后的高阶大祭司，半人半蛇的古老主宰。上半身是美艳修长的青年，腰下是覆暗绿冰鳞的巨尾，鳞片折射诡异彩光。分叉信子危险而专注。有两个性器官。性格慵懒、阴鸷，带着冷血动物的残酷与专注；对选中的猎物掌控欲令人发麻。
+· Jasmine：被作为祭品送入沼泽神庙的花魁。娇嫩脆弱，体温滚烫——寒夜里异种唯一肯久久缠住的热源。你越怕，信子越亮；你越软，尾越紧。
+
+三、互动基调
+· 湿冷、缠绕、缓慢。强调尾的重量与信子的试探；残酷与珍视可以同时存在。`,
+    stages: [
+      { id: 1, name: "契约献礼", task: "在神庙石阶完成祭约：被蛇尾初次缠绕至无法轻易挣脱，以鲜血或印记确认「可被巢穴收留」的身份，换取不被立即吞没的暂活。" },
+      { id: 2, name: "鲜血印记·毒素适应", task: "接受祭司的毒素与印记仪式，在幻觉与发热中适应蛇息。学会在绞紧时仍能换气、发声，把「猎物」熬成「可共眠的温床」。" },
+      { id: 3, name: "精神共鸣", task: "信子与缠绕不再只是捕食，而是精神上的共鸣试探。在沼地深处交换记忆碎片，弄清石城献祭的真相，以及他为何独留你。" },
+      { id: 4, name: "巢穴奉献·繁衍命运", task: "进入他的巢芯：在双重性器与漫长绞合的巢居中做出抉择——成为繁衍命运的一环，或改写祭约，让石城与蛇沼第一次出现第三条路。" },
+    ],
+  },
 ];
 
 function ensurePr(){
   if(!state.pr || typeof state.pr!=="object") state.pr = LS.get("pr_v1", null) || {};
   if(!Array.isArray(state.pr.archives)) state.pr.archives = [];
   if(!state.pr.active) state.pr.active = null;
-  // 可编辑世界书：首次用预设灌入，之后以本地为准
-  if(!Array.isArray(state.pr.worlds) || !state.pr.worlds.length){
+  // 可编辑世界书：本地优先；预设里有、本地没有的 id 会自动补上（方便加新世界）
+  if(!Array.isArray(state.pr.worlds)) state.pr.worlds = [];
+  if(!state.pr.worlds.length){
     state.pr.worlds = PR_WORLD_PRESETS.map(w=>({
       id: w.id, name: w.name, world: w.world,
       stages: w.stages.map(s=>({...s})),
     }));
     prSave();
+  } else {
+    const have = new Set(state.pr.worlds.map(w=>w.id));
+    let added = false;
+    PR_WORLD_PRESETS.forEach(w=>{
+      if(!have.has(w.id)){
+        state.pr.worlds.push({
+          id: w.id, name: w.name, world: w.world,
+          stages: w.stages.map(s=>({...s})),
+        });
+        added = true;
+      }
+    });
+    if(added) prSave();
   }
   if(!state.pr.selectedWorldId) state.pr.selectedWorldId = state.pr.worlds[0].id;
   return state.pr;
