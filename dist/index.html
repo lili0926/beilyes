@@ -21181,10 +21181,17 @@ function sendUserMsg(){
   if(typeof memRemoteWarmup==="function") memRemoteWarmup(text); // 预热云端记忆检索（异步，不阻塞）
   const atts=state.chatAttachments||[];
   text = handleProfileCommand(text, "me"); // 主页资料卡：改签名/简介/背景（识别并擦除）
-  // 远程浏览器：用户说「登推特/登录X/打开浏览器」→ 直接弹浏览器登录页（不等 AI 写暗号）
+  // 小浏览器：用户要上网 / 登 X / 贴了链接 → 直接弹层（不等 AI 写暗号）
   try{
-    if(text && /登\S*推特|登录\S*X|登\S*X|打开浏览器|登录浏览器|上推特|推特\S*登录/.test(text) && typeof pocketShowUrl==="function" && pocketNative()){
-      pocketShowUrl("https://x.com/i/flow/login");
+    if(text && typeof pocketShowUrl==="function" && pocketNative()){
+      const urlIn = (text.match(/https?:\/\/[^\s⟧】）\]」』]+/)||[])[0];
+      if(urlIn){
+        pocketShowUrl(urlIn);
+      } else if(/登\S*推特|登录\S*X|登\S*X|上推特|推特\S*登录|打开\S*X/.test(text)){
+        pocketShowUrl("https://x.com/i/flow/login");
+      } else if(/打开浏览器|打开小浏览器|上网看看|查(一下)?百科/.test(text)){
+        pocketShowUrl("https://www.bing.com");
+      }
     }
   }catch(e){}
   // 飞行棋：用户说「到你了/轮到你」且轮到机 → 前端直接让机掷骰（弹窗没开就先开）
