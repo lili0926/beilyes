@@ -365,7 +365,9 @@
     .fc-path-scroll::-webkit-scrollbar { width: 4px; }
     .fc-path-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     .fc-path-popup { gap: 2px; }
-    .fc-popup-action { flex-shrink: 0; padding: 10px 14px 14px; border-top: 1px solid var(--border); }
+    .fc-popup-action { flex-shrink: 0; padding: 10px 14px 14px; border-top: 1px solid var(--border); position: relative; z-index: 5; background: var(--card); }
+    .fc-btn-roll, .fc-btn-ai { position: relative; z-index: 6; pointer-events: auto !important; touch-action: manipulation; }
+    .fc-btn-roll:disabled, .fc-btn-ai:disabled { pointer-events: auto !important; opacity: 0.65; }
     .fc-turn-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .fc-turn-text { font-size: 12px; color: var(--text); }
     .fc-turn-text strong { color: var(--accent); }
@@ -4415,7 +4417,7 @@ const state = {
   flightChessPromptEvent: null, // 需要进入两轮 prompt 的格子内容 {who,text,pos,remaining}（不持久化）
   _fcSkipConsume: false, // ⟪掷骰⟫ 在回复中途掷骰时，本轮不消耗 promptEvent 剩余轮次
   msgBarIdx: null, // 点气泡唤出的收藏/复制操作条挂在哪条消息上（不持久化）
-  streamOn: (function(){ const v=LS.get("streamOn", true); return v===false||v==="false"||v===0||v==="0"?false:true; })(), // 流式输出（规范化布尔）
+  streamOn: (function(){ try{ const v=LS.get("streamOn", true); if(v===false||v==="false"||v===0||v==="0") return false; return true; }catch(e){ return true; } })(),
   streamLive: null, // 流式中的实时内容 {active,thinking,text,speaker}（不持久化）
   // 书房（连载写作；数据与「一起读」共用 state.books）
   shufangTab: "shelf", // shelf | chapters | editor
@@ -6040,29 +6042,89 @@ function flightChessSetVersion(key){
   render();
 }
 window.flightChessPlayerRoll = function(){
-  const st = state.flightChess;
-  if(!st || st.turn!=="player" || st.finished) return false;
-  const num = Math.floor(Math.random()*6)+1;
-  state.flightChessDice = num;
-  flightChessMove("player", num);
-  return num;
+  try{
+    if(!state.flightChess) state.flightChess = { version:"maid", playerPos:0, aiPos:0, turn:"player", finished:false };
+    const st = state.flightChess;
+    if(st.finished){ if(typeof showToast==="function") showToast("本局已结束，请换版本或重置"); return false; }
+    if(st.turn!=="player"){ if(typeof showToast==="function") showToast("现在是小机的回合"); return false; }
+    const num = Math.floor(Math.random()*6)+1;
+    state.flightChessDice = num;
+    flightChessMove("player", num);
+    if(typeof showToast==="function") showToast("你掷出了 "+num);
+    return num;
+  }catch(err){
+    console.error(err);
+    if(typeof showToast==="function") showToast("掷骰失败："+(err.message||err));
+    return false;
+  }
 };
 /** 机的回合由「到你了」/暗号 ⟪掷骰⟫ 触发（外部也直接调） */
 window.flightChessAiRoll = function(){
-  const st = state.flightChess;
-  if(!st || st.turn!=="ai" || st.finished) return false;
-  const num = Math.floor(Math.random()*6)+1;
-  state.flightChessDice = num;
-  flightChessMove("ai", num);
-  return num;
+  try{
+    if(!state.flightChess) state.flightChess = { version:"maid", playerPos:0, aiPos:0, turn:"player", finished:false };
+    const st = state.flightChess;
+    if(st.finished) return false;
+    if(st.turn!=="ai"){ if(typeof showToast==="function") showToast("现在是你的回合"); return false; }
+    const num = Math.floor(Math.random()*6)+1;
+    state.flightChessDice = num;
+    flightChessMove("ai", num);
+    return num;
+  }catch(err){
+    console.error(err);
+    if(typeof showToast==="function") showToast("机掷骰失败："+(err.message||err));
+    return false;
+  }
 };
 /** 打开聊天弹窗棋盘（切到聊天页） */
 window.flightChessOpen = function(){
   state.flightChessOpen = true;
+  state.flightChessMin = false;
   if(state.tab!=="chat"){ state.tab="chat"; state.subPage=null; }
   state.needChatScroll = true;
   render();
 };
+if(!window.__fcDelegated){
+  window.__fcDelegated = true;
+  document.addEventListener("click", function(e){
+    const t = e.target && e.target.closest ? e.target.closest("[data-fc-roll],[data-fc-ai],[data-fc-close],[data-fc-backdrop],[data-fc-save],[data-fc-min],[data-fc-version],[data-fc-float],[data-fc-event-close]") : null;
+    if(!t) return;
+    if(t.hasAttribute("data-fc-roll")){
+      e.preventDefault(); e.stopPropagation();
+      if(window.flightChessPlayerRoll) window.flightChessPlayerRoll();
+      return;
+    }
+    if(t.hasAttribute("data-fc-ai")){
+      e.preventDefault(); e.stopPropagation();
+      if(window.flightChessAiRoll) window.flightChessAiRoll();
+      return;
+    }
+    if(t.hasAttribute("data-fc-close") || (t.hasAttribute("data-fc-backdrop") && e.target===t)){
+      state.flightChessOpen=false; state.flightChessMin=false; render();
+      return;
+    }
+    if(t.hasAttribute("data-fc-save")){
+      persist("flightChess");
+      if(typeof showToast==="function") showToast("飞行棋进度已保存");
+      return;
+    }
+    if(t.hasAttribute("data-fc-min")){
+      state.flightChessMin=true; render();
+      return;
+    }
+    if(t.hasAttribute("data-fc-version")){
+      if(typeof flightChessSetVersion==="function") flightChessSetVersion(t.getAttribute("data-fc-version"));
+      return;
+    }
+    if(t.hasAttribute("data-fc-event-close")){
+      state.flightChessEvent=null; render();
+      return;
+    }
+    if(t.hasAttribute("data-fc-float")){
+      if(t.dataset.dragged){ delete t.dataset.dragged; return; }
+      state.flightChessMin=false; state.flightChessOpen=true; render();
+    }
+  }, true);
+}
 // AI 回复暗号：⟪飞行棋⟫ 开局弹棋盘 / ⟪掷骰⟫ 让机掷骰
 
 
@@ -10271,8 +10333,8 @@ function renderFlightChessPopup(){
           <div class="fc-dice">${state.flightChessDice!=null?state.flightChessDice:"?"}</div>
         </div>
         <div class="fc-btn-row">
-          <button type="button" class="fc-btn-roll" data-fc-roll ${!isPlayer||st.finished?"disabled":""}>我投掷</button>
-          <button type="button" class="fc-btn-ai" data-fc-ai ${isPlayer||st.finished?"disabled":""}>到你了</button>
+          <button type="button" class="fc-btn-roll" data-fc-roll ${!isPlayer||st.finished?'aria-disabled="true" style="opacity:.65"':''}>我投掷</button>
+          <button type="button" class="fc-btn-ai" data-fc-ai ${isPlayer||st.finished?'aria-disabled="true" style="opacity:.65"':''}>到你了</button>
         </div>
       </div>
       ${ev?`<div class="fc-event-layer" data-fc-event-backdrop>
@@ -17604,9 +17666,9 @@ function renderSettings(){
       <div class="section-body">
         <div class="setting-row">
           <span class="setting-label">流式输出</span>
-          <div id="stream-on-toggle" class="toggle-switch" style="background:${state.streamOn!==false?"var(--accent)":"var(--border)"}">
-            <div class="toggle-knob" style="left:${state.streamOn!==false?18:2}px"></div>
-          </div>
+          <button type="button" id="stream-on-toggle" class="toggle-switch" aria-label="流式输出" style="background:${state.streamOn===true?"var(--accent)":"var(--border)"};border:none;padding:0;flex:none !important;width:36px;height:20px;display:inline-block !important;">
+            <span class="toggle-knob" style="left:${state.streamOn===true?18:2}px;pointer-events:none"></span>
+          </button>
         </div>
         <div style="font-size:11px;color:var(--sub);padding:4px 2px 8px;line-height:1.5">TA 的回复逐字显现，token 用量照常显示在思考链顶栏；出错自动回退非流式。MCP 工具对话暂走非流式。</div>
       </div>
@@ -19994,15 +20056,18 @@ reader.readAsArrayBuffer(f);
 
   // 流式输出开关
   const streamToggle = document.getElementById("stream-on-toggle");
-  if(streamToggle) streamToggle.onclick = (e)=>{
-    e.preventDefault(); e.stopPropagation();
-    const nowOn = state.streamOn === true || state.streamOn === undefined || state.streamOn === null;
-    // 明确布尔：关→开，开→关（避免字符串/脏值卡死）
-    state.streamOn = !nowOn;
-    try{ LS.set("streamOn", state.streamOn === true); }catch(err){}
-    persist("streamOn");
-    render();
-  };
+  if(streamToggle){
+    const flipStream = (e)=>{
+      if(e){ e.preventDefault(); e.stopPropagation(); }
+      state.streamOn = state.streamOn === true ? false : true;
+      try{ LS.set("streamOn", state.streamOn); }catch(err){}
+      try{ persist("streamOn"); }catch(err){}
+      if(typeof showToast==="function") showToast(state.streamOn ? "流式输出：开" : "流式输出：关");
+      render();
+    };
+    streamToggle.onclick = flipStream;
+    streamToggle.ontouchend = (e)=>{ e.preventDefault(); flipStream(e); };
+  }
 
   // 飞行棋：功能页版本切换 / 保存 / 去聊天玩
   document.querySelectorAll("[data-fc-version]").forEach(btn=>{
