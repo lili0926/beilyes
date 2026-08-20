@@ -17854,7 +17854,7 @@ function renderSettings(){
         <div class="setting-row"><span class="setting-label">Token</span>
           <input id="pocket-token" type="password" value="${escAttr(p.token||"")}" placeholder="POCKET_TOKEN"/></div>
         <div class="setting-row">
-          <span class="setting-label" style="line-height:1.6">连接后手机登录态变成远程可用的钥匙（只能连你的 VPS）。<br/>「打开浏览器登录 X」会弹出隐藏 WebView 手动登录，登录后点「隐藏」，Cookie 保留供远程使用。</span>
+          <span class="setting-label" style="line-height:1.6">连接后手机登录态变成远程可用的钥匙（只能连你的 VPS）。<br/>「打开浏览器登录 X」会弹出带「关闭」按钮的浏览器层（类似弹窗），登录后点关闭即可，不必清后台。Cookie 保留供远程使用。</span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
           <button type="button" id="pocket-connect" class="btn-accent2" style="padding:8px 14px">连接远程通道</button>
@@ -22608,7 +22608,7 @@ async function pocketShow(){
   if(!native){ setPocketStatus("仅原生 App 内可用", true); return; }
   try{
     await native.showBrowser({ url: "https://x.com/i/flow/login" });
-    setPocketStatus("浏览器已弹出：手动登录 X，登录后点「隐藏浏览器」");
+    setPocketStatus("浏览器已弹出：手动登录 X，完成后点右上角「关闭」或下方「隐藏浏览器」");
   }catch(e){ setPocketStatus("弹出失败：" + ((e && e.message) || e), true); }
 }
 async function pocketHide(){
