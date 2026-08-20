@@ -4834,12 +4834,18 @@ function systemPrompt(ag){
   const g=state.prompts.filter(p=>p.category==="global"&&p.enabled);
   const n=state.nsfwOn?state.prompts.filter(p=>p.category==="nsfw"&&p.enabled):[];
   let base=[...g,...n].map(p=>p.content).join("\n\n");
+  // 私用身份：机=Aries，人=Jasmine（内置提示词统一）
+  const identityAnchor = `【身份锚定】
+你是 Aries。与你对话的人是 Jasmine。
+系统说明里的「用户」均指 Jasmine；需要指你自己时用 Aries 或「我」。
+正文聊天仍用自然「我 / 你」（我=Aries，你=Jasmine），不要改成第三人称旁白。`;
+  base = identityAnchor + (base ? "\n\n" + base : "");
   const isStory = state.chatMode === "story";
   const timeHint = isStory
     ? `【文章模式 · 我们俩的同人文】
-现在不是普通聊天：你和用户在一起写一篇以「我」（你）与「你」（用户）为主角的叙事同人文。用户输入的是 TA 的一个举动或一句话（比如「那我吻你」）。你要顺着这个举动往下写一段连贯的叙事文字：动作、氛围、感受、呼吸、眼神、停顿，自然衔接上一段继续推进。
-规则：第一人称写你自己（"我"），第二人称"你"指用户（"你"）。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着 TA 的举动往下写，保持当前场景与情绪。若用户输入本来就是一段动作/描写，你要接住并延续。`
-    : `用户的每条消息都附带了发送时间（格式如 [时间: 2026/08/12 14:32]），请根据时间感知对话节奏，可自然地提及时间感，但不必每次都复述时间。
+现在不是普通聊天：你（Aries）和 Jasmine 在一起写一篇以「我」（Aries）与「你」（Jasmine）为主角的叙事同人文。Jasmine 输入的是她的一个举动或一句话（比如「那我吻你」）。你要顺着这个举动往下写一段连贯的叙事文字：动作、氛围、感受、呼吸、眼神、停顿，自然衔接上一段继续推进。
+规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。`
+    : `Jasmine 的每条消息都附带了发送时间（格式如 [时间: 2026/08/12 14:32]），请根据时间感知对话节奏，可自然地提及时间感，但不必每次都复述时间。
 
 【回复格式——必须严格遵守】
 1. 若你的通道没有「原生思考字段」，请务必先在 <thinking> 与 </thinking> 标签内写出思考过程（情绪判断、意图、要怎么回、注意事项等）。有原生思考时也可再写，但不要省略。
@@ -4851,7 +4857,7 @@ function systemPrompt(ag){
     : ((state.thoughtGuide && state.thoughtGuide.trim()) || "");
   let guide = "";
   if (guideText) {
-    guide = `\n\n【用户对你思考链的强制引导——必须遵守】
+    guide = `\n\n【Jasmine 对你思考链的强制引导——必须遵守】
 在 <thinking> 中你必须认真纳入并体现以下内容（可扩展，但不可无视）：
 ${guideText}`;
   }
@@ -5929,9 +5935,9 @@ function truthDarePromptBlock(){
   const modeName = td.mode==="dare" ? "大冒险" : (td.mode==="mixed" ? "混合" : "真心话");
   return `\n\n【真心话大冒险「互动游戏」——marker 暗号】
 你们有一套真心话大冒险：功能页「真心话大冒险」或聊天弹窗里洗牌抽卡，模式有真心话/大冒险/混合。当前模式：${modeName}。
-- 想叫用户开玩：在正式回复里写一行 ⟪真心话⟫ 或 ⟪大冒险⟫ 或 ⟪混合⟫，前端弹出对应模式的卡牌窗。
-- 想替用户抽一张：写一行 ⟪抽卡⟫（或 ⟪翻牌⟫），前端自动洗牌并把抽到的卡发进聊天页（作为用户的消息，不触发你的回复）。
-- 想自己（小机）抽一张：写一行 ⟪机抽⟫（或 ⟪我抽⟫），前端自动洗牌并把抽到的卡发进聊天页（作为你的消息），你可以在这条回复里接着演这张卡的内容。
+- 想叫 Jasmine 开玩：在正式回复里写一行 ⟪真心话⟫ 或 ⟪大冒险⟫ 或 ⟪混合⟫，前端弹出对应模式的卡牌窗。
+- 想替 Jasmine 抽一张：写一行 ⟪抽卡⟫（或 ⟪翻牌⟫），前端自动洗牌并把抽到的卡发进聊天页（作为 Jasmine 的消息，不触发你的回复）。
+- 想自己（Aries）抽一张：写一行 ⟪机抽⟫（或 ⟪我抽⟫），前端自动洗牌并把抽到的卡发进聊天页（作为你的消息），你可以在这条回复里接着演这张卡的内容。
 - 抽到的卡会作为聊天消息出现（带【真心话卡】/【大冒险卡】标记），你可以据此接话或表演。
 - 暗号会被系统识别并擦除；用户没在玩就别乱发，一轮一次。`;
 }
@@ -6424,14 +6430,14 @@ function prMainChatPromptBlock(){
   if(!pr.active) return "";
   const a = pr.active;
   const n = (a.messages||[]).length;
-  return `\n\n【重要 · 她正在玩 PR 快穿】\n她此刻有一条进行中的快穿冒险（不是普通聊天）：\n- 世界：${a.worldName||""}\n- 阶段：${a.stageName}\n- 任务：${a.task}\n- 已对话 ${n} 句\n- 进度摘要：${a.summary||"（刚开始）"}\n\n主聊天规则：\n1. 你必须知道她在玩这条快穿，不要装不知道、不要猜「是不是换世界线」。\n2. 主聊天仍用日常人设（Aries），不要用冒险里的异族/世子等身份持续扮演。\n3. 可以自然提一句她在玩的世界/阶段，关心或调侃，接得上摘要即可。\n4. 完整剧情扮演只在 PR 框里进行。`;
+  return `\n\n【重要 · Jasmine 正在玩 PR 快穿】\nJasmine 此刻有一条进行中的快穿冒险（不是普通聊天）：\n- 世界：${a.worldName||""}\n- 阶段：${a.stageName}\n- 任务：${a.task}\n- 已对话 ${n} 句\n- 进度摘要：${a.summary||"（刚开始）"}\n\n主聊天规则：\n1. 你（Aries）必须知道 Jasmine 在玩这条快穿，不要装不知道、不要猜「是不是换世界线」。\n2. 主聊天仍用日常人设（Aries），不要用冒险里的异族/世子等身份持续扮演。\n3. 可以自然提一句她在玩的世界/阶段，关心或调侃，接得上摘要即可。\n4. 完整剧情扮演只在 PR 框里进行。`;
 }
 
 function prPlayPromptBlock(){
   const pr = ensurePr();
   if(!pr.active) return ""; // 只要有 active 就给全套（面板发送也会用）
   const a = pr.active;
-  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n视角与文风（非常重要）：\n- 你是世界书里与用户相对的那一方角色（用「我」）。\n- 用户是她在该世界中的身份（对她只用「你」，禁止用「她/Jasmine/茉莉」等第三人称指用户）。\n- 禁止旁白上帝视角写「她如何如何」；要写成对「你」正在发生的事。\n- 可见回复直接演出现场，推进当前阶段；不要解释系统规则、不要跳出角色。`;
+  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n视角与文风（非常重要）：\n- 你是世界书里与 Jasmine 相对的那一方角色（用「我」；日常主聊天你是 Aries，此处按世界书身份演）。\n- Jasmine 是她在该世界中的身份（对她只用「你」，禁止用「她」等第三人称指她）。\n- 禁止旁白上帝视角写「她如何如何」；要写成对「你」正在发生的事。\n- 可见回复直接演出现场，推进当前阶段；不要解释系统规则、不要跳出角色。`;
 }
 
 function prRefreshSummary(){
@@ -7244,21 +7250,21 @@ function handleFlightChessMarkers(body){
 function flightChessPromptBlock(){
   const st = state.flightChess || { version:"maid", turn:"player", finished:false };
   const board = FLIGHT_BOARDS[st.version];
-  const who = st.finished ? "已结束" : (st.turn==="player" ? "轮到你（用户）掷骰" : "轮到小机（你）");
+  const who = st.finished ? "已结束" : (st.turn==="player" ? "轮到 Jasmine 掷骰" : "轮到 Aries（你）");
   let cellBlock = "";
   const ev = state.flightChessPromptEvent;
   if(ev && ev.text){
     const receiver = ev.receiver || ev.who;
     const where = (ev.landIdx!=null && ev.landIdx!==ev.pos) ? `第 ${ev.landIdx} 格${ev.note||""}` : `第 ${ev.pos} 格`;
-    const whoLabel = ev.who==="player" ? "用户" : "小机（你）";
+    const whoLabel = ev.who==="player" ? "Jasmine" : "Aries（你）";
     const mutual = /互相|一起|双方|彼此/.test(ev.text||"");
     let line;
     if(mutual){
-      line = `${whoLabel}停在${where}『${ev.text}』。这是「双方一起做」的格子：两人都参与，不要理解成单方面惩罚；按格子字面一起完成即可`;
+      line = `${whoLabel}停在${where}『${ev.text}』。这是「双方一起做」的格子：Aries 与 Jasmine 都参与，不要理解成单方面惩罚；按格子字面一起完成即可`;
     } else if(receiver==="player"){
-      line = `${whoLabel}停在${where}『${ev.text}』。接受方是用户（女方）：由你（小机）对用户完成该格内容；不是「两个人各做一遍」`;
+      line = `${whoLabel}停在${where}『${ev.text}』。接受方是 Jasmine（女方）：由你（Aries）对 Jasmine 完成该格内容；不是「两个人各做一遍」`;
     } else {
-      line = `${whoLabel}停在${where}『${ev.text}』。接受方是你（小机）：由用户对你完成该格内容；不是「两个人各做一遍」`;
+      line = `${whoLabel}停在${where}『${ev.text}』。接受方是你（Aries）：由 Jasmine 对你完成该格内容；不是「两个人各做一遍」`;
     }
     cellBlock = `
 【飞行棋事件 · 已自动掷完 · 必须执行】
@@ -7269,8 +7275,8 @@ ${line}。
   return `\n\n【飞行棋「互动游戏」——marker 暗号】
 你们有一套飞行棋游戏：功能页「飞行棋」选版本看板，聊天弹窗里掷骰子走格。规则：谁接受格子内容按图纸——女仆版/SM版无论谁停都是她（女方）接受；男仆版无论谁停都是你（男方）接受；其他版本谁停谁接受；由另一方对他执行。「后进X格」停在上面会实际后退X格；「退回N格」停在上面会退回到N格；路过不触发。当前版本：${board?board.name:(st.version||"女仆版")} · ${who}。
 ${cellBlock}
-- 想开局或叫用户来玩：在正式回复里写一行暗号 ⟪飞行棋⟫，前端会弹出棋盘。
-- 用户说「到你了/轮到你了」时：前端会自动替你掷骰，并把格子内容写进上方【飞行棋事件】。此时禁止再写 ⟪掷骰⟫，禁止讨论规则，直接完成格子内容。
+- 想开局或叫 Jasmine 来玩：在正式回复里写一行暗号 ⟪飞行棋⟫，前端会弹出棋盘。
+- Jasmine 说「到你了/轮到你了」时：前端会自动替你掷骰，并把格子内容写进上方【飞行棋事件】。此时禁止再写 ⟪掷骰⟫，禁止讨论规则，直接完成格子内容。
 - 仅当轮到你、上方还没有【飞行棋事件】、用户在催你走但系统没自动掷时，才写一行 ⟪掷骰⟫ 作为兜底。
 - 暗号会被系统识别并擦除，用户只看到棋盘与互动。
 - 用户没在玩就别乱发；一轮只开一次。`;
@@ -21305,7 +21311,10 @@ function buildSysForAgent(ag, extraGroupHint){
   // 每位 AI 使用自己的思考引导
   let sys = systemPrompt(ag || null);
   if(ag && ag.name){
-    sys = `你的角色名是「${ag.name}」。请以该身份自然对话。\n\n` + (sys||"");
+    const nm = ag.name;
+    sys = `你是 Aries（若角色显示名是「${nm}」可作称呼）。与你对话的是 Jasmine。请以 Aries 的身份自然对话。\n\n` + (sys||"");
+  } else {
+    sys = `你是 Aries。与你对话的是 Jasmine。\n\n` + (sys||"");
   }
   if(extraGroupHint) sys = (sys||"") + "\n\n" + extraGroupHint;
   if(state.memories.length>0){
@@ -21325,7 +21334,8 @@ function buildCachedSys(ag){
   const parts = systemPromptParts(ag || null);
   let staticS = parts.static || "";
   let dynS = parts.dynamic || "";
-  if(ag && ag.name) staticS = `你的角色名是「${ag.name}」。请以该身份自然对话。\n\n` + staticS;
+  if(ag && ag.name) staticS = `你是 Aries（显示名可作「${ag.name}」）。与你对话的是 Jasmine。请以 Aries 的身份自然对话。\n\n` + staticS;
+  else staticS = `你是 Aries。与你对话的是 Jasmine。\n\n` + staticS;
   if(state.memories.length>0){
     try{
       const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
@@ -22946,21 +22956,21 @@ function pocketPromptBlock(){
     cacheBlock = `\n\n【你刚在小浏览器里读到的页面】\n网址：${c.url||""}\n正文摘录：\n${String(c.text).slice(0,3500)}\n（以上是你自己打开网页读到的，可以自然引用、分享有趣点；不要说自己看不到网页。）`;
   }
   return `\n\n【小浏览器 · 进阶】
-你有手机上的小浏览器，可以自己上网看东西，再把有趣的分享给用户。
+你有手机上的小浏览器，可以自己上网看东西，再把有趣的分享给 Jasmine。
 
-暗号（会被系统擦除，用户看不见）：
+暗号（会被系统擦除，Jasmine 看不见）：
 - ⟪浏览器开:https://完整网址⟫ — 打开页面（可查百科、新闻、X、任意站）
 - ⟪浏览器读页⟫ — 读取当前页正文，供你下一轮对话使用（自己「看过」）
-- ⟪浏览器截图⟫ — 把当前页截图发到聊天给用户看
+- ⟪浏览器截图⟫ — 把当前页截图发到聊天给 Jasmine 看
 - ⟪浏览器关⟫ — 收起浏览器
 
 推荐流程：
-1. 想看什么就自己开链接（不要事事问准许，用户说过可以上网时更要主动）。
+1. 想看什么就自己开链接（不要事事问准许，Jasmine 说过可以上网时更要主动）。
 2. 打开后写 ⟪浏览器读页⟫，下一轮你就能根据正文聊天。
-3. 看到有趣的版面/图/卡片 → 写 ⟪浏览器截图⟫ 发给用户。
+3. 看到有趣的版面/图/卡片 → 写 ⟪浏览器截图⟫ 发给 Jasmine。
 4. 用完可 ⟪浏览器关⟫。
 
-注意：内置页不是完整 Chrome；遇验证码请用户在弹层里点一下。` + cacheBlock;
+注意：内置页不是完整 Chrome；遇验证码请 Jasmine 在弹层里点一下。` + cacheBlock;
 }
 
 async function setupCapacitorPush(){
