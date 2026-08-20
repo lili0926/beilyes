@@ -22,6 +22,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import com.getcapacitor.Plugin;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
@@ -113,6 +114,88 @@ public class PocketBrowserPlugin extends Plugin {
                 call.resolve();
             } catch (Exception e) {
                 call.reject(e.getMessage() != null ? e.getMessage() : "hide failed");
+            }
+        });
+    }
+
+
+    /** 截取当前页为 JPEG base64 dataUrl，供机发到聊天 */
+    @PluginMethod
+    public void captureScreenshot(PluginCall call) {
+        mainHandler.post(() -> {
+            try {
+                ensureWorkWebView();
+                WebView wv = workWebView;
+                DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
+                int w = wv.getWidth() > 0 ? wv.getWidth() : dm.widthPixels;
+                int h = wv.getHeight() > 0 ? wv.getHeight() : (int) (dm.heightPixels * 0.65f);
+                if (w <= 0) w = dm.widthPixels;
+                if (h <= 0) h = dm.heightPixels / 2;
+                if (wv.getWidth() <= 0 || wv.getHeight() <= 0) {
+                    wv.measure(
+                            View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+                    wv.layout(0, 0, w, h);
+                }
+                w = Math.max(1, wv.getWidth() > 0 ? wv.getWidth() : w);
+                h = Math.max(1, wv.getHeight() > 0 ? wv.getHeight() : h);
+                Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bmp);
+                wv.draw(canvas);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                bmp.compress(Bitmap.CompressFormat.JPEG, 72, baos);
+                String b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+                JSObject ret = new JSObject();
+                ret.put("dataUrl", "data:image/jpeg;base64," + b64);
+                ret.put("url", wv.getUrl() != null ? wv.getUrl() : "");
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : "screenshot failed");
+            }
+        });
+    }
+
+    /** 抽取当前页正文文本（截断），让机「自己看过」后能写进下一轮对话 */
+    @PluginMethod
+    public void getPageText(PluginCall call) {
+        mainHandler.post(() -> {
+            try {
+                ensureWorkWebView();
+                WebView wv = workWebView;
+                final String pageUrl = wv.getUrl() != null ? wv.getUrl() : "";
+wv.evaluateJavascript(
+                        "(function(){try{var t=(document.body&&document.body.innerText)||''; t=t.replace(/\s+/g,' ').trim(); return t.slice(0,6000);}catch(e){return '';}})()",
+                        value -> {
+                            try {
+                                String text = "";
+                                if (value != null && !"null".equals(value)) {
+                                    // value 是 JSON 编码的字符串
+                                    text = new JSONObject("{\"v\":" + value + "}").getString("v");
+                                }
+                                JSObject ret = new JSObject();
+                                ret.put("text", text);
+                                ret.put("url", pageUrl);
+                                call.resolve(ret);
+                            } catch (Exception e) {
+                                call.reject(e.getMessage() != null ? e.getMessage() : "getPageText parse failed");
+                            }
+                        });
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : "getPageText failed");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void getCurrentUrl(PluginCall call) {
+        mainHandler.post(() -> {
+            try {
+                ensureWorkWebView();
+                JSObject ret = new JSObject();
+                ret.put("url", workWebView.getUrl() != null ? workWebView.getUrl() : "");
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : "getCurrentUrl failed");
             }
         });
     }
