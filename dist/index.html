@@ -17847,20 +17847,23 @@ function renderSettings(){
       </div>
     </div>
     <div class="section">
-      <div class="section-title"><i data-lucide="globe"></i> 远程浏览器（Pocket）</div>
+      <div class="section-title"><i data-lucide="globe"></i> 小浏览器（Pocket）</div>
       <div class="section-body">
         <div class="setting-row"><span class="setting-label">Server URL</span>
           <input id="pocket-serverUrl" value="${escAttr(p.serverUrl||"")}" placeholder="wss://…/pocket/ws"/></div>
         <div class="setting-row"><span class="setting-label">Token</span>
           <input id="pocket-token" type="password" value="${escAttr(p.token||"")}" placeholder="POCKET_TOKEN"/></div>
         <div class="setting-row">
-          <span class="setting-label" style="line-height:1.6">连接后手机登录态变成远程可用的钥匙（只能连你的 VPS）。<br/>「打开浏览器登录 X」会弹出带「关闭」按钮的浏览器层（类似弹窗），登录后点关闭即可，不必清后台。Cookie 保留供远程使用。</span>
+          <span class="setting-label" style="line-height:1.6">给机用的小浏览器：可刷 X、查百科、打开任意网页。弹层右上角有「关闭」，不用清后台。<br/>可选：填 Server/Token 并「连接远程通道」后，登录态还能给 VPS 远程复用。</span>
         </div>
+        <div class="setting-row"><span class="setting-label">打开网址</span>
+          <input id="pocket-open-url" value="" placeholder="https://zh.wikipedia.org 或 https://x.com"/></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
           <button type="button" id="pocket-connect" class="btn-accent2" style="padding:8px 14px">连接远程通道</button>
-          <button type="button" id="pocket-show" class="btn-accent2" style="padding:8px 14px">打开浏览器登录 X</button>
-          <button type="button" id="pocket-hide" class="btn-ghost" style="padding:8px 14px">隐藏浏览器</button>
-          <button type="button" id="pocket-disconnect" class="btn-ghost" style="padding:8px 14px">断开</button>
+          <button type="button" id="pocket-show" class="btn-accent2" style="padding:8px 14px">打开小浏览器</button>
+          <button type="button" id="pocket-show-x" class="btn-ghost" style="padding:8px 14px">打开 X 登录</button>
+          <button type="button" id="pocket-hide" class="btn-ghost" style="padding:8px 14px">关闭浏览器</button>
+          <button type="button" id="pocket-disconnect" class="btn-ghost" style="padding:8px 14px">断开通道</button>
         </div>
         <div id="pocket-status" style="font-size:12px;color:var(--sub);margin-top:8px;line-height:1.5">未连接</div>        <div class="setting-row"><span class="setting-label">桌宠</span>
           <div class="body-switch-row" style="margin:0">
@@ -19501,6 +19504,8 @@ function bindEvents(){
   if(pConn) pConn.onclick=()=>{ pocketConnect(); };
   const pShow=document.getElementById("pocket-show");
   if(pShow) pShow.onclick=()=>{ pocketShow(); };
+  const pShowX=document.getElementById("pocket-show-x");
+  if(pShowX) pShowX.onclick=()=>{ pocketShowX(); };
   const pHide=document.getElementById("pocket-hide");
   if(pHide) pHide.onclick=()=>{ pocketHide(); };
   const pDisc=document.getElementById("pocket-disconnect");
@@ -22603,13 +22608,23 @@ async function pocketConnect(){
     setPocketStatus("已连接：远程通道就绪（再打开浏览器登录 X 一次）");
   }catch(e){ setPocketStatus("连接失败：" + ((e && e.message) || e), true); }
 }
-async function pocketShow(){
+async function pocketShow(url){
   const native = pocketNative();
-  if(!native){ setPocketStatus("仅原生 App 内可用", true); return; }
+  if(!native){ setPocketStatus("仅原生 App 内可用（请用安装版 APK）", true); return; }
+  let u = (url && String(url).trim()) || "";
+  if(!u){
+    const inp = document.getElementById("pocket-open-url");
+    u = (inp && inp.value || "").trim();
+  }
+  if(!u) u = "https://www.bing.com";
+  if(!/^https?:\/\//i.test(u)) u = "https://" + u;
   try{
-    await native.showBrowser({ url: "https://x.com/i/flow/login" });
-    setPocketStatus("浏览器已弹出：手动登录 X，完成后点右上角「关闭」或下方「隐藏浏览器」");
-  }catch(e){ setPocketStatus("弹出失败：" + ((e && e.message) || e), true); }
+    await native.showBrowser({ url: u });
+    setPocketStatus("小浏览器已打开：" + u + "（右上角「关闭」可收起）");
+  }catch(e){ setPocketStatus("打开失败：" + ((e && e.message) || e), true); }
+}
+async function pocketShowX(){
+  return pocketShow("https://x.com/i/flow/login");
 }
 async function pocketHide(){
   const native = pocketNative();
@@ -22635,7 +22650,7 @@ async function pocketShowUrl(url){
   try{
     if(p.serverUrl && p.token) await native.connect({ serverUrl: p.serverUrl, token: p.token });
     await native.showBrowser({ url: (url && url.trim()) || "https://x.com/i/flow/login" });
-    setPocketStatus("浏览器已弹出：登录完成后它会记住 Cookie");
+    setPocketStatus("小浏览器已打开，可浏览；需要登录时在弹层内操作，完成后点关闭");
   }catch(e){ setPocketStatus("打开失败：" + ((e && e.message) || e), true); }
 }
 function handlePocketMarkers(text){
@@ -22837,12 +22852,19 @@ async function galateaGameWake(){
 }
 function pocketPromptBlock(){
   if(!pocketNative()) return "";
-  return `\n\n【远程浏览器（pocket）】
-你能打开/收起一个远程浏览器窗口（手机上的隐藏 WebView，连着你手机的登录态）。
-- 用户说「登推特 / 登录 X / 打开浏览器」这类话时，浏览器会自动弹出登录页，你不需要写任何暗号，正常陪 TA 走登录流程，登录完提醒一句即可。
-- 用户要求访问其他网站时：写一行 ⟪浏览器开:网址⟫ 打开。
-- 用户登录完、或要收起时：写一行 ⟪浏览器关⟫。
-规则：暗号会被系统识别并从显示文本里擦除，用户看不到；平时别乱开。`;
+  return `\n\n【小浏览器 · Pocket】
+你有一个手机上的小浏览器（弹层 WebView，带关闭按钮）。不只是刷 X，也可以查百科、看网页、打开链接——等于能「上网看一眼」。
+
+什么时候用：
+- 用户让你查资料、打开某个网址、刷推/登 X、看百科或新闻 → 写一行 ⟪浏览器开:完整网址⟫（必须带 https://）。
+- 例如：⟪浏览器开:https://zh.wikipedia.org/wiki/猫⟫ 或 ⟪浏览器开:https://x.com⟫
+- 用户说收起/关掉浏览器 → 写一行 ⟪浏览器关⟫
+- 用户只是闲聊、不需要看网页时，不要开。
+
+注意：
+- 暗号会被系统擦掉，用户看不见。
+- 这是手机内置页，不是完整 Chrome；遇验证码/登录墙时，请用户在弹层里自己点一下，你在一旁说明即可。
+- 打开后用自然语言告诉用户你打开了什么、TA 可以在弹层里看；需要收起时提醒点「关闭」。`;
 }
 
 async function setupCapacitorPush(){
