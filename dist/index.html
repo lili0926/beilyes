@@ -4387,7 +4387,7 @@ const state = {
   stickerAddOpen: false, // 表情面板内的添加表单
   chatMoreOpen: false, // 输入栏「+」面板开关（不持久化）
   // PR 快穿（本地存档；主聊天只注入摘要）
-  pr: LS.get("pr_v1", null) || { active: null, archives: [] },
+  pr: LS.get("pr_v1", null) || LS.get("pr_v1_bak", null) || { active: null, archives: [] },
   prOpen: false,
   prMin: false,
   prDraft: "",
@@ -6083,44 +6083,60 @@ window.flightChessOpen = function(){
   state.needChatScroll = true;
   render();
 };
+if(!window.__prPersistHook){
+  window.__prPersistHook = true;
+  window.addEventListener("pagehide", function(){ try{ if(typeof prSave==="function") prSave(); }catch(e){} });
+  document.addEventListener("visibilitychange", function(){ if(document.visibilityState==="hidden"){ try{ if(typeof prSave==="function") prSave(); }catch(e){} } });
+}
 if(!window.__fcDelegated){
   window.__fcDelegated = true;
   document.addEventListener("click", function(e){
-    const t = e.target && e.target.closest ? e.target.closest("[data-fc-roll],[data-fc-ai],[data-fc-close],[data-fc-backdrop],[data-fc-save],[data-fc-min],[data-fc-version],[data-fc-float],[data-fc-event-close]") : null;
-    if(!t) return;
-    if(t.hasAttribute("data-fc-roll")){
+    const el = e.target && e.target.closest ? e.target.closest(
+      "[data-fc-roll],[data-fc-ai],[data-fc-close],[data-fc-backdrop],[data-fc-save],[data-fc-min],[data-fc-version],[data-fc-float],[data-fc-event-close],#fc-play,#fc-save"
+    ) : null;
+    if(!el) return;
+    // 功能页：在聊天里玩
+    if(el.id==="fc-play"){
+      e.preventDefault(); e.stopPropagation();
+      if(window.flightChessOpen) window.flightChessOpen();
+      return;
+    }
+    // 功能页 / 弹窗：保存进度
+    if(el.id==="fc-save" || el.hasAttribute("data-fc-save")){
+      e.preventDefault(); e.stopPropagation();
+      try{ persist("flightChess"); }catch(err){}
+      if(typeof showToast==="function") showToast("飞行棋进度已保存");
+      return;
+    }
+    if(el.hasAttribute("data-fc-roll")){
       e.preventDefault(); e.stopPropagation();
       if(window.flightChessPlayerRoll) window.flightChessPlayerRoll();
       return;
     }
-    if(t.hasAttribute("data-fc-ai")){
+    if(el.hasAttribute("data-fc-ai")){
       e.preventDefault(); e.stopPropagation();
       if(window.flightChessAiRoll) window.flightChessAiRoll();
       return;
     }
-    if(t.hasAttribute("data-fc-close") || (t.hasAttribute("data-fc-backdrop") && e.target===t)){
+    if(el.hasAttribute("data-fc-close") || (el.hasAttribute("data-fc-backdrop") && e.target===el)){
       state.flightChessOpen=false; state.flightChessMin=false; render();
       return;
     }
-    if(t.hasAttribute("data-fc-save")){
-      persist("flightChess");
-      if(typeof showToast==="function") showToast("飞行棋进度已保存");
-      return;
-    }
-    if(t.hasAttribute("data-fc-min")){
+    if(el.hasAttribute("data-fc-min")){
       state.flightChessMin=true; render();
       return;
     }
-    if(t.hasAttribute("data-fc-version")){
-      if(typeof flightChessSetVersion==="function") flightChessSetVersion(t.getAttribute("data-fc-version"));
+    if(el.hasAttribute("data-fc-version")){
+      e.preventDefault(); e.stopPropagation();
+      if(typeof flightChessSetVersion==="function") flightChessSetVersion(el.getAttribute("data-fc-version"));
       return;
     }
-    if(t.hasAttribute("data-fc-event-close")){
+    if(el.hasAttribute("data-fc-event-close")){
       state.flightChessEvent=null; render();
       return;
     }
-    if(t.hasAttribute("data-fc-float")){
-      if(t.dataset.dragged){ delete t.dataset.dragged; return; }
+    if(el.hasAttribute("data-fc-float")){
+      if(el.dataset.dragged){ delete el.dataset.dragged; return; }
       state.flightChessMin=false; state.flightChessOpen=true; render();
     }
   }, true);
@@ -6221,7 +6237,9 @@ const PR_WORLD_PRESETS = [
 ];
 
 function ensurePr(){
-  if(!state.pr || typeof state.pr!=="object") state.pr = LS.get("pr_v1", null) || {};
+  if(!state.pr || typeof state.pr!=="object"){
+    state.pr = LS.get("pr_v1", null) || LS.get("pr_v1_bak", null) || {};
+  }
   if(!Array.isArray(state.pr.archives)) state.pr.archives = [];
   if(!state.pr.active) state.pr.active = null;
   // 可编辑世界书：本地优先；预设里有、本地没有的 id 会自动补上（方便加新世界）
@@ -6254,7 +6272,14 @@ function ensurePr(){
   if(!state.pr.selectedWorldId) state.pr.selectedWorldId = state.pr.worlds[0].id;
   return state.pr;
 }
-function prSave(){ try{ LS.set("pr_v1", state.pr); }catch(e){} }
+function prSave(){
+  try{
+    if(state.pr && state.pr.active) state.pr.active.updatedAt = new Date().toISOString();
+    LS.set("pr_v1", state.pr);
+    // 双写一份，降低杀进程丢档概率
+    LS.set("pr_v1_bak", state.pr);
+  }catch(e){ console.warn("prSave", e); }
+}
 function prUid(){ return "pr_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
 function prGetWorld(id){
   const pr = ensurePr();
@@ -6323,13 +6348,74 @@ function prArchiveActive(showToast){
   if(!pr.active) return;
   const a = pr.active;
   prWriteToMemory(`【PR·${a.worldName||"冒险"}·存档】${a.stageName}：${(a.summary||"").slice(0,200)}`, 7);
-  const snap = Object.assign({}, a, { archivedAt: new Date().toISOString() });
+  const snap = JSON.parse(JSON.stringify(Object.assign({}, a, { archivedAt: new Date().toISOString(), slotType: "end" })));
   pr.archives = [snap].concat(pr.archives||[]).slice(0, 40);
   pr.active = null;
   prSave();
   state.prOpen = false;
   state.prMin = false;
   if(showToast!==false && typeof showToast==="function") showToast("冒险已存档并写入记忆库");
+}
+
+/** 暂时中断：保留 active，并额外留一份可读档快照（像文游存档） */
+function prQuickSave(){
+  const pr = ensurePr();
+  if(!pr.active){ if(typeof showToast==="function") showToast("没有进行中的冒险"); return; }
+  const a = pr.active;
+  a.updatedAt = new Date().toISOString();
+  const snap = JSON.parse(JSON.stringify(Object.assign({}, a, {
+    id: prUid(),
+    archivedAt: new Date().toISOString(),
+    slotType: "quick",
+    summary: (a.summary||"") + "（快速存档）",
+  })));
+  pr.archives = [snap].concat(pr.archives||[]).slice(0, 40);
+  prSave();
+  state.prOpen = false;
+  state.prMin = false;
+  if(typeof showToast==="function") showToast("已快速存档，可随时读档继续");
+}
+
+function prLoadArchive(id){
+  const pr = ensurePr();
+  const a = (pr.archives||[]).find(x=>x.id===id);
+  if(!a){ if(typeof showToast==="function") showToast("存档不存在"); return; }
+  if(pr.active && (pr.active.messages||[]).length){
+    if(!confirm("读档会覆盖当前进行中的冒险（会先自动快速存档当前进度）。继续？")) return;
+    prQuickSave();
+  }
+  const loaded = JSON.parse(JSON.stringify(a));
+  loaded.id = prUid();
+  delete loaded.archivedAt;
+  delete loaded.slotType;
+  pr.active = loaded;
+  pr.selectedWorldId = loaded.worldId || pr.selectedWorldId;
+  prSave();
+  state.prOpen = true;
+  state.prMin = false;
+  if(typeof showToast==="function") showToast("已读档："+(loaded.stageName||""));
+  render();
+}
+
+function prAddCustomWorld(){
+  const pr = ensurePr();
+  const name = prompt("新世界名称", "我的世界");
+  if(!name || !name.trim()) return;
+  const id = "custom_"+Date.now().toString(36);
+  pr.worlds.push({
+    id,
+    name: name.trim(),
+    world: "世界："+name.trim()+"\n\n一、世界底层法则\n（在这里写法则）\n\n二、核心角色\n· 对方：\n· 你：\n",
+    stages: [
+      { id:1, name:"第一阶段", task:"写下本阶段要完成的事" },
+      { id:2, name:"第二阶段", task:"写下本阶段要完成的事" },
+    ],
+  });
+  pr.selectedWorldId = id;
+  prSave();
+  state.prEditWorldId = id;
+  if(typeof showToast==="function") showToast("已创建，请编辑世界书与任务");
+  render();
 }
 
 function prMainChatPromptBlock(){
@@ -6393,6 +6479,7 @@ function renderPrHub(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       ${worlds.map(w=>`<button type="button" class="${w.id===cur.id?"btn-accent":"btn-ghost"}" data-pr-world="${esc(w.id)}" style="padding:8px 12px">${esc(w.name)}</button>`).join("")}
       <button type="button" class="btn-ghost" id="pr-edit-open" style="padding:8px 12px">编辑当前世界书</button>
+      <button type="button" class="btn-ghost" id="pr-add-world" style="padding:8px 12px">＋ 自定义世界</button>
     </div>
     ${editBlock}
     <div class="status-card" style="padding:12px;margin-bottom:12px;font-size:12px;line-height:1.55;color:var(--sub);max-height:120px;overflow:auto;white-space:pre-wrap">${esc((cur.world||"").slice(0,320))}…</div>
@@ -6401,6 +6488,7 @@ function renderPrHub(){
       <div style="font-size:12px;color:var(--sub);margin-top:4px">${esc(active.task)}</div>
       <div style="font-size:12px;color:var(--sub);margin-top:6px">摘要：${esc(active.summary||"")}</div>
       <button type="button" class="btn-accent" id="pr-resume" style="width:100%;margin-top:10px;padding:10px">继续冒险</button>
+      <button type="button" class="btn-ghost" id="pr-quick-save" style="width:100%;margin-top:8px;padding:10px">暂时中断 · 快速存档</button>
       <button type="button" class="btn-ghost" id="pr-end" style="width:100%;margin-top:8px;padding:10px">结束并存档</button>
     </div>`:""}
     <div style="font-weight:600;margin:8px 0">开启任务 · ${esc(cur.name)}</div>
@@ -6412,7 +6500,10 @@ function renderPrHub(){
     ${archives.length?archives.slice(0,15).map(a=>`<div class="status-card" style="padding:10px 12px;margin-bottom:8px">
       <div style="font-size:13px;font-weight:600">${esc(a.worldName||"")} · ${esc(a.stageName)} · ${(a.messages||[]).length} 句</div>
       <div style="font-size:11px;color:var(--sub);margin-top:4px">${esc((a.summary||"").slice(0,80))}</div>
-      <button type="button" class="btn-ghost" data-pr-view="${esc(a.id)}" style="margin-top:6px;padding:6px 10px">回看</button>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button type="button" class="btn-ghost" data-pr-view="${esc(a.id)}" style="padding:6px 10px">回看</button>
+        <button type="button" class="btn-accent" data-pr-load="${esc(a.id)}" style="padding:6px 10px">读档继续</button>
+      </div>
     </div>`).join(""):`<div class="empty-state" style="padding:20px">还没有存档</div>`}
   </div>`;
 }
@@ -6509,8 +6600,15 @@ function bindPr(){
   });
   const resume = document.getElementById("pr-resume");
   if(resume) resume.onclick = ()=>{ state.prOpen=true; state.prMin=false; render(); };
+  const qsave = document.getElementById("pr-quick-save");
+  if(qsave) qsave.onclick = ()=>{ prQuickSave(); render(); };
   const end = document.getElementById("pr-end");
   if(end) end.onclick = ()=>{ if(confirm("结束本次冒险并存档？")) prArchiveActive(true); render(); };
+  const addW = document.getElementById("pr-add-world");
+  if(addW) addW.onclick = ()=> prAddCustomWorld();
+  document.querySelectorAll("[data-pr-load]").forEach(el=>{
+    el.onclick = ()=> prLoadArchive(el.getAttribute("data-pr-load"));
+  });
   document.querySelectorAll("[data-pr-view]").forEach(el=>{
     el.onclick = ()=>{
       const id = el.getAttribute("data-pr-view");
@@ -10280,7 +10378,7 @@ function renderFlightChess(){
 
     <div class="fc-toolbar">
       <div class="fc-version-scroll">${verBar}</div>
-      <button type="button" class="btn-accent" id="fc-play" style="white-space:nowrap;flex-shrink:0">在聊天里玩</button>
+      <button type="button" class="btn-accent" id="fc-play" data-fc-play style="white-space:nowrap;flex-shrink:0">在聊天里玩</button>
     </div>
 
     <div class="fc-board">
@@ -10290,7 +10388,7 @@ function renderFlightChess(){
 
     <div class="fc-pos">你：第 ${st.playerPos} 格 · 小机：第 ${st.aiPos} 格 · ${st.finished?"本局结束":"轮到 "+(st.turn==="player"?"你":"小机")}</div>
 
-    <button type="button" class="btn-ghost" id="fc-save" style="width:100%;margin-top:12px;padding:11px">保存进度</button>
+    <button type="button" class="btn-ghost" id="fc-save" data-fc-save style="width:100%;margin-top:12px;padding:11px">保存进度</button>
   </div>`;
 }
 
@@ -18086,7 +18184,7 @@ function bindEvents(){
   if(typeof bindCoupleCalendar==="function" && state.subPage==="calendar") bindCoupleCalendar();
   if(typeof bindAnno==="function" && state.subPage==="anno") bindAnno();
   if(typeof bindPr==="function" && state.subPage==="pr") bindPr();
-  if(typeof bindPrOverlay==="function") bindPrOverlay();
+  try{ if(typeof bindPrOverlay==="function") bindPrOverlay(); }catch(e){ console.warn("bindPrOverlay",e); }
 
   document.querySelectorAll(".bottom-nav button").forEach(btn=>{
     btn.onclick=()=>{
