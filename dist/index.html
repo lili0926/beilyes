@@ -6323,8 +6323,13 @@ function prSave(){
   try{
     if(state.pr && state.pr.active) state.pr.active.updatedAt = new Date().toISOString();
     LS.set("pr_v1", state.pr);
-    // 双写一份，降低杀进程丢档概率
     LS.set("pr_v1_bak", state.pr);
+    try{
+      if(typeof __nativeMirrorWrite==="function"){
+        __nativeMirrorWrite("pr_v1", state.pr);
+        __nativeMirrorWrite("pr_v1_bak", state.pr);
+      }
+    }catch(e2){}
   }catch(e){ console.warn("prSave", e); }
 }
 function prUid(){ return "pr_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
@@ -18031,8 +18036,8 @@ if(!window.__mpDelegated){
         if(typeof render==="function") render();
         return;
       }
-      // 功能入口 data-sub
-      const subBtn = raw.closest("[data-sub]");
+      // 功能入口：仅功能卡，避免子页内部误伤
+      const subBtn = raw.closest("button.feat-card[data-sub]");
       if(subBtn && !raw.closest(".bottom-nav")){
         const key = subBtn.getAttribute("data-sub") || subBtn.dataset.sub;
         if(key){
@@ -18042,8 +18047,79 @@ if(!window.__mpDelegated){
           return;
         }
       }
+      // 每日任务打卡
+      const qToggle = raw.closest("[data-quest-toggle]");
+      if(qToggle){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const qd = state.questData || (typeof questDefaultData==="function"?questDefaultData():{quests:[]});
+        const q = (qd.quests||[]).find(x=>String(x.id)===String(qToggle.getAttribute("data-quest-toggle")));
+        if(q){ q.done = !q.done; state.questData = qd; try{ persist("questData"); }catch(e){} if(typeof render==="function") render(); }
+        return;
+      }
+      // 记录日历
+      const dutyDay = raw.closest("[data-duty-day]");
+      if(dutyDay){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const k = dutyDay.getAttribute("data-duty-day") || dutyDay.dataset.dutyDay;
+        state.dutySelected = k;
+        const rec = (state.dutyRecords||{})[k] || {};
+        state.dutyDraft = { note: rec.note||"", mood: rec.mood||"" };
+        if(typeof render==="function") render();
+        return;
+      }
+      // 衣柜
+      const wardTab = raw.closest("[data-ward-tab]");
+      if(wardTab){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.wardrobeTab = wardTab.getAttribute("data-ward-tab") || wardTab.dataset.wardTab;
+        state.wardrobeAdding=false;
+        if(typeof render==="function") render();
+        return;
+      }
+      const wardCat = raw.closest("[data-ward-cat]");
+      if(wardCat){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const c = wardCat.getAttribute("data-ward-cat") || wardCat.dataset.wardCat;
+        state.wardrobeCatFilter = c;
+        state.wardrobeNewCat = c;
+        if(typeof render==="function") render();
+        return;
+      }
+      const wardDel = raw.closest("[data-ward-del]");
+      if(wardDel){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const idDel = wardDel.getAttribute("data-ward-del");
+        if(idDel && confirm("删除这件衣服？")){
+          state.wardrobeItems = (state.wardrobeItems||[]).filter(x=>String(x.id)!==String(idDel));
+          try{ persist("wardrobeItems"); }catch(e){}
+          if(typeof render==="function") render();
+        }
+        return;
+      }
       const idEl = raw.closest("[id]");
       const id = idEl && idEl.id;
+      if(id==="stream-on-toggle" || raw.closest("#stream-on-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.streamOn = state.streamOn === true ? false : true;
+        try{ LS.set("streamOn", state.streamOn); }catch(err){}
+        try{ persist("streamOn"); }catch(err){}
+        if(typeof showToast==="function") showToast(state.streamOn ? "流式输出：开" : "流式输出：关");
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="ward-feed-toggle" || id==="ward-feed"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.wardrobeFeedChat = !state.wardrobeFeedChat;
+        try{ persist("wardrobeFeedChat"); }catch(e){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="ward-add-toggle"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.wardrobeAdding = !state.wardrobeAdding;
+        if(typeof render==="function") render();
+        return;
+      }
       if(id==="chat-exit-home" || (idEl && idEl.closest && idEl.closest("#chat-exit-home"))){
         e.preventDefault(); e.stopImmediatePropagation();
         state.tab="home"; state.subPage=null;
@@ -22622,7 +22698,34 @@ if(!window.__chatFlushBound){
 })();
 // 合并原生镜像：localStorage 配额满时落到底层原生存储（@capacitor/preferences）的数据在此恢复，
 // 原生版本优先。boot 与 reinitState（登录切用户）都会调用；同时重建 __nativeMirrorKeys 供后续写同步。
-async function restoreNativeMirrors(){
+async 
+async function restorePrNative(){
+  try{
+    const Cap = window.Capacitor;
+    if(!Cap || !Cap.Plugins || !Cap.Plugins.Preferences) return;
+    const tryKey = async (k)=>{
+      const r = await Cap.Plugins.Preferences.get({ key: "mp_mirror_"+LS._k(k) });
+      if(r && r.value){ try{ return JSON.parse(r.value); }catch(e){ return null; } }
+      return null;
+    };
+    let pr = await tryKey("pr_v1");
+    if(!pr) pr = await tryKey("pr_v1_bak");
+    if(!pr || typeof pr!=="object") return;
+    const cur = state.pr || {};
+    const curArch = (cur.archives||[]).length;
+    const newArch = (pr.archives||[]).length;
+    const curActive = !!(cur.active && (cur.active.messages||[]).length);
+    const newActive = !!(pr.active && (pr.active.messages||[]).length);
+    // 原生里更「满」才覆盖
+    if(newArch>curArch || (newActive && !curActive) || (newArch>=curArch && newActive)){
+      state.pr = pr;
+      try{ LS.set("pr_v1", pr); LS.set("pr_v1_bak", pr); }catch(e){}
+      if(typeof render==="function") render();
+    }
+  }catch(e){}
+}
+
+function restoreNativeMirrors(){
   try{
     const Cap = window.Capacitor;
     if(!Cap || !Cap.Plugins || !Cap.Plugins.Preferences) return;
@@ -22656,6 +22759,7 @@ async function restoreNativeMirrors(){
   }catch(e){}
 }
 restoreNativeMirrors();
+try{ restorePrNative(); }catch(e){}
 
 
 // 他的机：启动后检查是否该生成；每 15 分钟再看一眼（仅进程存活时）
