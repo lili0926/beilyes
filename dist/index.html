@@ -28,7 +28,8 @@
       /* 顶栏自己吃掉安全区并铺色，这里不再空出一条异色带 */
       padding-top: 0;
     }
-    button { font-family: inherit; }
+    button { font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    button, a, [data-sub], [data-tab] { touch-action: manipulation; }
     input, textarea, select { font-family: inherit; }
     textarea { resize: none; }
     ::-webkit-scrollbar { width: 4px; }
@@ -1140,7 +1141,7 @@
 
     /* 音乐 / 一起听 */
     .music-topbar {
-      position: sticky; top: 0; z-index: 60;
+      position: sticky; top: 0; z-index: 40; /* 低于 .chat-header(50)，勿挡顶栏按钮 */
       background: color-mix(in srgb, var(--card) 92%, transparent);
       border-bottom: 1px solid var(--border);
       backdrop-filter: blur(12px);
@@ -16520,6 +16521,8 @@ function renderChat(){
         </div>
       </div>
     </div>
+    ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
+    ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>
     <div class="chat-input-bar">
       ${guideOpen?`
@@ -18006,6 +18009,67 @@ function bindCoreNav(){
 }
 if(!window.__mpDelegated){
   window.__mpDelegated = true;
+  // —— 核心按钮委托（capture）：即使 bindEvents 中途抛错，导航/发信/退出仍可用 ——
+  document.addEventListener("click", function(e){
+    try{
+      const raw = e.target;
+      if(!raw || !raw.closest) return;
+      // 底栏
+      const tabBtn = raw.closest(".bottom-nav button[data-tab]");
+      if(tabBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(state.tab==="chat" && typeof saveActiveThread==="function") saveActiveThread();
+        const next = tabBtn.getAttribute("data-tab") || tabBtn.dataset.tab;
+        if(next==="chat" && state.tab!=="chat"){
+          const tg = state.chatTarget || "a1";
+          const th = (state.chatThreads && state.chatThreads[tg]) || {messages:[],pendingUser:[]};
+          state.messages = th.messages || [];
+          state.pendingUser = th.pendingUser || [];
+          state.needChatScroll = true;
+        }
+        state.tab = next; state.subPage = null; state.homePage = 1;
+        if(typeof render==="function") render();
+        return;
+      }
+      // 功能入口 data-sub
+      const subBtn = raw.closest("[data-sub]");
+      if(subBtn && !raw.closest(".bottom-nav")){
+        const key = subBtn.getAttribute("data-sub") || subBtn.dataset.sub;
+        if(key){
+          e.preventDefault(); e.stopImmediatePropagation();
+          state.subPage = key;
+          if(typeof render==="function") render();
+          return;
+        }
+      }
+      const idEl = raw.closest("[id]");
+      const id = idEl && idEl.id;
+      if(id==="chat-exit-home" || (idEl && idEl.closest && idEl.closest("#chat-exit-home"))){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.tab="home"; state.subPage=null;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="chat-send" || raw.closest("#chat-send")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof sendUserMsg==="function") sendUserMsg();
+        return;
+      }
+      if(id==="toggle-guide" || raw.closest("#toggle-guide")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.showThoughtGuide = !state.showThoughtGuide;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="sub-back" || raw.closest("#sub-back")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(state.subPage==="shufang" && state.shufangTab==="editor" && typeof shufangSaveChapter==="function") shufangSaveChapter(true);
+        state.subPage=null;
+        if(typeof render==="function") render();
+        return;
+      }
+    }catch(err){ console.error("[core-delegate]", err); }
+  }, true);
   // 桌面右键气泡 → 收藏聊天（与触屏长按等价）
   document.addEventListener("contextmenu", function(e){
     try{
@@ -18241,11 +18305,12 @@ if(!window.__mpDelegated){
 
 
 function bindEvents(){
-  bindCoreNav();
-  if(typeof bindCoupleCalendar==="function" && state.subPage==="calendar") bindCoupleCalendar();
-  if(typeof bindAnno==="function" && state.subPage==="anno") bindAnno();
-  if(typeof bindPr==="function" && state.subPage==="pr") bindPr();
-  try{ if(typeof bindPrOverlay==="function") bindPrOverlay(); }catch(e){ console.warn("bindPrOverlay",e); }
+  const _safe = (label, fn)=>{ try{ fn(); }catch(e){ console.error("[bindEvents:"+label+"]", e); } };
+  _safe("coreNav", ()=>bindCoreNav());
+  _safe("calendar", ()=>{ if(typeof bindCoupleCalendar==="function" && state.subPage==="calendar") bindCoupleCalendar(); });
+  _safe("anno", ()=>{ if(typeof bindAnno==="function" && state.subPage==="anno") bindAnno(); });
+  _safe("pr", ()=>{ if(typeof bindPr==="function" && state.subPage==="pr") bindPr(); });
+  _safe("prOverlay", ()=>{ if(typeof bindPrOverlay==="function") bindPrOverlay(); });
 
   document.querySelectorAll(".bottom-nav button").forEach(btn=>{
     btn.onclick=()=>{
@@ -21177,6 +21242,9 @@ function _swipeCommit(){
 function bindHomeSwipe(){
   const wrap=document.getElementById("home-swipe");
   if(!wrap) return;
+  // 每次 render 都会调 bindEvents；触摸监听只绑一次，避免叠多层导致点击失灵
+  if(wrap.dataset.swipeBound==="1") return;
+  wrap.dataset.swipeBound="1";
   const w = _swipe;
   const startDrag = (cx, cy)=>{
     w.startX=cx; w.startY=cy; w.dx=0; w.dragging=true;
@@ -21185,6 +21253,9 @@ function bindHomeSwipe(){
   };
 
   wrap.addEventListener("touchstart", e=>{
+    // 点在可点控件上时不启动横滑，避免吞掉按钮点击
+    const t = e.target;
+    if(t && t.closest && t.closest("button, a, input, textarea, select, [data-sub], label")) return;
     startDrag(e.touches[0].clientX, e.touches[0].clientY);
   }, {passive:true});
 
@@ -21195,16 +21266,17 @@ function bindHomeSwipe(){
 
   wrap.addEventListener("touchend", _swipeCommit, {passive:true});
 
-  // 桌面端：鼠标拖拽划页（方便在电脑浏览器里调试主页三页）；window 级监听只绑一次
   wrap.addEventListener("mousedown", e=>{
-    if(e.button !== 0) return; // 只认左键
+    if(e.button !== 0) return;
+    const t = e.target;
+    if(t && t.closest && t.closest("button, a, input, textarea, select, [data-sub], label")) return;
     startDrag(e.clientX, e.clientY);
   });
   if(!w.mouseBound){
     w.mouseBound = true;
     window.addEventListener("mousemove", e=>{
       if(!_swipe.dragging) return;
-      if(_swipeDoMove(e.clientX, e.clientY)) e.preventDefault(); // 横向拖时阻止文本选中
+      if(_swipeDoMove(e.clientX, e.clientY)) e.preventDefault();
     }, {passive:false});
     window.addEventListener("mouseup", _swipeCommit);
   }
