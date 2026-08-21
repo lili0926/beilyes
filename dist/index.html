@@ -17,7 +17,6 @@
     #app {
       max-width: 480px;
       margin: 0 auto;
-      /* 键盘弹出时由 visualViewport 写入 --app-height，避免整页被顶飞 */
       height: var(--app-height, 100dvh);
       max-height: var(--app-height, 100dvh);
       min-height: 0;
@@ -25,9 +24,9 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      /* 顶上留给系统状态栏一条，避免内容顶死刘海/时间 */
-      padding-top: env(safe-area-inset-top, 0px);
       box-sizing: border-box;
+      /* 顶栏自己吃掉安全区并铺色，这里不再空出一条异色带 */
+      padding-top: 0;
     }
     button { font-family: inherit; }
     input, textarea, select { font-family: inherit; }
@@ -81,7 +80,8 @@
       flex-shrink: 0;
       height: 100%;
       min-height: 0;
-      padding: 8px 20px 56px; /* 底栏变矮后少留空白 */
+      padding: 8px 20px 56px;
+      padding-top: max(8px, env(safe-area-inset-top, 0px));
       overflow-x: hidden;
       overflow-y: auto;       /* 只有当前页自己滚 */
       -webkit-overflow-scrolling: touch;
@@ -817,7 +817,8 @@
       background: var(--card); border-bottom: 1px solid var(--border);
       padding: 8px 12px 8px; display: flex; align-items: center; justify-content: space-between;
       gap: 6px;
-      /* 安全区已在 #app padding-top，这里不再重复加 */
+      /* 顶栏颜色向上铺满状态栏区域（系统时间仍叠在上面） */
+      padding-top: max(8px, env(safe-area-inset-top, 0px));
       position: sticky; top: 0; z-index: 50;
     }
     .chat-header .title { font-size: 15px; font-weight: 700; color: var(--text); }
@@ -4447,6 +4448,7 @@ const state = {
   profileWho: null, // 当前主页是谁："me"（女方）或 AI 的 agent id
   openThinkIds: {},    // id -> true 展开的思考块
   thoughtGuide: LS.get("thoughtGuide", ""), // 用户操控思考链的引导词
+  thoughtOn: LS.get("thoughtOn", true) !== false, // 思考链总开关，关则不要求写 <thinking>
   showThoughtGuide: false,
   editingThinkId: null, // 正在编辑的思考块 tid
   // diary
@@ -4880,11 +4882,15 @@ function systemPrompt(ag){
 规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。`
     : `Jasmine 的每条消息都附带了发送时间（格式如 [时间: 2026/08/12 14:32]），请根据时间感知对话节奏，可自然地提及时间感，但不必每次都复述时间。
 
-【回复格式——必须严格遵守】
+${(state.thoughtOn!==false) ? `【回复格式——必须严格遵守】
 1. 若你的通道没有「原生思考字段」，请务必先在 <thinking> 与 </thinking> 标签内写出思考过程（情绪判断、意图、要怎么回、注意事项等）。有原生思考时也可再写，但不要省略。
 2. </thinking> 之后才是正式回复正文。不要只回正文却留空思考。
 3. 正式回复请拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句），不要写成一整段长文。
-4. 思考只写在 <thinking> 标签里；标签外不要写旁白、不要用括号心里话代替思考块。`;
+4. 思考只写在 <thinking> 标签里；标签外不要写旁白、不要用括号心里话代替思考块。`
+: `【回复格式——思考链已关闭】
+1. 不要写 <thinking> 标签，不要输出内心独白块。
+2. 直接写正式回复正文：拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句）。
+3. 不要用括号写心里话代替思考。`}`;
   const guideText = (ag && typeof ag.thoughtGuide === "string" && ag.thoughtGuide.trim())
     ? ag.thoughtGuide.trim()
     : ((state.thoughtGuide && state.thoughtGuide.trim()) || "");
@@ -5032,7 +5038,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -16504,7 +16510,7 @@ function renderChat(){
       </div>
       <div class="chat-header-icons">
         <button id="puppy-open" title="小狗按钮"><i data-lucide="paw-print"></i></button>
-        <button id="toggle-guide" title="思考引导" style="color:${hasAnyGuide?"var(--accent)":"var(--sub)"}"><i data-lucide="brain"></i></button>
+        <button id="toggle-guide" title="思考引导 / 思考链开关" style="color:${state.thoughtOn===false?"var(--sub)":(hasAnyGuide?"var(--accent)":"var(--text)")}"><i data-lucide="brain"></i></button>
         <div class="chat-mode-switch" id="chat-mode-switch">
           <button type="button" data-chat-mode="chat" class="${state.chatMode!=="story"?"active":""}" title="正常聊天">聊</button>
           <button type="button" data-chat-mode="story" class="${state.chatMode==="story"?"active":""}" title="我们俩的同人文：你说举动，TA 顺着写成文章">文</button>
@@ -16519,8 +16525,19 @@ function renderChat(){
       ${guideOpen?`
         <div class="think-guide-panel">
           <div class="think-guide-head">
-            <span><i data-lucide="brain"></i> 思考引导 · 按 AI 分开</span>
+            <span><i data-lucide="brain"></i> 思考引导</span>
             <button id="close-guide">收起</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border)">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--text)">启用思考链</div>
+              <div style="font-size:10px;color:var(--sub);margin-top:2px">关闭后闲聊不必写 &lt;thinking&gt;</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:44px;height:26px;flex-shrink:0">
+              <input type="checkbox" id="thought-on-toggle" ${state.thoughtOn!==false?"checked":""} style="opacity:0;width:0;height:0"/>
+              <span style="position:absolute;cursor:pointer;inset:0;background:${state.thoughtOn!==false?"var(--accent)":"var(--border)"};border-radius:26px;transition:.2s"></span>
+              <span style="position:absolute;content:'';height:20px;width:20px;left:${state.thoughtOn!==false?"22px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span>
+            </label>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
             ${agents.map(ag=>`
@@ -18809,6 +18826,12 @@ function bindEvents(){
   if(toggleGuide) toggleGuide.onclick=()=>{ state.showThoughtGuide=!state.showThoughtGuide; render(); };
   const closeGuide=document.getElementById("close-guide");
   if(closeGuide) closeGuide.onclick=()=>{ state.showThoughtGuide=false; render(); };
+  const thoughtOnToggle=document.getElementById("thought-on-toggle");
+  if(thoughtOnToggle) thoughtOnToggle.onchange=()=>{
+    state.thoughtOn = !!thoughtOnToggle.checked;
+    try{ LS.set("thoughtOn", state.thoughtOn); }catch(e){}
+    render();
+  };
   document.querySelectorAll("[data-guide-agent]").forEach(btn=>{
     btn.onclick=()=>{ state.guideEditAgentId=btn.dataset.guideAgent; render(); };
   });
