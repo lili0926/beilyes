@@ -4868,6 +4868,8 @@ function bindAppViewportHeight(){
   document.addEventListener("focusout", function(){ setTimeout(apply, 100); });
 }
 
+try{ if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", bindAppViewportHeight); else bindAppViewportHeight(); }catch(e){}
+
 function systemPrompt(ag){
   const g=state.prompts.filter(p=>p.category==="global"&&p.enabled);
   const n=state.nsfwOn?state.prompts.filter(p=>p.category==="nsfw"&&p.enabled):[];
