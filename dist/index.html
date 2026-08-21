@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>baileys</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%AC%3C/text%3E%3C/svg%3E" />
   <style>
@@ -17,12 +17,10 @@
     #app {
       max-width: 480px;
       margin: 0 auto;
-      height: 100dvh;
-      height: 100%;
-      min-height: 100dvh;
-      min-height: 100vh;
-      max-height: 100dvh;
-      max-height: 100vh;
+      /* 键盘弹出时由 visualViewport 写入 --app-height，避免整页被顶飞 */
+      height: var(--app-height, 100dvh);
+      max-height: var(--app-height, 100dvh);
+      min-height: 0;
       position: relative;
       display: flex;
       flex-direction: column;
@@ -49,7 +47,7 @@
     .bottom-nav button.active { color: var(--accent); font-weight: 700; }
     .bottom-nav button .icon { font-size: 18px; }
 
-    .page { padding: 48px 20px 80px; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .page { padding: 8px 20px 80px; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .page-title { font-size: 20px; font-weight: 800; color: var(--text); margin-bottom: 2px; }
     .page-sub { font-size: 11px; color: var(--sub); margin-bottom: 24px; }
 
@@ -78,7 +76,7 @@
       flex-shrink: 0;
       height: 100%;
       min-height: 0;
-      padding: 48px 20px 72px; /* 底部给导航留空 */
+      padding: 8px 20px 72px; /* 顶栏由 .sub-header sticky 贴顶，不再预留 48px 空白 */
       overflow-x: hidden;
       overflow-y: auto;       /* 只有当前页自己滚 */
       -webkit-overflow-scrolling: touch;
@@ -636,10 +634,11 @@
 
     /* 子页面顶栏返回 — sticky 顶死，翻页/滚动不带走，玻璃底盖住滚过内容 */
     .sub-header {
-      display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
       position: sticky; top: 0; z-index: 20;
       margin-left: -20px; margin-right: -20px;   /* 与 .page 的 20px 内边距抵消，撑满全宽 */
-      padding: 12px 20px 10px;
+      padding: 10px 20px 10px;
+      padding-top: max(10px, env(safe-area-inset-top, 0px));
       background: color-mix(in srgb, var(--bg) 92%, transparent);
       -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
     }
@@ -812,7 +811,8 @@
     .chat-page { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: auto; }
     .chat-header {
       background: var(--card); border-bottom: 1px solid var(--border);
-      padding: 14px 20px 10px; display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 20px 10px; display: flex; align-items: center; justify-content: space-between;
+      padding-top: max(10px, env(safe-area-inset-top, 0px));
       position: sticky; top: 0; z-index: 50;
     }
     .chat-header .title { font-size: 15px; font-weight: 700; color: var(--text); }
@@ -1029,6 +1029,7 @@
       background: var(--card); border-top: 1px solid var(--border);
       padding: 10px 16px 12px; display: flex; flex-direction: column; gap: 8px;
       flex-shrink: 0;
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
     }
     .chat-input-row { display: flex; align-items: flex-end; gap: 10px; }
     .chat-input-bar textarea {
@@ -4830,6 +4831,43 @@ function tipsyStatusPromptBlock(){
 }
 
 /** @param {object|null} ag 指定 AI 时用其专属思考引导；否则回退全局 thoughtGuide */
+
+// ─── 原生体感：visualViewport 锁定 #app 高度，键盘弹起时只压缩聊天区、不整页上推 ───
+function bindAppViewportHeight(){
+  const root = document.getElementById("app");
+  if(!root) return;
+  const apply = ()=>{
+    try{
+      const vv = window.visualViewport;
+      let h = window.innerHeight || document.documentElement.clientHeight || 0;
+      if(vv && vv.height){
+        h = vv.height;
+        // 部分 Android WebView 键盘顶起时 offsetTop>0，对齐可视区域
+        if(vv.offsetTop){ root.style.marginTop = vv.offsetTop + "px"; }
+        else { root.style.marginTop = "0"; }
+      }
+      if(h > 0){
+        root.style.setProperty("--app-height", h + "px");
+      }
+    }catch(e){}
+  };
+  apply();
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", apply);
+    window.visualViewport.addEventListener("scroll", apply);
+  }
+  window.addEventListener("resize", apply);
+  window.addEventListener("orientationchange", function(){ setTimeout(apply, 200); });
+  // 输入框聚焦再刷一次（WebView 有时晚一拍）
+  document.addEventListener("focusin", function(e){
+    if(e.target && (e.target.tagName==="TEXTAREA" || e.target.tagName==="INPUT")){
+      setTimeout(apply, 50);
+      setTimeout(apply, 300);
+    }
+  });
+  document.addEventListener("focusout", function(){ setTimeout(apply, 100); });
+}
+
 function systemPrompt(ag){
   const g=state.prompts.filter(p=>p.category==="global"&&p.enabled);
   const n=state.nsfwOn?state.prompts.filter(p=>p.category==="nsfw"&&p.enabled):[];
