@@ -22636,7 +22636,8 @@ window.reinitState = function(){
   try{ applyBrandingToDom(); }catch(e){}
   render();
   // 登录切用户后也从原生镜像恢复（壁纸/头像等配额满时落到原生的数据）
-  try{ if(typeof restoreNativeMirrors === "function") restoreNativeMirrors(); }catch(e){}
+  try{ if(typeof restoreNativeMirrors === "function") restoreNativeMirrors();
+try{ restorePrNative(); }catch(e){} }catch(e){}
   // 登录后触发一次记忆自动沉淀（补足 App 关闭期间积攒的聊天）
   setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
 };
@@ -22698,7 +22699,7 @@ if(!window.__chatFlushBound){
 })();
 // 合并原生镜像：localStorage 配额满时落到底层原生存储（@capacitor/preferences）的数据在此恢复，
 // 原生版本优先。boot 与 reinitState（登录切用户）都会调用；同时重建 __nativeMirrorKeys 供后续写同步。
-async 
+
 async function restorePrNative(){
   try{
     const Cap = window.Capacitor;
@@ -22716,7 +22717,6 @@ async function restorePrNative(){
     const newArch = (pr.archives||[]).length;
     const curActive = !!(cur.active && (cur.active.messages||[]).length);
     const newActive = !!(pr.active && (pr.active.messages||[]).length);
-    // 原生里更「满」才覆盖
     if(newArch>curArch || (newActive && !curActive) || (newArch>=curArch && newActive)){
       state.pr = pr;
       try{ LS.set("pr_v1", pr); LS.set("pr_v1_bak", pr); }catch(e){}
@@ -22725,7 +22725,7 @@ async function restorePrNative(){
   }catch(e){}
 }
 
-function restoreNativeMirrors(){
+async function restoreNativeMirrors(){
   try{
     const Cap = window.Capacitor;
     if(!Cap || !Cap.Plugins || !Cap.Plugins.Preferences) return;
