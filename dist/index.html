@@ -4555,32 +4555,17 @@ function defaultAgents(){
   return [
     {
       id: "a1",
-      name: (state.coupleInfo && state.coupleInfo.partnerName) || "TA",
+      name: (state.coupleInfo && state.coupleInfo.partnerName) || "Aries",
       channel: a.channel || "claude",
       claudeKey: a.claudeKey || "",
       openaiKey: a.openaiKey || "",
       openaiBase: a.openaiBase || "https://api.openai.com/v1",
       openaiModel: a.openaiModel || "gpt-4o",
-      geminiKey: "",
-      geminiModel: "gemini-2.0-flash",
+      geminiKey: a.geminiKey || "",
+      geminiModel: a.geminiModel || "gemini-2.0-flash",
       avatar: (state.coupleInfo && state.coupleInfo.partnerAvatar) || "",
       color: "#D4A5A5",
       thoughtGuide: state.thoughtGuide || "",
-      enabled: true,
-    },
-    {
-      id: "a2",
-      name: "Gemini",
-      channel: "gemini",
-      claudeKey: "",
-      openaiKey: "",
-      openaiBase: "https://api.openai.com/v1",
-      openaiModel: "gpt-4o",
-      geminiKey: "",
-      geminiModel: "gemini-2.0-flash",
-      avatar: "",
-      color: "#8AA0B8",
-      thoughtGuide: "",
       enabled: true,
     },
   ];
@@ -4589,6 +4574,8 @@ function ensureAgents(){
   if(!Array.isArray(state.agents) || state.agents.length < 1){
     state.agents = defaultAgents();
   } else {
+    state.agents = state.agents.filter(a=>a && a.id!=="a2");
+    if(!state.agents.length) state.agents = defaultAgents();
     state.agents.forEach((ag, i)=>{
       if(typeof ag.thoughtGuide !== "string"){
         ag.thoughtGuide = (i===0 && state.thoughtGuide) ? state.thoughtGuide : "";
@@ -4600,12 +4587,12 @@ function ensureAgents(){
       if(!ag.channel) ag.channel = "claude";
       if(ag.enabled === undefined) ag.enabled = true;
     });
-    // 至少保证有 a1
     if(!state.agents.find(a=>a.id==="a1")){
       state.agents = defaultAgents().concat(state.agents);
     }
+    const a1 = state.agents.find(a=>a.id==="a1");
+    if(a1) state.agents = [a1];
   }
-  // 聊天对象只保留 Aries 单聊：gemini / 群聊 不再使用（用户要求），强制回到 a1
   if(state.chatTarget && state.chatTarget!=="a1") state.chatTarget = "a1";
   return state.agents;
 }
@@ -5270,8 +5257,8 @@ function render(){
 }
 
 function renderBottomNav(){
-  // 子页（功能页二级页）有返回键，隐藏底栏避免遮挡内容/悬浮按钮
   if(state.subPage) return "";
+  if(state.tab==="chat") return "";
   const items=[
     {key:"home",icon:"home",label:"首页"},
     {key:"chat",icon:"message-circle",label:"聊天"},
@@ -16509,6 +16496,7 @@ function renderChat(){
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-header">
+      <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
       <button class="back-btn love-score-chip" id="love-score-chip" title="情侣计分器：满分100 起始50">♥ <b>${esc((state.loveScore&&state.loveScore.value)!=null?state.loveScore.value:50)}</b></button>
       <div class="chat-title-wrap">
         <span class="chat-name">${isGroup?"群聊":esc((activeAg&&activeAg.name)||"聊天")}</span>
@@ -17547,10 +17535,10 @@ function renderPrompts(){
 function renderAgentSettingsBlock(ag, idx){
   const prefix = `ag${idx}`;
   return `<div class="section">
-    <div class="section-title"><i data-lucide="bot"></i> AI ${idx+1} · ${esc(ag.name||ag.id)}</div>
+    <div class="section-title"><i data-lucide="bot"></i> Aries · ${esc(ag.name||"Aries")}</div>
     <div class="section-body">
       <div class="setting-row"><span class="setting-label">显示名</span>
-        <input id="${prefix}-name" value="${escAttr(ag.name)}" placeholder="TA / Gemini"/></div>
+        <input id="${prefix}-name" value="${escAttr(ag.name)}" placeholder="Aries"/></div>
       <div class="setting-row"><span class="setting-label">头像</span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${ag.avatar?`<img src="${escAttr(ag.avatar)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${escAttr(ag.color||"var(--border)")}"/>`:`<div style="width:40px;height:40px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid ${escAttr(ag.color||"var(--border)")}">${esc((ag.name||"?").slice(0,1))}</div>`}
