@@ -200,6 +200,80 @@ wv.evaluateJavascript(
         });
     }
 
+
+    /** 在当前页执行 JS，返回字符串结果（供滑动、点链接等轻操作） */
+    @PluginMethod
+    public void evaluateJs(PluginCall call) {
+        String code = call.getString("code");
+        if (code == null || code.trim().isEmpty()) {
+            call.reject("code required");
+            return;
+        }
+        final String js = code.trim();
+        mainHandler.post(() -> {
+            try {
+                ensureWorkWebView();
+                WebView wv = workWebView;
+                // 包一层，保证返回 JSON 字符串
+                String wrapped = "(function(){try{var __r=(function(){" + js + "})();"
+                        + "if(__r===undefined||__r===null)return '';"
+                        + "return (typeof __r==='string')?__r:JSON.stringify(__r);}catch(e){return 'err:'+e;}})()";
+                wv.evaluateJavascript(wrapped, value -> {
+                    try {
+                        String text = "";
+                        if (value != null && !"null".equals(value)) {
+                            text = new JSONObject("{\"v\":" + value + "}").getString("v");
+                        }
+                        JSObject ret = new JSObject();
+                        ret.put("result", text);
+                        call.resolve(ret);
+                    } catch (Exception e) {
+                        call.reject(e.getMessage() != null ? e.getMessage() : "evaluateJs parse failed");
+                    }
+                });
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : "evaluateJs failed");
+            }
+        });
+    }
+
+    /** 页面滚动：direction=up|down|top|bottom，amount 为像素（可选） */
+    @PluginMethod
+    public void scrollBy(PluginCall call) {
+        String direction = call.getString("direction", "down");
+        int amount = call.getInt("amount", 800);
+        if (amount < 100) amount = 100;
+        if (amount > 4000) amount = 4000;
+        final String dir = direction != null ? direction.trim().toLowerCase() : "down";
+        final int amt = amount;
+        mainHandler.post(() -> {
+            try {
+                ensureWorkWebView();
+                WebView wv = workWebView;
+                String js;
+                if ("top".equals(dir)) {
+                    js = "window.scrollTo(0,0);'top'";
+                } else if ("bottom".equals(dir)) {
+                    js = "window.scrollTo(0,document.body.scrollHeight);'bottom'";
+                } else if ("up".equals(dir)) {
+                    js = "window.scrollBy(0,-" + amt + ");'up'";
+                } else {
+                    js = "window.scrollBy(0," + amt + ");'down'";
+                }
+                final String code = "(function(){try{" + js + ";return 'ok';}catch(e){return 'err';}})()";
+                wv.evaluateJavascript(code, value -> {
+                    JSObject ret = new JSObject();
+                    ret.put("ok", true);
+                    ret.put("direction", dir);
+                    call.resolve(ret);
+                });
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : "scrollBy failed");
+            }
+        });
+    }
+
+
     private void hidePanel() {
         if (panelRoot != null) panelRoot.setVisibility(View.GONE);
         if (workWebView != null) workWebView.setVisibility(View.INVISIBLE);
