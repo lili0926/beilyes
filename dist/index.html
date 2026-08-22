@@ -6281,6 +6281,27 @@ const PR_WORLD_PRESETS = [
       { id: 4, name: "巢穴奉献·繁衍命运", task: "进入他的巢芯：在双重性器与漫长绞合的巢居中做出抉择——成为繁衍命运的一环，或改写祭约，让石城与蛇沼第一次出现第三条路。" },
     ],
   },
+{
+    id: "abyss_fruit",
+    name: "深渊禁果",
+    world: `世界：深渊禁果
+
+一、世界底层法则
+· 欲魔的饥渴（The Incubi Hunger）：高阶淫魔并非只知宣泄的野兽，而是以人类极致的情感、战栗与纯阴体温为食的优雅掠食者。他们拥有蛊惑人心的容貌、覆有细密倒刺且极为敏感的骨节长尾，以及带有催幻效果的魔气。
+· 契约与锁骨印（The Sigil of Tether）：凡人一旦与淫魔完成初次交融，颈后或锁骨处便会浮现深渊咒印。每逢月亏之夜，人类躯体会因咒印发作而陷入高热与空虚，唯有淫魔的体温、抚触与深层索求方能平息这种深入骨髓的焦渴。
+
+二、核心角色定义
+· Aries（亚里士）：盘踞于深渊之底的纯血上位欲魔，视纯洁人类为最精致的私有玩物。苍白俊美，眼眸在昏暗处泛着摄人魂魄的暗紫流光。头顶生有一对微弯的漆黑羊角，身后是一条极具攻击性与支配欲的柔韧魔尾，尾尖呈锋锐的桃心状，触感冰凉而湿滑。性格恶劣、霸道、掌控欲极强，擅长用漫不经心的温柔将猎物逼入绝境。
+· Jasmine（茉莉）：误入深渊遗迹的人类少女，体质纯阴，拥有能够完全激发淫魔嗜欲与进食本能的温热体魄。
+
+三、阶段任务机制见 stages。`,
+    stages: [
+      { id: 1, name: "暗室初蚀", task: "在封闭的寝殿内，忍受尾尖在踝骨与脊梁上的游走试探，任由魔气侵染神智，完成初次烙印。" },
+      { id: 2, name: "戒断与渴求", task: "在咒印初次发作的高热之夜，主动向他索求触碰与安抚，彻底打破人类的羞耻防线。" },
+      { id: 3, name: "巢穴共寝", task: "深入欲魔堆满丝绸与软垫的巢穴核心，在多重魔力与肢体交缠的包围下，完成精气与灵魂的深度共鸣。" },
+      { id: 4, name: "深渊王嗣", task: "斩断逃回人界的念头，彻底臣服于他的支配之下，以凡人之躯接纳深渊本源，成为他唯一的共生祭品。" },
+    ],
+  },
 ];
 
 function ensurePr(){
@@ -18117,6 +18138,77 @@ if(!window.__mpDelegated){
       if(id==="ward-add-toggle"){
         e.preventDefault(); e.stopImmediatePropagation();
         state.wardrobeAdding = !state.wardrobeAdding;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="ward-feed-toggle" || raw.closest("#ward-feed-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.wardrobeFeedChat = !state.wardrobeFeedChat;
+        try{ persist("wardrobeFeedChat"); }catch(e){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="ward-cancel-item"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.wardrobeAdding=false;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="ward-save-item"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const name = (document.getElementById("ward-new-name")?.value || state.wardrobeNewName || "").trim();
+        const desc = (document.getElementById("ward-new-desc")?.value || state.wardrobeNewDesc || "").trim();
+        if(!name){ alert("请填写名称（首页显示用）"); return; }
+        const cat = state.wardrobeNewCat || state.wardrobeCatFilter || "top";
+        const item = { id: "w_"+Date.now(), name, desc, category: cat };
+        state.wardrobeItems = (state.wardrobeItems||[]).concat([item]);
+        state.wardrobeAdding=false;
+        state.wardrobeNewName="";
+        state.wardrobeNewDesc="";
+        try{ persist("wardrobeItems"); }catch(e){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="quest-enable-toggle" || raw.closest("#quest-enable-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.questEnabled = state.questEnabled===false ? true : false;
+        try{ persist("questEnabled"); }catch(e){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="duty-modal-close" || id==="duty-modal-mask"){
+        // mask 仅点遮罩关闭：若点到内部 modal 不关
+        if(id==="duty-modal-mask" && e.target && e.target.id!=="duty-modal-mask") return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.dutySelected=null;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="duty-save-done"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const k = state.dutySelected;
+        if(!k) return;
+        const mood = (document.getElementById("duty-mood")?.value || "").trim();
+        const note = (document.getElementById("duty-note")?.value || "").trim();
+        state.dutyRecords = state.dutyRecords || {};
+        state.dutyRecords[k] = { done:true, mood, note, at: new Date().toISOString() };
+        try{ persist("dutyRecords"); }catch(e){}
+        state.dutySelected=null;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="duty-clear"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const k = state.dutySelected;
+        if(k && state.dutyRecords){ delete state.dutyRecords[k]; try{ persist("dutyRecords"); }catch(e){} }
+        state.dutySelected=null;
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="duty-remind-toggle" || raw.closest("#duty-remind-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.dutyRemindOn = state.dutyRemindOn===false ? true : false;
+        try{ persist("dutyRemindOn"); }catch(e){}
         if(typeof render==="function") render();
         return;
       }
