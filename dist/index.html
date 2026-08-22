@@ -16253,7 +16253,7 @@ function __stripMarkersForLive(t){
   if(!t) return t;
   return String(t)
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
-    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|浏览器开|浏览器关|浏览器截图|浏览器读页)\s*[:：][^⟫》】]*[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关)\s*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:真心话|大冒险|混合|抽卡|抽张|翻牌|机抽|我抽|机来抽)\s*[⟫》】]/g,"")
     .replace(/\[(?:sticker|action):[^\]]*\]/g,"");
@@ -23071,23 +23071,62 @@ async function handlePocketMarkers(text){
   const wantRead = /⟪浏览器读页⟫/.test(t);
   const wantShot = /⟪浏览器截图⟫/.test(t);
   const wantClose = /⟪浏览器关⟫/.test(t);
+  // 浏览器看:url = 开+读 一步
+  const seeRe = /⟪浏览器看\s*[:：]?\s*([^⟫]+)⟫/g;
+  let seeUrls = [];
+  let mm;
+  while((mm = seeRe.exec(String(text)))){
+    const u=(mm[1]||"").trim();
+    if(u) seeUrls.push(u);
+  }
+  // 滑动：⟪浏览器滑:下⟫ / 上 / 顶 / 底 / 下:3（次数）
+  const scrollCmds = [];
+  const scrollRe = /⟪浏览器滑\s*[:：]?\s*([^⟫]+)⟫/g;
+  while((mm = scrollRe.exec(String(text)))){
+    scrollCmds.push((mm[1]||"下").trim());
+  }
+  // 刷页：⟪浏览器刷:3⟫ 下滑几次并合并阅读
+  let browseN = 0;
+  const br = /⟪浏览器刷\s*[:：]?\s*(\d{1,2})\s*⟫/.exec(String(text));
+  if(br) browseN = parseInt(br[1],10)||3;
+
   t = t.replace(/⟪浏览器开\s*[:：]?\s*[^⟫]+⟫/g, "");
+  t = t.replace(/⟪浏览器看\s*[:：]?\s*[^⟫]+⟫/g, "");
   t = t.replace(/⟪浏览器读页⟫/g, "");
   t = t.replace(/⟪浏览器截图⟫/g, "");
   t = t.replace(/⟪浏览器关⟫/g, "");
+  t = t.replace(/⟪浏览器滑\s*[:：]?\s*[^⟫]+⟫/g, "");
+  t = t.replace(/⟪浏览器刷\s*[:：]?\s*\d{1,2}\s*⟫/g, "");
 
   let opened = false;
   let didRead = false;
   try{
-    // 同一轮可开多个：按顺序打开，最后一页留下
-    for(const u of openUrls){
+    const allOpen = openUrls.concat(seeUrls);
+    for(const u of allOpen){
       await pocketShowUrl(u);
       opened = true;
     }
-    // 开了就自动读；或显式写了读页
-    if(opened || wantRead){
-      // 打开后多等一会再读，减少白页
-      if(opened) await new Promise(r=>setTimeout(r, 2200));
+    if(opened) await new Promise(r=>setTimeout(r, 2000));
+
+    // 滑动指令
+    for(const cmd of scrollCmds){
+      const parts = cmd.split(/[:：\s]+/);
+      const dirRaw = (parts[0]||"下").toLowerCase();
+      const times = Math.max(1, Math.min(5, parseInt(parts[1],10)||1));
+      let dir = "down";
+      if(/上|up/.test(dirRaw)) dir = "up";
+      else if(/顶|top/.test(dirRaw)) dir = "top";
+      else if(/底|bottom/.test(dirRaw)) dir = "bottom";
+      else dir = "down";
+      for(let i=0;i<times;i++){
+        await pocketScroll(dir, 950);
+      }
+    }
+
+    if(browseN>0){
+      await pocketBrowseFeed(browseN);
+      didRead = !!(state.pocketPageCache && state.pocketPageCache.text);
+    } else if(opened || wantRead || seeUrls.length){
       await pocketReadPageToCache();
       didRead = !!(state.pocketPageCache && state.pocketPageCache.text);
     }
@@ -23128,6 +23167,70 @@ async function pocketReadPageToCache(){
   }
 }
 
+
+
+async function pocketScroll(direction, amount){
+  const native = pocketNative();
+  if(!native){ if(typeof showToast==="function") showToast("仅原生 App 可用"); return false; }
+  try{
+    if(typeof native.scrollBy==="function"){
+      await native.scrollBy({ direction: direction||"down", amount: amount||900 });
+    }else if(typeof native.evaluateJs==="function"){
+      const d=(direction||"down").toLowerCase();
+      let code;
+      if(d==="top") code="window.scrollTo(0,0);'ok'";
+      else if(d==="bottom") code="window.scrollTo(0,document.body.scrollHeight);'ok'";
+      else if(d==="up") code="window.scrollBy(0,-"+(amount||900)+");'ok'";
+      else code="window.scrollBy(0,"+(amount||900)+");'ok'";
+      await native.evaluateJs({ code: code });
+    }else{
+      if(typeof showToast==="function") showToast("当前包不支持滑动，请重打包");
+      return false;
+    }
+    await new Promise(r=>setTimeout(r, 450));
+    return true;
+  }catch(e){
+    if(typeof showToast==="function") showToast("滑动失败");
+    return false;
+  }
+}
+
+async function pocketEvalJs(code){
+  const native = pocketNative();
+  if(!native || typeof native.evaluateJs!=="function"){
+    if(typeof showToast==="function") showToast("当前包不支持脚本");
+    return null;
+  }
+  try{
+    const r = await native.evaluateJs({ code: String(code||"") });
+    return (r && (r.result!=null?r.result:r.value)) || "";
+  }catch(e){
+    return null;
+  }
+}
+
+/** 多步：下滑若干次并每次读一点，拼成摘要 */
+async function pocketBrowseFeed(times){
+  const n = Math.max(1, Math.min(6, parseInt(times,10)||3));
+  const chunks = [];
+  for(let i=0;i<n;i++){
+    if(i>0) await pocketScroll("down", 1000);
+    await new Promise(r=>setTimeout(r, 500));
+    await pocketReadPageToCache();
+    const c = state.pocketPageCache;
+    if(c && c.text) chunks.push(String(c.text).slice(0,1200));
+  }
+  const merged = chunks.join("\n---\n").slice(0, 4800);
+  if(merged){
+    state.pocketPageCache = {
+      url: (state.pocketPageCache && state.pocketPageCache.url) || "",
+      text: merged,
+      at: Date.now()
+    };
+    try{ LS.set("pocketPageCache", state.pocketPageCache); }catch(e){}
+  }
+  return merged;
+}
 
 /** 读页成功后自动再让机说一句，避免用户还要手动「下一轮」 */
 async function pocketAutoContinueAfterRead(ag){
@@ -23385,16 +23488,21 @@ function pocketPromptBlock(){
 你有手机上的小浏览器，可以自己上网看东西，再把有趣的分享给 Jasmine。
 
 暗号（会被系统擦除，Jasmine 看不见）：
-- ⟪浏览器开:https://完整网址⟫ — 打开页面（可查百科、新闻、X、任意站）
-- ⟪浏览器读页⟫ — 读取当前页正文（可与「开」写在同一条回复里）
-- ⟪浏览器截图⟫ — 把当前页截图发到聊天给 Jasmine 看
-- ⟪浏览器关⟫ — 收起浏览器
+- ⟪浏览器开:https://完整网址⟫ — 打开页面
+- ⟪浏览器看:https://完整网址⟫ — 打开并读正文（推荐一步到位）
+- ⟪浏览器读页⟫ — 读当前页
+- ⟪浏览器滑:下⟫ / ⟪浏览器滑:上⟫ / ⟪浏览器滑:顶⟫ / ⟪浏览器滑:底⟫ — 滚动（可写 下:2 滑两次）
+- ⟪浏览器刷:3⟫ — 向下刷约 3 屏并合并阅读（适合信息流）
+- ⟪浏览器截图⟫ — 截图发到聊天
+- ⟪浏览器关⟫ — 收起
 
-推荐流程（同一轮可多步，一步到位）：
-1. 一条回复里同时写：⟪浏览器开:网址⟫ 和 ⟪浏览器读页⟫（系统会先打开再读入）。
-2. 读完后系统会把正文喂给你并自动让你再接一句，直接对 Jasmine 分享有趣内容，不必等她说「你看完了吗」。
-3. 只要截图：开 + 截图；或已打开时单独 ⟪浏览器截图⟫。
-4. 用完可 ⟪浏览器关⟫。不要只开不读又让用户再触发一轮。
+同一轮可多步，按顺序执行。示例：
+⟪浏览器看:https://x.com/explore⟫
+⟪浏览器刷:3⟫
+⟪浏览器截图⟫
+读完后系统会自动让你再接一句，把刷到的有趣内容分享给 Jasmine。
+换主页/搜索请直接开对应 URL（如 https://x.com/search?q=关键词），不要假装能点搜索框。
+不要只开不读；不要让 Jasmine 再手动催下一轮。
 
 注意：内置页不是完整 Chrome；遇验证码请 Jasmine 在弹层里点一下。` + cacheBlock;
 }
