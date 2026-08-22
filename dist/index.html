@@ -21894,7 +21894,20 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   const couponRes = handleCouponMarkers(cleanBody); // 券夹：⟪使用券:券名⟫
   cleanBody = couponRes.text;
   cleanBody = handleProfileCommand(cleanBody, "them"); // 主页资料卡：改签名/简介/背景
-  cleanBody = handlePocketMarkers(cleanBody); // 远程浏览器：⟪浏览器开:url⟫ / ⟪浏览器关⟫
+  let pocketMeta = { didRead:false, opened:false };
+  try{
+    const pr = await handlePocketMarkers(cleanBody);
+    if(pr && typeof pr==="object"){
+      cleanBody = pr.text != null ? pr.text : cleanBody;
+      pocketMeta = pr;
+    } else if(typeof pr==="string"){
+      cleanBody = pr;
+    }
+  }catch(e){}
+  // 远程浏览器：⟪浏览器开:url⟫ / ⟪浏览器读页⟫ 可同轮；读完后下面自动再接一句
+  if(pocketMeta && pocketMeta.didRead){
+    setTimeout(()=>{ try{ pocketAutoContinueAfterRead(ag); }catch(e){} }, 600);
+  }
   cleanBody = handleNoteMarkers(cleanBody);   // 机写小纸条：⟪写纸条:内容⟫ → 聊天卡片
   cleanBody = handleDiaryMarkers(cleanBody);  // 机写日记：⟪写日记:标题|正文⟫ → 聊天轻提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
@@ -23042,36 +23055,52 @@ async function pocketShowUrl(url){
     }
     const u = (url && url.trim()) || "https://www.bing.com";
     await native.showBrowser({ url: u });
-    setPocketStatus("小浏览器已打开："+u.slice(0,48)+"（可截图/读页）");
-    // 进阶：打开后自动尝试读页，方便机下一轮「自己看过」
-    setTimeout(function(){ try{ pocketReadPageToCache(); }catch(e){} }, 2800);
+    setPocketStatus("小浏览器已打开："+u.slice(0,48)+"（可同轮读页）");
   }catch(e){ setPocketStatus("打开失败：" + ((e && e.message) || e), true); }
 }
-function handlePocketMarkers(text){
-  if(!text || !pocketNative()) return text;
+async function handlePocketMarkers(text){
+  if(!text || !pocketNative()) return { text: text, didRead: false, opened: false };
   let t = String(text);
   let m;
-  // 可多次开链接
   const openRe = /⟪浏览器开\s*[:：]?\s*([^⟫]+)⟫/g;
-  let openUrl = null;
-  while((m = openRe.exec(String(text)))){ openUrl = m[1].trim(); }
-  if(openUrl){
-    t = t.replace(/⟪浏览器开\s*[:：]?\s*[^⟫]+⟫/g, "");
-    pocketShowUrl(openUrl);
+  const openUrls = [];
+  while((m = openRe.exec(String(text)))){
+    const u = (m[1]||"").trim();
+    if(u) openUrls.push(u);
   }
-  if(/⟪浏览器关⟫/.test(t)){
-    t = t.replace(/⟪浏览器关⟫/g, "");
-    pocketHide();
+  const wantRead = /⟪浏览器读页⟫/.test(t);
+  const wantShot = /⟪浏览器截图⟫/.test(t);
+  const wantClose = /⟪浏览器关⟫/.test(t);
+  t = t.replace(/⟪浏览器开\s*[:：]?\s*[^⟫]+⟫/g, "");
+  t = t.replace(/⟪浏览器读页⟫/g, "");
+  t = t.replace(/⟪浏览器截图⟫/g, "");
+  t = t.replace(/⟪浏览器关⟫/g, "");
+
+  let opened = false;
+  let didRead = false;
+  try{
+    // 同一轮可开多个：按顺序打开，最后一页留下
+    for(const u of openUrls){
+      await pocketShowUrl(u);
+      opened = true;
+    }
+    // 开了就自动读；或显式写了读页
+    if(opened || wantRead){
+      // 打开后多等一会再读，减少白页
+      if(opened) await new Promise(r=>setTimeout(r, 2200));
+      await pocketReadPageToCache();
+      didRead = !!(state.pocketPageCache && state.pocketPageCache.text);
+    }
+    if(wantShot){
+      await pocketCaptureAndSend();
+    }
+    if(wantClose){
+      pocketHide();
+    }
+  }catch(e){
+    try{ if(typeof setPocketStatus==="function") setPocketStatus("浏览器操作失败："+((e&&e.message)||e), true); }catch(_){}
   }
-  if(/⟪浏览器读页⟫/.test(t)){
-    t = t.replace(/⟪浏览器读页⟫/g, "");
-    pocketReadPageToCache();
-  }
-  if(/⟪浏览器截图⟫/.test(t)){
-    t = t.replace(/⟪浏览器截图⟫/g, "");
-    pocketCaptureAndSend();
-  }
-  return t.trim();
+  return { text: t.trim(), didRead: didRead, opened: opened };
 }
 
 /** 读当前页正文 → 写入缓存，下一轮 system 注入，让机「自己看过」 */
@@ -23096,6 +23125,32 @@ async function pocketReadPageToCache(){
     if(typeof showToast==="function") showToast("已读页："+(url||"当前页").slice(0,40));
   }catch(e){
     if(typeof showToast==="function") showToast("读页失败："+((e&&e.message)||e));
+  }
+}
+
+
+/** 读页成功后自动再让机说一句，避免用户还要手动「下一轮」 */
+async function pocketAutoContinueAfterRead(ag){
+  try{
+    if(window.__pocketAutoContinueLock) return;
+    const c = state.pocketPageCache;
+    if(!c || !c.text) return;
+    if(Date.now() - (c.at||0) > 15000) return; // 只接刚刚读的
+    window.__pocketAutoContinueLock = true;
+    const sysExtra = `【系统·小浏览器】你刚刚已经打开并读完页面（同轮完成）。网址：${c.url||""}\n正文摘录：\n${String(c.text).slice(0,3200)}\n请直接用第一人称对 Jasmine 分享你看到的有趣点，不要再写浏览器暗号，除非还要继续打开新页面。不要说「下一轮才能看」。`;
+    // 轻量：往当前会话塞一条隐藏 system 提示后触发一次回复
+    const agent = ag || (state.agents||[]).find(a=>a.id===state.currentAgentId) || state.agents[0];
+    if(!agent || typeof callOneAgentReply!=="function"){ window.__pocketAutoContinueLock=false; return; }
+    const thread = (typeof currentThread==="function") ? currentThread() : null;
+    const msgs = (thread && thread.messages) ? thread.messages.slice(-12) : [];
+    const apiMsgs = msgs.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({role:m.role, content: typeof m.content==="string"?m.content:(m.content||"")}));
+    apiMsgs.push({ role:"user", content:"（系统提示：页面已读入，请根据刚读到的内容自然接话，不要提系统提示本身。）" });
+    const baseSys = (typeof buildSystemPrompt==="function") ? buildSystemPrompt(agent) : "";
+    await callOneAgentReply(agent, apiMsgs, (baseSys||"")+"\n\n"+sysExtra);
+  }catch(e){
+    try{ console.warn("pocketAutoContinue", e); }catch(_){}
+  }finally{
+    setTimeout(()=>{ window.__pocketAutoContinueLock=false; }, 800);
   }
 }
 
@@ -23331,15 +23386,15 @@ function pocketPromptBlock(){
 
 暗号（会被系统擦除，Jasmine 看不见）：
 - ⟪浏览器开:https://完整网址⟫ — 打开页面（可查百科、新闻、X、任意站）
-- ⟪浏览器读页⟫ — 读取当前页正文，供你下一轮对话使用（自己「看过」）
+- ⟪浏览器读页⟫ — 读取当前页正文（可与「开」写在同一条回复里）
 - ⟪浏览器截图⟫ — 把当前页截图发到聊天给 Jasmine 看
 - ⟪浏览器关⟫ — 收起浏览器
 
-推荐流程：
-1. 想看什么就自己开链接（不要事事问准许，Jasmine 说过可以上网时更要主动）。
-2. 打开后写 ⟪浏览器读页⟫，下一轮你就能根据正文聊天。
-3. 看到有趣的版面/图/卡片 → 写 ⟪浏览器截图⟫ 发给 Jasmine。
-4. 用完可 ⟪浏览器关⟫。
+推荐流程（同一轮可多步，一步到位）：
+1. 一条回复里同时写：⟪浏览器开:网址⟫ 和 ⟪浏览器读页⟫（系统会先打开再读入）。
+2. 读完后系统会把正文喂给你并自动让你再接一句，直接对 Jasmine 分享有趣内容，不必等她说「你看完了吗」。
+3. 只要截图：开 + 截图；或已打开时单独 ⟪浏览器截图⟫。
+4. 用完可 ⟪浏览器关⟫。不要只开不读又让用户再触发一轮。
 
 注意：内置页不是完整 Chrome；遇验证码请 Jasmine 在弹层里点一下。` + cacheBlock;
 }
