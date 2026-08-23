@@ -2298,6 +2298,8 @@
   <div id="app"></div>
   <script src="backend-bridge.js"></script>
   <script>
+/* === 10_core_boot.js === extracted from monolith; edit here then: python3 frontend/build.py */
+
 // ═══════════════ 开屏 & 登录逻辑 ═══════════════
 (function(){
   // ── 账号系统 ──
@@ -6196,6 +6198,7 @@ if(!window.__fcDelegated){
 
 
 // ═══ PR 快穿（本地 · 多世界观可编辑）═══
+/* === 20_feature_pr.js === extracted from monolith; edit here then: python3 frontend/build.py */
 const PR_WORLD_PRESETS = [
   {
     id: "abyss",
@@ -6705,7 +6708,8 @@ async function prSendUser(){
     prSave();
     render();
   }
-}
+}/* === 30_core_mid.js === extracted from monolith; edit here then: python3 frontend/build.py */
+
 
 function bindPr(){
   document.querySelectorAll("[data-pr-world]").forEach(el=>{
@@ -16693,6 +16697,7 @@ function renderChat(){
 }
 
 // ─── 小纸条 / 机日记 / 信箱（Machine Content）────────────────────────────────
+/* === 40_feature_mc_ui.js === extracted from monolith; edit here then: python3 frontend/build.py */
 function mcFindDetail(type, id){
   if(!id) return null;
   let hit = null;
@@ -16920,7 +16925,8 @@ function mcSheetMask(){
     </div>`;
   }
   return "";
-}
+}/* === 50_core_mid2.js === extracted from monolith; edit here then: python3 frontend/build.py */
+
 function renderNotes(){
   const notes = state.mcNotes || [];
   const detail = (state.mcDetail && state.mcDetail.type === "note") ? mcFindDetail("note", state.mcDetail.id) : null;
@@ -23104,6 +23110,7 @@ if(!window.__proactiveBoot){
 
 // ─── Capacitor 原生推送（FCM）──────────────────────────────────────────────
 // ─── 远程浏览器控制（Pocket · Capacitor 原生插件）────────────────────────────
+/* === 60_feature_pocket_mc.js === extracted from monolith; edit here then: python3 frontend/build.py */
 function pocketNative(){
   const Cap = window.Capacitor;
   if(!Cap || typeof Cap.isNativePlatform!=="function" || !Cap.isNativePlatform()) return null;
@@ -23619,7 +23626,8 @@ function pocketPromptBlock(){
 不要只开不读；不要让 Jasmine 再手动催下一轮。
 
 注意：内置页不是完整 Chrome；遇验证码请 Jasmine 在弹层里点一下。` + cacheBlock;
-}
+}/* === 70_core_rest.js === extracted from monolith; edit here then: python3 frontend/build.py */
+
 
 async function setupCapacitorPush(){
   const Cap = window.Capacitor;
