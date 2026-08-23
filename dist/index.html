@@ -3905,18 +3905,33 @@ function ariesCameraToolDef(){
 }
 function ariesSavePhotoToAlbum(base64, ts){
   try{
-    if(typeof addToAlbum==="function"){
-      addToAlbum({ dataUrl: "data:image/jpeg;base64,"+base64, time: ts, source: "aries_camera" });
-      return;
-    }
-  }catch(e){}
-  try{
-    if(!Array.isArray(state.album)) state.album = [];
-    state.album.unshift({ id: "cam_"+Date.now(), src: "data:image/jpeg;base64,"+base64, time: ts||Date.now(), from: "aries" });
-    if(state.album.length>200) state.album.length = 200;
-    if(typeof persist==="function") persist("album");
-    else try{ LS.set("album", state.album); }catch(e){}
-  }catch(e){}
+    if(!base64) return;
+    const image = String(base64).startsWith("data:") ? String(base64) : ("data:image/jpeg;base64,"+base64);
+    if(!Array.isArray(state.albumData)) state.albumData = [];
+    // 去重：同一张不重复进
+    if(state.albumData.some(a=>a && a.image===image)) return;
+    let date = "";
+    try{
+      if(typeof _todayStr==="function") date = _todayStr();
+      else date = new Date(ts||Date.now()).toISOString().slice(0,10);
+    }catch(e){ date = new Date().toISOString().slice(0,10); }
+    const item = {
+      id: "cam_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),
+      image,
+      date,
+      caption: "Aries 看一眼 · "+new Date(ts||Date.now()).toLocaleString("zh-CN"),
+      from: "aries_camera",
+    };
+    state.albumData.unshift(item);
+    if(state.albumData.length>200) state.albumData.length = 200;
+    state.albumIdx = 0;
+    if(typeof persist==="function") persist("albumData");
+    else try{ LS.set("albumData", state.albumData); }catch(e){}
+    try{ if(typeof postAppEvent==="function") postAppEvent("album_collect",{ n:1, source:"aries_camera" }); }catch(e){}
+    try{ if(typeof showToast==="function") showToast("已存入相册"); }catch(e){}
+  }catch(e){
+    try{ console.warn("ariesSavePhotoToAlbum", e); }catch(_){}
+  }
 }
 
 
