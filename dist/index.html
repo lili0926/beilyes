@@ -3857,11 +3857,28 @@ function __chatAppendToolRound(channel, convo, assistantMsg, toolResults){
 
 /** Aries 本机拍照 → CameraService :18888 */
 async function ariesRequestPhoto(facing){
+  const cam = facing || "front";
+  // 1) 原生插件（避免 WebView https→http 混合内容 Failed to fetch）
+  try{
+    const Cap = window.Capacitor;
+    const plug = Cap && Cap.Plugins && (Cap.Plugins.AriesCamera || Cap.Plugins.AriesCameraPlugin);
+    if(plug && typeof plug.takePhoto === "function"){
+      const data = await plug.takePhoto({ camera: cam });
+      const img = data && (data.image || (data.value && data.value.image));
+      if(img){
+        return { ok:true, base64: img, timestamp: (data.timestamp || (data.value&&data.value.timestamp) || Date.now()) };
+      }
+      throw new Error((data && data.error) || "no image from plugin");
+    }
+  }catch(e){
+    console.warn("[AriesCamera] plugin", e);
+  }
+  // 2) 回退 HTTP（仅非混合内容环境）
   try{
     const res = await fetch("http://127.0.0.1:18888/take-photo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ camera: facing || "front" }),
+      body: JSON.stringify({ camera: cam }),
       signal: (typeof AbortSignal!=="undefined" && AbortSignal.timeout) ? AbortSignal.timeout(10000) : undefined,
     });
     if(!res.ok) throw new Error("HTTP "+res.status);
