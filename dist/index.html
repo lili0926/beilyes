@@ -16694,9 +16694,52 @@ function renderChat(){
 
 // ─── 小纸条 / 机日记 / 信箱（Machine Content）────────────────────────────────
 function mcFindDetail(type, id){
-  if(type==="note") return (state.mcNotes||[]).find(x=>x.id===id) || null;
-  if(type==="diary") return (state.mcDiaries||[]).find(x=>x.id===id) || null;
-  return (state.mcLetters||[]).find(x=>x.id===id) || null;
+  if(!id) return null;
+  let hit = null;
+  if(type==="note") hit = (state.mcNotes||[]).find(x=>String(x.id)===String(id)) || null;
+  else if(type==="diary") hit = (state.mcDiaries||[]).find(x=>String(x.id)===String(id)) || null;
+  else hit = (state.mcLetters||[]).find(x=>String(x.id)===String(id)) || null;
+  if(hit) return hit;
+  // 聊天卡片 snap 兜底（列表未刷新时也能打开）
+  try{
+    const threads = state.chatThreads || state.threads || [];
+    const lists = [];
+    if(Array.isArray(threads)){
+      threads.forEach(th=>{ if(th && Array.isArray(th.messages)) lists.push(th.messages); });
+    } else if(threads && typeof threads==="object"){
+      Object.keys(threads).forEach(k=>{
+        const th = threads[k];
+        if(th && Array.isArray(th.messages)) lists.push(th.messages);
+      });
+    }
+    if(Array.isArray(state.messages)) lists.push(state.messages);
+    for(const msgs of lists){
+      for(const m of msgs){
+        if(!m) continue;
+        if(String(m.refId||"")!==String(id)) continue;
+        const snap = m.snap || {};
+        if(type==="diary"){
+          return {
+            id: id,
+            title: snap.title || m.title || "",
+            content: snap.content || snap.body || m.content || "",
+            date: snap.date || "",
+            visibility: snap.visibility || "public",
+            locked: !!snap.locked,
+            author: snap.author || "ai",
+            annotations: snap.annotations || [],
+          };
+        }
+        if(type==="note"){
+          return { id, content: snap.content || snap.body || m.content || "", author: snap.author || "ai" };
+        }
+        if(type==="letter"){
+          return { id, body: snap.body || snap.content || m.content || "", content: snap.body || snap.content || "", status: snap.status || "delivered", author: snap.author || "ai" };
+        }
+      }
+    }
+  }catch(e){}
+  return null;
 }
 /** 隐私判定：未投递的信 / 私有或上锁的机日记 → 需要模糊层，未解锁不可点开 */
 function mcIsRestricted(type, rec){
@@ -16724,10 +16767,19 @@ async function mcDelete(type, id){
 function mcOpenDetail(type, id){
   state.mcDetail = { type, id };
   state.mcAnnDraft = "";
-  // 从聊天卡片打开时，切到对应功能页展示详情
   const sub = type==="note" ? "notes" : type==="diary" ? "mdiary" : "mailbox";
   state.subPage = sub;
-  render();
+  if(typeof render==="function") render();
+  // 后台拉列表，补全正文后刷新弹层
+  try{
+    if(typeof mcRefresh==="function"){
+      Promise.resolve(mcRefresh()).then(()=>{
+        if(state.mcDetail && String(state.mcDetail.id)===String(id)){
+          if(typeof render==="function") render();
+        }
+      }).catch(()=>{});
+    }
+  }catch(e){}
 }
 function mcCloseDetail(){ state.mcDetail = null; render(); }
 async function mcRefresh(){
@@ -18218,6 +18270,32 @@ if(!window.__mpDelegated){
         e.preventDefault(); e.stopImmediatePropagation();
         state.wardrobeAdding = !state.wardrobeAdding;
         if(typeof render==="function") render();
+        return;
+      }
+      // 机日记 / 小纸条 / 信箱 卡片与详情
+      const mcOpenEl = raw.closest("[data-mc-open]");
+      if(mcOpenEl){
+        const v = mcOpenEl.getAttribute("data-mc-open") || "";
+        const i0 = v.indexOf(":");
+        if(i0>0){
+          e.preventDefault(); e.stopImmediatePropagation();
+          if(typeof mcOpenDetail==="function") mcOpenDetail(v.slice(0,i0), v.slice(i0+1));
+          return;
+        }
+      }
+      if(id==="mc-detail-close" || (id==="mc-detail-mask" && e.target && e.target.id==="mc-detail-mask")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof mcCloseDetail==="function") mcCloseDetail();
+        return;
+      }
+      const mcDel = raw.closest("[data-mc-del]");
+      if(mcDel && typeof mcDeleteRecord==="function"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const v = mcDel.getAttribute("data-mc-del") || "";
+        const i0 = v.indexOf(":");
+        if(i0>0){
+          try{ mcDeleteRecord(v.slice(0,i0), v.slice(i0+1)); }catch(err){}
+        }
         return;
       }
       if(id==="ward-feed-toggle" || raw.closest("#ward-feed-toggle")){
