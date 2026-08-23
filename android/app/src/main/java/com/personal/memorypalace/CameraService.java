@@ -26,10 +26,12 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import fi.iki.elonen.NanoHTTPD;
 
@@ -37,6 +39,8 @@ import fi.iki.elonen.NanoHTTPD;
  * 本机 HTTP：POST http://127.0.0.1:18888/take-photo
  * body: {"camera":"front"|"back"}
  * 返回: {"success":true,"image":"<base64>","timestamp":...}
+ *
+ * 前后置：每次按 camera 字段 unbind 后重新 bind 对应 CameraSelector（CameraX 需重建用例）。
  */
 public class CameraService extends LifecycleService {
     public static final int PORT = 18888;
@@ -45,8 +49,11 @@ public class CameraService extends LifecycleService {
     private static final int NOTIF_ID = 1001;
 
     private CameraHttpServer httpServer;
-    private ImageCapture imageCapture;
+    private final AtomicReference<ImageCapture> imageCaptureRef = new AtomicReference<>();
+    /** 当前已绑定的朝向：front / back */
+    private final AtomicReference<String> boundFacing = new AtomicReference<>("front");
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
+    private final Object bindLock = new Object();
 
     public static void start(Context ctx) {
         Intent i = new Intent(ctx, CameraService.class);
@@ -62,7 +69,8 @@ public class CameraService extends LifecycleService {
         super.onCreate();
         createNotificationChannel();
         startForeground(NOTIF_ID, buildNotification());
-        bindCamera(CameraSelector.DEFAULT_FRONT_CAMERA);
+        // 启动时默认前置
+        bindCameraBlocking("front", 5);
         startHttp();
     }
 
@@ -73,35 +81,87 @@ public class CameraService extends LifecycleService {
         cameraExecutor.shutdownNow();
     }
 
-    private void bindCamera(CameraSelector selector) {
-        ProcessCameraProvider.getInstance(this).addListener(() -> {
-            try {
-                ProcessCameraProvider provider = ProcessCameraProvider.getInstance(this).get();
-                imageCapture = new ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .build();
-                provider.unbindAll();
-                provider.bindToLifecycle(this, selector, imageCapture);
-            } catch (Exception e) {
-                Log.e(TAG, "bindCamera", e);
-            }
-        }, ContextCompat.getMainExecutor(this));
-    }
+    /**
+     * 按朝向绑定摄像头。CameraX 不支持热切换，必须 unbindAll 后重建 ImageCapture。
+     * @return 是否在超时内绑定成功
+     */
+    private boolean bindCameraBlocking(String facing, int timeoutSec) {
+        final String want = "back".equalsIgnoreCase(facing) ? "back" : "front";
+        final CameraSelector selector = "back".equals(want)
+                ? CameraSelector.DEFAULT_BACK_CAMERA
+                : CameraSelector.DEFAULT_FRONT_CAMERA;
 
-    private void takePhoto(String facing, PhotoCallback cb) {
-        if ("back".equalsIgnoreCase(facing)) {
-            bindCamera(CameraSelector.DEFAULT_BACK_CAMERA);
-            cameraExecutor.execute(() -> {
-                try { Thread.sleep(600); } catch (InterruptedException ignored) {}
-                doCapture(cb);
-            });
-        } else {
-            doCapture(cb);
+        synchronized (bindLock) {
+            // 已是目标朝向且 ImageCapture 可用则跳过
+            if (want.equals(boundFacing.get()) && imageCaptureRef.get() != null) {
+                return true;
+            }
+
+            final CountDownLatch latch = new CountDownLatch(1);
+            final boolean[] ok = {false};
+
+            ProcessCameraProvider.getInstance(this).addListener(() -> {
+                try {
+                    ProcessCameraProvider provider = ProcessCameraProvider.getInstance(this).get();
+                    ImageCapture capture = new ImageCapture.Builder()
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                            .build();
+                    provider.unbindAll();
+                    provider.bindToLifecycle(this, selector, capture);
+                    imageCaptureRef.set(capture);
+                    boundFacing.set(want);
+                    ok[0] = true;
+                    Log.i(TAG, "bound camera: " + want);
+                } catch (Exception e) {
+                    Log.e(TAG, "bindCamera " + want, e);
+                    imageCaptureRef.set(null);
+                } finally {
+                    latch.countDown();
+                }
+            }, ContextCompat.getMainExecutor(this));
+
+            try {
+                if (!latch.await(timeoutSec, TimeUnit.SECONDS)) {
+                    Log.e(TAG, "bindCamera timeout: " + want);
+                    return false;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+            return ok[0];
         }
     }
 
+    private void takePhoto(String facing, PhotoCallback cb) {
+        final String want = "back".equalsIgnoreCase(facing) ? "back" : "front";
+        cameraExecutor.execute(() -> {
+            try {
+                if (!bindCameraBlocking(want, 6)) {
+                    // 后置失败时回退前置一次（无后置镜头的设备）
+                    if ("back".equals(want)) {
+                        Log.w(TAG, "back bind failed, fallback front");
+                        if (!bindCameraBlocking("front", 5)) {
+                            cb.onDone(null);
+                            return;
+                        }
+                    } else {
+                        cb.onDone(null);
+                        return;
+                    }
+                }
+                // 镜头刚切换时稍等稳定
+                try { Thread.sleep(350); } catch (InterruptedException ignored) {}
+                doCapture(cb);
+            } catch (Exception e) {
+                Log.e(TAG, "takePhoto", e);
+                cb.onDone(null);
+            }
+        });
+    }
+
     private void doCapture(PhotoCallback cb) {
-        ImageCapture capture = imageCapture;
+        ImageCapture capture = imageCaptureRef.get();
         if (capture == null) {
             cb.onDone(null);
             return;
@@ -223,7 +283,8 @@ public class CameraService extends LifecycleService {
             });
             boolean ok;
             try {
-                ok = sem.tryAcquire(8, TimeUnit.SECONDS);
+                // 切换镜头 + 拍照，放宽到 12s
+                ok = sem.tryAcquire(12, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 ok = false;
             }
@@ -233,6 +294,7 @@ public class CameraService extends LifecycleService {
                     r.put("success", true);
                     r.put("image", out[0]);
                     r.put("timestamp", System.currentTimeMillis());
+                    r.put("camera", "back".equalsIgnoreCase(facing) ? "back" : "front");
                     return newFixedLengthResponse(Response.Status.OK, "application/json", r.toString());
                 } catch (Exception e) {
                     return jsonError("json");
