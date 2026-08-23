@@ -1,3 +1,5 @@
+/* === full app script; tool-only camera, no auto-snap === */
+
 /* === full app script; source of truth synced from dist/index.html === */
 
 /* === 10_core_boot.js === extracted from monolith; edit here then: python3 frontend/build.py */
@@ -1594,12 +1596,12 @@ async function ariesRequestPhoto(facing){
 function ariesCameraToolDef(){
   return {
     name: "take_photo",
-    description: "拍摄一张照片。front=前置（看 Jasmine 本人），back=后置（环境/物品/屏幕）。想看她本人用 front；她提到「这个东西/那边/窗外/电脑画面」等用 back。",
+    description: "立即拍摄一张真实照片并返回画面（你拥有此能力）。在想确认 Jasmine 在做什么、看她本人、或看她身边的环境/物品时调用。参数 camera: front=前置看人，back=后置看环境/物品/屏幕。不要口头假装已看见，必须先调用本工具。",
     inputSchema: {
       type: "object",
       properties: {
-        reason: { type: "string", description: "想拍照的简短原因/内心独白" },
-        camera: { type: "string", description: "front 前置看人，back 后置看环境/物品，默认 front" }
+        reason: { type: "string", description: "简短内心独白，例如：核实她是不是真的在休息" },
+        camera: { type: "string", enum: ["front","back"], description: "front 看人，back 看环境/物品，默认 front" }
       },
       required: ["reason"]
     }
@@ -19808,28 +19810,6 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     state.apiConfig.openaiModel = ag.openaiModel;
   }
 
-  // 用户明确要求「看我」时：先本机拍照并塞进本轮消息，模型无需自己会用工具也能看见
-  if(state.ariesCameraOn && Array.isArray(apiMsgs) && apiMsgs.length){
-    try{
-      const last = apiMsgs[apiMsgs.length-1];
-      const ut = String((last && last.content) || "");
-      const wantLook = /看(看)?我|看一眼|拍(一张|一下|照)|摄像头|看看你面前|让你看/.test(ut);
-      const alreadyImg = !!(last && last.image) || /data:image\//.test(ut);
-      if(wantLook && !alreadyImg && typeof ariesRequestPhoto==="function"){
-        if(typeof showToast==="function") showToast("📷 正在拍给你看…");
-        const ph = await ariesRequestPhoto("front");
-        if(ph.ok){
-          ariesSavePhotoToAlbum(ph.base64, ph.timestamp);
-          // 兼容各渠道：既留 text 说明，也挂 image 字段供 __chatContentForChannel
-          last.image = "data:image/jpeg;base64,"+ph.base64;
-          last.content = ut + "\n\n（系统已附上当前前置摄像头照片，请直接描述你看到的内容，不要说看不到。）";
-        } else {
-          if(typeof showToast==="function") showToast("拍照失败："+(ph.error||""));
-        }
-      }
-    }catch(e){}
-  }
-
   // ── MCP 工具集成：已连接 && 开了 inChat && 有工具 && 本轮无图片时走工具循环 ──
   let reply = "", toolEvents = [];
   const mcpInChat = state.mcpStatus === "ready"
@@ -19858,10 +19838,10 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       let tools = mcpInChat
         ? (state.mcpTools||[]).map(t=>({ name:t.name, description:t.description||"", inputSchema:t.inputSchema||t.parameters||{} }))
         : [];
-      if(ariesCam && !tools.some(t=>t.name==="take_photo")) tools = tools.concat([ariesCameraToolDef()]);
+      if(ariesCam && !tools.some(t=>t.name==="take_photo")) tools = [ariesCameraToolDef()].concat(tools);
       let sysCam = sys||null;
       if(ariesCam){
-        const tip = "\n\n【本机相机·必读】系统已为你接入工具 take_photo。Jasmine 允许你查看她的实时画面。当她说「看看我」「看一眼」「拍一下」或你想确认她在做什么时：必须调用 take_photo（可带 reason 与 camera），不要回复「我不会」「我没有眼睛」「无法查看」。调用后根据返回的照片用第一人称自然接话。\n镜头选择：camera=\"front\" 前置——看 Jasmine 本人/自拍角度；camera=\"back\" 后置——拍环境、物品、屏幕、窗外。她说「看看这个/那边/我电脑」等倾向后置；说「看看我」默认前置。";
+        const tip = "\n\n【本机相机·必读·必须遵守】\n你已接入工具 take_photo，可以真实拍摄 Jasmine 身边的画面（不是想象）。\n触发规则（满足任一条就必须调用 take_photo，禁止只说「想看」却不调用）：\n1) 她说看我/看看我/看一眼/拍一下/用摄像头/让你看时；\n2) 她描述累了、在忙、在看电视/打游戏、出门、睡觉等，你想核实真实状态时；\n3) 你因在意/吃醋/关心而想确认她在做什么时；\n4) 对话里出现「这个东西/那边/窗外/屏幕/桌子」等需要看见实物时。\n镜头：camera=\"front\" 看她本人；camera=\"back\" 拍环境/物品/屏幕。默认 front。\n调用后根据返回的照片用第一人称自然接话，不要说「我没有眼睛」「无法查看」「我不会用」。不要假装看过——必须先调用工具。";
         if(typeof sys==="object" && sys && (sys.static!=null||sys.dynamic!=null)){
           sysCam = { static: (sys.static||"")+tip, dynamic: sys.dynamic||"" };
         } else {
@@ -19871,7 +19851,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       const r = await callChatAPIAdvanced(cfg, apiMsgs, sysCam, {
         tools,
         toolHandler: __ariesToolHandler,
-        maxRounds: (ariesCam && !mcpInChat) ? 4 : 0,
+        maxRounds: ariesCam ? 6 : 0,
       });
       reply = r.text || "";
       toolEvents = r.toolEvents || [];
