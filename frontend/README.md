@@ -1,27 +1,22 @@
 # 前端拆分说明
 
-`dist/index.html` 仍是 App 唯一入口（Capacitor 加载它）。
+**重要：** APK 构建会执行 `python3 frontend/build.py`，用 `frontend/parts/` 生成 `dist/index.html`。
 
-源码按功能拆在 `frontend/parts/`，修改后执行：
+因此 **parts 必须与可用的 dist 同步**，否则打出来的包会丢功能（例如 Aries 相机）。
 
-```bash
-python3 frontend/build.py
-```
+## 当前布局（防丢失）
 
-会重新组装 `dist/index.html`。
-
-## 零件
-
-| 文件 | 内容 |
+| 文件 | 说明 |
 |------|------|
-| `00_prefix.html` | HTML 头、样式、外链 script |
-| `10_core_boot.js` | 开屏登录、state 前半 |
-| `20_feature_pr.js` | PR 世界书预设 + pr* API |
-| `30_core_mid.js` | 中间核心 |
-| `40_feature_mc_ui.js` | 机日记/纸条详情 UI（mcFindDetail 等） |
-| `50_core_mid2.js` | 中间核心 2 |
-| `60_feature_pocket_mc.js` | 小浏览器 + 日记/信 marker |
-| `70_core_rest.js` | 其余（含 mcFetch 等） |
-| `99_suffix.html` | `</script>` 与结尾 |
+| `parts/00_prefix.html` | HTML/CSS/外链 |
+| `parts/10_core_all.js` | 完整应用脚本（含相机/PR/日记等） |
+| `parts/99_suffix.html` | `</script>` 结尾 |
+| `build.py` | 组装 → `dist/index.html` |
 
-后续可把 `70` 里的 mc 网络层再挪到 `40` 旁独立文件。
+若存在 `10_core_all.js`，优先用三文件组装；否则回退旧的多 part 顺序。
+
+## 修改流程
+
+1. 改 `parts/10_core_all.js`（或改完 dist 后再同步回 parts）
+2. `python3 frontend/build.py`
+3. 提交 `frontend/parts` + `dist/index.html`
