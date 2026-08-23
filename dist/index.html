@@ -18289,12 +18289,12 @@ if(!window.__mpDelegated){
         return;
       }
       const mcDel = raw.closest("[data-mc-del]");
-      if(mcDel && typeof mcDeleteRecord==="function"){
+      if(mcDel && typeof mcDelete==="function"){
         e.preventDefault(); e.stopImmediatePropagation();
         const v = mcDel.getAttribute("data-mc-del") || "";
         const i0 = v.indexOf(":");
         if(i0>0){
-          try{ mcDeleteRecord(v.slice(0,i0), v.slice(i0+1)); }catch(err){}
+          try{ mcDelete(v.slice(0,i0), v.slice(i0+1)); }catch(err){}
         }
         return;
       }
