@@ -3786,7 +3786,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
     model: openaiModel || "gpt-4o",
     messages: systemPrompt ? [{ role:"system", content: systemPrompt }, ...convo] : convo,
   };
-  if(toolsParam) body.tools = toolsParam;
+  if(toolsParam){ body.tools = toolsParam; body.tool_choice = "auto"; }
   const res = await fetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
@@ -3817,13 +3817,91 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
 function __chatAppendToolRound(channel, convo, assistantMsg, toolResults){
   convo.push(assistantMsg);
   if(channel === "claude"){
-    convo.push({ role:"user", content: toolResults.map(tr=>({ type:"tool_result", tool_use_id: tr.id, content: tr.result })) });
+    convo.push({ role:"user", content: toolResults.map(tr=>{
+      const r = tr.result;
+      if(r && typeof r==="object" && r.__ariesCamera && r.base64){
+        return {
+          type: "tool_result", tool_use_id: tr.id,
+          content: [
+            { type:"image", source:{ type:"base64", media_type:"image/jpeg", data: r.base64 } },
+            { type:"text", text: r.text || ("拍摄时间："+new Date(r.timestamp||Date.now()).toLocaleString("zh-CN")) }
+          ]
+        };
+      }
+      return { type:"tool_result", tool_use_id: tr.id, content: typeof r==="string" ? r : JSON.stringify(r) };
+    }) });
   } else if(channel === "gemini"){
-    convo.push({ role:"user", content: toolResults.map(tr=>({ functionResponse:{ name: tr.name, response:{ result: tr.result } } })) });
+    convo.push({ role:"user", content: toolResults.map(tr=>({ functionResponse:{ name: tr.name, response:{ result: typeof tr.result==="string"?tr.result:JSON.stringify(tr.result) } } })) });
   } else {
-    toolResults.forEach(tr=> convo.push({ role:"tool", tool_call_id: tr.id, content: tr.result }));
+    // OpenAI 兼容：tool 角色只能是文本；照片另附一条 user 多模态消息，模型才能「看见」
+    toolResults.forEach(tr=>{
+      const r = tr.result;
+      if(r && typeof r==="object" && r.__ariesCamera && r.base64){
+        convo.push({ role:"tool", tool_call_id: tr.id, content: r.ok ? (r.text || "拍照成功，见下一条图片。") : ("拍照失败："+(r.error||"unknown")) });
+        if(r.ok && r.base64){
+          convo.push({
+            role: "user",
+            content: [
+              { type: "text", text: "（系统：这是 take_photo 拍到的照片，请根据画面继续对话。）" },
+              { type: "image_url", image_url: { url: "data:image/jpeg;base64,"+r.base64 } }
+            ]
+          });
+        }
+      } else {
+        convo.push({ role:"tool", tool_call_id: tr.id, content: typeof r==="string" ? r : JSON.stringify(r) });
+      }
+    });
   }
 }
+
+
+/** Aries 本机拍照 → CameraService :18888 */
+async function ariesRequestPhoto(facing){
+  try{
+    const res = await fetch("http://127.0.0.1:18888/take-photo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ camera: facing || "front" }),
+      signal: (typeof AbortSignal!=="undefined" && AbortSignal.timeout) ? AbortSignal.timeout(10000) : undefined,
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const data = await res.json();
+    if(!data || !data.success || !data.image) throw new Error((data && data.error) || "no image");
+    return { ok:true, base64: data.image, timestamp: data.timestamp || Date.now() };
+  }catch(e){
+    return { ok:false, error: (e && e.message) || String(e) };
+  }
+}
+function ariesCameraToolDef(){
+  return {
+    name: "take_photo",
+    description: "拍摄 Jasmine 当前环境的照片（默认前置摄像头）。当你想知道她在做什么、担心她的状态、或想看看她时调用。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "想拍照的简短原因" },
+        camera: { type: "string", description: "front 或 back，默认 front" }
+      },
+      required: ["reason"]
+    }
+  };
+}
+function ariesSavePhotoToAlbum(base64, ts){
+  try{
+    if(typeof addToAlbum==="function"){
+      addToAlbum({ dataUrl: "data:image/jpeg;base64,"+base64, time: ts, source: "aries_camera" });
+      return;
+    }
+  }catch(e){}
+  try{
+    if(!Array.isArray(state.album)) state.album = [];
+    state.album.unshift({ id: "cam_"+Date.now(), src: "data:image/jpeg;base64,"+base64, time: ts||Date.now(), from: "aries" });
+    if(state.album.length>200) state.album.length = 200;
+    if(typeof persist==="function") persist("album");
+    else try{ LS.set("album", state.album); }catch(e){}
+  }catch(e){}
+}
+
 
 /** 高级聊天调用：把 MCP 工具注入 LLM、跑多轮 tool_call 循环。返回 {text, toolEvents} */
 async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
@@ -3870,8 +3948,13 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
       let resultStr;
       try{
         const r = await toolHandler(tc.name, tc.arguments);
+        if(r && typeof r==="object" && r.__ariesCamera){
+          toolResults.push({ id: tc.id, name: tc.name, args: tc.arguments, result: r });
+          toolEvents.push({ name: tc.name, args: tc.arguments, result: r.ok ? "[photo]" : (r.error||"fail") });
+          continue;
+        }
         resultStr = flattenMcpResult(r);
-        toolEvents.push({ name: tc.name, args: tc.arguments, result: resultStr.slice(0, 500) });
+        toolEvents.push({ name: tc.name, args: tc.arguments, result: String(resultStr).slice(0, 500) });
       }catch(e){
         resultStr = JSON.stringify({ type:"tool_error", error: e.message||String(e), tool: tc.name, lastArguments: tc.arguments, instruction:"修正参数后重试同一个工具，或直接给出答案。" });
         toolEvents.push({ name: tc.name, args: tc.arguments, error: e.message||String(e) });
@@ -4452,6 +4535,7 @@ const state = {
   openThinkIds: {},    // id -> true 展开的思考块
   thoughtGuide: LS.get("thoughtGuide", ""), // 用户操控思考链的引导词
   thoughtOn: LS.get("thoughtOn", true) !== false, // 思考链总开关，关则不要求写 <thinking>
+  ariesCameraOn: LS.get("ariesCameraOn", false) === true, // Aries 看一眼
   showThoughtGuide: false,
   editingThinkId: null, // 正在编辑的思考块 tid
   // diary
@@ -21989,20 +22073,47 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     && state.mcpConfig && state.mcpConfig.inChat !== false
     && (state.mcpTools||[]).length > 0
     && !(apiMsgs||[]).some(m=>m && m.image);
-  if(mcpInChat){
+  const ariesCam = !!state.ariesCameraOn;
+  async function __ariesToolHandler(name, args){
+    if(name==="take_photo"){
+      try{ if(typeof showToast==="function") showToast("📷 "+((args&&args.reason)||"看一眼")); }catch(e){}
+      const ph = await ariesRequestPhoto((args&&args.camera)||"front");
+      if(ph.ok){
+        ariesSavePhotoToAlbum(ph.base64, ph.timestamp);
+        return { __ariesCamera:true, ok:true, base64: ph.base64, timestamp: ph.timestamp, text: "已拍下（"+(args&&args.reason||"")+"）" };
+      }
+      return { __ariesCamera:true, ok:false, error: ph.error||"fail", text: "拍照失败："+(ph.error||"") };
+    }
+    if(mcpInChat){
+      const res = await mcpRpc("tools/call", { name, arguments: args || {} });
+      return flattenMcpResult(res);
+    }
+    return { error: "unknown tool "+name };
+  }
+  if(mcpInChat || ariesCam){
     try{
-      const tools = (state.mcpTools||[]).map(t=>({ name:t.name, description:t.description||"", inputSchema:t.inputSchema||t.parameters||{} }));
-      const r = await callChatAPIAdvanced(cfg, apiMsgs, sys||null, {
+      let tools = mcpInChat
+        ? (state.mcpTools||[]).map(t=>({ name:t.name, description:t.description||"", inputSchema:t.inputSchema||t.parameters||{} }))
+        : [];
+      if(ariesCam && !tools.some(t=>t.name==="take_photo")) tools = tools.concat([ariesCameraToolDef()]);
+      let sysCam = sys||null;
+      if(ariesCam){
+        const tip = "\n\n【本机相机】你可以使用工具 take_photo 查看 Jasmine 当前环境（默认前置）。想看她时请直接调用该工具，不要只说想看却不调用。";
+        if(typeof sys==="object" && sys && (sys.static!=null||sys.dynamic!=null)){
+          sysCam = { static: (sys.static||"")+tip, dynamic: sys.dynamic||"" };
+        } else {
+          sysCam = (sys||"")+tip;
+        }
+      }
+      const r = await callChatAPIAdvanced(cfg, apiMsgs, sysCam, {
         tools,
-        toolHandler: async (name,args)=>{
-          const res = await mcpRpc("tools/call", { name, arguments: args || {} });
-          return flattenMcpResult(res);
-        },
+        toolHandler: __ariesToolHandler,
+        maxRounds: (ariesCam && !mcpInChat) ? 4 : 0,
       });
       reply = r.text || "";
       toolEvents = r.toolEvents || [];
     }catch(e){
-      showToast(`MCP 调用失败，已退化为普通对话：${e.message}`);
+      showToast(`工具调用失败，已退化为普通对话：${e.message}`);
       reply = await callChatAPI(cfg, apiMsgs, sys||null);
     }
   } else if(state.streamOn !== false && typeof callChatAPIStream === "function"){
