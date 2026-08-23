@@ -5488,6 +5488,9 @@ function renderHomeFeat(){
         {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
         {key:"pr", icon:"sparkles", label:"PR快穿", desc:"深海骨殖·独立冒险·存档"},
         {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"九版本 · 聊天里掷骰走格"},
+        {key:"bisca_cards", icon:"spade", label:"牌室", desc:"斗地主·炸金花·UNO · VPS"},
+        {key:"bisca_daifugo", icon:"club", label:"大富豪", desc:"日式爬牌 · AI同桌"},
+        {key:"bisca_monopoly", icon:"landmark", label:"大富翁", desc:"中文棋盘 · 自托管"},
         {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
         {key:"divination", icon:"sparkles", label:"占卜", desc:"问心处 · 小六壬/六爻/塔罗"},
@@ -12326,6 +12329,37 @@ function ensureCaptivityConfig(){
   if(!state.captivityConfig.openIn) state.captivityConfig.openIn = "iframe";
   return state.captivityConfig;
 }
+
+const BISCA_URLS = {
+  bisca_cards: "https://jasmine0926.xyz/cards",
+  bisca_daifugo: "https://jasmine0926.xyz/daifugo",
+  bisca_monopoly: "https://jasmine0926.xyz/monopoly",
+};
+const BISCA_URLS_IP = {
+  bisca_cards: "http://115.29.237.172/cards",
+  bisca_daifugo: "http://115.29.237.172/daifugo",
+  bisca_monopoly: "http://115.29.237.172/monopoly",
+};
+function openBiscaGame(key){
+  let url = BISCA_URLS[key] || "";
+  if(!url) return false;
+  const go = async (u)=>{
+    try{
+      const Cap = window.Capacitor;
+      if(Cap && Cap.Plugins && Cap.Plugins.Browser && typeof Cap.Plugins.Browser.open==="function"){
+        await Cap.Plugins.Browser.open({ url: u });
+        return;
+      }
+    }catch(e){}
+    try{ window.open(u, "_blank"); }catch(e){ location.href = u; }
+  };
+  go(url).catch(()=>{
+    const ip = BISCA_URLS_IP[key];
+    if(ip) go(ip);
+  });
+  return true;
+}
+
 function captivityLaunchUrl(){
   const c = ensureCaptivityConfig();
   let u = (c.baseUrl || "").trim();
@@ -18071,6 +18105,7 @@ function bindCoreNav(){
     btn.onclick=()=>{
       const key = btn.getAttribute("data-sub") || btn.dataset.sub;
       if(!key) return;
+      if(typeof openBiscaGame==="function" && openBiscaGame(key)) return;
       state.subPage = key;
       render();
     };
@@ -18106,6 +18141,7 @@ if(!window.__mpDelegated){
         const key = subBtn.getAttribute("data-sub") || subBtn.dataset.sub;
         if(key){
           e.preventDefault(); e.stopImmediatePropagation();
+          if(typeof openBiscaGame==="function" && openBiscaGame(key)) return;
           state.subPage = key;
           if(typeof render==="function") render();
           return;
