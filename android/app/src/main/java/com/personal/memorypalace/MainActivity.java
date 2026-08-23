@@ -2,7 +2,6 @@ package com.personal.memorypalace;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Bundle;
 
 import androidx.core.app.ActivityCompat;
@@ -16,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PocketBrowserPlugin.class);
+        registerPlugin(AriesCameraPlugin.class);
         super.onCreate(savedInstanceState);
         maybeStartCameraService();
     }
