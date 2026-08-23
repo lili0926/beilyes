@@ -3892,12 +3892,12 @@ async function ariesRequestPhoto(facing){
 function ariesCameraToolDef(){
   return {
     name: "take_photo",
-    description: "拍摄 Jasmine 当前环境的照片（默认前置摄像头）。当你想知道她在做什么、担心她的状态、或想看看她时调用。",
+    description: "拍摄一张照片。front=前置（看 Jasmine 本人），back=后置（环境/物品/屏幕）。想看她本人用 front；她提到「这个东西/那边/窗外/电脑画面」等用 back。",
     inputSchema: {
       type: "object",
       properties: {
-        reason: { type: "string", description: "想拍照的简短原因" },
-        camera: { type: "string", description: "front 或 back，默认 front" }
+        reason: { type: "string", description: "想拍照的简短原因/内心独白" },
+        camera: { type: "string", description: "front 前置看人，back 后置看环境/物品，默认 front" }
       },
       required: ["reason"]
     }
@@ -22159,7 +22159,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       if(ariesCam && !tools.some(t=>t.name==="take_photo")) tools = tools.concat([ariesCameraToolDef()]);
       let sysCam = sys||null;
       if(ariesCam){
-        const tip = "\n\n【本机相机·必读】系统已为你接入工具 take_photo。Jasmine 允许你查看她的实时画面。当她说「看看我」「看一眼」「拍一下」或你想确认她在做什么时：必须调用 take_photo（可带 reason），不要回复「我不会」「我没有眼睛」「无法查看」。调用后根据返回的照片内容用第一人称自然接话。默认前置摄像头。";
+        const tip = "\n\n【本机相机·必读】系统已为你接入工具 take_photo。Jasmine 允许你查看她的实时画面。当她说「看看我」「看一眼」「拍一下」或你想确认她在做什么时：必须调用 take_photo（可带 reason 与 camera），不要回复「我不会」「我没有眼睛」「无法查看」。调用后根据返回的照片用第一人称自然接话。\n镜头选择：camera=\"front\" 前置——看 Jasmine 本人/自拍角度；camera=\"back\" 后置——拍环境、物品、屏幕、窗外。她说「看看这个/那边/我电脑」等倾向后置；说「看看我」默认前置。";
         if(typeof sys==="object" && sys && (sys.static!=null||sys.dynamic!=null)){
           sysCam = { static: (sys.static||"")+tip, dynamic: sys.dynamic||"" };
         } else {
