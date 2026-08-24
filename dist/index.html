@@ -4403,6 +4403,7 @@ const state = {
 
   captivityConfig: LS.get("captivityConfig", { baseUrl: "http://115.29.237.172:5058", openIn: "iframe" }), // 囚禁模拟器外部地址（已部署 VPS，默认即玩）
   captivityOpen: false,
+  biscaOpen: null, // { key, title, url } 牌室/大富豪/大富翁 页内 iframe
   proactiveInbox: LS.get("proactiveInbox", []), // {id, content, time, speakerId, speakerName, from}
   // REM 做梦（dream-system 风格，与记忆隔离）
   dreamConfig: LS.get("dreamConfig", {
@@ -5380,6 +5381,18 @@ function render(){
       <iframe class="captivity-frame" id="captivity-iframe" src="${capUrl ? escAttr(capUrl) : "about:blank"}" allow="fullscreen; autoplay"></iframe>
     </div>`;
   }
+  if(state.biscaOpen && state.biscaOpen.url){
+    const b = state.biscaOpen;
+    html += `<div class="captivity-frame-wrap" id="bisca-frame-wrap">
+      <div class="captivity-frame-bar">
+        <button type="button" id="bisca-frame-close">← 返回宫殿</button>
+        <div class="cap-title">${esc(b.title||"游戏")}</div>
+        <button type="button" id="bisca-frame-host">${b.useDomain?"用IP":"用域名"}</button>
+        <button type="button" id="bisca-frame-ext">新窗口</button>
+      </div>
+      <iframe class="captivity-frame" id="bisca-iframe" src="${escAttr(b.url)}" allow="fullscreen; autoplay"></iframe>
+    </div>`;
+  }
   app.innerHTML=html;
   // 补充 lucide v1.31 缺失的图标（pen-nib：书房页头），经 createIcons 传入合并图标集
   try{
@@ -5669,9 +5682,9 @@ function renderHomeFeat(){
         {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
         {key:"pr", icon:"sparkles", label:"PR快穿", desc:"深海骨殖·独立冒险·存档"},
         {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"九版本 · 聊天里掷骰走格"},
-        {key:"bisca_cards", icon:"spade", label:"牌室", desc:"斗地主·炸金花·UNO · VPS"},
-        {key:"bisca_daifugo", icon:"club", label:"大富豪", desc:"日式爬牌 · AI同桌"},
-        {key:"bisca_monopoly", icon:"landmark", label:"大富翁", desc:"中文棋盘 · 自托管"},
+        {key:"bisca_cards", icon:"spade", label:"牌室", desc:"斗地主·炸金花·UNO · 页内玩"},
+        {key:"bisca_daifugo", icon:"club", label:"大富豪", desc:"日式爬牌 · 页内玩"},
+        {key:"bisca_monopoly", icon:"landmark", label:"大富翁", desc:"中文棋盘 · 页内玩"},
         {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
         {key:"divination", icon:"sparkles", label:"占卜", desc:"问心处 · 小六壬/六爻/塔罗"},
@@ -12523,25 +12536,39 @@ const BISCA_URLS_IP = {
   bisca_daifugo: "http://115.29.237.172/daifugo",
   bisca_monopoly: "http://115.29.237.172/monopoly",
 };
+const BISCA_TITLES = {
+  bisca_cards: "牌室",
+  bisca_daifugo: "大富豪",
+  bisca_monopoly: "大富翁",
+};
+function biscaLaunchUrl(key){
+  // 优先 IP（备案拦截时更稳），失败由用户点「换域名」
+  return BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
+}
 function openBiscaGame(key){
-  // 域名被备案拦截时走 IP（http://115.29.237.172/cards…）；域名通了再用域名
-  let url = BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
+  if(!BISCA_URLS[key] && !BISCA_URLS_IP[key]) return false;
+  const url = biscaLaunchUrl(key);
   if(!url) return false;
-  const go = async (u)=>{
-    try{
-      const Cap = window.Capacitor;
-      if(Cap && Cap.Plugins && Cap.Plugins.Browser && typeof Cap.Plugins.Browser.open==="function"){
-        await Cap.Plugins.Browser.open({ url: u });
-        return;
-      }
-    }catch(e){}
-    try{ window.open(u, "_blank"); }catch(e){ location.href = u; }
+  state.biscaOpen = {
+    key: key,
+    title: BISCA_TITLES[key] || "游戏",
+    url: url,
+    useDomain: false,
   };
-  go(url).catch(()=>{
-    const alt = BISCA_URLS[key];
-    if(alt && alt !== url) go(alt);
-  });
+  if(typeof render==="function") render();
   return true;
+}
+function closeBiscaGame(){
+  state.biscaOpen = null;
+  if(typeof render==="function") render();
+}
+function biscaToggleHost(){
+  if(!state.biscaOpen || !state.biscaOpen.key) return;
+  const key = state.biscaOpen.key;
+  const useDomain = !state.biscaOpen.useDomain;
+  const url = useDomain ? (BISCA_URLS[key] || BISCA_URLS_IP[key]) : (BISCA_URLS_IP[key] || BISCA_URLS[key]);
+  state.biscaOpen = { key, title: BISCA_TITLES[key]||"游戏", url, useDomain };
+  if(typeof render==="function") render();
 }
 
 function captivityLaunchUrl(){
@@ -18659,6 +18686,14 @@ if(!window.__mpDelegated){
       if(id==="cap-frame-ext"){
         e.preventDefault(); e.stopImmediatePropagation();
         const u = captivityLaunchUrl();
+        if(u) window.open(u, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if(id==="bisca-frame-close"){ e.preventDefault(); e.stopImmediatePropagation(); closeBiscaGame(); return; }
+      if(id==="bisca-frame-host"){ e.preventDefault(); e.stopImmediatePropagation(); biscaToggleHost(); return; }
+      if(id==="bisca-frame-ext"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const u = state.biscaOpen && state.biscaOpen.url;
         if(u) window.open(u, "_blank", "noopener,noreferrer");
         return;
       }
