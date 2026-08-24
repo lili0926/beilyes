@@ -2091,6 +2091,7 @@ const state = {
     // STT
     sttUrl: "", // 如 https://vps/stt  → POST multipart file
     sttToken: "",
+    voceUrl: "http://115.29.237.172:3456", // 语音消息 STT（voce /upload + /stt）
     // 来电轮询
     invitePollSec: 8,
   }),
@@ -10171,7 +10172,8 @@ const BISCA_URLS_IP = {
   bisca_monopoly: "http://115.29.237.172/monopoly",
 };
 function openBiscaGame(key){
-  let url = BISCA_URLS[key] || "";
+  // 域名被备案拦截时走 IP（http://115.29.237.172/cards…）；域名通了再用域名
+  let url = BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
   if(!url) return false;
   const go = async (u)=>{
     try{
@@ -10184,8 +10186,8 @@ function openBiscaGame(key){
     try{ window.open(u, "_blank"); }catch(e){ location.href = u; }
   };
   go(url).catch(()=>{
-    const ip = BISCA_URLS_IP[key];
-    if(ip) go(ip);
+    const alt = BISCA_URLS[key];
+    if(alt && alt !== url) go(alt);
   });
   return true;
 }
@@ -11618,7 +11620,7 @@ function ensureCallConfig(){
     baseUrl:VPS, token:"", dnd:false, ttsProvider:"minimax", minimaxKey:"", minimaxGroupId:"",
     minimaxVoice:"female-shaonv", minimaxModel:"speech-2.6-turbo",
     minimaxEndpoint:"https://api.minimax.chat/v1/t2a_v2", ttsProxy:VPS, ttsEnabled:true,
-    sttUrl:"", sttToken:"", invitePollSec:8,
+    sttUrl:"", sttToken:"", voceUrl:"http://115.29.237.172:3456", invitePollSec:8,
     wsUrl:"ws://192.168.101.1:8765", httpUrl:"http://192.168.101.1:8080", aicallEnabled:true,
   };
   state.callConfig = Object.assign({}, d, state.callConfig||{});
@@ -11932,6 +11934,9 @@ function renderPhone(){
           <input id="call-stt-url" value="${escAttr(cfg.sttUrl||"")}" placeholder="https://vps.example.com/stt"/>
           <span class="setting-label" style="margin-top:8px">STT Token（可选）</span>
           <input type="password" id="call-stt-token" value="${escAttr(cfg.sttToken||"")}" placeholder="默认用网关 Token"/>
+          <span class="setting-label" style="margin-top:8px">语音消息 Voce URL</span>
+          <input id="call-voce-url" value="${escAttr(cfg.voceUrl||"")}" placeholder="http://127.0.0.1:3456"/>
+          <span class="setting-hint" style="font-size:10px;color:var(--sub);margin-top:4px">聊天语音消息的转写服务（voce /upload + /stt）</span>
         </div>
         <div class="feat-section-label">AIcall WebSocket（实时通话记录）</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
@@ -14367,7 +14372,9 @@ function renderChat(){
       const stickerHtml = extractStickerNames(m.content).map(stickerImgHtml).join("");
       const stickerTxt = stickerCleanText(m.content);
       let bubbleInner;
-      if(pureAct){
+      if(m.voice && m.voice.dataUrl){
+        bubbleInner = chatVoiceBarHtml(m, isMe, glassCls, bubbleColor);
+      } else if(pureAct){
         const tag = isMe ? "span" : "button";
         const click = isMe ? "" : ` data-action-send="${escAttr(pureAct)}"`;
         bubbleInner = `<${tag} class="paw-bubble"${click}><i data-lucide="paw-print"></i>${esc(pureAct)}</${tag}>`;
@@ -14404,11 +14411,13 @@ function renderChat(){
       const pureAct = _actionLabel(m.content);
       const stickerHtml = extractStickerNames(m.content).map(stickerImgHtml).join("");
       const stickerTxt = stickerCleanText(m.content);
-      const inner = pureAct
-        ? `<span class="paw-bubble"><i data-lucide="paw-print"></i>${esc(pureAct)}</span>`
-        : (stickerHtml && !stickerTxt.trim())
-          ? `<div class="sticker-floats">${stickerHtml}</div>`
-          : `<div class="bubble me${glassCls}">${imgHtml}${renderInline(stickerTxt, false)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
+      const inner = (m.voice && m.voice.dataUrl)
+        ? chatVoiceBarHtml(m, true, glassCls, "")
+        : pureAct
+          ? `<span class="paw-bubble"><i data-lucide="paw-print"></i>${esc(pureAct)}</span>`
+          : (stickerHtml && !stickerTxt.trim())
+            ? `<div class="sticker-floats">${stickerHtml}</div>`
+            : `<div class="bubble me${glassCls}">${imgHtml}${renderInline(stickerTxt, false)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
       msgs+=`<div class="bubble-row me" style="opacity:0.75">
         ${inner}
       </div>
@@ -14501,7 +14510,8 @@ function renderChat(){
         <button type="button" id="chat-img-btn" class="chat-more-item" title="发图片（可粘贴）"><i data-lucide="image"></i><span>图片</span></button>
         <button type="button" id="chat-file-btn" class="chat-more-item" title="发文本文件（txt/md/json/代码）"><i data-lucide="paperclip"></i><span>文件</span></button>
         <button type="button" id="sticker-btn" class="chat-more-item" title="表情包"><i data-lucide="smile"></i><span>表情</span></button>
-        <button type="button" id="chat-mic-btn" class="chat-more-item" title="语音"><i data-lucide="mic"></i><span>语音</span></button>
+        <button type="button" id="chat-mic-btn" class="chat-more-item" title="语音输入"><i data-lucide="mic"></i><span>语音输入</span></button>
+        <button type="button" id="chat-voice-btn" class="chat-more-item" title="语音消息（录音转文字发给TA）"><i data-lucide="audio-lines"></i><span>语音消息</span></button>
         <button type="button" id="chat-pr-btn" class="chat-more-item" title="PR快穿"><i data-lucide="sparkles"></i><span>PR</span></button>
       </div>`:""}
       <input type="file" id="chat-img-input" accept="image/*" style="display:none"/>
@@ -17030,6 +17040,268 @@ function bindEvents(){
       try{ rec.start(); }catch(err){ reset(); }
     };
   }
+  // ─── 语音消息（voce）：按钮绑定 ────────────────────────────────────────────
+  const chatVoiceBtn = document.getElementById("chat-voice-btn");
+  if(chatVoiceBtn) chatVoiceBtn.onclick = (e)=>{ e.stopPropagation(); chatVoiceStart(); };
+
+  // ─── 语音消息（voce）：录音 → 转写 → 语音条气泡 ───────────────────────────
+  const VOICE_EMOJI = { happy:"😊", sad:"😢", angry:"😠", neutral:"😐", surprised:"😲", fearful:"😨", disgusted:"🤢" };
+  const VOICE_MAX_SEC = 60;
+  let __chatRec = null;   // {mediaRecorder, chunks, audioCtx, analyser, raf, timer, sec, stream, startAt, timerId, strip}
+  let __chatVoice = null; // {audio, btn, spans, raf}  单例播放器
+
+  function fmtDur(sec){ sec = Math.max(0, Math.round(sec||0)); return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+
+  function voiceWaveformHtml(seed, n=28){
+    // 确定性伪随机波形（同一文本渲染稳定）
+    let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))>>>0;
+    const rng=()=> (h=(h*1664525+1013904223)>>>0)/4294967296;
+    const env=i=>Math.sin(i/(n-1)*Math.PI)*0.6+0.15;
+    let out="";
+    for(let i=0;i<n;i++){
+      const v=Math.max(0.08, Math.min(1, env(i)*(rng()*0.6+0.4)));
+      out+=`<span style="height:${Math.round(v*22)+2}px"></span>`;
+    }
+    return `<div class="voice-wave">${out}</div>`;
+  }
+
+  function chatVoiceBarHtml(m, isMe, glassCls, bubbleColor){
+    const v=m.voice||{};
+    const src=v.dataUrl||"";
+    const dur=Math.max(1, Math.round(v.duration||0));
+    const emo=v.emotion||"";
+    const text=v.text||m.content||"";
+    const bars=voiceWaveformHtml(text||src, 28);
+    return `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor||""}>
+      <div class="voice-bar">
+        <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}" aria-label="播放语音"><i data-lucide="play"></i></button>
+        ${bars}
+        <div class="voice-meta">
+          <span class="voice-dur">${fmtDur(dur)}</span>
+          ${emo?`<span class="voice-emo">${VOICE_EMOJI[emo]||"🎤"}</span>`:""}
+          ${text?`<button type="button" class="voice-text-toggle" aria-label="显示转写文字">文</button>`:""}
+        </div>
+      </div>
+      ${text?`<div class="voice-transcript">${esc(text)}</div>`:""}
+    </div>`;
+  }
+
+  function chatVoiceStart(){
+    if(__chatRec) return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      if(typeof showToast==="function") showToast("当前环境不支持录音");
+      return;
+    }
+    // 收起 more 面板（直接动 DOM，不 render，避免打断录音）
+    state.chatMoreOpen=false;
+    const panel=document.getElementById("chat-more-panel");
+    if(panel) panel.remove();
+    const moreBtn=document.getElementById("chat-more-btn");
+    if(moreBtn) moreBtn.classList.remove("open");
+
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+      const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      const source=audioCtx.createMediaStreamSource(stream);
+      const analyser=audioCtx.createAnalyser(); analyser.fftSize=256;
+      source.connect(analyser);
+
+      const mime=MediaRecorder.isTypeSupported("audio/webm;codecs=opus")?"audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")?"audio/webm":"";
+      const chunks=[];
+      const rec=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream);
+      rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+      rec.start(100);
+
+      const strip=document.createElement("div");
+      strip.className="chat-voice-strip";
+      strip.innerHTML=`
+        <div class="rec-dot"></div>
+        <div class="rec-wave"></div>
+        <div class="rec-timer">0:00</div>
+        <div class="rec-hint">${VOICE_MAX_SEC}s 自动停</div>
+        <button type="button" class="rec-stop" aria-label="停止录音"><svg viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="1"/></svg></button>`;
+      document.body.appendChild(strip);
+      const waveEl=strip.querySelector(".rec-wave");
+      for(let i=0;i<32;i++) waveEl.appendChild(document.createElement("span"));
+      const bars=Array.from(waveEl.children);
+      const timer=strip.querySelector(".rec-timer");
+      const stopBtn=strip.querySelector(".rec-stop");
+      stopBtn.onclick=()=>chatVoiceStop();
+
+      const buf=new Uint8Array(analyser.frequencyBinCount);
+      let raf=null;
+      const draw=()=>{
+        raf=requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(buf);
+        bars.forEach((b,i)=>{
+          const idx=Math.floor(i*buf.length/bars.length);
+          const v=buf[idx]/255;
+          b.style.height=Math.max(4,Math.round(v*26))+"px";
+        });
+      };
+      draw();
+
+      let sec=0;
+      const timerId=setInterval(()=>{ sec++; timer.textContent=fmtDur(sec); if(sec>=VOICE_MAX_SEC) chatVoiceStop(); },1000);
+
+      __chatRec={ mediaRecorder:rec, chunks, audioCtx, analyser, raf, sec, stream, timerId, strip };
+    }).catch(err=>{
+      if(typeof showToast==="function") showToast("录音失败：请允许麦克风权限"+(err&&err.name?"（"+err.name+"）":""));
+    });
+  }
+
+  async function chatVoiceStop(){
+    const r=__chatRec; if(!r) return;
+    clearInterval(r.timerId);
+    cancelAnimationFrame(r.raf);
+    __chatRec=null;
+    // 等 recorder 完全停止：确保最后一段 dataavailable 已进 chunks（否则音频尾部丢失）
+    await new Promise(resolve=>{
+      r.mediaRecorder.onstop=()=>resolve();
+      try{ if(r.mediaRecorder.state!=="inactive") r.mediaRecorder.stop(); }catch(e){ resolve(); }
+      try{ r.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+    });
+    try{ r.audioCtx.close(); }catch(e){}
+    const strip=r.strip;
+    const dur=r.sec;
+    const type=r.mediaRecorder.mimeType||"audio/webm";
+    const blob=new Blob(r.chunks,{type});
+    r.chunks=[];
+    if(blob.size<500){
+      if(strip&&strip.parentNode) strip.parentNode.removeChild(strip);
+      if(typeof showToast==="function") showToast("太短了，再录一次");
+      return;
+    }
+    const hint=strip.querySelector(".rec-hint");
+    if(hint) hint.textContent="转写中…";
+    const stopBtn=strip.querySelector(".rec-stop");
+    if(stopBtn) stopBtn.style.opacity=".5";
+    chatVoiceSend(blob, dur, strip);
+  }
+
+  async function chatVoiceSend(blob, dur, strip){
+    try{
+      const { text, emotion }=await chatVoiceTranscribe(blob);
+      const dataUrl=await blobToDataUrl(blob);
+      const now=new Date().toISOString();
+      state.pendingUser.push({ role:"user", content:text||"🎤 语音消息", voice:{ dataUrl, duration:dur, emotion:emotion||"neutral" }, time:now });
+      if(typeof saveActiveThread==="function") saveActiveThread();
+      state.needChatScroll=true;
+      if(strip&&strip.parentNode) strip.parentNode.removeChild(strip);
+      if(typeof postAppEvent==="function") postAppEvent("chat_message",{ text:(text||"🎤 语音消息").slice(0,120) });
+      if(typeof triggerAIReply==="function") triggerAIReply(); else render();
+    }catch(e){
+      if(strip&&strip.parentNode) strip.parentNode.removeChild(strip);
+      if(typeof showToast==="function") showToast("语音消息发送失败："+(e&&e.message||e));
+    }
+  }
+
+  function blobToDataUrl(blob){
+    return new Promise((resolve,reject)=>{
+      const fr=new FileReader();
+      fr.onload=()=>resolve(fr.result);
+      fr.onerror=()=>reject(new Error("音频编码失败"));
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  async function chatVoiceTranscribe(blob){
+    const cfg=state.callConfig||{};
+    const voce=((cfg.voceUrl||"").trim()||"http://115.29.237.172:3456").replace(/\/+$/,"");
+    // 优先 voce 双步 /upload + /stt
+    try{
+      const fd=new FormData();
+      fd.append("audio", blob, "recording.webm");
+      const up=await fetch(voce+"/upload",{ method:"POST", body:fd });
+      if(up.ok){
+        const upj=await up.json();
+        if(upj&&upj.filename){
+          const st=await fetch(voce+"/stt",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({audio_path:upj.filename}) });
+          if(st.ok){
+            const d=await st.json();
+            if(d&&d.text) return { text:d.text, emotion:d.emotion||"neutral" };
+          }
+        }
+      }
+    }catch(e){ /* 回退单步 STT */ }
+    if(typeof callSttUpload==="function"){
+      const text=await callSttUpload(blob);
+      let emotion="neutral";
+      try{ const s=ensureCallSession(); if(s&&s.lastVoiceMeta&&s.lastVoiceMeta.emotion) emotion=s.lastVoiceMeta.emotion; }catch(e){}
+      return { text, emotion };
+    }
+    throw new Error("STT 服务不可用");
+  }
+
+  // 语音条回放：单例播放器 + 事件委托（render 重渲染后依然生效）
+  function __chatVoicePlay(btn){
+    const src=btn.getAttribute("data-src");
+    const dur=parseInt(btn.getAttribute("data-dur")||"0",10);
+    if(!src) return;
+    const bar=btn.closest(".voice-bar");
+    const spans=bar?Array.from(bar.querySelectorAll(".voice-wave span")):[];
+    const durEl=bar?bar.querySelector(".voice-dur"):null;
+    const setIcon=(playing)=>{
+      btn.innerHTML=playing
+        ? `<svg viewBox="0 0 16 16"><rect x="3" y="2" width="4" height="12"/><rect x="9" y="2" width="4" height="12"/></svg>`
+        : `<svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg>`;
+    };
+    const reset=()=>{
+      if(__chatVoice&&__chatVoice.raf) cancelAnimationFrame(__chatVoice.raf);
+      __chatVoice=null;
+      setIcon(false);
+      spans.forEach(s=>s.classList.remove("on"));
+      if(durEl) durEl.textContent=fmtDur(dur);
+    };
+    if(__chatVoice && __chatVoice.btn===btn){ // 点正在播的这条 → 暂停
+      try{ __chatVoice.audio.pause(); }catch(e){}
+      reset();
+      return;
+    }
+    if(__chatVoice){ // 切到另一条
+      try{ __chatVoice.audio.pause(); }catch(e){}
+      if(__chatVoice.raf) cancelAnimationFrame(__chatVoice.raf);
+      const prevBtn=__chatVoice.btn;
+      const prevBar=prevBtn&&prevBtn.closest?prevBtn.closest(".voice-bar"):null;
+      if(prevBar) prevBar.querySelectorAll(".voice-wave span").forEach(s=>s.classList.remove("on"));
+      __chatVoice=null;
+    }
+    const audio=new Audio(src);
+    __chatVoice={ audio, btn, spans, raf:null };
+    setIcon(true);
+    const tick=()=>{
+      if(!audio.duration){ __chatVoice.raf=requestAnimationFrame(tick); return; }
+      const pct=Math.min(1, audio.currentTime/audio.duration);
+      spans.forEach((s,i)=>s.classList.toggle("on", i<Math.floor(pct*spans.length)));
+      if(durEl) durEl.textContent=fmtDur(audio.currentTime);
+      __chatVoice.raf=requestAnimationFrame(tick);
+    };
+    audio.play().then(()=>{ __chatVoice.raf=requestAnimationFrame(tick); }).catch(()=>reset());
+    audio.addEventListener("ended",reset);
+    audio.addEventListener("error",reset);
+  }
+
+  function __chatVoiceTextToggle(btn){
+    const bar=btn.closest(".voice-bar");
+    const bubble=bar?bar.closest(".bubble"):null;
+    const tr=bubble?bubble.querySelector(".voice-transcript"):null;
+    if(!tr) return;
+    const open=tr.classList.toggle("open");
+    btn.classList.toggle("on",open);
+  }
+
+  if(!window.__chatVoiceDelegated){
+    window.__chatVoiceDelegated=true;
+    document.addEventListener("click", e=>{
+      const t=e.target;
+      if(!t||!t.closest) return;
+      const play=t.closest(".voice-play");
+      if(play){ e.stopPropagation(); __chatVoicePlay(play); return; }
+      const tt=t.closest(".voice-text-toggle");
+      if(tt){ e.stopPropagation(); __chatVoiceTextToggle(tt); return; }
+    });
+  }
+
   document.querySelectorAll("[data-attach-del]").forEach(btn=>{
     btn.onclick=()=>{
       const i=+btn.dataset.attachDel;
@@ -19065,6 +19337,8 @@ const sttUrl = document.getElementById("call-stt-url");
   if(sttUrl) sttUrl.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.sttUrl=sttUrl.value.trim(); persist("callConfig"); };
   const sttTok = document.getElementById("call-stt-token");
   if(sttTok) sttTok.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.sttToken=sttTok.value.trim(); persist("callConfig"); };
+  const voceUrlInp = document.getElementById("call-voce-url");
+  if(voceUrlInp) voceUrlInp.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.voceUrl=voceUrlInp.value.trim(); persist("callConfig"); };
   if(typeof callInvitePollStart === "function") callInvitePollStart();
 
 
@@ -19201,7 +19475,7 @@ const sttUrl = document.getElementById("call-stt-url");
     state.musicConfig      = { ...(state.musicConfig||{}),      baseUrl: VPS_BASE, token: VPS_MUSIC_TOKEN };
     state.usageConfig      = { ...(state.usageConfig||{}),      baseUrl: VPS_BASE, token: VPS_MUSIC_TOKEN };
     state.proactiveConfig  = { ...(state.proactiveConfig||{}),  baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN };
-    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN };
+    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN, voceUrl: "http://115.29.237.172:3456" };
     ["musicConfig","usageConfig","proactiveConfig","callConfig"].forEach(k=>{ if(typeof persist==="function") persist(k); });
     render();
   };

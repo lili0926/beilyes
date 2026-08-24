@@ -5635,7 +5635,8 @@ const BISCA_URLS_IP = {
   bisca_monopoly: "http://115.29.237.172/monopoly",
 };
 function openBiscaGame(key){
-  let url = BISCA_URLS[key] || "";
+  // 域名被备案拦截时走 IP（http://115.29.237.172/cards…）；域名通了再用域名
+  let url = BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
   if(!url) return false;
   const go = async (u)=>{
     try{
@@ -5648,8 +5649,8 @@ function openBiscaGame(key){
     try{ window.open(u, "_blank"); }catch(e){ location.href = u; }
   };
   go(url).catch(()=>{
-    const ip = BISCA_URLS_IP[key];
-    if(ip) go(ip);
+    const alt = BISCA_URLS[key];
+    if(alt && alt !== url) go(alt);
   });
   return true;
 }
