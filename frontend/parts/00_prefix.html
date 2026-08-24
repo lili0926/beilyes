@@ -6,6 +6,43 @@
   <title>baileys</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%AC%3C/text%3E%3C/svg%3E" />
   <style>
+
+    /* ── 三套自定义字体 ── */
+    @font-face {
+      font-family: 'NailCatBell';
+      src: url('Nail-猫猫铃1.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'NailAngelClinic';
+      src: url('Nail·天使诊所8.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'NaiKitten';
+      src: url('奈の小猫8.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+    body.font-nail { font-family: 'NailCatBell', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    body.font-angel { font-family: 'NailAngelClinic', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    body.font-kitten { font-family: 'NaiKitten', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+
+    .font-switch-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .font-chip {
+      border: 1px solid var(--border); background: var(--card); color: var(--sub);
+      border-radius: 16px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .font-chip.active {
+      border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       height: 100%;
