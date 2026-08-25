@@ -5131,8 +5131,30 @@ function scheduleChatNativePersist(){
 /** 扫描本机所有可能残留的聊天快照，合并成最全的一份 */
 async function salvageChatThreadsFromDevice(){
   const candidates = [];
+  const diag = { lsKeys: 0, lsChatKeys: [], nativeKeys: [], notes: [] };
+  const looksLikeThread = (v)=>{
+    if(!v || typeof v !== "object" || Array.isArray(v)) return false;
+    if(Array.isArray(v.messages)) return true;
+    return false;
+  };
+  const looksLikeThreadsBag = (v)=>{
+    if(!v || typeof v !== "object" || Array.isArray(v)) return false;
+    const keys = Object.keys(v);
+    if(!keys.length) return false;
+    // { a1:{messages:[]}, a2:..., group:... } 或任意 id
+    let hit = 0;
+    for(const k of keys){
+      if(looksLikeThread(v[k])) hit++;
+    }
+    return hit > 0;
+  };
   const pushCand = (src, t)=>{
     if(!t || typeof t !== "object") return;
+    // 单线程 → 包成 bag
+    if(looksLikeThread(t) && !looksLikeThreadsBag(t)){
+      t = { a1: t };
+    }
+    if(!looksLikeThreadsBag(t)) return;
     const s = chatThreadsScore(t);
     if(s.count <= 0) return;
     candidates.push({ src, threads: t, score: s });
@@ -5147,45 +5169,81 @@ async function salvageChatThreadsFromDevice(){
     });
     pushCand("LS.shards", bag);
   }catch(e){}
-  // 裸 localStorage 扫描（防前缀异常时还有旧库）
+  // 全量扫描 localStorage（不限前缀、不限命名）
   try{
+    diag.lsKeys = localStorage.length;
     for(let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
       if(!k) continue;
-      if(!/chatThreads$|chatThread_a1$|chatThread_a2$|chatThread_group$/.test(k)) continue;
-      try{
-        const v = JSON.parse(localStorage.getItem(k));
-        if(k.endsWith("chatThreads")) pushCand("raw:"+k, v);
-        else if(/chatThread_(a1|a2|group)$/.test(k)){
-          const id = k.match(/chatThread_(a1|a2|group)$/)[1];
-          pushCand("raw:"+k, { [id]: v });
-        }
-      }catch(e){}
+      let raw;
+      try{ raw = localStorage.getItem(k); }catch(e){ continue; }
+      if(!raw || raw.length < 20) continue;
+      if(!/message|chat|role|assistant|content/i.test(raw.slice(0, 5000)) && !/chatThread/i.test(k)) continue;
+      let v;
+      try{ v = JSON.parse(raw); }catch(e){ continue; }
+      if(/chat/i.test(k) || /thread/i.test(k)) diag.lsChatKeys.push(k + " (" + Math.round(raw.length/1024) + "KB)");
+      pushCand("ls:"+k, v);
+      // 有的备份把 data.chatThreads 包在外层
+      if(v && typeof v === "object"){
+        if(v.chatThreads) pushCand("ls:"+k+".chatThreads", v.chatThreads);
+        if(v.data && v.data.chatThreads) pushCand("ls:"+k+".data.chatThreads", v.data.chatThreads);
+      }
     }
-  }catch(e){}
+  }catch(e){ diag.notes.push("ls-scan:"+ (e.message||e)); }
+  // 原生 Preferences：keys() 全扫 + 常见键名
   try{
     const Cap = window.Capacitor;
     if(Cap && Cap.Plugins && Cap.Plugins.Preferences){
-      const keys = ["chatThreads_v2"];
-      try{ if(window.__LS_PREFIX) keys.push(window.__LS_PREFIX + "chatThreads_v2"); }catch(e){}
-      // 常见账号前缀兜底
+      const Pref = Cap.Plugins.Preferences;
+      const keySet = new Set(["chatThreads_v2"]);
+      try{ if(window.__LS_PREFIX) keySet.add(window.__LS_PREFIX + "chatThreads_v2"); }catch(e){}
       try{
         const last = localStorage.getItem("__last_user__")||"";
-        if(last) keys.push("u_" + last + "_chatThreads_v2");
+        if(last) keySet.add("u_" + last + "_chatThreads_v2");
       }catch(e){}
-      for(const key of keys){
+      try{
+        const accounts = JSON.parse(localStorage.getItem("__app_auth__")||"{}");
+        Object.keys(accounts||{}).forEach(u=> keySet.add("u_" + u + "_chatThreads_v2"));
+      }catch(e){}
+      // Capacitor Preferences.keys()
+      try{
+        if(typeof Pref.keys === "function"){
+          const kr = await Pref.keys();
+          const arr = (kr && (kr.keys || kr)) || [];
+          if(Array.isArray(arr)){
+            arr.forEach(k=>{
+              if(typeof k === "string" && /chat|thread|mirror/i.test(k)) keySet.add(k);
+            });
+            diag.nativeKeys = arr.filter(k=>/chat|thread|mirror/i.test(String(k))).slice(0, 40);
+          }
+        }
+      }catch(e){ diag.notes.push("pref-keys:"+ (e.message||e)); }
+      for(const key of keySet){
         try{
-          const r = await Cap.Plugins.Preferences.get({ key });
+          const r = await Pref.get({ key });
           if(r && r.value){
-            const t = JSON.parse(r.value);
+            let t;
+            try{ t = JSON.parse(r.value); }catch(e){ continue; }
             pushCand("native:"+key, t);
+            if(t && t.chatThreads) pushCand("native:"+key+".chatThreads", t.chatThreads);
+            if(t && t.data && t.data.chatThreads) pushCand("native:"+key+".data.chatThreads", t.data.chatThreads);
           }
         }catch(e){}
       }
+    } else {
+      diag.notes.push("no-capacitor-preferences");
     }
-  }catch(e){}
+  }catch(e){ diag.notes.push("native:"+ (e.message||e)); }
+
   if(!candidates.length){
-    return { ok:false, msg:"本机没找到更多聊天快照" };
+    const hint = [
+      "本机没解析到聊天快照",
+      "localStorage键数="+diag.lsKeys,
+      diag.lsChatKeys.length ? ("疑似聊天键:"+diag.lsChatKeys.slice(0,8).join(", ")) : "无chat键名",
+      diag.nativeKeys.length ? ("原生键:"+diag.nativeKeys.slice(0,8).join(", ")) : "无原生chat键",
+      diag.notes.join("; ")
+    ].filter(Boolean).join(" · ");
+    return { ok:false, msg: hint, diag };
   }
   candidates.sort((a,b)=>{
     if(b.score.latest !== a.score.latest) return b.score.latest - a.score.latest;
@@ -5193,7 +5251,6 @@ async function salvageChatThreadsFromDevice(){
   });
   let best = candidates[0].threads;
   for(let i=1;i<candidates.length;i++){
-    // 按会话合并：每个 id 取更「新/多」的那份
     const other = candidates[i].threads;
     const merged = Object.assign({}, best);
     Object.keys(other).forEach(id=>{
@@ -5222,10 +5279,14 @@ async function salvageChatThreadsFromDevice(){
   window.__chatNativeHydrated = true;
   try{ persistChatNative(); }catch(e){}
   const latestStr = after.latest ? new Date(after.latest).toLocaleString() : "—";
+  const top = candidates.slice(0,5).map(c=>{
+    const ls = c.score.latest ? new Date(c.score.latest).toLocaleDateString() : "?";
+    return c.src + ":" + c.score.count + "条/" + ls;
+  }).join(" | ");
   return {
     ok: true,
-    msg: `抢救完成：约 ${after.count} 条，最新 ${latestStr}（之前 ${before.count} 条）· 扫描 ${candidates.length} 份快照`,
-    before, after, sources: candidates.map(c=>c.src+"@"+c.score.count)
+    msg: `抢救完成：约 ${after.count} 条，最新 ${latestStr}（之前 ${before.count} 条）· 共 ${candidates.length} 份\n` + top,
+    before, after, sources: candidates.map(c=>c.src+"@"+c.score.count), diag
   };
 }
 function loadChatTarget(id){
@@ -21627,13 +21688,21 @@ function bindEvents(){
   const salvageBtn = document.getElementById("chat-salvage-btn");
   if(salvageBtn) salvageBtn.onclick = async ()=>{
     try{
-      showToast("正在扫描本机聊天快照…");
+      showToast("正在全盘扫描本机聊天快照…");
       const res = await salvageChatThreadsFromDevice();
+      const text = (res && res.msg) || "没有结果";
+      // 长结果放进可复制浮层，方便截图/发给我
+      if(text.length > 60 || (res && res.diag)){
+        state.backupResult = "【聊天抢救报告】\n" + text +
+          (res && res.sources ? "\n来源: " + res.sources.join(", ") : "") +
+          (res && res.diag ? "\n诊断: " + JSON.stringify(res.diag).slice(0, 1500) : "");
+      }
       if(res && res.ok){
-        showToast(res.msg || "抢救完成");
+        showToast(text.split("\n")[0]);
         render();
       } else {
-        showToast((res && res.msg) || "没有找到更多记录");
+        showToast(text.slice(0, 80));
+        render();
       }
     }catch(e){
       showToast("抢救失败：" + (e.message||e));
