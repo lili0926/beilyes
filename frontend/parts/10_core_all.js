@@ -2473,6 +2473,34 @@ hydrateChatThreadsFromLS();
   state.pendingUser = th.pendingUser || [];
 })();
 function agentById(id){ return (state.agents||[]).find(a=>a.id===id); }
+function chatThreadsScore(threads){
+  let count = 0, latest = 0;
+  if(!threads || typeof threads !== "object") return { count:0, latest:0 };
+  Object.keys(threads).forEach(id=>{
+    const msgs = (threads[id] && threads[id].messages) || [];
+    if(!Array.isArray(msgs)) return;
+    count += msgs.length;
+    for(let i=0;i<msgs.length;i++){
+      const m = msgs[i];
+      const t = Date.parse((m && (m.time || m.createdAt)) || 0) || 0;
+      if(t > latest) latest = t;
+    }
+  });
+  return { count, latest };
+}
+/** 选「更新 + 更全」的一份线程快照（优先最近消息时间，其次条数） */
+function pickRicherChatThreads(a, b){
+  const sa = chatThreadsScore(a), sb = chatThreadsScore(b);
+  if(sb.latest > sa.latest) return b;
+  if(sa.latest > sb.latest) return a;
+  if(sb.count > sa.count) return b;
+  return a;
+}
+function chatThreadsIsEmpty(threads){
+  const s = chatThreadsScore(threads);
+  return s.count === 0;
+}
+window.__chatNativeHydrated = false; // 原生/多源恢复完成前，禁止把空快照写进 Preferences
 function saveActiveThread(){
   const t = state.chatTarget || "a1";
   state.chatThreads = state.chatThreads || {};
@@ -2506,13 +2534,125 @@ function persistChatNative(){
   try{
     const Cap = window.Capacitor;
     if(!Cap || !Cap.Plugins || !Cap.Plugins.Preferences) return;
-    const snap = JSON.stringify(state.chatThreads || {});
-    Cap.Plugins.Preferences.set({ key:"chatThreads_v2", value: snap }).catch(()=>{});
+    const threads = state.chatThreads || {};
+    // 未完成多源恢复前，绝不把空/更旧快照写进原生，避免覆盖安装后误杀
+    if(!window.__chatNativeHydrated){
+      if(chatThreadsIsEmpty(threads)) return;
+    }
+    const snap = JSON.stringify(threads);
+    const keys = ["chatThreads_v2"];
+    try{
+      const prefix = window.__LS_PREFIX || "";
+      if(prefix) keys.push(prefix + "chatThreads_v2");
+    }catch(e){}
+    keys.forEach(k=>{
+      Cap.Plugins.Preferences.set({ key:k, value: snap }).catch(()=>{});
+    });
   }catch(e){}
 }
 function scheduleChatNativePersist(){
   if(__nativePersistTimer) return;
   __nativePersistTimer = setTimeout(()=>{ __nativePersistTimer = null; persistChatNative(); }, 3000);
+}
+/** 扫描本机所有可能残留的聊天快照，合并成最全的一份 */
+async function salvageChatThreadsFromDevice(){
+  const candidates = [];
+  const pushCand = (src, t)=>{
+    if(!t || typeof t !== "object") return;
+    const s = chatThreadsScore(t);
+    if(s.count <= 0) return;
+    candidates.push({ src, threads: t, score: s });
+  };
+  try{ pushCand("state", state.chatThreads); }catch(e){}
+  try{ pushCand("LS.chatThreads", LS.get("chatThreads", null)); }catch(e){}
+  try{
+    const bag = {};
+    ["a1","a2","group"].forEach(id=>{
+      const part = LS.get("chatThread_"+id, null);
+      if(part) bag[id] = part;
+    });
+    pushCand("LS.shards", bag);
+  }catch(e){}
+  // 裸 localStorage 扫描（防前缀异常时还有旧库）
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(!k) continue;
+      if(!/chatThreads$|chatThread_a1$|chatThread_a2$|chatThread_group$/.test(k)) continue;
+      try{
+        const v = JSON.parse(localStorage.getItem(k));
+        if(k.endsWith("chatThreads")) pushCand("raw:"+k, v);
+        else if(/chatThread_(a1|a2|group)$/.test(k)){
+          const id = k.match(/chatThread_(a1|a2|group)$/)[1];
+          pushCand("raw:"+k, { [id]: v });
+        }
+      }catch(e){}
+    }
+  }catch(e){}
+  try{
+    const Cap = window.Capacitor;
+    if(Cap && Cap.Plugins && Cap.Plugins.Preferences){
+      const keys = ["chatThreads_v2"];
+      try{ if(window.__LS_PREFIX) keys.push(window.__LS_PREFIX + "chatThreads_v2"); }catch(e){}
+      // 常见账号前缀兜底
+      try{
+        const last = localStorage.getItem("__last_user__")||"";
+        if(last) keys.push("u_" + last + "_chatThreads_v2");
+      }catch(e){}
+      for(const key of keys){
+        try{
+          const r = await Cap.Plugins.Preferences.get({ key });
+          if(r && r.value){
+            const t = JSON.parse(r.value);
+            pushCand("native:"+key, t);
+          }
+        }catch(e){}
+      }
+    }
+  }catch(e){}
+  if(!candidates.length){
+    return { ok:false, msg:"本机没找到更多聊天快照" };
+  }
+  candidates.sort((a,b)=>{
+    if(b.score.latest !== a.score.latest) return b.score.latest - a.score.latest;
+    return b.score.count - a.score.count;
+  });
+  let best = candidates[0].threads;
+  for(let i=1;i<candidates.length;i++){
+    // 按会话合并：每个 id 取更「新/多」的那份
+    const other = candidates[i].threads;
+    const merged = Object.assign({}, best);
+    Object.keys(other).forEach(id=>{
+      const a = best[id], b = other[id];
+      if(!a) merged[id] = b;
+      else if(!b) merged[id] = a;
+      else {
+        const sa = chatThreadsScore({ x:a }), sb = chatThreadsScore({ x:b });
+        merged[id] = (sb.latest > sa.latest || (sb.latest===sa.latest && sb.count>sa.count)) ? b : a;
+      }
+    });
+    best = merged;
+  }
+  const before = chatThreadsScore(state.chatThreads);
+  const after = chatThreadsScore(best);
+  state.chatThreads = best;
+  const tt = state.chatTarget || "a1";
+  state.messages = (best[tt] && best[tt].messages) || [];
+  state.pendingUser = (best[tt] && best[tt].pendingUser) || [];
+  try{
+    persist("chatThreads");
+    ["a1","a2","group"].forEach(id=>{
+      if(best[id]) LS.set("chatThread_"+id, best[id]);
+    });
+  }catch(e){}
+  window.__chatNativeHydrated = true;
+  try{ persistChatNative(); }catch(e){}
+  const latestStr = after.latest ? new Date(after.latest).toLocaleString() : "—";
+  return {
+    ok: true,
+    msg: `抢救完成：约 ${after.count} 条，最新 ${latestStr}（之前 ${before.count} 条）· 扫描 ${candidates.length} 份快照`,
+    before, after, sources: candidates.map(c=>c.src+"@"+c.score.count)
+  };
 }
 function loadChatTarget(id){
   saveActiveThread();
@@ -16271,7 +16411,8 @@ function renderBackup(){
     <div class="add-form" style="margin-bottom:12px">
       <div class="setting-label">导出</div>
       <button type="button" id="backup-export" class="btn-accent" style="width:100%;padding:11px"><i data-lucide="download"></i> 导出备份文件（memorypalace-backup-*.json）</button>
-      <div style="font-size:10px;color:var(--sub);margin-top:6px">上次备份：${esc(last)}</div>
+      <button type="button" id="chat-salvage-btn" class="btn-ghost" style="width:100%;padding:11px;margin-top:8px"><i data-lucide="life-buoy"></i> 抢救聊天记录（扫描本机残留快照）</button>
+      <div style="font-size:10px;color:var(--sub);margin-top:6px">覆盖更新后记录变旧/变少时先点这个。上次备份：${esc(last)}</div>
       <div class="setting-row" style="margin-top:8px">
         <span class="setting-label">含 API Key</span>
         <div id="backup-include-keys" class="toggle-switch" style="background:${state.backupIncludeKeys?"var(--accent)":"var(--border)"}">
@@ -18909,6 +19050,21 @@ function bindEvents(){
   // 数据备份
   const backupExportBtn = document.getElementById("backup-export");
   if(backupExportBtn) backupExportBtn.onclick = ()=> backupExport();
+  const salvageBtn = document.getElementById("chat-salvage-btn");
+  if(salvageBtn) salvageBtn.onclick = async ()=>{
+    try{
+      showToast("正在扫描本机聊天快照…");
+      const res = await salvageChatThreadsFromDevice();
+      if(res && res.ok){
+        showToast(res.msg || "抢救完成");
+        render();
+      } else {
+        showToast((res && res.msg) || "没有找到更多记录");
+      }
+    }catch(e){
+      showToast("抢救失败：" + (e.message||e));
+    }
+  };
   // 备份 WebView 兜底浮层：复制 / 关闭
   const bakCopyBtn = document.getElementById("bak-copy");
   if(bakCopyBtn) bakCopyBtn.onclick = ()=>{
@@ -21795,30 +21951,22 @@ if(!window.__chatFlushBound){
     }catch(e){}
   })();
 }
-// 冷启动：从原生存储恢复（异步，覆盖 localStorage 的旧快照，杀进程丢盘时兜底）
+// 冷启动：多源抢救聊天（原生 Preferences + 分片 + 旧前缀），按「最新消息时间」合并，避免旧库盖住新库
 (async function restoreNativeChat(){
   try{
-    const Cap = window.Capacitor;
-    if(!Cap || !Cap.Plugins || !Cap.Plugins.Preferences) return;
-    const r = await Cap.Plugins.Preferences.get({ key:"chatThreads_v2" });
-    if(!r || !r.value) return;
-    const t = JSON.parse(r.value);
-    if(!t || typeof t !== "object") return;
-    const cur = state.chatThreads || {};
-    const merged = {};
-    Object.keys(t).forEach(id=>{
-      const p = t[id], c = cur[id];
-      if(!c || !Array.isArray(c.messages) || (Array.isArray(p.messages) && p.messages.length > c.messages.length)){
-        merged[id] = p;
-      } else merged[id] = c;
-    });
-    Object.keys(cur).forEach(id=>{ if(!merged[id]) merged[id] = cur[id]; });
-    state.chatThreads = merged;
-    const tt = state.chatTarget || "a1";
-    state.messages = (merged[tt] && Array.isArray(merged[tt].messages)) ? merged[tt].messages : [];
-    state.pendingUser = (merged[tt] && Array.isArray(merged[tt].pendingUser)) ? merged[tt].pendingUser : [];
-    if(typeof render === "function") render();
-  }catch(e){}
+    if(typeof salvageChatThreadsFromDevice === "function"){
+      const res = await salvageChatThreadsFromDevice();
+      window.__chatNativeHydrated = true;
+      if(res && res.ok && typeof render === "function") render();
+      try{ if(res && res.ok && res.after && res.before && res.after.count > res.before.count){
+        console.info("[chat-salvage]", res.msg, res.sources);
+      }}catch(e){}
+    } else {
+      window.__chatNativeHydrated = true;
+    }
+  }catch(e){
+    window.__chatNativeHydrated = true;
+  }
 })();
 // 合并原生镜像：localStorage 配额满时落到底层原生存储（@capacitor/preferences）的数据在此恢复，
 // 原生版本优先。boot 与 reinitState（登录切用户）都会调用；同时重建 __nativeMirrorKeys 供后续写同步。
