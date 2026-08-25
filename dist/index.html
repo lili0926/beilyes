@@ -72,6 +72,120 @@
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
 
+
+    /* ── 聊天侧边栏 ── */
+    .chat-sidebar-mask {
+      position: fixed; inset: 0; z-index: 80;
+      background: rgba(30,24,20,.28);
+      backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .chat-sidebar-mask.open { opacity: 1; pointer-events: auto; }
+    .chat-sidebar {
+      position: fixed; top: 0; right: 0; bottom: 0; z-index: 81;
+      width: min(320px, 88vw);
+      background: var(--card);
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 28px rgba(0,0,0,.12);
+      display: flex; flex-direction: column;
+      transform: translateX(105%);
+      transition: transform .28s cubic-bezier(.32,.72,0,1);
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .chat-sidebar.open { transform: translateX(0); }
+    .chat-sidebar-head {
+      flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; border-bottom: 1px solid var(--border);
+    }
+    .chat-sidebar-head .sb-title { flex: 1; font-size: 15px; font-weight: 700; color: var(--text); }
+    .chat-sidebar-head .sb-close {
+      width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
+      background: var(--bg); color: var(--sub); cursor: pointer; font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .chat-sidebar-body {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sb-card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 14px; margin-bottom: 12px;
+    }
+    .sb-card-label {
+      font-size: 10px; color: var(--sub); letter-spacing: .06em; margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .sb-clock {
+      font-size: 28px; font-weight: 700; color: var(--text);
+      font-variant-numeric: tabular-nums; letter-spacing: .02em; line-height: 1.15;
+    }
+    .sb-clock-sub { font-size: 12px; color: var(--sub); margin-top: 4px; }
+    .sb-weather-row { display: flex; align-items: center; gap: 10px; }
+    .sb-temp { font-size: 26px; font-weight: 700; color: var(--text); }
+    .sb-weather-meta { flex: 1; min-width: 0; font-size: 12px; color: var(--sub); line-height: 1.45; }
+    .sb-section-title {
+      font-size: 12px; font-weight: 700; color: var(--text); margin: 4px 0 8px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .sb-section-title button {
+      border: none; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer;
+    }
+    .sb-file-list { display: flex; flex-direction: column; gap: 8px; }
+    .sb-file-item {
+      display: flex; align-items: center; gap: 10px; text-align: left; width: 100%;
+      padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); cursor: pointer;
+    }
+    .sb-file-item:active { transform: scale(.98); }
+    .sb-file-ico {
+      width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-size: 15px;
+    }
+    .sb-file-meta { flex: 1; min-width: 0; }
+    .sb-file-name {
+      font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sb-file-sub { font-size: 10px; color: var(--sub); margin-top: 2px; }
+    .sb-empty { font-size: 12px; color: var(--sub); text-align: center; padding: 16px 8px; line-height: 1.5; }
+    .sb-quota-wrap { margin-top: 8px; padding-top: 4px; }
+    .sb-quota-row { margin-bottom: 12px; }
+    .sb-quota-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 12px; color: var(--text); margin-bottom: 6px;
+    }
+    .sb-quota-head span { color: var(--sub); font-size: 11px; }
+    .sb-quota-bar {
+      height: 8px; border-radius: 4px; background: var(--border); overflow: hidden;
+    }
+    .sb-quota-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      width: 0%; transition: width .35s ease;
+    }
+    .sb-quota-hint { font-size: 10px; color: var(--sub); margin-top: 10px; line-height: 1.45; opacity: .85; }
+    .sb-file-preview-mask {
+      position: fixed; inset: 0; z-index: 90; background: rgba(30,24,20,.4);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .sb-file-preview {
+      width: 100%; max-width: 420px; max-height: 78vh; overflow: hidden;
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.2);
+    }
+    .sb-file-preview-head {
+      flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+      padding: 12px 14px; border-bottom: 1px solid var(--border);
+    }
+    .sb-file-preview-head .t { flex: 1; font-size: 13px; font-weight: 700; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sb-file-preview-body {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 14px;
+      font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-word;
+    }
+    .sb-file-preview-body img { max-width: 100%; border-radius: 10px; display: block; }
+
     /* 底部导航 — 仅 3 项 */
     .bottom-nav {
       position: sticky; bottom: 0; display: flex; flex-shrink: 0;
@@ -4616,6 +4730,15 @@ const state = {
   stickerOpen: false, // 表情面板
   stickerAddOpen: false, // 表情面板内的添加表单
   chatMoreOpen: false, // 输入栏「+」面板开关（不持久化）
+  chatSidebarOpen: false, // 聊天侧栏（不持久化）
+  chatProjectPreview: null, // {id} 预览中的 Project 文件
+  chatProjectFiles: LS.get("chatProjectFiles", []) || [], // [{id,name,mime,content,dataUrl,createdAt,source}]
+  claudeQuota: LS.get("claudeQuota", null) || {
+    window5h: { used: null, limit: null, resetAt: null },
+    weekly: { used: null, limit: null, resetAt: null },
+    updatedAt: null,
+  },
+  weatherCache: LS.get("weatherCache", null) || null, // {temp, code, label, city, lat, lon, updatedAt, error}
   // PR 快穿（本地存档；主聊天只注入摘要）
   pr: LS.get("pr_v1", null) || LS.get("pr_v1_bak", null) || { active: null, archives: [] },
   prOpen: false,
@@ -5267,7 +5390,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -16697,6 +16820,294 @@ function renderSaveChatModal(){
   </div>`;
 }
 
+
+// ─── 聊天侧栏：时钟 / 天气 / Project / Claude 额度占位 ───────────────────────
+function sbTzLabel(){
+  try{
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const off = -new Date().getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-";
+    const abs = Math.abs(off);
+    const hh = String(Math.floor(abs/60)).padStart(2,"0");
+    const mm = String(abs%60).padStart(2,"0");
+    return (tz || "Local") + " · UTC" + sign + hh + ":" + mm;
+  }catch(e){ return "Local"; }
+}
+function sbClockParts(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  return {
+    time: pad(d.getHours()) + ":" + pad(d.getMinutes()),
+    date: d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " · 周" + "日一二三四五六"[d.getDay()],
+  };
+}
+function sbWeatherLabel(code){
+  const c = +code;
+  if(c === 0) return "晴";
+  if(c === 1 || c === 2) return "少云";
+  if(c === 3) return "阴";
+  if(c === 45 || c === 48) return "雾";
+  if(c >= 51 && c <= 67) return "雨";
+  if(c >= 71 && c <= 77) return "雪";
+  if(c >= 80 && c <= 82) return "阵雨";
+  if(c >= 95) return "雷雨";
+  return "—";
+}
+function sbWeatherEmoji(code){
+  const c = +code;
+  if(c === 0) return "☀️";
+  if(c <= 2) return "🌤";
+  if(c === 3) return "☁️";
+  if(c === 45 || c === 48) return "🌫";
+  if(c >= 71 && c <= 77) return "❄️";
+  if(c >= 95) return "⛈";
+  if(c >= 51) return "🌧";
+  return "🌡";
+}
+async function sbFetchWeather(lat, lon, city){
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("weather " + res.status);
+    const data = await res.json();
+    const cur = data.current || {};
+    state.weatherCache = {
+      temp: cur.temperature_2m,
+      code: cur.weather_code,
+      label: sbWeatherLabel(cur.weather_code),
+      city: city || state.weatherCache?.city || "当前位置",
+      lat, lon,
+      updatedAt: Date.now(),
+      error: null,
+    };
+    try{ persist("weatherCache"); }catch(e){}
+  }catch(e){
+    state.weatherCache = {
+      ...(state.weatherCache || {}),
+      error: e.message || String(e),
+      updatedAt: Date.now(),
+    };
+  }
+  if(state.chatSidebarOpen && typeof render === "function") render();
+}
+function sbEnsureWeather(force){
+  const w = state.weatherCache;
+  const fresh = w && w.updatedAt && (Date.now() - w.updatedAt < 30*60*1000) && w.temp != null && !force;
+  if(fresh) return;
+  // 有缓存坐标则复用；否则尝试定位，失败用上海
+  const go = (lat, lon, city) => sbFetchWeather(lat, lon, city);
+  if(w && w.lat != null && w.lon != null && !force){
+    go(w.lat, w.lon, w.city);
+    return;
+  }
+  if(typeof navigator !== "undefined" && navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      pos => go(pos.coords.latitude, pos.coords.longitude, "当前位置"),
+      () => go(31.23, 121.47, "上海"),
+      { timeout: 8000, maximumAge: 600000 }
+    );
+  } else {
+    go(31.23, 121.47, "上海");
+  }
+}
+function sbFmtBytes(n){
+  n = +n || 0;
+  if(n < 1024) return n + " B";
+  if(n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/1024/1024).toFixed(1) + " MB";
+}
+function sbAddProjectFile(file){
+  if(!file || !file.name) return;
+  state.chatProjectFiles = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
+  const id = "pf_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,6);
+  const row = {
+    id,
+    name: String(file.name).slice(0, 120),
+    mime: file.mime || "text/plain",
+    content: file.content != null ? String(file.content).slice(0, 200000) : "",
+    dataUrl: file.dataUrl || "",
+    createdAt: Date.now(),
+    source: file.source || "chat",
+  };
+  state.chatProjectFiles.unshift(row);
+  // 最多保留 80 个
+  if(state.chatProjectFiles.length > 80) state.chatProjectFiles = state.chatProjectFiles.slice(0, 80);
+  try{ persist("chatProjectFiles"); }catch(e){}
+  return row;
+}
+function sbRemoveProjectFile(id){
+  state.chatProjectFiles = (state.chatProjectFiles || []).filter(f => f.id !== id);
+  if(state.chatProjectPreview && state.chatProjectPreview.id === id) state.chatProjectPreview = null;
+  try{ persist("chatProjectFiles"); }catch(e){}
+  render();
+}
+/** 解析助手消息里的 ⟪file:name⟫ ... ⟪/file⟫ 并入库（可重复调用，靠内容去重） */
+function sbIngestFilesFromText(text, sourceMsgId){
+  if(!text || typeof text !== "string") return [];
+  const re = /⟪file:([^⟫]+)⟫\s*([\s\S]*?)\s*⟪\/file⟫/gi;
+  const out = [];
+  let m;
+  while((m = re.exec(text))){
+    const name = (m[1] || "untitled.txt").trim().slice(0, 120);
+    const content = (m[2] || "").trim();
+    if(!content) continue;
+    const exists = (state.chatProjectFiles || []).some(f => f.name === name && f.content === content);
+    if(exists) continue;
+    out.push(sbAddProjectFile({ name, content, mime: "text/plain", source: sourceMsgId || "ai" }));
+  }
+  return out;
+}
+function sbQuotaPct(used, limit){
+  if(used == null || limit == null || !(+limit > 0)) return null;
+  return Math.max(0, Math.min(100, Math.round((+used / +limit) * 100)));
+}
+function renderChatSidebar(){
+  const open = !!state.chatSidebarOpen;
+  const clock = sbClockParts();
+  const w = state.weatherCache || {};
+  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
+  const q = state.claudeQuota || {};
+  const q5 = q.window5h || {};
+  const qw = q.weekly || {};
+  const p5 = sbQuotaPct(q5.used, q5.limit);
+  const pw = sbQuotaPct(qw.used, qw.limit);
+  const q5Text = (q5.used != null && q5.limit != null) ? `${q5.used} / ${q5.limit}` : "— / —";
+  const qwText = (qw.used != null && qw.limit != null) ? `${qw.used} / ${qw.limit}` : "— / —";
+
+  let fileHtml = "";
+  if(!files.length){
+    fileHtml = `<div class="sb-empty">还没有文件<br>模型用 ⟪file:名字⟫ … ⟪/file⟫ 写出的内容会出现在这里</div>`;
+  } else {
+    fileHtml = `<div class="sb-file-list">${files.slice(0, 40).map(f => {
+      const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
+      return `<button type="button" class="sb-file-item" data-sb-file="${escAttr(f.id)}">
+        <div class="sb-file-ico"><i data-lucide="${f.dataUrl ? "image" : "file-text"}"></i></div>
+        <div class="sb-file-meta">
+          <div class="sb-file-name">${esc(f.name || "未命名")}</div>
+          <div class="sb-file-sub">${esc(sub)}</div>
+        </div>
+      </button>`;
+    }).join("")}</div>`;
+  }
+
+  let preview = "";
+  if(state.chatProjectPreview && state.chatProjectPreview.id){
+    const f = files.find(x => x.id === state.chatProjectPreview.id);
+    if(f){
+      const body = f.dataUrl
+        ? `<img src="${escAttr(f.dataUrl)}" alt="${escAttr(f.name)}"/>`
+        : esc(f.content || "(空文件)");
+      preview = `<div class="sb-file-preview-mask" id="sb-preview-mask">
+        <div class="sb-file-preview">
+          <div class="sb-file-preview-head">
+            <div class="t">${esc(f.name || "预览")}</div>
+            <button type="button" class="btn-ghost" id="sb-file-del" data-id="${escAttr(f.id)}" style="padding:4px 10px;font-size:11px">删除</button>
+            <button type="button" class="sb-close" id="sb-preview-close">✕</button>
+          </div>
+          <div class="sb-file-preview-body">${body}</div>
+        </div>
+      </div>`;
+    }
+  }
+
+  return `
+    <div class="chat-sidebar-mask${open?" open":""}" id="chat-sidebar-mask"></div>
+    <aside class="chat-sidebar${open?" open":""}" id="chat-sidebar" aria-hidden="${open?"false":"true"}">
+      <div class="chat-sidebar-head">
+        <div class="sb-title">侧栏</div>
+        <button type="button" class="sb-close" id="chat-sidebar-close" aria-label="关闭">✕</button>
+      </div>
+      <div class="chat-sidebar-body">
+        <div class="sb-card">
+          <div class="sb-card-label">时间</div>
+          <div class="sb-clock" id="sb-clock-time">${esc(clock.time)}</div>
+          <div class="sb-clock-sub">${esc(clock.date)}<br>${esc(sbTzLabel())}</div>
+        </div>
+        <div class="sb-card">
+          <div class="sb-card-label">天气</div>
+          <div class="sb-weather-row">
+            <div style="font-size:28px;line-height:1">${w.temp!=null ? sbWeatherEmoji(w.code) : "…"}</div>
+            <div class="sb-temp">${w.temp!=null ? (Math.round(+w.temp) + "°") : "—"}</div>
+            <div class="sb-weather-meta">
+              <div style="color:var(--text);font-weight:600">${esc(w.label || (w.error ? "获取失败" : "加载中"))}</div>
+              <div>${esc(w.city || "定位中…")}</div>
+            </div>
+            <button type="button" class="btn-ghost" id="sb-weather-refresh" style="padding:6px 10px;font-size:11px;flex-shrink:0">刷新</button>
+          </div>
+        </div>
+        <div class="sb-section-title">
+          <span>Project</span>
+          <button type="button" id="sb-file-clear" ${files.length?"":"disabled"} style="opacity:${files.length?1:.4}">清空</button>
+        </div>
+        ${fileHtml}
+        <div class="sb-quota-wrap">
+          <div class="sb-section-title"><span>额度</span></div>
+          <div class="sb-card">
+            <div class="sb-quota-row">
+              <div class="sb-quota-head">5 小时窗口 <span>${esc(q5Text)}</span></div>
+              <div class="sb-quota-bar"><div class="sb-quota-fill" style="width:${p5==null?0:p5}%"></div></div>
+            </div>
+            <div class="sb-quota-row">
+              <div class="sb-quota-head">本周额度 <span>${esc(qwText)}</span></div>
+              <div class="sb-quota-bar"><div class="sb-quota-fill" style="width:${pw==null?0:pw}%"></div></div>
+            </div>
+            <div class="sb-quota-hint">占位中。Claude 会员开通后对上官方用量接口即可显示真实剩余。</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    ${preview}
+  `;
+}
+function bindChatSidebar(){
+  const openBtn = document.getElementById("chat-sidebar-open");
+  if(openBtn) openBtn.onclick = (e)=>{
+    e.stopPropagation();
+    state.chatSidebarOpen = true;
+    sbEnsureWeather(false);
+    render();
+    // 侧栏打开时每 30s 刷新一次时钟显示
+    if(window._sbClockTimer) clearInterval(window._sbClockTimer);
+    window._sbClockTimer = setInterval(()=>{
+      const el = document.getElementById("sb-clock-time");
+      if(!el || !state.chatSidebarOpen){ clearInterval(window._sbClockTimer); return; }
+      el.textContent = sbClockParts().time;
+    }, 15000);
+  };
+  const closeBtn = document.getElementById("chat-sidebar-close");
+  if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
+  const mask = document.getElementById("chat-sidebar-mask");
+  if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
+  const wr = document.getElementById("sb-weather-refresh");
+  if(wr) wr.onclick = ()=>{ sbEnsureWeather(true); showToast("正在刷新天气…"); };
+  document.querySelectorAll("[data-sb-file]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.chatProjectPreview = { id: btn.getAttribute("data-sb-file") };
+      render();
+    };
+  });
+  const pc = document.getElementById("sb-preview-close");
+  if(pc) pc.onclick = ()=>{ state.chatProjectPreview = null; render(); };
+  const pm = document.getElementById("sb-preview-mask");
+  if(pm) pm.onclick = (e)=>{ if(e.target === pm){ state.chatProjectPreview = null; render(); } };
+  const del = document.getElementById("sb-file-del");
+  if(del) del.onclick = ()=>{
+    const id = del.getAttribute("data-id");
+    if(id && confirm("删除这个文件？")) sbRemoveProjectFile(id);
+  };
+  const clear = document.getElementById("sb-file-clear");
+  if(clear) clear.onclick = ()=>{
+    if(!(state.chatProjectFiles||[]).length) return;
+    if(confirm("清空 Project 里的全部文件？")){
+      state.chatProjectFiles = [];
+      state.chatProjectPreview = null;
+      try{ persist("chatProjectFiles"); }catch(e){}
+      render();
+    }
+  };
+}
+
+
 function renderChat(){
   const agents = state.agents || [];
   const target = state.chatTarget || "a1";
@@ -16877,6 +17288,7 @@ function renderChat(){
         <div class="chat-status"><span class="status-heart">♥</span><span>online</span></div>
       </div>
       <div class="chat-header-icons">
+        <button id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-right"></i></button>
         <button id="puppy-open" title="小狗按钮"><i data-lucide="paw-print"></i></button>
         <button id="toggle-guide" title="思考引导 / 思考链开关" style="color:${state.thoughtOn===false?"var(--sub)":(hasAnyGuide?"var(--accent)":"var(--text)")}"><i data-lucide="brain"></i></button>
         <div class="chat-mode-switch" id="chat-mode-switch">
@@ -16954,6 +17366,7 @@ function renderChat(){
     ${state.puppyPageOpen && typeof renderPuppyPageOverlay==="function" ? renderPuppyPageOverlay() : ""}
     ${state.stickerOpen && typeof renderStickerOverlay==="function" ? renderStickerOverlay() : ""}
     ${typeof renderPet==="function" ? renderPet() : ""}
+    ${typeof renderChatSidebar==="function" ? renderChatSidebar() : ""}
   </div>`;
 }
 
@@ -19438,6 +19851,7 @@ function bindEvents(){
   // 输入栏「+」：展开/收起面板（再点一次或点外部收起）
   const chatMoreBtn=document.getElementById("chat-more-btn");
   if(chatMoreBtn) chatMoreBtn.onclick=(e)=>{ e.stopPropagation(); state.chatMoreOpen=!state.chatMoreOpen; render(); };
+  if(typeof bindChatSidebar==="function") bindChatSidebar();
   // 多模态：图片/文件按钮（选完自动收起面板）
   const chatImgBtn=document.getElementById("chat-img-btn");
   if(chatImgBtn) chatImgBtn.onclick=(e)=>{ e.stopPropagation(); const i=document.getElementById("chat-img-input"); if(i) i.click(); };
@@ -22674,6 +23088,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   }
   // 偷听：AI 回复也悄悄喂给宝宝
   if(cleanBody) babyOverhearChat(cleanBody.replace(/\[action[^\]]*\]/g, "").replace(/\[sticker[^\]]*\]/g, "").trim(), "assistant");
+  // Project：解析 ⟪file:名字⟫…⟪/file⟫ 入库
+  try{ if(cleanBody && typeof sbIngestFilesFromText==="function") sbIngestFilesFromText(cleanBody, msgId); }catch(e){}
   state.openThinkIds[msgId] = true;
   saveActiveThread(); // 每轮回复立即落盘，杀进程不丢
   // 页面在后台时：普通回复也上推，方便锁屏收到
