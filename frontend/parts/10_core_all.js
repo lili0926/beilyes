@@ -14778,6 +14778,7 @@ function renderChat(){
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-header">
+      <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
       <button class="back-btn love-score-chip" id="love-score-chip" title="情侣计分器：满分100 起始50">♥ <b>${esc((state.loveScore&&state.loveScore.value)!=null?state.loveScore.value:50)}</b></button>
       <div class="chat-title-wrap">
@@ -14785,7 +14786,6 @@ function renderChat(){
         <div class="chat-status"><span class="status-heart">♥</span><span>online</span></div>
       </div>
       <div class="chat-header-icons">
-        <button id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-right"></i></button>
         <button id="puppy-open" title="小狗按钮"><i data-lucide="paw-print"></i></button>
         <button id="toggle-guide" title="思考引导 / 思考链开关" style="color:${state.thoughtOn===false?"var(--sub)":(hasAnyGuide?"var(--accent)":"var(--text)")}"><i data-lucide="brain"></i></button>
         <div class="chat-mode-switch" id="chat-mode-switch">

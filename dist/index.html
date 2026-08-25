@@ -82,13 +82,13 @@
     }
     .chat-sidebar-mask.open { opacity: 1; pointer-events: auto; }
     .chat-sidebar {
-      position: fixed; top: 0; right: 0; bottom: 0; z-index: 81;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 81;
       width: min(320px, 88vw);
       background: var(--card);
-      border-left: 1px solid var(--border);
-      box-shadow: -8px 0 28px rgba(0,0,0,.12);
+      border-right: 1px solid var(--border);
+      box-shadow: 8px 0 28px rgba(0,0,0,.12);
       display: flex; flex-direction: column;
-      transform: translateX(105%);
+      transform: translateX(-105%);
       transition: transform .28s cubic-bezier(.32,.72,0,1);
       padding-top: env(safe-area-inset-top, 0px);
       padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -17281,6 +17281,7 @@ function renderChat(){
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-header">
+      <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
       <button class="back-btn love-score-chip" id="love-score-chip" title="情侣计分器：满分100 起始50">♥ <b>${esc((state.loveScore&&state.loveScore.value)!=null?state.loveScore.value:50)}</b></button>
       <div class="chat-title-wrap">
@@ -17288,7 +17289,6 @@ function renderChat(){
         <div class="chat-status"><span class="status-heart">♥</span><span>online</span></div>
       </div>
       <div class="chat-header-icons">
-        <button id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-right"></i></button>
         <button id="puppy-open" title="小狗按钮"><i data-lucide="paw-print"></i></button>
         <button id="toggle-guide" title="思考引导 / 思考链开关" style="color:${state.thoughtOn===false?"var(--sub)":(hasAnyGuide?"var(--accent)":"var(--text)")}"><i data-lucide="brain"></i></button>
         <div class="chat-mode-switch" id="chat-mode-switch">

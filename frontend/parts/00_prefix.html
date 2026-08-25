@@ -82,13 +82,13 @@
     }
     .chat-sidebar-mask.open { opacity: 1; pointer-events: auto; }
     .chat-sidebar {
-      position: fixed; top: 0; right: 0; bottom: 0; z-index: 81;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 81;
       width: min(320px, 88vw);
       background: var(--card);
-      border-left: 1px solid var(--border);
-      box-shadow: -8px 0 28px rgba(0,0,0,.12);
+      border-right: 1px solid var(--border);
+      box-shadow: 8px 0 28px rgba(0,0,0,.12);
       display: flex; flex-direction: column;
-      transform: translateX(105%);
+      transform: translateX(-105%);
       transition: transform .28s cubic-bezier(.32,.72,0,1);
       padding-top: env(safe-area-inset-top, 0px);
       padding-bottom: env(safe-area-inset-bottom, 0px);
