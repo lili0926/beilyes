@@ -4762,6 +4762,7 @@ const state = {
   stickerAddOpen: false, // 表情面板内的添加表单
   chatMoreOpen: false, // 输入栏「+」面板开关（不持久化）
   chatSidebarOpen: false, // 聊天侧栏（不持久化）
+  uiTimezone: LS.get("uiTimezone", "") || "", // IANA 时区，空=系统
   chatProjectPreview: null, // {id} 预览中的 Project 文件
   chatHtmlRun: null, // {id} 页内运行 HTML
   chatProjectFiles: LS.get("chatProjectFiles", []) || [], // [{id,name,mime,content,dataUrl,createdAt,source}]
@@ -5422,7 +5423,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -5568,6 +5569,7 @@ function render(){
   else if(state.tab==="chat") html+=renderChat();
   else if(state.tab==="settings") html+=renderSettings();
   html+=renderBottomNav();
+  if(typeof renderProjectOverlays==="function") html+=renderProjectOverlays();
   if(state.savedSaving && typeof renderSaveChatModal==="function") html+=renderSaveChatModal();
   if(state.backupResult && typeof backupResultOverlay==="function") html+=backupResultOverlay();
 
@@ -7839,6 +7841,7 @@ function renderSubPage(){
     cmdgame: renderCmdGame,
     htmlgame: renderHtmlGame,
     mcphall: renderMcpHall,
+    project: renderProject,
     theme: renderTheme,
     branding: renderBranding,
     hisphone: renderHisPhone,
@@ -16854,24 +16857,59 @@ function renderSaveChatModal(){
 
 
 // ─── 聊天侧栏：时钟 / 天气 / Project / Claude 额度占位 ───────────────────────
+const SB_TZ_OPTIONS = [
+  { id: "", label: "系统默认" },
+  { id: "Asia/Shanghai", label: "中国 · 上海 (UTC+8)" },
+  { id: "Asia/Hong_Kong", label: "香港 (UTC+8)" },
+  { id: "Asia/Taipei", label: "台北 (UTC+8)" },
+  { id: "Asia/Tokyo", label: "日本 · 东京 (UTC+9)" },
+  { id: "Asia/Seoul", label: "韩国 · 首尔 (UTC+9)" },
+  { id: "Asia/Singapore", label: "新加坡 (UTC+8)" },
+  { id: "Asia/Bangkok", label: "曼谷 (UTC+7)" },
+  { id: "UTC", label: "UTC" },
+  { id: "Europe/London", label: "伦敦" },
+  { id: "Europe/Paris", label: "巴黎" },
+  { id: "America/New_York", label: "纽约" },
+  { id: "America/Los_Angeles", label: "洛杉矶" },
+  { id: "America/Chicago", label: "芝加哥" },
+  { id: "Australia/Sydney", label: "悉尼" },
+];
+function sbActiveTz(){
+  const t = (state.uiTimezone || "").trim();
+  if(t) return t;
+  try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }catch(e){ return "UTC"; }
+}
 function sbTzLabel(){
   try{
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    const off = -new Date().getTimezoneOffset();
-    const sign = off >= 0 ? "+" : "-";
-    const abs = Math.abs(off);
-    const hh = String(Math.floor(abs/60)).padStart(2,"0");
-    const mm = String(abs%60).padStart(2,"0");
-    return (tz || "Local") + " · UTC" + sign + hh + ":" + mm;
-  }catch(e){ return "Local"; }
+    const tz = sbActiveTz();
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date());
+    const off = (parts.find(p => p.type === "timeZoneName") || {}).value || "";
+    const custom = !!(state.uiTimezone || "").trim();
+    return tz + (off ? " · " + off : "") + (custom ? "" : "（系统）");
+  }catch(e){ return sbActiveTz(); }
 }
 function sbClockParts(){
-  const d = new Date();
+  const tz = sbActiveTz();
   const pad = n => String(n).padStart(2,"0");
-  return {
-    time: pad(d.getHours()) + ":" + pad(d.getMinutes()),
-    date: d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " · 周" + "日一二三四五六"[d.getDay()],
-  };
+  try{
+    const dtf = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false, weekday: "short",
+    });
+    const parts = Object.fromEntries(dtf.formatToParts(new Date()).filter(p => p.type !== "literal").map(p => [p.type, p.value]));
+    const wdMap = { Sun: "日", Mon: "一", Tue: "二", Wed: "三", Thu: "四", Fri: "五", Sat: "六" };
+    const wd = wdMap[parts.weekday] || parts.weekday || "";
+    return {
+      time: (parts.hour || "00") + ":" + (parts.minute || "00"),
+      date: (parts.year || "") + "-" + (parts.month || "") + "-" + (parts.day || "") + (wd ? " · 周" + wd : ""),
+    };
+  }catch(e){
+    const d = new Date();
+    return {
+      time: pad(d.getHours()) + ":" + pad(d.getMinutes()),
+      date: d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()),
+    };
+  }
 }
 function sbWeatherLabel(code){
   const c = +code;
@@ -17023,36 +17061,43 @@ function sbQuotaPct(used, limit){
   if(used == null || limit == null || !(+limit > 0)) return null;
   return Math.max(0, Math.min(100, Math.round((+used / +limit) * 100)));
 }
-function renderChatSidebar(){
-  const open = !!state.chatSidebarOpen;
-  const clock = sbClockParts();
-  const w = state.weatherCache || {};
-  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
-  const q = state.claudeQuota || {};
-  const q5 = q.window5h || {};
-  const qw = q.weekly || {};
-  const p5 = sbQuotaPct(q5.used, q5.limit);
-  const pw = sbQuotaPct(qw.used, qw.limit);
-  const q5Text = (q5.used != null && q5.limit != null) ? `${q5.used} / ${q5.limit}` : "— / —";
-  const qwText = (qw.used != null && qw.limit != null) ? `${qw.used} / ${qw.limit}` : "— / —";
 
-  let fileHtml = "";
+function renderProject(){
+  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
+  let list = "";
   if(!files.length){
-    fileHtml = `<div class="sb-empty">还没有文件<br>模型用 ⟪file:名字⟫ … ⟪/file⟫ 写出的内容会出现在这里</div>`;
+    list = `<div class="empty-state" style="padding:36px 16px">还没有文件<br><span style="font-size:12px;opacity:.75">聊天里模型用 ⟪file:名字⟫ … ⟪/file⟫ 写出的内容会出现在这里</span></div>`;
   } else {
-    fileHtml = `<div class="sb-file-list">${files.slice(0, 40).map(f => {
-      const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
+    list = `<div class="sb-file-list" style="gap:10px">${files.map(f => {
       const ico = f.dataUrl ? "image" : (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f) ? "globe" : "file-text");
-      return `<button type="button" class="sb-file-item" data-sb-file="${escAttr(f.id)}">
-        <div class="sb-file-ico"><i data-lucide="${ico}"></i></div>
-        <div class="sb-file-meta">
-          <div class="sb-file-name">${esc(f.name || "未命名")}</div>
-          <div class="sb-file-sub">${esc(sub)}</div>
-        </div>
-      </button>`;
+      const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
+      const run = (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f))
+        ? `<button type="button" class="btn-accent" data-proj-run="${escAttr(f.id)}" style="padding:6px 10px;font-size:11px;flex-shrink:0">打开</button>` : "";
+      return `<div class="sb-file-item" style="cursor:default">
+        <button type="button" data-sb-file="${escAttr(f.id)}" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:none;background:transparent;padding:0;text-align:left;color:inherit;cursor:pointer">
+          <div class="sb-file-ico"><i data-lucide="${ico}"></i></div>
+          <div class="sb-file-meta">
+            <div class="sb-file-name">${esc(f.name || "未命名")}</div>
+            <div class="sb-file-sub">${esc(sub)}</div>
+          </div>
+        </button>
+        ${run}
+      </div>`;
     }).join("")}</div>`;
   }
+  return `<div class="page">
+    ${subHeader('<i data-lucide="folder-open"></i> Project')}
+    <p class="page-sub">模型产出的文件 · 预览 / 页内运行 HTML / 下载</p>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button type="button" class="btn-ghost" id="proj-clear" ${files.length?"":"disabled"} style="padding:8px 14px;font-size:12px">清空全部</button>
+      <span style="font-size:12px;color:var(--sub);align-self:center">${files.length} 个文件</span>
+    </div>
+    ${list}
+  </div>`;
+}
 
+function renderProjectOverlays(){
+  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
   let preview = "";
   if(state.chatProjectPreview && state.chatProjectPreview.id){
     const f = files.find(x => x.id === state.chatProjectPreview.id);
@@ -17104,6 +17149,40 @@ function renderChatSidebar(){
     }
   }
 
+  return `${preview||""}${htmlRun||""}`;
+}
+
+function renderChatSidebar(){
+  const open = !!state.chatSidebarOpen;
+  const clock = sbClockParts();
+  const w = state.weatherCache || {};
+  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
+  const q = state.claudeQuota || {};
+  const q5 = q.window5h || {};
+  const qw = q.weekly || {};
+  const p5 = sbQuotaPct(q5.used, q5.limit);
+  const pw = sbQuotaPct(qw.used, qw.limit);
+  const q5Text = (q5.used != null && q5.limit != null) ? `${q5.used} / ${q5.limit}` : "— / —";
+  const qwText = (qw.used != null && qw.limit != null) ? `${qw.used} / ${qw.limit}` : "— / —";
+
+  let fileHtml = "";
+  if(!files.length){
+    fileHtml = `<div class="sb-empty">还没有文件<br>模型用 ⟪file:名字⟫ … ⟪/file⟫ 写出的内容会出现在这里</div>`;
+  } else {
+    fileHtml = `<div class="sb-file-list">${files.slice(0, 40).map(f => {
+      const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
+      const ico = f.dataUrl ? "image" : (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f) ? "globe" : "file-text");
+      return `<button type="button" class="sb-file-item" data-sb-file="${escAttr(f.id)}">
+        <div class="sb-file-ico"><i data-lucide="${ico}"></i></div>
+        <div class="sb-file-meta">
+          <div class="sb-file-name">${esc(f.name || "未命名")}</div>
+          <div class="sb-file-sub">${esc(sub)}</div>
+        </div>
+      </button>`;
+    }).join("")}</div>`;
+  }
+
+  // 预览/HTML 运行层由 renderProjectOverlays 统一输出
   return `
     <div class="chat-sidebar-mask${open?" open":""}" id="chat-sidebar-mask"></div>
     <aside class="chat-sidebar${open?" open":""}" id="chat-sidebar" aria-hidden="${open?"false":"true"}">
@@ -17115,7 +17194,13 @@ function renderChatSidebar(){
         <div class="sb-card">
           <div class="sb-card-label">时间</div>
           <div class="sb-clock" id="sb-clock-time">${esc(clock.time)}</div>
-          <div class="sb-clock-sub">${esc(clock.date)}<br>${esc(sbTzLabel())}</div>
+          <div class="sb-clock-sub">${esc(clock.date)}</div>
+          <div class="sb-clock-sub" style="margin-top:6px">${esc(sbTzLabel())}</div>
+          <label style="display:block;margin-top:10px;font-size:11px;color:var(--sub)">时区
+            <select id="sb-tz-select" style="display:block;width:100%;margin-top:6px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px">
+              ${SB_TZ_OPTIONS.map(o => `<option value="${escAttr(o.id)}" ${(state.uiTimezone||"")===o.id?"selected":""}>${esc(o.label)}</option>`).join("")}
+            </select>
+          </label>
         </div>
         <div class="sb-card">
           <div class="sb-card-label">天气</div>
@@ -17129,11 +17214,14 @@ function renderChatSidebar(){
             <button type="button" class="btn-ghost" id="sb-weather-refresh" style="padding:6px 10px;font-size:11px;flex-shrink:0">刷新</button>
           </div>
         </div>
-        <div class="sb-section-title">
-          <span>Project</span>
-          <button type="button" id="sb-file-clear" ${files.length?"":"disabled"} style="opacity:${files.length?1:.4}">清空</button>
-        </div>
-        ${fileHtml}
+        <button type="button" class="sb-card" id="sb-project-open" style="width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px">
+          <div class="sb-file-ico" style="width:40px;height:40px;font-size:18px"><i data-lucide="folder-open"></i></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Project</div>
+            <div style="font-size:11px;color:var(--sub);margin-top:2px">${files.length ? (files.length + " 个文件 · 点进管理") : "还没有文件 · 点进查看"}</div>
+          </div>
+          <span style="color:var(--sub);font-size:16px">›</span>
+        </button>
         <div class="sb-quota-wrap">
           <div class="sb-section-title"><span>额度</span></div>
           <div class="sb-card">
@@ -17150,10 +17238,81 @@ function renderChatSidebar(){
         </div>
       </div>
     </aside>
-    ${preview}
-    ${htmlRun}
   `;
 }
+
+function bindProjectPage(){
+  document.querySelectorAll("[data-sb-file]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      state.chatProjectPreview = { id: btn.getAttribute("data-sb-file") };
+      render();
+    };
+  });
+  document.querySelectorAll("[data-proj-run]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      state.chatHtmlRun = { id: btn.getAttribute("data-proj-run") };
+      state.chatProjectPreview = null;
+      render();
+    };
+  });
+  const clear = document.getElementById("proj-clear");
+  if(clear) clear.onclick = ()=>{
+    if(!(state.chatProjectFiles||[]).length) return;
+    if(confirm("清空 Project 里的全部文件？")){
+      state.chatProjectFiles = [];
+      state.chatProjectPreview = null;
+      state.chatHtmlRun = null;
+      try{ persist("chatProjectFiles"); }catch(e){}
+      render();
+    }
+  };
+  // overlays shared
+  const pc = document.getElementById("sb-preview-close");
+  if(pc) pc.onclick = ()=>{ state.chatProjectPreview = null; render(); };
+  const pm = document.getElementById("sb-preview-mask");
+  if(pm) pm.onclick = (e)=>{ if(e.target === pm){ state.chatProjectPreview = null; render(); } };
+  const del = document.getElementById("sb-file-del");
+  if(del) del.onclick = ()=>{
+    const id = del.getAttribute("data-id");
+    if(id && confirm("删除这个文件？")) sbRemoveProjectFile(id);
+  };
+  const dl = document.getElementById("sb-file-dl");
+  if(dl) dl.onclick = ()=>{
+    const id = dl.getAttribute("data-id");
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+    if(f) sbDownloadProjectFile(f);
+  };
+  const runBtn = document.getElementById("sb-html-run");
+  if(runBtn) runBtn.onclick = ()=>{
+    const id = runBtn.getAttribute("data-id");
+    state.chatHtmlRun = { id };
+    state.chatProjectPreview = null;
+    render();
+  };
+  const iframe = document.getElementById("sb-html-iframe");
+  if(iframe && state.chatHtmlRun && state.chatHtmlRun.id){
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===state.chatHtmlRun.id);
+    if(f){ try{ iframe.srcdoc = f.content || "<p>(空)</p>"; }catch(e){ iframe.srcdoc = "<p>无法加载</p>"; } }
+  }
+  const htmlClose = document.getElementById("sb-html-close");
+  if(htmlClose) htmlClose.onclick = ()=>{ state.chatHtmlRun = null; render(); };
+  const htmlReload = document.getElementById("sb-html-reload");
+  if(htmlReload) htmlReload.onclick = ()=>{
+    const id = htmlReload.getAttribute("data-id");
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+    const ifr = document.getElementById("sb-html-iframe");
+    if(f && ifr){ ifr.srcdoc = ""; setTimeout(()=>{ ifr.srcdoc = f.content || ""; }, 30); }
+  };
+  const htmlDl = document.getElementById("sb-html-dl");
+  if(htmlDl) htmlDl.onclick = ()=>{
+    const id = htmlDl.getAttribute("data-id");
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+    if(f) sbDownloadProjectFile(f);
+  };
+}
+
 function bindChatSidebar(){
   const openBtn = document.getElementById("chat-sidebar-open");
   if(openBtn) openBtn.onclick = (e)=>{
@@ -17175,6 +17334,19 @@ function bindChatSidebar(){
   if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
   const wr = document.getElementById("sb-weather-refresh");
   if(wr) wr.onclick = ()=>{ sbEnsureWeather(true); showToast("正在刷新天气…"); };
+  const tzSel = document.getElementById("sb-tz-select");
+  if(tzSel) tzSel.onchange = ()=>{
+    state.uiTimezone = tzSel.value || "";
+    try{ persist("uiTimezone"); }catch(e){}
+    render();
+  };
+  const projOpen = document.getElementById("sb-project-open");
+  if(projOpen) projOpen.onclick = (e)=>{
+    e.stopPropagation();
+    state.chatSidebarOpen = false;
+    state.subPage = "project";
+    render();
+  };
   document.querySelectorAll("[data-sb-file]").forEach(btn=>{
     btn.onclick = ()=>{
       state.chatProjectPreview = { id: btn.getAttribute("data-sb-file") };
@@ -19984,6 +20156,7 @@ function bindEvents(){
   const chatMoreBtn=document.getElementById("chat-more-btn");
   if(chatMoreBtn) chatMoreBtn.onclick=(e)=>{ e.stopPropagation(); state.chatMoreOpen=!state.chatMoreOpen; render(); };
   if(typeof bindChatSidebar==="function") bindChatSidebar();
+  if(typeof bindProjectPage==="function") bindProjectPage();
   // 多模态：图片/文件按钮（选完自动收起面板）
   const chatImgBtn=document.getElementById("chat-img-btn");
   if(chatImgBtn) chatImgBtn.onclick=(e)=>{ e.stopPropagation(); const i=document.getElementById("chat-img-input"); if(i) i.click(); };
