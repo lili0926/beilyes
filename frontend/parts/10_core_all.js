@@ -14517,11 +14517,33 @@ function sbIngestFilesFromText(text, sourceMsgId){
     const name = (m[1] || "untitled.txt").trim().slice(0, 120);
     const content = (m[2] || "").trim();
     if(!content) continue;
-    const exists = (state.chatProjectFiles || []).some(f => f.name === name && f.content === content);
-    if(exists) continue;
-    out.push(sbAddProjectFile({ name, content, mime: "text/plain", source: sourceMsgId || "ai" }));
+    const exists = (state.chatProjectFiles || []).find(f => f.name === name && f.content === content);
+    if(exists){ out.push(exists); continue; }
+    const mime = /\.(html?|htm)$/i.test(name) ? "text/html" : "text/plain";
+    out.push(sbAddProjectFile({ name, content, mime, source: sourceMsgId || "ai" }));
   }
   return out;
+}
+/** 从回复正文拆出文件块：入库 + 擦除正文，返回 { text, files } */
+function handleProjectFileMarkers(body, sourceMsgId){
+  const raw = String(body || "");
+  const files = typeof sbIngestFilesFromText === "function" ? sbIngestFilesFromText(raw, sourceMsgId) : [];
+  const text = raw.replace(/⟪file:[^⟫]+⟫\s*[\s\S]*?\s*⟪\/file⟫/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { text, files };
+}
+function projectFileCardHtml(f){
+  if(!f) return "";
+  const isHtml = typeof sbIsHtmlFile === "function" && sbIsHtmlFile(f);
+  const hint = isHtml ? "点开 · 可页内运行" : "点开查看";
+  const badge = isHtml ? "HTML" : ((f.name || "").split(".").pop() || "FILE").toUpperCase();
+  return `<button type="button" class="proj-file-card" data-proj-card="${escAttr(f.id)}" title="${escAttr(f.name||"文件")}">
+    <div class="proj-file-card-bg"></div>
+    <div class="proj-file-card-label">
+      <div class="proj-file-card-name">${esc(f.name || "未命名文件")}</div>
+      <div class="proj-file-card-hint">${esc(hint)}</div>
+      <div class="proj-file-card-badge">${esc(badge)}</div>
+    </div>
+  </button>`;
 }
 function sbQuotaPct(used, limit){
   if(used == null || limit == null || !(+limit > 0)) return null;
@@ -14708,6 +14730,22 @@ function renderChatSidebar(){
 }
 
 function bindProjectPage(){
+  document.querySelectorAll("[data-proj-card]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute("data-proj-card");
+      const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+      if(!f) return;
+      if(typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f)){
+        state.chatHtmlRun = { id };
+        state.chatProjectPreview = null;
+      } else {
+        state.chatProjectPreview = { id };
+      }
+      render();
+    };
+  });
+
   document.querySelectorAll("[data-sb-file]").forEach(btn=>{
     btn.onclick = (e)=>{
       e.stopPropagation();
@@ -14965,6 +15003,14 @@ function renderChat(){
         const cc=(state.coupons||[]).find(x=>x.id===m.couponId);
         if(!cc) return; // 券已被删除：不显示
         msgs+=`${speakerMeta}<div class="bubble-row them">${couponCardHtml(cc)}</div>`;
+        return;
+      }
+      // Project 信封文件卡
+      if(m.projectFileId){
+        const pf=(state.chatProjectFiles||[]).find(x=>x.id===m.projectFileId);
+        if(!pf) return;
+        const card = typeof projectFileCardHtml==="function" ? projectFileCardHtml(pf) : `<button type="button" data-proj-card="${escAttr(pf.id)}">${esc(pf.name)}</button>`;
+        msgs+=`${speakerMeta}<div class="bubble-row them" style="align-items:flex-start">${card}</div>`;
         return;
       }
       // 机写卡片：小纸条 / 机日记轻提示 / 来信
@@ -20813,10 +20859,21 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
   cleanBody = handleAnnoMarkers(cleanBody); // 共读批注
   cleanBody = handleTruthDareMarkers(cleanBody);   // 真心话大冒险：⟪真心话⟫/⟪大冒险⟫/⟪抽卡⟫
+  // Project 文件：先拆块入库，正文擦除，后面再推信封卡片
+  let projectFilesFromReply = [];
+  try{
+    if(typeof handleProjectFileMarkers === "function"){
+      const pf = handleProjectFileMarkers(cleanBody, "pending");
+      cleanBody = pf.text;
+      projectFilesFromReply = pf.files || [];
+    }
+  }catch(e){}
   // NSFW 人称兜底：模型老爱用第三人称写自己，这里硬性改成「我/你」
   if(state.nsfwOn) cleanBody = nsfwFirstPersonRewrite(cleanBody);
   // 文章模式 / NSFW：整段显示，不拆成短气泡（NSFW 要一整条沉浸叙事，拆开会打断配色与连贯）
-  const parts = (state.chatMode === "story" || state.nsfwOn) ? [(cleanBody||"").trim() || "……"] : splitReply(cleanBody);
+  const parts = (state.chatMode === "story" || state.nsfwOn)
+    ? ([(cleanBody||"").trim()].filter(Boolean).length ? [(cleanBody||"").trim()] : (projectFilesFromReply.length ? [] : ["……"]))
+    : (String(cleanBody||"").trim() ? splitReply(cleanBody) : []);
   const now = new Date().toISOString();
   const msgId = "m"+Date.now()+"_"+ag.id;
   // 本通回复的 token 用量（__usageLog 最近一条对应这次请求），挂到首条消息供思考链顶端显示
@@ -20857,10 +20914,29 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       speakerColor: ag.color,
     });
   }
+  // Project 信封文件卡（正文已擦除文件块）
+  if(projectFilesFromReply && projectFilesFromReply.length){
+    projectFilesFromReply.forEach((f, fi)=>{
+      if(!f || !f.id) return;
+      // 回填 source
+      try{
+        const hit = (state.chatProjectFiles||[]).find(x=>x.id===f.id);
+        if(hit) hit.source = msgId;
+      }catch(e){}
+      state.messages.push({
+        role:"assistant",
+        projectFileId: f.id,
+        content: "",
+        time: now,
+        msgId: msgId+"_file_"+fi,
+        speakerId: ag.id,
+        speakerName: ag.name,
+        speakerColor: ag.color,
+      });
+    });
+  }
   // 偷听：AI 回复也悄悄喂给宝宝
   if(cleanBody) babyOverhearChat(cleanBody.replace(/\[action[^\]]*\]/g, "").replace(/\[sticker[^\]]*\]/g, "").trim(), "assistant");
-  // Project：解析 ⟪file:名字⟫…⟪/file⟫ 入库
-  try{ if(cleanBody && typeof sbIngestFilesFromText==="function") sbIngestFilesFromText(cleanBody, msgId); }catch(e){}
   state.openThinkIds[msgId] = true;
   saveActiveThread(); // 每轮回复立即落盘，杀进程不丢
   // 页面在后台时：普通回复也上推，方便锁屏收到
