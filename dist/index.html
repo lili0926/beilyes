@@ -186,6 +186,37 @@
     }
     .sb-file-preview-body img { max-width: 100%; border-radius: 10px; display: block; }
 
+    .sb-file-preview.sb-preview-wide {
+      max-width: min(960px, 96vw); width: 96vw; max-height: 90vh; height: 90vh;
+    }
+    .sb-file-preview-body.sb-code {
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+      background: var(--bg); border-radius: 0 0 16px 16px;
+    }
+    .sb-html-frame-wrap {
+      flex: 1; min-height: 0; background: #fff; position: relative;
+    }
+    .sb-html-frame-wrap iframe {
+      width: 100%; height: 100%; border: 0; display: block; background: #fff;
+    }
+    .sb-html-run-mask {
+      position: fixed; inset: 0; z-index: 95;
+      background: rgba(20,16,14,.45);
+      display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+    }
+    .sb-html-run-bar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--border);
+    }
+    .sb-html-run-bar .t {
+      flex: 1; font-size: 13px; font-weight: 700; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sb-html-run-body { flex: 1; min-height: 0; background: #fff; }
+    .sb-html-run-body iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+
     /* 底部导航 — 仅 3 项 */
     .bottom-nav {
       position: sticky; bottom: 0; display: flex; flex-shrink: 0;
@@ -4732,6 +4763,7 @@ const state = {
   chatMoreOpen: false, // 输入栏「+」面板开关（不持久化）
   chatSidebarOpen: false, // 聊天侧栏（不持久化）
   chatProjectPreview: null, // {id} 预览中的 Project 文件
+  chatHtmlRun: null, // {id} 页内运行 HTML
   chatProjectFiles: LS.get("chatProjectFiles", []) || [], // [{id,name,mime,content,dataUrl,createdAt,source}]
   claudeQuota: LS.get("claudeQuota", null) || {
     window5h: { used: null, limit: null, resetAt: null },
@@ -16916,6 +16948,36 @@ function sbFmtBytes(n){
   if(n < 1024*1024) return (n/1024).toFixed(1) + " KB";
   return (n/1024/1024).toFixed(1) + " MB";
 }
+
+function sbIsHtmlFile(f){
+  if(!f) return false;
+  const n = (f.name || "").toLowerCase();
+  const m = (f.mime || "").toLowerCase();
+  if(n.endsWith(".html") || n.endsWith(".htm")) return true;
+  if(m.includes("text/html")) return true;
+  const c = (f.content || "").trim().slice(0, 200).toLowerCase();
+  if(c.startsWith("<!doctype html") || c.startsWith("<html")) return true;
+  return false;
+}
+function sbDownloadProjectFile(f){
+  if(!f) return;
+  try{
+    const name = f.name || "file.txt";
+    let blob;
+    if(f.dataUrl){
+      const a = document.createElement("a");
+      a.href = f.dataUrl; a.download = name; a.click();
+      return;
+    }
+    const mime = sbIsHtmlFile(f) ? "text/html;charset=utf-8" : (f.mime || "text/plain;charset=utf-8");
+    blob = new Blob([f.content || ""], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }catch(e){ showToast("下载失败：" + (e.message||e)); }
+}
+
 function sbAddProjectFile(file){
   if(!file || !file.name) return;
   state.chatProjectFiles = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
@@ -16980,8 +17042,9 @@ function renderChatSidebar(){
   } else {
     fileHtml = `<div class="sb-file-list">${files.slice(0, 40).map(f => {
       const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
+      const ico = f.dataUrl ? "image" : (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f) ? "globe" : "file-text");
       return `<button type="button" class="sb-file-item" data-sb-file="${escAttr(f.id)}">
-        <div class="sb-file-ico"><i data-lucide="${f.dataUrl ? "image" : "file-text"}"></i></div>
+        <div class="sb-file-ico"><i data-lucide="${ico}"></i></div>
         <div class="sb-file-meta">
           <div class="sb-file-name">${esc(f.name || "未命名")}</div>
           <div class="sb-file-sub">${esc(sub)}</div>
@@ -16994,17 +17057,48 @@ function renderChatSidebar(){
   if(state.chatProjectPreview && state.chatProjectPreview.id){
     const f = files.find(x => x.id === state.chatProjectPreview.id);
     if(f){
-      const body = f.dataUrl
-        ? `<img src="${escAttr(f.dataUrl)}" alt="${escAttr(f.name)}"/>`
-        : esc(f.content || "(空文件)");
+      const isHtml = sbIsHtmlFile(f);
+      let body;
+      if(f.dataUrl){
+        body = `<img src="${escAttr(f.dataUrl)}" alt="${escAttr(f.name)}"/>`;
+      } else if(isHtml){
+        body = `<div class="sb-empty" style="padding:8px 0 12px">这是 HTML 文件。点「页内打开」直接跑起来，或看下面源码。</div><pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;color:var(--sub)">${esc((f.content||"").slice(0,8000))}${(f.content||"").length>8000?"\n…":""}</pre>`;
+      } else {
+        body = esc(f.content || "(空文件)");
+      }
+      const runBtn = isHtml
+        ? `<button type="button" class="btn-accent" id="sb-html-run" data-id="${escAttr(f.id)}" style="padding:4px 12px;font-size:11px">页内打开</button>`
+        : "";
       preview = `<div class="sb-file-preview-mask" id="sb-preview-mask">
         <div class="sb-file-preview">
           <div class="sb-file-preview-head">
             <div class="t">${esc(f.name || "预览")}</div>
+            ${runBtn}
+            <button type="button" class="btn-ghost" id="sb-file-dl" data-id="${escAttr(f.id)}" style="padding:4px 10px;font-size:11px">下载</button>
             <button type="button" class="btn-ghost" id="sb-file-del" data-id="${escAttr(f.id)}" style="padding:4px 10px;font-size:11px">删除</button>
             <button type="button" class="sb-close" id="sb-preview-close">✕</button>
           </div>
-          <div class="sb-file-preview-body">${body}</div>
+          <div class="sb-file-preview-body${isHtml?" sb-code":""}">${body}</div>
+        </div>
+      </div>`;
+    }
+  }
+
+  // 全屏页内运行 HTML
+  let htmlRun = "";
+  if(state.chatHtmlRun && state.chatHtmlRun.id){
+    const f = files.find(x => x.id === state.chatHtmlRun.id);
+    if(f && sbIsHtmlFile(f)){
+      // srcdoc 需要转义引号；用 placeholder + 运行时注入更稳，这里用 data 属性存 id，bind 里设 srcdoc
+      htmlRun = `<div class="sb-html-run-mask" id="sb-html-run-mask">
+        <div class="sb-html-run-bar">
+          <div class="t">🌐 ${esc(f.name || "HTML")}</div>
+          <button type="button" class="btn-ghost" id="sb-html-reload" data-id="${escAttr(f.id)}" style="padding:5px 12px;font-size:12px">刷新</button>
+          <button type="button" class="btn-ghost" id="sb-html-dl" data-id="${escAttr(f.id)}" style="padding:5px 12px;font-size:12px">下载</button>
+          <button type="button" class="btn-accent" id="sb-html-close" style="padding:5px 14px;font-size:12px">关闭</button>
+        </div>
+        <div class="sb-html-run-body">
+          <iframe id="sb-html-iframe" sandbox="allow-scripts allow-forms allow-modals allow-popups" title="${escAttr(f.name||"html")}"></iframe>
         </div>
       </div>`;
     }
@@ -17057,6 +17151,7 @@ function renderChatSidebar(){
       </div>
     </aside>
     ${preview}
+    ${htmlRun}
   `;
 }
 function bindChatSidebar(){
@@ -17095,12 +17190,49 @@ function bindChatSidebar(){
     const id = del.getAttribute("data-id");
     if(id && confirm("删除这个文件？")) sbRemoveProjectFile(id);
   };
+  const dl = document.getElementById("sb-file-dl");
+  if(dl) dl.onclick = ()=>{
+    const id = dl.getAttribute("data-id");
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+    if(f) sbDownloadProjectFile(f);
+  };
+  const runBtn = document.getElementById("sb-html-run");
+  if(runBtn) runBtn.onclick = ()=>{
+    const id = runBtn.getAttribute("data-id");
+    state.chatHtmlRun = { id };
+    state.chatProjectPreview = null;
+    render();
+  };
+  // 注入 HTML 到 iframe（srcdoc）
+  const iframe = document.getElementById("sb-html-iframe");
+  if(iframe && state.chatHtmlRun && state.chatHtmlRun.id){
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===state.chatHtmlRun.id);
+    if(f){
+      try{ iframe.srcdoc = f.content || "<p>(空)</p>"; }catch(e){ iframe.srcdoc = "<p>无法加载</p>"; }
+    }
+  }
+  const htmlClose = document.getElementById("sb-html-close");
+  if(htmlClose) htmlClose.onclick = ()=>{ state.chatHtmlRun = null; render(); };
+  const htmlReload = document.getElementById("sb-html-reload");
+  if(htmlReload) htmlReload.onclick = ()=>{
+    const id = htmlReload.getAttribute("data-id");
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+    const ifr = document.getElementById("sb-html-iframe");
+    if(f && ifr){ ifr.srcdoc = ""; setTimeout(()=>{ ifr.srcdoc = f.content || ""; }, 30); }
+  };
+  const htmlDl = document.getElementById("sb-html-dl");
+  if(htmlDl) htmlDl.onclick = ()=>{
+    const id = htmlDl.getAttribute("data-id");
+    const f = (state.chatProjectFiles||[]).find(x=>x.id===id);
+    if(f) sbDownloadProjectFile(f);
+  };
   const clear = document.getElementById("sb-file-clear");
   if(clear) clear.onclick = ()=>{
     if(!(state.chatProjectFiles||[]).length) return;
     if(confirm("清空 Project 里的全部文件？")){
       state.chatProjectFiles = [];
       state.chatProjectPreview = null;
+      state.chatHtmlRun = null;
       try{ persist("chatProjectFiles"); }catch(e){}
       render();
     }
