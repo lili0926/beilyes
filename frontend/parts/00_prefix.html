@@ -2506,9 +2506,10 @@
       color: var(--px-ink) !important;
       box-shadow: inset 2px 2px 0 #f5e6a8, inset -2px -2px 0 #b8860b !important;
     }
-    body.shell-pixel .bubble-row .bubble,
-    body.shell-pixel .chat-messages .bubble,
-    body.shell-pixel [class*="bubble"]:not(.love-score-chip) {
+    /* 只描真正的 .bubble，不要碰到 .bubble-row（否则会双层框） */
+    body.shell-pixel .chat-messages .bubble.me,
+    body.shell-pixel .chat-messages .bubble.them,
+    body.shell-pixel .bubble-row > .bubble {
       border-radius: 2px !important;
       border: 3px solid var(--px-border) !important;
       box-shadow: 3px 3px 0 rgba(61,41,24,0.35) !important;
@@ -2517,15 +2518,29 @@
       font-size: 14px;
       line-height: 1.45;
     }
-    body.shell-pixel .bubble-row.me .bubble,
-    body.shell-pixel .bubble.me {
+    body.shell-pixel .bubble-row {
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+    body.shell-pixel .chat-messages .bubble.me,
+    body.shell-pixel .bubble-row.me > .bubble {
       background: #f0d78c !important;
       color: var(--px-ink) !important;
     }
-    body.shell-pixel .bubble-row.them .bubble,
-    body.shell-pixel .bubble.them {
+    body.shell-pixel .chat-messages .bubble.them,
+    body.shell-pixel .bubble-row.them > .bubble {
       background: var(--px-paper) !important;
       color: var(--px-ink) !important;
+    }
+    body.shell-pixel .chat-header {
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      justify-content: flex-start !important;
+    }
+    body.shell-pixel .chat-header .back-btn {
+      color: var(--px-cream) !important;
     }
     body.shell-pixel .btn-accent,
     body.shell-pixel button.btn-accent {

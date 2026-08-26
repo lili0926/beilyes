@@ -14868,6 +14868,12 @@ function renderChatSidebar(){
   const clock = sbClockParts();
   const w = state.weatherCache || {};
   const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
+  const _tgt = state.chatTarget || "a1";
+  const _isGroup = _tgt === "group";
+  const _ag = _isGroup ? null : (typeof agentById==="function" ? agentById(_tgt) : null);
+  const _chatName = _isGroup ? "群聊" : ((_ag && _ag.name) || "聊天");
+  const _love = (state.loveScore && state.loveScore.value) != null ? state.loveScore.value : 50;
+  const _hasGuide = (state.agents||[]).some(a=>a.thoughtGuide && a.thoughtGuide.trim());
   const q = state.claudeQuota || {};
   const q5 = q.window5h || {};
   const qw = q.weekly || {};
@@ -14924,6 +14930,28 @@ function renderChatSidebar(){
             </div>
             <button type="button" class="btn-ghost" id="sb-weather-refresh" style="padding:6px 10px;font-size:11px;flex-shrink:0">刷新</button>
           </div>
+        </div>
+        <div class="sb-card" id="sb-chat-tools">
+          <div class="sb-card-label">聊天</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">${esc(_chatName)}</div>
+          <div style="font-size:11px;color:var(--sub);margin-bottom:12px">online · 工具收在这里，顶栏更清爽</div>
+          <button type="button" class="btn-ghost" id="love-score-chip" title="情侣计分器" style="width:100%;padding:10px 12px;margin-bottom:8px;text-align:left;display:flex;justify-content:space-between;align-items:center">
+            <span>♥ 情侣计分</span><b style="color:var(--accent)">${esc(String(_love))}</b>
+          </button>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button type="button" data-chat-mode="chat" class="filter-chip${state.chatMode!=="story"?" active":""}" style="flex:1;justify-content:center">聊</button>
+            <button type="button" data-chat-mode="story" class="filter-chip${state.chatMode==="story"?" active":""}" style="flex:1;justify-content:center" title="同人文模式">文</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 4px">
+            <span style="font-size:12px;color:var(--text)">NSFW</span>
+            <div id="nsfw-toggle" class="toggle-switch" title="NSFW 开关" style="background:${state.nsfwOn?"var(--accent)":"var(--border)"}">
+              <div class="toggle-knob" style="left:${state.nsfwOn?18:2}px"></div>
+            </div>
+          </div>
+          <button type="button" class="btn-ghost" id="toggle-guide" title="思考引导" style="width:100%;padding:10px 12px;text-align:left;display:flex;justify-content:space-between;align-items:center;color:${state.thoughtOn===false?"var(--sub)":(_hasGuide?"var(--accent)":"var(--text)")}">
+            <span><i data-lucide="brain"></i> 思考引导</span>
+            <span style="font-size:11px;opacity:.75">${state.thoughtOn===false?"关":"开"}</span>
+          </button>
         </div>
         <button type="button" class="sb-card" id="sb-project-open" style="width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px">
           <div class="sb-file-ico" style="width:40px;height:40px;font-size:18px"><i data-lucide="folder-open"></i></div>
@@ -15319,24 +15347,11 @@ function renderChat(){
   return `<div class="chat-page">
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
-    <div class="chat-header">
+    <div class="chat-header chat-header-slim">
       <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
-      <button class="back-btn love-score-chip" id="love-score-chip" title="情侣计分器：满分100 起始50">♥ <b>${esc((state.loveScore&&state.loveScore.value)!=null?state.loveScore.value:50)}</b></button>
-      <div class="chat-title-wrap">
-        <span class="chat-name">${isGroup?"群聊":esc((activeAg&&activeAg.name)||"聊天")}</span>
-        <div class="chat-status"><span class="status-heart">♥</span><span>online</span></div>
-      </div>
-      <div class="chat-header-icons">
-        <button id="puppy-open" title="小狗按钮"><i data-lucide="paw-print"></i></button>
-        <button id="toggle-guide" title="思考引导 / 思考链开关" style="color:${state.thoughtOn===false?"var(--sub)":(hasAnyGuide?"var(--accent)":"var(--text)")}"><i data-lucide="brain"></i></button>
-        <div class="chat-mode-switch" id="chat-mode-switch">
-          <button type="button" data-chat-mode="chat" class="${state.chatMode!=="story"?"active":""}" title="正常聊天">聊</button>
-          <button type="button" data-chat-mode="story" class="${state.chatMode==="story"?"active":""}" title="我们俩的同人文：你说举动，TA 顺着写成文章">文</button>
-        </div>
-        <div id="nsfw-toggle" class="toggle-switch" title="NSFW 开关" style="background:${state.nsfwOn?"var(--accent)":"var(--border)"};margin-left:2px">
-          <div class="toggle-knob" style="left:${state.nsfwOn?18:2}px"></div>
-        </div>
+      <div class="chat-title-wrap" style="flex:1;min-width:0;pointer-events:none">
+        <span class="chat-name" style="font-size:14px">${isGroup?"群聊":esc((activeAg&&activeAg.name)||"聊天")}</span>
       </div>
     </div>
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
@@ -15386,7 +15401,7 @@ function renderChat(){
         <button type="button" id="chat-img-btn" class="chat-more-item" title="发图片（可粘贴）"><i data-lucide="image"></i><span>图片</span></button>
         <button type="button" id="chat-file-btn" class="chat-more-item" title="发文本文件（txt/md/json/代码）"><i data-lucide="paperclip"></i><span>文件</span></button>
         <button type="button" id="sticker-btn" class="chat-more-item" title="表情包"><i data-lucide="smile"></i><span>表情</span></button>
-        <button type="button" id="chat-mic-btn" class="chat-more-item" title="语音输入"><i data-lucide="mic"></i><span>语音输入</span></button>
+        <button type="button" id="puppy-open" class="chat-more-item" title="小狗按钮"><i data-lucide="paw-print"></i><span>小狗</span></button>
         <button type="button" id="chat-voice-btn" class="chat-more-item" title="语音消息（录音转文字发给TA）"><i data-lucide="audio-lines"></i><span>语音消息</span></button>
         <button type="button" id="chat-pr-btn" class="chat-more-item" title="PR快穿"><i data-lucide="sparkles"></i><span>PR</span></button>
       </div>`:""}
