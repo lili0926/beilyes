@@ -1903,6 +1903,9 @@ const state = {
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
   uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel
+  chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
+  rpgLineIndex: null, // RPG 当前演到第几条可展示消息
+  rpgHistOpen: false,
   memIntegrateOpen: false,
   memIntegrateDraft: { threads: ["a1","a2","group"], dateFrom: "", dateTo: "", days: 0, maxPer: 0 },
   contextLimit: LS.get("contextLimit", 40),  // 聊天上下文最大条数（0=不限）
@@ -2542,6 +2545,13 @@ function saveActiveThread(){
     });
   }catch(e){}
   scheduleChatNativePersist();
+  // RPG 模式下有新消息时跟到最新一句
+  try{
+    if(state.chatViewMode === "rpg" && state.tab === "chat"){
+      const lines = typeof rpgCollectLines==="function" ? rpgCollectLines() : [];
+      if(lines.length) state.rpgLineIndex = lines.length - 1;
+    }
+  }catch(e){}
 }
 // ── 原生持久化兜底（@capacitor/preferences，不受 WebView localStorage 配额/刷盘影响）──
 let __nativePersistTimer = null;
@@ -3112,7 +3122,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", chatViewMode:"chatViewMode", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -15068,6 +15078,51 @@ function bindProjectPage(){
   };
 }
 
+
+function bindRpgView(){
+  document.querySelectorAll("[data-chat-view]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const mode = btn.getAttribute("data-chat-view") || "chat";
+      state.chatViewMode = mode === "rpg" ? "rpg" : "chat";
+      try{ persist("chatViewMode"); }catch(e){}
+      if(state.chatViewMode === "rpg"){
+        state.rpgHistOpen = false;
+        try{ rpgJumpToEnd(); }catch(e){}
+      }
+      render();
+    };
+  });
+  const dialog = document.getElementById("rpg-dialog");
+  if(dialog) dialog.onclick = (e)=>{
+    e.stopPropagation();
+    if(state.rpgHistOpen) return;
+    rpgAdvance(1);
+  };
+  const next = document.getElementById("rpg-next");
+  if(next) next.onclick = (e)=>{ e.stopPropagation(); rpgAdvance(1); };
+  const prev = document.getElementById("rpg-prev");
+  if(prev) prev.onclick = (e)=>{ e.stopPropagation(); rpgAdvance(-1); };
+  const end = document.getElementById("rpg-to-end");
+  if(end) end.onclick = (e)=>{ e.stopPropagation(); rpgJumpToEnd(); render(); };
+  const histOpen = document.getElementById("rpg-hist-open");
+  if(histOpen) histOpen.onclick = (e)=>{
+    e.stopPropagation();
+    state.rpgHistOpen = true;
+    render();
+    setTimeout(()=>{
+      const body = document.getElementById("rpg-hist-body");
+      if(body) body.scrollTop = body.scrollHeight;
+    }, 30);
+  };
+  const histClose = document.getElementById("rpg-hist-close");
+  if(histClose) histClose.onclick = (e)=>{ e.stopPropagation(); state.rpgHistOpen = false; render(); };
+  const histMask = document.getElementById("rpg-hist-mask");
+  if(histMask) histMask.onclick = (e)=>{
+    if(e.target === histMask){ state.rpgHistOpen = false; render(); }
+  };
+}
+
 function bindChatSidebar(){
   const openBtn = document.getElementById("chat-sidebar-open");
   if(openBtn) openBtn.onclick = (e)=>{
@@ -15166,6 +15221,138 @@ function bindChatSidebar(){
   };
 }
 
+
+
+/** RPG：从 messages 抽出可演出的台词行（跳过工具/空壳） */
+function rpgCollectLines(){
+  const lines = [];
+  const agents = state.agents || [];
+  const myName = (state.coupleInfo && state.coupleInfo.myName) || "我";
+  (state.messages || []).forEach((m, idx)=>{
+    if(!m) return;
+    if(m.couponId || m.projectFileId || m.toolNote) return;
+    if(m.type && m.type !== "text") return; // 特殊卡片暂不进 RPG 主轴
+    let text = String(m.content || "").trim();
+    if(!text && !m.image) return;
+    // 擦掉常见标记，避免 RPG 框里刷协议
+    text = text
+      .replace(/⟪[^⟫]*⟫/g, "")
+      .replace(/\[sticker\s*[:：][^\]]*\]/gi, "")
+      .replace(/\[action[^\]]*\]/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if(!text && !m.image) return;
+    const isMe = m.role === "user";
+    const name = isMe ? myName : (m.speakerName || (agents.find(a=>a.id===m.speakerId)||{}).name || "TA");
+    lines.push({
+      idx, isMe, name,
+      text: text || (m.image ? "（图片）" : ""),
+      image: m.image || "",
+      time: m.time || "",
+    });
+  });
+  return lines;
+}
+function rpgClampIndex(lines){
+  const n = (lines || []).length;
+  if(n <= 0) return 0;
+  let i = state.rpgLineIndex;
+  if(i == null || i < 0) i = n - 1;
+  if(i > n - 1) i = n - 1;
+  return i;
+}
+function rpgAdvance(delta){
+  const lines = rpgCollectLines();
+  if(!lines.length){ state.rpgLineIndex = 0; return; }
+  let i = rpgClampIndex(lines);
+  i = Math.max(0, Math.min(lines.length - 1, i + (delta || 1)));
+  state.rpgLineIndex = i;
+  render();
+}
+function rpgJumpToEnd(){
+  const lines = rpgCollectLines();
+  state.rpgLineIndex = Math.max(0, lines.length - 1);
+}
+function renderRpgStage(activeAg, isGroup){
+  const lines = rpgCollectLines();
+  const i = rpgClampIndex(lines);
+  state.rpgLineIndex = i;
+  const cur = lines[i] || null;
+  const myName = (state.coupleInfo && state.coupleInfo.myName) || "我";
+  const titleName = isGroup ? "群聊" : ((activeAg && activeAg.name) || "TA");
+  // 背景：自定义壁纸 > 主题感纯色
+  let bgStyle = "";
+  if(state.customWallpaper){
+    bgStyle = `background-image:url('${String(state.customWallpaper).replace(/'/g,"")}')`;
+  } else {
+    const t = (typeof T==="function" ? T() : null) || {};
+    bgStyle = `background:linear-gradient(160deg, ${t.bg||"#2a2430"} 0%, ${t.accent||"#6a5a70"} 100%)`;
+  }
+  // 立绘占位：对方用 agent/profile 头像
+  let sprite = "";
+  if(cur && !cur.isMe){
+    let av = "";
+    try{
+      if(activeAg && activeAg.avatar) av = activeAg.avatar;
+      else if(state.profileThem && state.profileThem.avatar) av = state.profileThem.avatar;
+    }catch(e){}
+    if(av){
+      sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar" src="${escAttr(av)}" alt=""/></div>`;
+    } else {
+      const ch = (cur.name || "TA").slice(0,1);
+      sprite = `<div class="rpg-sprite-slot"><div class="rpg-avatar-fallback">${esc(ch)}</div></div>`;
+    }
+  } else if(cur && cur.isMe){
+    let av = "";
+    try{ if(state.profileMe && state.profileMe.avatar) av = state.profileMe.avatar; }catch(e){}
+    if(av) sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar" src="${escAttr(av)}" alt=""/></div>`;
+    else sprite = `<div class="rpg-sprite-slot"><div class="rpg-avatar-fallback">${esc((myName||"我").slice(0,1))}</div></div>`;
+  }
+
+  const name = cur ? cur.name : titleName;
+  const text = cur ? cur.text : "还没有可演出的对话。先在聊天里说几句，再回来用 RPG 看。";
+  const progress = lines.length ? `${i+1} / ${lines.length}` : "0 / 0";
+
+  let hist = "";
+  if(state.rpgHistOpen){
+    const histLines = lines.map(l=>`
+      <div class="rpg-hist-line ${l.isMe?"me":"them"}">
+        <div class="who">${esc(l.name)}${l.time?` · ${esc(formatTime(l.time))}`:""}</div>
+        <div>${esc(l.text)}</div>
+      </div>`).join("") || `<div class="rpg-hist-line"><div class="who">空</div><div>暂无记录</div></div>`;
+    hist = `<div class="rpg-hist-mask" id="rpg-hist-mask">
+      <div class="rpg-hist-panel">
+        <div class="rpg-hist-head">
+          <span>回顾</span>
+          <button type="button" class="btn-ghost" id="rpg-hist-close" style="padding:4px 10px;color:#fff">关闭</button>
+        </div>
+        <div class="rpg-hist-body" id="rpg-hist-body">${histLines}</div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="rpg-stage" id="rpg-stage">
+    <div class="rpg-bg" style="${bgStyle}"></div>
+    <div class="rpg-stage-body">
+      ${sprite}
+      ${hist}
+      <div class="rpg-dialog" id="rpg-dialog" title="点击继续">
+        <div class="rpg-dialog-name">${esc(name)}</div>
+        <div class="rpg-dialog-text">${esc(text)}</div>
+        <div class="rpg-dialog-foot">
+          <span>${esc(progress)}</span>
+          <span class="blink">▼ 点击继续</span>
+        </div>
+      </div>
+      <div class="rpg-toolbar">
+        <button type="button" id="rpg-hist-open">回顾</button>
+        <button type="button" id="rpg-prev">上一句</button>
+        <button type="button" id="rpg-next">下一句</button>
+        <button type="button" id="rpg-to-end">最新</button>
+      </div>
+    </div>
+  </div>`;
+}
 
 function renderChat(){
   const agents = state.agents || [];
@@ -15344,7 +15531,11 @@ function renderChat(){
   const guideAg = agentById(state.guideEditAgentId) || activeAg || agents[0];
   const hasAnyGuide = agents.some(a=>a.thoughtGuide && a.thoughtGuide.trim());
 
-  return `<div class="chat-page">
+  const viewMode = (state.chatViewMode === "rpg") ? "rpg" : "chat";
+  if(viewMode === "rpg" && state.rpgLineIndex == null){
+    try{ rpgJumpToEnd(); }catch(e){}
+  }
+  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}">
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-header chat-header-slim">
@@ -15353,10 +15544,15 @@ function renderChat(){
       <div class="chat-title-wrap" style="flex:1;min-width:0;pointer-events:none">
         <span class="chat-name" style="font-size:14px">${isGroup?"群聊":esc((activeAg&&activeAg.name)||"聊天")}</span>
       </div>
+      <div class="chat-view-switch" title="聊天 / RPG">
+        <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
+        <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
+      </div>
     </div>
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>
+    ${viewMode==="rpg" ? renderRpgStage(activeAg, isGroup) : ""}
     <div class="chat-input-bar">
       ${guideOpen?`
         <div class="think-guide-panel">
