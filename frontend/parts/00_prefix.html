@@ -2786,6 +2786,13 @@
       border: 1px solid var(--border); border-radius: 999px;
       overflow: hidden; flex-shrink: 0; margin-left: auto;
       background: var(--card);
+      position: relative; z-index: 60;
+      pointer-events: auto;
+    }
+    .chat-view-switch button {
+      pointer-events: auto;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .chat-view-switch button {
       border: none; background: transparent; color: var(--sub);

@@ -3070,8 +3070,19 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     && /galatea|abysslumina/i.test(String(state.mcpConfig.url||"")))
     ? galateaGameBlock() : "";
   // 缓存拆分仍计算（供 systemPromptParts 用），但主路径按原顺序拼接，避免改变模型行为（思考链）
+  const choiceBlock = `\n\n【选择题卡 —— 可选 marker】
+当你想让用户从几个选项里挑（小测验、玩闹二选一、剧情分叉、点名让她选），在正式回复里写一行协议（可单独成行，也可夹在文字后）：
+⟪choice:题干|选项1|选项2|选项3⟫
+示例：
+⟪choice:你老公最帅的时候是？|写日记的时候|吃醋的时候|说想你的时候|每时每刻⟫
+规则：
+- 题干与选项用英文竖线 | 分隔；选项 2～6 个为宜，最多 8 个。
+- 前端会把协议渲染成可点的选项卡（聊天页）或乙游横条（RPG 页）；用户点选项等于发那句话。
+- 暗号整段会被界面吃掉，不要把 ⟪choice:…⟫ 再当普通文字解释给用户听。
+- 用户说「出题 / 选择题 / 选一个 / 测测我」等时优先用；平时自然聊天不必每句都出题。
+- 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock, choiceBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock, puzzleBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock ];
@@ -17452,6 +17463,26 @@ if(!window.__mpDelegated){
         if(typeof sendUserMsg==="function") sendUserMsg();
         return;
       }
+      const viewBtn = raw.closest("[data-chat-view]");
+      if(viewBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const mode = viewBtn.getAttribute("data-chat-view") || "chat";
+        state.chatViewMode = mode === "rpg" ? "rpg" : "chat";
+        try{ persist("chatViewMode"); }catch(err){}
+        if(state.chatViewMode === "rpg"){
+          state.rpgHistOpen = false;
+          try{ if(typeof rpgJumpToEnd==="function") rpgJumpToEnd(); }catch(err){}
+        }
+        if(typeof render==="function") render();
+        return;
+      }
+      const choiceBtn = raw.closest("[data-choice-send]");
+      if(choiceBtn && !choiceBtn.disabled){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const t = choiceBtn.getAttribute("data-choice-send") || "";
+        if(t && typeof sendChoiceOption==="function") sendChoiceOption(t);
+        return;
+      }
       if(id==="toggle-guide" || raw.closest("#toggle-guide")){
         e.preventDefault(); e.stopImmediatePropagation();
         state.showThoughtGuide = !state.showThoughtGuide;
@@ -18226,6 +18257,8 @@ function bindEvents(){
   const chatMoreBtn=document.getElementById("chat-more-btn");
   if(chatMoreBtn) chatMoreBtn.onclick=(e)=>{ e.stopPropagation(); state.chatMoreOpen=!state.chatMoreOpen; render(); };
   if(typeof bindChatSidebar==="function") bindChatSidebar();
+  if(typeof bindRpgView==="function") bindRpgView();
+  if(typeof bindChoiceButtons==="function") bindChoiceButtons();
   if(typeof bindProjectPage==="function") bindProjectPage();
   // 多模态：图片/文件按钮（选完自动收起面板）
   const chatImgBtn=document.getElementById("chat-img-btn");
