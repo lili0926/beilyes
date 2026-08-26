@@ -15487,10 +15487,10 @@ function renderRpgStage(activeAg, isGroup){
       else if(state.profileThem && state.profileThem.avatar) av = state.profileThem.avatar;
     }catch(e){}
     if(av){
-      sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
+      sprite = `<div class="rpg-sprite-slot them"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
     } else {
       const ch = (cur.name || "TA").slice(0,1);
-      sprite = `<div class="rpg-sprite-slot"><div class="rpg-avatar-fallback">${esc(ch)}</div></div>`;
+      sprite = `<div class="rpg-sprite-slot them"><div class="rpg-avatar-fallback">${esc(ch)}</div></div>`;
     }
   } else if(cur && cur.isMe){
     let av = "";
@@ -15499,7 +15499,7 @@ function renderRpgStage(activeAg, isGroup){
       else if(state.profileMe && state.profileMe.avatar) av = state.profileMe.avatar;
     }catch(e){}
     if(!av) av = defaultMeSprite;
-    sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
+    sprite = `<div class="rpg-sprite-slot me"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
   }
 
   const name = cur ? cur.name : titleName;
