@@ -2545,11 +2545,12 @@ function saveActiveThread(){
     });
   }catch(e){}
   scheduleChatNativePersist();
-  // RPG 模式下有新消息时跟到最新一句
+  // RPG：用户侧新消息跟到该句；助手侧由 push 回复处定位到本轮第一条
   try{
-    if(state.chatViewMode === "rpg" && state.tab === "chat"){
+    if(state.chatViewMode === "rpg" && state.tab === "chat" && state._rpgPreferEnd){
       const lines = typeof rpgCollectLines==="function" ? rpgCollectLines() : [];
       if(lines.length) state.rpgLineIndex = lines.length - 1;
+      state._rpgPreferEnd = false;
     }
   }catch(e){}
 }
@@ -3079,7 +3080,8 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 题干与选项用英文竖线 | 分隔；选项 2～6 个为宜，最多 8 个。
 - 前端会把协议渲染成可点的选项卡（聊天页）或乙游横条（RPG 页）；用户点选项等于发那句话。
 - 暗号整段会被界面吃掉，不要把 ⟪choice:…⟫ 再当普通文字解释给用户听。
-- 用户说「出题 / 选择题 / 选一个 / 测测我」等时优先用；平时自然聊天不必每句都出题。
+- 用户说「出题 / 选择题 / 选一个 / 测测我 / 做选项卡」等时必须用上述 ⟪choice:…⟫ 协议，不要只用「A. B. C.」纯文本（纯文本也能显示，但协议更稳）。
+- 禁止只写「你选」却不给协议；选项写在同一行协议里。
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
     callBlock, pushBlock, albumBlock, couponBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock, choiceBlock ];
@@ -15143,6 +15145,12 @@ function bindRpgView(){
   if(histMask) histMask.onclick = (e)=>{
     if(e.target === histMask){ state.rpgHistOpen = false; render(); }
   };
+  const thinkBtn = document.getElementById("rpg-think-toggle");
+  if(thinkBtn) thinkBtn.onclick = (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    state.rpgShowThink = !state.rpgShowThink;
+    render();
+  };
 }
 
 function bindChatSidebar(){
@@ -15246,23 +15254,94 @@ function bindChatSidebar(){
 
 
 
-/** 选择题协议：⟪choice:题干|选项1|选项2|…⟫ */
+/** 选择题：官方 ⟪choice:…⟫，或自然语言 A/B/C/D 列表 */
 function parseChoiceBlock(text){
   if(!text || typeof text !== "string") return null;
   const re = /⟪\s*choice\s*[:：]\s*([^⟫]*)⟫/i;
   const m = text.match(re);
-  if(!m) return null;
-  const body = String(m[1] || "").replace(/\r/g, "");
-  const parts = body.split("|").map(s => s.replace(/\n+/g, " ").trim()).filter(Boolean);
-  if(parts.length < 2) return null;
+  if(m){
+    const body = String(m[1] || "").replace(/\r/g, "");
+    const parts = body.split("|").map(s => s.replace(/\n+/g, " ").trim()).filter(Boolean);
+    if(parts.length >= 2){
+      return {
+        question: parts[0],
+        options: parts.slice(1).slice(0, 8),
+        fullMatch: m[0],
+        index: m.index,
+        before: text.slice(0, m.index).trim(),
+        after: text.slice(m.index + m[0].length).trim(),
+        source: "marker",
+      };
+    }
+  }
+  // 宽松：整段里的 A./B./C. 或 1./2. 选项
+  const loose = parseLooseChoiceList(text);
+  return loose;
+}
+function parseLooseChoiceList(text){
+  if(!text) return null;
+  const raw = String(text).replace(/\r/g, "");
+  const lines = raw.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  if(lines.length < 2) return null;
+  const optRe = /^([A-DＡ-Ｄ]|[1-4])[.．、\.\)）:：\s]\s*(.+)$/;
+  const opts = [];
+  const optIdx = [];
+  lines.forEach((ln, i)=>{
+    const mm = ln.match(optRe);
+    if(mm){ opts.push(mm[2].trim()); optIdx.push(i); }
+  });
+  if(opts.length < 2) return null;
+  // 题干：选项前最近一行非选项文字，或整段里「选项」标题
+  let q = "";
+  const firstOpt = optIdx[0];
+  for(let i = firstOpt - 1; i >= 0; i--){
+    if(!optRe.test(lines[i])){ q = lines[i]; break; }
+  }
+  if(!q){
+    const hit = lines.find(l => /选项|选一个|你选|测验|题目/.test(l) && !optRe.test(l));
+    if(hit) q = hit;
+  }
+  if(!q) q = "请选择";
+  // before/after：去掉选项行后的前后缀
+  const beforeLines = lines.slice(0, firstOpt).filter(l => l !== q);
+  const lastOpt = optIdx[optIdx.length - 1];
+  const afterLines = lines.slice(lastOpt + 1).filter(l => !optRe.test(l));
   return {
-    question: parts[0],
-    options: parts.slice(1).slice(0, 8),
-    fullMatch: m[0],
-    index: m.index,
-    before: text.slice(0, m.index).trim(),
-    after: text.slice(m.index + m[0].length).trim(),
+    question: q.replace(/^[【\[]|[】\]]$/g, "").trim() || "请选择",
+    options: opts.slice(0, 8),
+    fullMatch: null,
+    index: 0,
+    before: beforeLines.join("\n").trim(),
+    after: afterLines.join("\n").trim(),
+    source: "loose",
   };
+}
+/** 同一 msgId 的多气泡助手回复拼起来识别选项 */
+function parseChoiceFromMsgGroup(msgs, startIdx){
+  const m0 = msgs[startIdx];
+  if(!m0 || m0.role !== "assistant") return null;
+  const mid = m0.msgId;
+  const chunks = [];
+  const indices = [];
+  for(let i = startIdx; i < msgs.length; i++){
+    const m = msgs[i];
+    if(!m || m.role !== "assistant") break;
+    if(mid && m.msgId && m.msgId !== mid) break;
+    if(m.toolNote || m.couponId || m.projectFileId || m.type) break;
+    const t = String(m.content || "").trim();
+    if(!t) continue;
+    chunks.push(t);
+    indices.push(i);
+    // 同一 msgId 无限制；无 msgId 时最多吃 12 条
+    if(!mid && indices.length >= 12) break;
+  }
+  if(!chunks.length) return null;
+  const joined = chunks.join("\n");
+  const choice = parseChoiceBlock(joined);
+  if(!choice) return null;
+  choice._indices = indices;
+  choice._startIdx = indices[0];
+  return choice;
 }
 function choiceIsAnswered(msgIdx){
   const msgs = state.messages || [];
@@ -15356,6 +15435,8 @@ function rpgCollectLines(){
       image: m.image || "",
       time: m.time || "",
       choice: choice || null,
+      thinking: (m.thinking && String(m.thinking).trim()) ? String(m.thinking).trim() : "",
+      msgId: m.msgId || "",
     });
   });
   return lines;
@@ -15395,25 +15476,30 @@ function renderRpgStage(activeAg, isGroup){
     const t = (typeof T==="function" ? T() : null) || {};
     bgStyle = `background:linear-gradient(160deg, ${t.bg||"#2a2430"} 0%, ${t.accent||"#6a5a70"} 100%)`;
   }
-  // 立绘占位：对方用 agent/profile 头像
+  // 立绘：对方 agent 头像；我方优先自定义头像，否则默认 jasmine-sprite.png
   let sprite = "";
+  const defaultMeSprite = "jasmine-sprite.png";
   if(cur && !cur.isMe){
     let av = "";
     try{
       if(activeAg && activeAg.avatar) av = activeAg.avatar;
+      else if(state.coupleInfo && state.coupleInfo.partnerAvatar) av = state.coupleInfo.partnerAvatar;
       else if(state.profileThem && state.profileThem.avatar) av = state.profileThem.avatar;
     }catch(e){}
     if(av){
-      sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar" src="${escAttr(av)}" alt=""/></div>`;
+      sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
     } else {
       const ch = (cur.name || "TA").slice(0,1);
       sprite = `<div class="rpg-sprite-slot"><div class="rpg-avatar-fallback">${esc(ch)}</div></div>`;
     }
   } else if(cur && cur.isMe){
     let av = "";
-    try{ if(state.profileMe && state.profileMe.avatar) av = state.profileMe.avatar; }catch(e){}
-    if(av) sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar" src="${escAttr(av)}" alt=""/></div>`;
-    else sprite = `<div class="rpg-sprite-slot"><div class="rpg-avatar-fallback">${esc((myName||"我").slice(0,1))}</div></div>`;
+    try{
+      if(state.coupleInfo && state.coupleInfo.myAvatar) av = state.coupleInfo.myAvatar;
+      else if(state.profileMe && state.profileMe.avatar) av = state.profileMe.avatar;
+    }catch(e){}
+    if(!av) av = defaultMeSprite;
+    sprite = `<div class="rpg-sprite-slot"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
   }
 
   const name = cur ? cur.name : titleName;
@@ -15453,8 +15539,12 @@ function renderRpgStage(activeAg, isGroup){
         <div class="rpg-dialog-text">${esc(text)}</div>
         <div class="rpg-dialog-foot">
           <span>${esc(progress)}</span>
-          <span class="blink">${cur && cur.choice && !(typeof choiceIsAnswered==="function" && choiceIsAnswered(cur.idx)) ? "选择一项，或点此跳过" : "▼ 点击继续"}</span>
+          <span style="display:flex;gap:10px;align-items:center">
+            ${cur && cur.thinking ? `<button type="button" id="rpg-think-toggle" class="rpg-mini-btn">思考</button>` : ""}
+            <span class="blink">${cur && cur.choice && !(typeof choiceIsAnswered==="function" && choiceIsAnswered(cur.idx)) ? "选择一项，或点此跳过" : "▼ 点击继续"}</span>
+          </span>
         </div>
+        ${state.rpgShowThink && cur && cur.thinking ? `<div class="rpg-think-box" id="rpg-think-box">${esc(cur.thinking)}</div>` : ""}
       </div>
       <div class="rpg-toolbar">
         <button type="button" id="rpg-hist-open">回顾</button>
@@ -15487,8 +15577,27 @@ function renderChat(){
       </div>`;
     }
     let prevKey = null; // 连续同一发言人的一轮消息，只在第一条配头像/meta
+    // 预扫描：把同一轮助手回复里的 A/B/C/D 或 choice 协议收成一张卡
+    const choiceLeadIdx = {}; // idx -> choice
+    const choiceHideIdx = {}; // idx -> true 被卡片吞掉的后续选项气泡
+    try{
+      const all = state.messages || [];
+      let i = startIdx;
+      while(i < all.length){
+        const m = all[i];
+        if(!m || m.role !== "assistant"){ i++; continue; }
+        const ch = typeof parseChoiceFromMsgGroup==="function" ? parseChoiceFromMsgGroup(all, i) : null;
+        if(ch && ch._indices && ch._indices.length){
+          choiceLeadIdx[ch._indices[0]] = ch;
+          ch._indices.slice(1).forEach(ix => { choiceHideIdx[ix] = true; });
+          i = ch._indices[ch._indices.length - 1] + 1;
+        } else i++;
+      }
+    }catch(e){}
     state.messages.slice(startIdx).forEach((m, i)=>{
+
       const idx = startIdx + i; // 真实索引，供编辑/重写定位
+      if(choiceHideIdx[idx]) return; // 已被选项卡合并
       if(m.role==="assistant" && m.thinking){
         const tid = m.msgId || ("t"+idx);
         const open = state.openThinkIds[tid] !== false;
@@ -15583,7 +15692,8 @@ function renderChat(){
       } else if(stickerHtml && !stickerTxt.trim()){
         bubbleInner = `<div class="sticker-floats">${stickerHtml}</div>`;
       } else {
-        const choice = (!isMe && typeof parseChoiceBlock==="function") ? parseChoiceBlock(stickerTxt) : null;
+        const choice = (!isMe && choiceLeadIdx[idx]) ? choiceLeadIdx[idx]
+          : ((!isMe && typeof parseChoiceBlock==="function") ? parseChoiceBlock(stickerTxt) : null);
         if(choice){
           const answered = typeof choiceIsAnswered==="function" ? choiceIsAnswered(idx) : false;
           const lead = [choice.before, choice.after].filter(Boolean).join("\n").trim();
@@ -21091,6 +21201,7 @@ function sendUserMsg(){
   }catch(e){}
   if(!text && !atts.length){ state.chatInput=""; saveActiveThread(); render(); return; } // 纯指令：不发消息
   state.chatInput="";
+  try{ if(state.chatViewMode === "rpg") state._rpgPreferEnd = true; }catch(e){}
   const now=new Date().toISOString();
   if(atts.length){
     // 多模态：图片逐张成消息（第一条带文字）；文件文本拼进 content
@@ -21510,6 +21621,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       toolNote:true,
     });
   }
+  const _rpgBatchStart = state.messages.length;
   parts.forEach((p,i)=>{
     state.messages.push({
       role:"assistant",
@@ -21523,6 +21635,17 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       thinking: i===0 ? (thinking || "（本通未返回思考：可点「编辑思考」手写，或换用带 thinking 的模型）") : null,
     });
   });
+  // RPG：从本轮助手第一条开始播，点继续往后翻
+  try{
+    if(state.chatViewMode === "rpg"){
+      const lines = typeof rpgCollectLines==="function" ? rpgCollectLines() : [];
+      let first = -1;
+      for(let li=0; li<lines.length; li++){
+        if(lines[li].idx >= _rpgBatchStart){ first = li; break; }
+      }
+      if(first >= 0) state.rpgLineIndex = first;
+    }
+  }catch(e){}
   // 券夹：送出的券面，作为一条独立卡片气泡跟在文字后面
   if(couponRes.couponId){
     state.messages.push({
