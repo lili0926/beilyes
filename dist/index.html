@@ -6592,9 +6592,9 @@ function renderHomeFeat(){
         {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
         {key:"pr", icon:"sparkles", label:"PR快穿", desc:"深海骨殖·独立冒险·存档"},
         {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"九版本 · 聊天里掷骰走格"},
-        {key:"bisca_cards", icon:"spade", label:"牌室", desc:"斗地主·炸金花·UNO · 页内玩"},
-        {key:"bisca_daifugo", icon:"club", label:"大富豪", desc:"日式爬牌 · 页内玩"},
-        {key:"bisca_monopoly", icon:"landmark", label:"大富翁", desc:"中文棋盘 · 页内玩"},
+        {key:"bisca_cards", icon:"spade", label:"牌室", desc:"斗地主·炸金花·UNO · 内置浏览器"},
+        {key:"bisca_daifugo", icon:"club", label:"大富豪", desc:"日式爬牌 · 内置浏览器"},
+        {key:"bisca_monopoly", icon:"landmark", label:"大富翁", desc:"中文棋盘 · 内置浏览器"},
         {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
         {key:"divination", icon:"sparkles", label:"占卜", desc:"问心处 · 小六壬/六爻/塔罗"},
@@ -13456,17 +13456,28 @@ function biscaLaunchUrl(key){
   // 优先 IP（备案拦截时更稳），失败由用户点「换域名」
   return BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
 }
-function openBiscaGame(key){
-  if(!BISCA_URLS[key] && !BISCA_URLS_IP[key]) return false;
+async function biscaOpenInApp(key){
+  // 原生 App：用内置半屏小浏览器打开。小浏览器里顶层域名就是游戏站，
+  // 登录 cookie 是首方的，不会被跨域 iframe 拦掉，能正常进牌室。
+  const native = pocketNative();
+  if(!native) return false;
   const url = biscaLaunchUrl(key);
   if(!url) return false;
-  state.biscaOpen = {
-    key: key,
-    title: BISCA_TITLES[key] || "游戏",
-    url: url,
-    useDomain: false,
-  };
-  if(typeof render==="function") render();
+  try{
+    await native.showBrowser({ url: url });
+    return true;
+  }catch(e){ return false; }
+}
+function openBiscaGame(key){
+  if(!BISCA_URLS[key] && !BISCA_URLS_IP[key]) return false;
+  biscaOpenInApp(key).then(ok => {
+    if(ok) return;
+    // 网页预览/无插件：回退页内 iframe（Web 下跨域 cookie 受限，卡在登录可点「新窗口」）
+    const url = biscaLaunchUrl(key);
+    if(!url) return;
+    state.biscaOpen = { key, title: BISCA_TITLES[key]||"游戏", url, useDomain:false };
+    if(typeof render==="function") render();
+  });
   return true;
 }
 function closeBiscaGame(){
@@ -20528,7 +20539,12 @@ if(!window.__mpDelegated){
       if(id==="bisca-frame-ext"){
         e.preventDefault(); e.stopImmediatePropagation();
         const u = state.biscaOpen && state.biscaOpen.url;
-        if(u) window.open(u, "_blank", "noopener,noreferrer");
+        if(!u) return;
+        (async()=>{
+          const native = pocketNative();
+          if(native){ try{ await native.showBrowser({ url: u }); return; }catch(e){} }
+          window.open(u, "_blank", "noopener,noreferrer");
+        })();
         return;
       }
 

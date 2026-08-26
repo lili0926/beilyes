@@ -5636,21 +5636,21 @@ const BISCA_URLS_IP = {
 };
 function openBiscaGame(key){
   // 域名被备案拦截时走 IP（http://115.29.237.172/cards…）；域名通了再用域名
-  let url = BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
+  const url = BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
   if(!url) return false;
-  const go = async (u)=>{
-    try{
-      const Cap = window.Capacitor;
-      if(Cap && Cap.Plugins && Cap.Plugins.Browser && typeof Cap.Plugins.Browser.open==="function"){
-        await Cap.Plugins.Browser.open({ url: u });
-        return;
-      }
-    }catch(e){}
-    try{ window.open(u, "_blank"); }catch(e){ location.href = u; }
+  // 原生 App：优先用内置半屏小浏览器（顶层 origin=游戏站，登录 cookie 首方有效）
+  const openPocket = async (u)=>{
+    const Cap = window.Capacitor;
+    const native = (Cap && Cap.Plugins && Cap.Plugins.PocketBrowser) || null;
+    if(native){
+      try{ await native.showBrowser({ url: u }); return true; }catch(e){}
+    }
+    return false;
   };
-  go(url).catch(()=>{
-    const alt = BISCA_URLS[key];
-    if(alt && alt !== url) go(alt);
+  openPocket(url).then(ok => {
+    if(ok) return;
+    // 无原生插件：网页里新窗口打开（顶层 origin=游戏站，登录才有效）
+    try{ window.open(url, "_blank"); }catch(e){ location.href = url; }
   });
   return true;
 }
