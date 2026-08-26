@@ -1902,6 +1902,7 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel
   memIntegrateOpen: false,
   memIntegrateDraft: { threads: ["a1","a2","group"], dateFrom: "", dateTo: "", days: 0, maxPer: 0 },
   contextLimit: LS.get("contextLimit", 40),  // 聊天上下文最大条数（0=不限）
@@ -2841,6 +2842,10 @@ function applyThemeVars(){
   if(uf==="nail") document.body.classList.add("font-nail");
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
+  // UI 壳：经典 / 像素农场
+  document.body.classList.remove("shell-classic","shell-pixel");
+  const sh = (state.uiShell || "classic");
+  document.body.classList.add(sh === "pixel" ? "shell-pixel" : "shell-classic");
 }
 /** 聊天气泡额外 class；同时 #app 会挂 ui-glass-* 作用于日历与卡片 */
 function bubbleGlassClass(){
@@ -3107,7 +3112,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -16355,6 +16360,14 @@ function renderTheme(){
       </div>
     </div>
     <div class="theme-group" style="margin-top:16px">
+      <div class="theme-group-label">界面壳</div>
+      <div class="font-switch-row">
+        <button type="button" class="font-chip${(state.uiShell||"classic")==="classic"?" active":""}" data-ui-shell="classic">经典</button>
+        <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
+      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
+    </div>
+    <div class="theme-group" style="margin-top:16px">
       <div class="theme-group-label">字体</div>
       <div class="font-switch-row">
         <button type="button" class="font-chip${!(state.uiFont)?" active":""}" data-ui-font="">默认</button>
@@ -18517,6 +18530,14 @@ function bindEvents(){
     btn.onclick = ()=>{
       state.uiFont = btn.dataset.uiFont || "";
       persist("uiFont");
+      applyThemeVars();
+      render();
+    };
+  });
+  document.querySelectorAll("[data-ui-shell]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.uiShell = btn.dataset.uiShell || "classic";
+      persist("uiShell");
       applyThemeVars();
       render();
     };

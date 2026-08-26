@@ -2428,6 +2428,203 @@
     }
     .chat-voice-strip .rec-stop:active { transform: scale(.92); }
     .chat-voice-strip .rec-stop svg { width: 12px; height: 12px; fill: #fff; }
+
+    /* ═══ UI Shell · 像素农场风（星露谷向，纯 CSS，无额外素材） ═══ */
+    body.shell-pixel {
+      --px-soil: #5c4033;
+      --px-wood: #8b5e3c;
+      --px-wood2: #c4a574;
+      --px-cream: #f7e8c3;
+      --px-paper: #fff6dc;
+      --px-grass: #4a7c3f;
+      --px-grass2: #7cb068;
+      --px-gold: #e0a824;
+      --px-ink: #3a2a20;
+      --px-muted: #7a654f;
+      --px-border: #3d2918;
+      --px-sky: #9ec9e0;
+      --card: var(--px-paper);
+      --bg: var(--px-cream);
+      --text: var(--px-ink);
+      --sub: var(--px-muted);
+      --border: var(--px-wood);
+      --accent: var(--px-grass);
+      --accent2: var(--px-gold);
+    }
+    body.shell-pixel #app,
+    body.shell-pixel .page,
+    body.shell-pixel .home-panel {
+      background-color: var(--px-cream) !important;
+      background-image:
+        linear-gradient(180deg, rgba(158,201,224,0.35) 0%, rgba(158,201,224,0) 28%),
+        repeating-linear-gradient(0deg, transparent, transparent 7px, rgba(74,124,63,0.06) 7px, rgba(74,124,63,0.06) 8px),
+        repeating-linear-gradient(90deg, transparent, transparent 7px, rgba(92,64,51,0.05) 7px, rgba(92,64,51,0.05) 8px) !important;
+      background-size: auto, 8px 8px, 8px 8px !important;
+      image-rendering: pixelated;
+    }
+    body.shell-pixel .chat-page {
+      background:
+        linear-gradient(180deg, rgba(158,201,224,0.4) 0 48px, transparent 120px),
+        repeating-linear-gradient(0deg, #e8d4a8 0 4px, #e2cca0 4px 8px) !important;
+    }
+    body.shell-pixel .chat-header,
+    body.shell-pixel .sub-header,
+    body.shell-pixel .chat-input-bar,
+    body.shell-pixel .bottom-nav {
+      background: var(--px-wood) !important;
+      border: 3px solid var(--px-border) !important;
+      border-radius: 0 !important;
+      box-shadow:
+        inset -3px -3px 0 #6e482e,
+        inset 3px 3px 0 #b8895c,
+        0 4px 0 var(--px-border) !important;
+      color: var(--px-cream) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    body.shell-pixel .chat-header .chat-name,
+    body.shell-pixel .chat-header .chat-status,
+    body.shell-pixel .sub-header .page-title,
+    body.shell-pixel .bottom-nav button {
+      color: var(--px-cream) !important;
+    }
+    body.shell-pixel .bottom-nav {
+      gap: 2px;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0)) !important;
+    }
+    body.shell-pixel .bottom-nav button {
+      border-radius: 0 !important;
+      border: 2px solid var(--px-border) !important;
+      background: var(--px-wood2) !important;
+      color: var(--px-ink) !important;
+      box-shadow: inset 2px 2px 0 #e8d4a8, inset -2px -2px 0 #8b5e3c !important;
+      font-weight: 700;
+      font-size: 11px;
+    }
+    body.shell-pixel .bottom-nav button.active {
+      background: var(--px-gold) !important;
+      color: var(--px-ink) !important;
+      box-shadow: inset 2px 2px 0 #f5e6a8, inset -2px -2px 0 #b8860b !important;
+    }
+    body.shell-pixel .bubble-row .bubble,
+    body.shell-pixel .chat-messages .bubble,
+    body.shell-pixel [class*="bubble"]:not(.love-score-chip) {
+      border-radius: 2px !important;
+      border: 3px solid var(--px-border) !important;
+      box-shadow: 3px 3px 0 rgba(61,41,24,0.35) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    body.shell-pixel .bubble-row.me .bubble,
+    body.shell-pixel .bubble.me {
+      background: #f0d78c !important;
+      color: var(--px-ink) !important;
+    }
+    body.shell-pixel .bubble-row.them .bubble,
+    body.shell-pixel .bubble.them {
+      background: var(--px-paper) !important;
+      color: var(--px-ink) !important;
+    }
+    body.shell-pixel .btn-accent,
+    body.shell-pixel button.btn-accent {
+      background: var(--px-grass) !important;
+      color: #fff8e0 !important;
+      border: 3px solid var(--px-border) !important;
+      border-radius: 0 !important;
+      box-shadow:
+        inset 2px 2px 0 #9ccc7a,
+        inset -2px -2px 0 #2f5a28,
+        0 3px 0 var(--px-border) !important;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    body.shell-pixel .btn-ghost,
+    body.shell-pixel button.btn-ghost,
+    body.shell-pixel .filter-chip,
+    body.shell-pixel .font-chip,
+    body.shell-pixel .theme-chip,
+    body.shell-pixel .feat-card {
+      border-radius: 0 !important;
+      border: 3px solid var(--px-border) !important;
+      background: var(--px-paper) !important;
+      color: var(--px-ink) !important;
+      box-shadow:
+        inset 2px 2px 0 #fffaf0,
+        inset -2px -2px 0 #d4b896,
+        2px 2px 0 rgba(61,41,24,0.25) !important;
+      backdrop-filter: none !important;
+    }
+    body.shell-pixel .feat-card {
+      background: linear-gradient(180deg, var(--px-paper), #f0e0b8) !important;
+    }
+    body.shell-pixel .feat-card .label,
+    body.shell-pixel .feat-card .desc { color: var(--px-ink) !important; }
+    body.shell-pixel .feat-card .desc { color: var(--px-muted) !important; opacity: 1; }
+    body.shell-pixel .add-form,
+    body.shell-pixel .sb-card,
+    body.shell-pixel .preview-inner,
+    body.shell-pixel .chat-sidebar {
+      background: var(--px-paper) !important;
+      border: 3px solid var(--px-border) !important;
+      border-radius: 0 !important;
+      box-shadow:
+        inset 3px 3px 0 #fffaf0,
+        inset -3px -3px 0 #dcc9a0,
+        4px 4px 0 rgba(61,41,24,0.2) !important;
+      backdrop-filter: none !important;
+    }
+    body.shell-pixel .chat-sidebar {
+      box-shadow: 6px 0 0 rgba(61,41,24,0.25) !important;
+    }
+    body.shell-pixel input,
+    body.shell-pixel textarea,
+    body.shell-pixel select {
+      border: 3px solid var(--px-border) !important;
+      border-radius: 0 !important;
+      background: #fffaf0 !important;
+      color: var(--px-ink) !important;
+      box-shadow: inset 2px 2px 0 #e8d9b8 !important;
+    }
+    body.shell-pixel .page-title,
+    body.shell-pixel .theme-group-label {
+      color: var(--px-ink) !important;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-shadow: 1px 1px 0 #fff6dc;
+    }
+    body.shell-pixel .font-chip.active,
+    body.shell-pixel .filter-chip.active,
+    body.shell-pixel .theme-chip.active {
+      background: var(--px-gold) !important;
+      box-shadow:
+        inset 2px 2px 0 #f5e6a8,
+        inset -2px -2px 0 #b8860b,
+        2px 2px 0 rgba(61,41,24,0.3) !important;
+    }
+    body.shell-pixel .love-score-chip {
+      background: #e88b8b !important;
+      border: 2px solid var(--px-border) !important;
+      border-radius: 0 !important;
+      color: #fff !important;
+    }
+    body.shell-pixel .proj-file-card {
+      filter: none;
+      image-rendering: auto;
+    }
+    body.shell-pixel .msg-meta-name,
+    body.shell-pixel .msg-meta-time { color: var(--px-muted) !important; }
+    body.shell-pixel .chat-empty { color: var(--px-muted) !important; }
+    /* 像素壳下弱化现代毛玻璃，避免风格打架 */
+    body.shell-pixel .ui-glass-fog,
+    body.shell-pixel .ui-glass-water,
+    body.shell-pixel .glass-fog,
+    body.shell-pixel .glass-water {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+
   </style>
 </head>
 <body>
