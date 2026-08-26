@@ -2516,7 +2516,21 @@ function saveActiveThread(){
     state.chatThreads[t].pendingUser = nextPending;
     if(prevCompressed) state.chatThreads[t].compressed = prevCompressed;
   } else {
-    state.chatThreads[t] = { messages: nextMsgs, pendingUser: nextPending, compressed: prevCompressed };
+    // 防护：若内存里已有更多/更新的消息，禁止被更短/更旧的 next 盖掉（启动竞态）
+    const cand = { messages: nextMsgs, pendingUser: nextPending, compressed: prevCompressed };
+    if(prev.length > 0 && nextMsgs.length > 0){
+      const sp = chatThreadsScore({ x: { messages: prev } });
+      const sn = chatThreadsScore({ x: { messages: nextMsgs } });
+      if(sp.latest > sn.latest || (sp.latest === sn.latest && prev.length > nextMsgs.length && nextMsgs.length < prev.length * 0.5)){
+        // 保留更完整的 prev，只合并 pending
+        state.chatThreads[t].pendingUser = nextPending;
+        if(prevCompressed) state.chatThreads[t].compressed = prevCompressed;
+      } else {
+        state.chatThreads[t] = cand;
+      }
+    } else {
+      state.chatThreads[t] = cand;
+    }
   }
   persist("chatThreads");
   // 分线程备份：小对象更易落盘，杀进程丢盘时用小分片兜底
@@ -2534,25 +2548,28 @@ function persistChatNative(){
   try{
     const Cap = window.Capacitor;
     if(!Cap || !Cap.Plugins || !Cap.Plugins.Preferences) return;
+    // 关键：未完成多源恢复前，禁止任何原生写入（包括「旧的非空」快照），
+    // 否则启动后 3 秒会把 8.7 旧库写回 Preferences，盖掉昨晚的新记录。
+    if(!window.__chatNativeHydrated) return;
     const threads = state.chatThreads || {};
-    // 未完成多源恢复前，绝不把空/更旧快照写进原生，避免覆盖安装后误杀
-    if(!window.__chatNativeHydrated){
-      if(chatThreadsIsEmpty(threads)) return;
-    }
+    if(chatThreadsIsEmpty(threads)) return; // 永不把全空写进原生
     const snap = JSON.stringify(threads);
-    const keys = ["chatThreads_v2"];
+    const keys = [];
     try{
       const prefix = window.__LS_PREFIX || "";
       if(prefix) keys.push(prefix + "chatThreads_v2");
     }catch(e){}
+    // 兼容旧版无前缀键；写入前若旧键更新、当前更旧则不覆盖旧键（只写前缀键）
+    keys.push("chatThreads_v2");
     keys.forEach(k=>{
       Cap.Plugins.Preferences.set({ key:k, value: snap }).catch(()=>{});
     });
   }catch(e){}
 }
 function scheduleChatNativePersist(){
-  if(__nativePersistTimer) return;
-  __nativePersistTimer = setTimeout(()=>{ __nativePersistTimer = null; persistChatNative(); }, 3000);
+  // 每次都重置定时器：以「最后一次改动」后 1.2s 落盘，避免 3s 内杀进程丢尾部消息
+  if(__nativePersistTimer) clearTimeout(__nativePersistTimer);
+  __nativePersistTimer = setTimeout(()=>{ __nativePersistTimer = null; persistChatNative(); }, 1200);
 }
 /** 扫描本机所有可能残留的聊天快照，合并成最全的一份 */
 async function salvageChatThreadsFromDevice(){
