@@ -2931,6 +2931,76 @@
     .chat-page.rpg-on .rpg-stage { display: flex; }
     .chat-page:not(.rpg-on) .rpg-stage { display: none; }
 
+
+    /* ═══ 选择题：普通聊天选项卡 + RPG 横条 ═══ */
+    .choice-card {
+      max-width: min(320px, 88vw);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+      overflow: hidden;
+      margin: 2px 0 4px;
+    }
+    body.shell-pixel .choice-card {
+      border-radius: 0; border: 3px solid var(--px-border, #3d2918);
+      box-shadow: 3px 3px 0 rgba(61,41,24,0.25);
+      background: var(--px-paper, #fff6dc);
+    }
+    .choice-card-q {
+      padding: 12px 14px 10px;
+      font-size: 14px; font-weight: 700; color: var(--text);
+      line-height: 1.45;
+      border-bottom: 1px solid var(--border);
+    }
+    .choice-card-list { display: flex; flex-direction: column; }
+    .choice-opt {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; text-align: left;
+      border: none; border-bottom: 1px solid var(--border);
+      background: transparent; color: var(--text);
+      padding: 11px 14px; font-size: 13px; line-height: 1.4;
+      cursor: pointer;
+    }
+    .choice-opt:last-child { border-bottom: none; }
+    .choice-opt:active { background: rgba(0,0,0,0.04); }
+    .choice-opt:disabled { opacity: 0.55; cursor: default; }
+    .choice-opt-num {
+      flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: #fff;
+      background: var(--accent);
+    }
+    body.shell-pixel .choice-opt-num { border-radius: 0; border: 2px solid #3d2918; }
+    .choice-opt-label { flex: 1; min-width: 0; }
+    .choice-card.done .choice-opt { cursor: default; }
+    .choice-card-note {
+      padding: 6px 14px 10px; font-size: 10px; color: var(--sub);
+    }
+    /* RPG 横条 */
+    .rpg-choices {
+      position: relative; z-index: 3;
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 8px 6px 14px; max-width: 420px; width: 100%; margin: 0 auto;
+    }
+    .rpg-choice-btn {
+      width: 100%; border: 1px solid rgba(255,255,255,0.28);
+      background: rgba(18, 22, 36, 0.72);
+      color: #f4f0ea; border-radius: 10px;
+      padding: 12px 16px; font-size: 14px; font-weight: 600;
+      letter-spacing: 0.04em; cursor: pointer;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+    .rpg-choice-btn:active { transform: scale(0.98); background: rgba(40,48,70,0.85); }
+    .rpg-choice-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+    body.shell-pixel .rpg-choice-btn {
+      border-radius: 0; border: 3px solid #2a2018;
+      background: rgba(40,28,18,0.88);
+      backdrop-filter: none; -webkit-backdrop-filter: none;
+    }
+
   </style>
 
   <div id="app"></div>
@@ -18161,6 +18231,83 @@ function bindChatSidebar(){
 
 
 
+
+/** 选择题协议：⟪choice:题干|选项1|选项2|…⟫ */
+function parseChoiceBlock(text){
+  if(!text || typeof text !== "string") return null;
+  const re = /⟪\s*choice\s*[:：]\s*([^⟫]*)⟫/i;
+  const m = text.match(re);
+  if(!m) return null;
+  const body = String(m[1] || "").replace(/\r/g, "");
+  const parts = body.split("|").map(s => s.replace(/\n+/g, " ").trim()).filter(Boolean);
+  if(parts.length < 2) return null;
+  return {
+    question: parts[0],
+    options: parts.slice(1).slice(0, 8),
+    fullMatch: m[0],
+    index: m.index,
+    before: text.slice(0, m.index).trim(),
+    after: text.slice(m.index + m[0].length).trim(),
+  };
+}
+function choiceIsAnswered(msgIdx){
+  const msgs = state.messages || [];
+  for(let i = (msgIdx|0) + 1; i < msgs.length; i++){
+    if(msgs[i] && msgs[i].role === "user") return true;
+  }
+  if((state.pendingUser || []).length) return true;
+  return false;
+}
+function choiceCardHtml(choice, msgIdx, answered){
+  if(!choice) return "";
+  const opts = (choice.options || []).map((opt, i) => {
+    const n = i + 1;
+    return `<button type="button" class="choice-opt" data-choice-send="${escAttr(opt)}" data-choice-msg="${msgIdx}" ${answered?"disabled":""}>
+      <span class="choice-opt-num">${n}</span>
+      <span class="choice-opt-label">${esc(opt)}</span>
+    </button>`;
+  }).join("");
+  return `<div class="choice-card${answered?" done":""}">
+    <div class="choice-card-q">${esc(choice.question)}</div>
+    <div class="choice-card-list">${opts}</div>
+    ${answered?`<div class="choice-card-note">已作答</div>`:`<div class="choice-card-note">点选项直接发送 · 也可自己打字</div>`}
+  </div>`;
+}
+function rpgChoicesHtml(choice, msgIdx, answered){
+  if(!choice) return "";
+  const opts = (choice.options || []).map((opt) => {
+    return `<button type="button" class="rpg-choice-btn" data-choice-send="${escAttr(opt)}" data-choice-msg="${msgIdx}" ${answered?"disabled":""}>${esc(opt)}</button>`;
+  }).join("");
+  return `<div class="rpg-choices" id="rpg-choices">${opts}</div>`;
+}
+function sendChoiceOption(text){
+  const t = String(text || "").trim();
+  if(!t) return;
+  try{ state.chatMoreOpen = false; }catch(e){}
+  state.chatInput = t;
+  if(typeof sendUserMsg === "function") sendUserMsg();
+  else {
+    state.pendingUser = state.pendingUser || [];
+    state.pendingUser.push({ role:"user", content:t, time:new Date().toISOString() });
+    state.chatInput = "";
+    if(typeof saveActiveThread==="function") saveActiveThread();
+    if(typeof render==="function") render();
+  }
+}
+function bindChoiceButtons(){
+  document.querySelectorAll("[data-choice-send]").forEach(btn=>{
+    if(btn._choiceBound) return;
+    btn._choiceBound = true;
+    btn.onclick = (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      if(btn.disabled) return;
+      const t = btn.getAttribute("data-choice-send") || "";
+      sendChoiceOption(t);
+    };
+  });
+}
+
 /** RPG：从 messages 抽出可演出的台词行（跳过工具/空壳） */
 function rpgCollectLines(){
   const lines = [];
@@ -18172,21 +18319,29 @@ function rpgCollectLines(){
     if(m.type && m.type !== "text") return; // 特殊卡片暂不进 RPG 主轴
     let text = String(m.content || "").trim();
     if(!text && !m.image) return;
-    // 擦掉常见标记，避免 RPG 框里刷协议
+    const rawContent = text;
+    const choice = (m.role !== "user") && typeof parseChoiceBlock === "function"
+      ? parseChoiceBlock(rawContent) : null;
+    // 擦掉常见标记；choice 题干留给对话框
     text = text
+      .replace(/⟪\s*choice\s*[:：][^⟫]*⟫/gi, "")
       .replace(/⟪[^⟫]*⟫/g, "")
       .replace(/\[sticker\s*[:：][^\]]*\]/gi, "")
       .replace(/\[action[^\]]*\]/gi, "")
       .replace(/\s+/g, " ")
       .trim();
-    if(!text && !m.image) return;
+    if(choice && choice.question){
+      text = [text, choice.question].filter(Boolean).join(" ").trim() || choice.question;
+    }
+    if(!text && !m.image && !choice) return;
     const isMe = m.role === "user";
     const name = isMe ? myName : (m.speakerName || (agents.find(a=>a.id===m.speakerId)||{}).name || "TA");
     lines.push({
       idx, isMe, name,
-      text: text || (m.image ? "（图片）" : ""),
+      text: text || (m.image ? "（图片）" : (choice ? choice.question : "")),
       image: m.image || "",
       time: m.time || "",
+      choice: choice || null,
     });
   });
   return lines;
@@ -18274,12 +18429,17 @@ function renderRpgStage(activeAg, isGroup){
     <div class="rpg-stage-body">
       ${sprite}
       ${hist}
+      ${(()=>{
+        if(!cur || !cur.choice) return "";
+        const answered = typeof choiceIsAnswered==="function" ? choiceIsAnswered(cur.idx) : false;
+        return typeof rpgChoicesHtml==="function" ? rpgChoicesHtml(cur.choice, cur.idx, answered) : "";
+      })()}
       <div class="rpg-dialog" id="rpg-dialog" title="点击继续">
         <div class="rpg-dialog-name">${esc(name)}</div>
         <div class="rpg-dialog-text">${esc(text)}</div>
         <div class="rpg-dialog-foot">
           <span>${esc(progress)}</span>
-          <span class="blink">▼ 点击继续</span>
+          <span class="blink">${cur && cur.choice && !(typeof choiceIsAnswered==="function" && choiceIsAnswered(cur.idx)) ? "选择一项，或点此跳过" : "▼ 点击继续"}</span>
         </div>
       </div>
       <div class="rpg-toolbar">
@@ -18409,7 +18569,16 @@ function renderChat(){
       } else if(stickerHtml && !stickerTxt.trim()){
         bubbleInner = `<div class="sticker-floats">${stickerHtml}</div>`;
       } else {
-        bubbleInner = `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor}>${imgHtml}${renderInline(stickerTxt, !isMe, !isMe && state.nsfwOn)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
+        const choice = (!isMe && typeof parseChoiceBlock==="function") ? parseChoiceBlock(stickerTxt) : null;
+        if(choice){
+          const answered = typeof choiceIsAnswered==="function" ? choiceIsAnswered(idx) : false;
+          const lead = [choice.before, choice.after].filter(Boolean).join("\n").trim();
+          const leadHtml = lead ? renderInline(lead, !isMe, !isMe && state.nsfwOn) : "";
+          const card = typeof choiceCardHtml==="function" ? choiceCardHtml(choice, idx, answered) : "";
+          bubbleInner = `${leadHtml?`<div class="bubble them${glassCls}" ${bubbleColor}>${imgHtml}${leadHtml}</div>`:(imgHtml?`<div class="bubble them${glassCls}" ${bubbleColor}>${imgHtml}</div>`:"")}${card}`;
+        } else {
+          bubbleInner = `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor}>${imgHtml}${renderInline(stickerTxt, !isMe, !isMe && state.nsfwOn)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
+        }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
         ${(!isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them"):""}

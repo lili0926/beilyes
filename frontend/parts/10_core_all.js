@@ -15223,6 +15223,83 @@ function bindChatSidebar(){
 
 
 
+
+/** 选择题协议：⟪choice:题干|选项1|选项2|…⟫ */
+function parseChoiceBlock(text){
+  if(!text || typeof text !== "string") return null;
+  const re = /⟪\s*choice\s*[:：]\s*([^⟫]*)⟫/i;
+  const m = text.match(re);
+  if(!m) return null;
+  const body = String(m[1] || "").replace(/\r/g, "");
+  const parts = body.split("|").map(s => s.replace(/\n+/g, " ").trim()).filter(Boolean);
+  if(parts.length < 2) return null;
+  return {
+    question: parts[0],
+    options: parts.slice(1).slice(0, 8),
+    fullMatch: m[0],
+    index: m.index,
+    before: text.slice(0, m.index).trim(),
+    after: text.slice(m.index + m[0].length).trim(),
+  };
+}
+function choiceIsAnswered(msgIdx){
+  const msgs = state.messages || [];
+  for(let i = (msgIdx|0) + 1; i < msgs.length; i++){
+    if(msgs[i] && msgs[i].role === "user") return true;
+  }
+  if((state.pendingUser || []).length) return true;
+  return false;
+}
+function choiceCardHtml(choice, msgIdx, answered){
+  if(!choice) return "";
+  const opts = (choice.options || []).map((opt, i) => {
+    const n = i + 1;
+    return `<button type="button" class="choice-opt" data-choice-send="${escAttr(opt)}" data-choice-msg="${msgIdx}" ${answered?"disabled":""}>
+      <span class="choice-opt-num">${n}</span>
+      <span class="choice-opt-label">${esc(opt)}</span>
+    </button>`;
+  }).join("");
+  return `<div class="choice-card${answered?" done":""}">
+    <div class="choice-card-q">${esc(choice.question)}</div>
+    <div class="choice-card-list">${opts}</div>
+    ${answered?`<div class="choice-card-note">已作答</div>`:`<div class="choice-card-note">点选项直接发送 · 也可自己打字</div>`}
+  </div>`;
+}
+function rpgChoicesHtml(choice, msgIdx, answered){
+  if(!choice) return "";
+  const opts = (choice.options || []).map((opt) => {
+    return `<button type="button" class="rpg-choice-btn" data-choice-send="${escAttr(opt)}" data-choice-msg="${msgIdx}" ${answered?"disabled":""}>${esc(opt)}</button>`;
+  }).join("");
+  return `<div class="rpg-choices" id="rpg-choices">${opts}</div>`;
+}
+function sendChoiceOption(text){
+  const t = String(text || "").trim();
+  if(!t) return;
+  try{ state.chatMoreOpen = false; }catch(e){}
+  state.chatInput = t;
+  if(typeof sendUserMsg === "function") sendUserMsg();
+  else {
+    state.pendingUser = state.pendingUser || [];
+    state.pendingUser.push({ role:"user", content:t, time:new Date().toISOString() });
+    state.chatInput = "";
+    if(typeof saveActiveThread==="function") saveActiveThread();
+    if(typeof render==="function") render();
+  }
+}
+function bindChoiceButtons(){
+  document.querySelectorAll("[data-choice-send]").forEach(btn=>{
+    if(btn._choiceBound) return;
+    btn._choiceBound = true;
+    btn.onclick = (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      if(btn.disabled) return;
+      const t = btn.getAttribute("data-choice-send") || "";
+      sendChoiceOption(t);
+    };
+  });
+}
+
 /** RPG：从 messages 抽出可演出的台词行（跳过工具/空壳） */
 function rpgCollectLines(){
   const lines = [];
@@ -15234,21 +15311,29 @@ function rpgCollectLines(){
     if(m.type && m.type !== "text") return; // 特殊卡片暂不进 RPG 主轴
     let text = String(m.content || "").trim();
     if(!text && !m.image) return;
-    // 擦掉常见标记，避免 RPG 框里刷协议
+    const rawContent = text;
+    const choice = (m.role !== "user") && typeof parseChoiceBlock === "function"
+      ? parseChoiceBlock(rawContent) : null;
+    // 擦掉常见标记；choice 题干留给对话框
     text = text
+      .replace(/⟪\s*choice\s*[:：][^⟫]*⟫/gi, "")
       .replace(/⟪[^⟫]*⟫/g, "")
       .replace(/\[sticker\s*[:：][^\]]*\]/gi, "")
       .replace(/\[action[^\]]*\]/gi, "")
       .replace(/\s+/g, " ")
       .trim();
-    if(!text && !m.image) return;
+    if(choice && choice.question){
+      text = [text, choice.question].filter(Boolean).join(" ").trim() || choice.question;
+    }
+    if(!text && !m.image && !choice) return;
     const isMe = m.role === "user";
     const name = isMe ? myName : (m.speakerName || (agents.find(a=>a.id===m.speakerId)||{}).name || "TA");
     lines.push({
       idx, isMe, name,
-      text: text || (m.image ? "（图片）" : ""),
+      text: text || (m.image ? "（图片）" : (choice ? choice.question : "")),
       image: m.image || "",
       time: m.time || "",
+      choice: choice || null,
     });
   });
   return lines;
@@ -15336,12 +15421,17 @@ function renderRpgStage(activeAg, isGroup){
     <div class="rpg-stage-body">
       ${sprite}
       ${hist}
+      ${(()=>{
+        if(!cur || !cur.choice) return "";
+        const answered = typeof choiceIsAnswered==="function" ? choiceIsAnswered(cur.idx) : false;
+        return typeof rpgChoicesHtml==="function" ? rpgChoicesHtml(cur.choice, cur.idx, answered) : "";
+      })()}
       <div class="rpg-dialog" id="rpg-dialog" title="点击继续">
         <div class="rpg-dialog-name">${esc(name)}</div>
         <div class="rpg-dialog-text">${esc(text)}</div>
         <div class="rpg-dialog-foot">
           <span>${esc(progress)}</span>
-          <span class="blink">▼ 点击继续</span>
+          <span class="blink">${cur && cur.choice && !(typeof choiceIsAnswered==="function" && choiceIsAnswered(cur.idx)) ? "选择一项，或点此跳过" : "▼ 点击继续"}</span>
         </div>
       </div>
       <div class="rpg-toolbar">
@@ -15471,7 +15561,16 @@ function renderChat(){
       } else if(stickerHtml && !stickerTxt.trim()){
         bubbleInner = `<div class="sticker-floats">${stickerHtml}</div>`;
       } else {
-        bubbleInner = `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor}>${imgHtml}${renderInline(stickerTxt, !isMe, !isMe && state.nsfwOn)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
+        const choice = (!isMe && typeof parseChoiceBlock==="function") ? parseChoiceBlock(stickerTxt) : null;
+        if(choice){
+          const answered = typeof choiceIsAnswered==="function" ? choiceIsAnswered(idx) : false;
+          const lead = [choice.before, choice.after].filter(Boolean).join("\n").trim();
+          const leadHtml = lead ? renderInline(lead, !isMe, !isMe && state.nsfwOn) : "";
+          const card = typeof choiceCardHtml==="function" ? choiceCardHtml(choice, idx, answered) : "";
+          bubbleInner = `${leadHtml?`<div class="bubble them${glassCls}" ${bubbleColor}>${imgHtml}${leadHtml}</div>`:(imgHtml?`<div class="bubble them${glassCls}" ${bubbleColor}>${imgHtml}</div>`:"")}${card}`;
+        } else {
+          bubbleInner = `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor}>${imgHtml}${renderInline(stickerTxt, !isMe, !isMe && state.nsfwOn)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
+        }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
         ${(!isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them"):""}
