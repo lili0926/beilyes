@@ -3110,6 +3110,164 @@
       border-radius: 8px !important;
     }
 
+
+    /* ═══════════ 壳：深渊 · 克苏鲁暗黑 ═══════════ */
+    body.shell-eldritch {
+      --bg: #0c0a10;
+      --card: #16121c;
+      --text: #e8e0d4;
+      --sub: #9a8f9e;
+      --border: #3a2f45;
+      --accent: #6b8f71;
+      --accent2: #4a3d5c;
+      --danger: #8b3a4a;
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -10%, rgba(40, 70, 55, 0.35), transparent 55%),
+        radial-gradient(ellipse 80% 50% at 100% 100%, rgba(60, 30, 80, 0.25), transparent 50%),
+        radial-gradient(ellipse 60% 40% at 0% 80%, rgba(30, 50, 40, 0.2), transparent 45%),
+        #0c0a10 !important;
+      color: var(--text);
+    }
+    body.shell-eldritch #app {
+      background: transparent;
+    }
+    body.shell-eldritch .bottom-nav,
+    body.shell-eldritch .chat-header,
+    body.shell-eldritch .chat-header-slim {
+      background: linear-gradient(180deg, #1a1522 0%, #120e18 100%) !important;
+      border-color: #3d3350 !important;
+      box-shadow: 0 0 0 1px rgba(80, 120, 90, 0.15), 0 8px 24px rgba(0,0,0,0.45);
+    }
+    body.shell-eldritch .chat-header-slim {
+      border-bottom: 1px solid rgba(100, 140, 110, 0.25) !important;
+    }
+    body.shell-eldritch .feat-card,
+    body.shell-eldritch .card,
+    body.shell-eldritch .setting-section {
+      background: rgba(22, 18, 28, 0.92) !important;
+      border: 1px solid #3a2f45 !important;
+      border-radius: 12px !important;
+      box-shadow: inset 0 1px 0 rgba(120, 160, 130, 0.06), 0 6px 20px rgba(0,0,0,0.35);
+    }
+    body.shell-eldritch .bubble.them,
+    body.shell-eldritch .bubble:not(.me) {
+      background: #1e1a26 !important;
+      border: 1px solid #4a3d5c !important;
+      color: #e8e0d4 !important;
+      border-radius: 14px 14px 14px 4px !important;
+    }
+    body.shell-eldritch .bubble.me {
+      background: linear-gradient(145deg, #2a3d32, #1e2a24) !important;
+      border: 1px solid #5a7a62 !important;
+      color: #eef5ee !important;
+      border-radius: 14px 14px 4px 14px !important;
+    }
+    body.shell-eldritch .chat-input-bar {
+      background: #120e18 !important;
+      border-top: 1px solid rgba(100, 140, 110, 0.2) !important;
+    }
+    body.shell-eldritch .chat-input-bar input,
+    body.shell-eldritch .chat-input-bar textarea {
+      background: #1a1522 !important;
+      border: 1px solid #3a2f45 !important;
+      color: #e8e0d4 !important;
+    }
+    body.shell-eldritch .btn-accent,
+    body.shell-eldritch .btn-accent2 {
+      background: linear-gradient(180deg, #4a6b52, #2f4536) !important;
+      border: 1px solid #6b8f71 !important;
+      color: #e8f0e8 !important;
+    }
+    body.shell-eldritch .font-chip.active,
+    body.shell-eldritch .chat-view-switch button.active {
+      background: #2f4536 !important;
+      border-color: #6b8f71 !important;
+      color: #d8e8d8 !important;
+    }
+    /* RPG 舞台：触须/藤蔓感装饰（纯 CSS） */
+    body.shell-eldritch .rpg-stage {
+      background: #08060c !important;
+    }
+    body.shell-eldritch .rpg-bg::after {
+      background:
+        linear-gradient(180deg, rgba(8,6,12,0.2) 0%, rgba(8,6,12,0.55) 50%, rgba(8,6,12,0.88) 100%),
+        radial-gradient(ellipse 50% 30% at 90% 70%, rgba(40, 90, 60, 0.15), transparent 70%) !important;
+    }
+    body.shell-eldritch .rpg-dialog {
+      background: linear-gradient(180deg, rgba(18, 14, 24, 0.94), rgba(10, 8, 14, 0.96)) !important;
+      border: 1px solid rgba(90, 130, 100, 0.45) !important;
+      border-radius: 4px 16px 4px 16px !important;
+      box-shadow:
+        0 0 0 1px rgba(40, 30, 50, 0.8),
+        0 12px 40px rgba(0,0,0,0.55),
+        inset 0 0 30px rgba(40, 80, 55, 0.08) !important;
+      position: relative;
+    }
+    body.shell-eldritch .rpg-dialog::before,
+    body.shell-eldritch .rpg-dialog::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.85;
+    }
+    /* 左上藤蔓卷须 */
+    body.shell-eldritch .rpg-dialog::before {
+      left: -6px; top: -10px;
+      width: 48px; height: 56px;
+      background:
+        radial-gradient(ellipse 40% 50% at 30% 40%, #2a4a35 0%, transparent 70%),
+        radial-gradient(ellipse 30% 60% at 60% 70%, #1a3025 0%, transparent 65%);
+      filter: drop-shadow(0 0 4px rgba(60, 100, 70, 0.4));
+      transform: rotate(-12deg);
+    }
+    /* 右下触须感 */
+    body.shell-eldritch .rpg-dialog::after {
+      right: -8px; bottom: -8px;
+      width: 56px; height: 40px;
+      background:
+        radial-gradient(ellipse 50% 40% at 70% 50%, #3a2850 0%, transparent 70%),
+        radial-gradient(ellipse 35% 55% at 40% 30%, #2a3d32 0%, transparent 65%);
+      filter: drop-shadow(0 0 5px rgba(80, 50, 100, 0.35));
+      transform: rotate(8deg);
+    }
+    body.shell-eldritch .rpg-dialog-name {
+      background: linear-gradient(90deg, #2a3d32, #3a2850) !important;
+      border: 1px solid rgba(100, 140, 110, 0.4) !important;
+      color: #d4e0d4 !important;
+      border-radius: 4px !important;
+    }
+    body.shell-eldritch .rpg-toolbar button {
+      background: #1a1522 !important;
+      border: 1px solid #3a2f45 !important;
+      color: #c8c0b8 !important;
+      border-radius: 6px !important;
+    }
+    body.shell-eldritch .rpg-choice-bar,
+    body.shell-eldritch .rpg-choice-opt {
+      background: rgba(20, 16, 28, 0.9) !important;
+      border: 1px solid rgba(90, 130, 100, 0.35) !important;
+      color: #e0d8d0 !important;
+    }
+    body.shell-eldritch .choice-card {
+      background: #16121c !important;
+      border: 1px solid #4a3d5c !important;
+      box-shadow: 0 0 20px rgba(40, 80, 55, 0.15);
+    }
+    /* 页角装饰线 */
+    body.shell-eldritch.rpg-chat-on .chat-page::before {
+      content: "";
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 5;
+      background:
+        radial-gradient(ellipse 20% 15% at 0% 0%, rgba(40, 70, 55, 0.35), transparent 70%),
+        radial-gradient(ellipse 18% 14% at 100% 0%, rgba(60, 30, 80, 0.3), transparent 70%),
+        radial-gradient(ellipse 22% 12% at 0% 100%, rgba(50, 40, 70, 0.25), transparent 70%),
+        radial-gradient(ellipse 20% 12% at 100% 100%, rgba(40, 70, 55, 0.28), transparent 70%);
+    }
+
   </style>
 
   <div id="app"></div>
@@ -5019,7 +5177,7 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "" }) || { me: "jasmine-sprite.png", them: "" },
@@ -5982,9 +6140,13 @@ function applyThemeVars(){
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","rpg-chat-on");
   const sh = (state.uiShell || "classic");
-  document.body.classList.add(sh === "pixel" ? "shell-pixel" : "shell-classic");
+  if(sh === "pixel") document.body.classList.add("shell-pixel");
+  else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
+  else document.body.classList.add("shell-classic");
+  if(state.chatViewMode === "rpg" && state.tab === "chat")
+    document.body.classList.add("rpg-chat-on");
 }
 /** 聊天气泡额外 class；同时 #app 会挂 ui-glass-* 作用于日历与卡片 */
 function bubbleGlassClass(){
@@ -20269,6 +20431,7 @@ function renderTheme(){
       <div class="font-switch-row">
         <button type="button" class="font-chip${(state.uiShell||"classic")==="classic"?" active":""}" data-ui-shell="classic">经典</button>
         <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
+        <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
     </div>
