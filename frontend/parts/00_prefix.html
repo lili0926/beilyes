@@ -3050,6 +3050,29 @@
       color: #fff; border-radius: 8px; padding: 2px 8px; font-size: 11px; cursor: pointer;
     }
 
+
+    .bisca-bot-panel {
+      position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 20;
+      background: rgba(30,24,20,0.94); color: #f5efe6;
+      border: 2px solid #5c4033; border-radius: 14px;
+      padding: 12px; max-height: 55%; overflow: auto;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+    .bisca-bot-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .bisca-bot-hd b { font-size: 14px; }
+    .bisca-bot-hd button { background:transparent; border:1px solid rgba(255,255,255,0.25); color:#fff; border-radius:8px; padding:4px 10px; }
+    .bisca-bot-bd label { display:block; font-size:11px; opacity:0.85; margin-bottom:8px; }
+    .bisca-bot-bd input {
+      display:block; width:100%; margin-top:4px; box-sizing:border-box;
+      padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08); color:#fff;
+    }
+    .bisca-bot-hint { font-size:11px; line-height:1.45; opacity:0.8; margin:8px 0; }
+    .bisca-bot-actions { display:flex; gap:8px; }
+    .bisca-bot-actions button { flex:1; padding:10px; border-radius:10px; border:none; font-weight:700; }
+    .bisca-bot-status { margin-top:8px; font-size:12px; opacity:0.9; min-height:1.2em; }
+    #bisca-frame-wrap { position: relative; }
+
   </style>
 
   <div id="app"></div>

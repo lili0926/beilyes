@@ -2061,6 +2061,15 @@ const state = {
   captivityConfig: LS.get("captivityConfig", { baseUrl: "http://115.29.237.172:5058", openIn: "iframe" }), // 囚禁模拟器外部地址（已部署 VPS，默认即玩）
   captivityOpen: false,
   biscaOpen: null, // { key, title, url } 牌室/大富豪/大富翁 页内 iframe
+  biscaBot: LS.get("biscaBot", {
+    internalKey: "",
+    agentId: "external",
+    agentName: "Aries",
+    roomCode: "",
+    armed: false,
+    status: "",
+    panelOpen: false,
+  }) || { internalKey:"", agentId:"external", agentName:"Aries", roomCode:"", armed:false, status:"", panelOpen:false },
   proactiveInbox: LS.get("proactiveInbox", []), // {id, content, time, speakerId, speakerName, from}
   // REM 做梦（dream-system 风格，与记忆隔离）
   dreamConfig: LS.get("dreamConfig", {
@@ -3137,7 +3146,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", chatViewMode:"chatViewMode", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -3304,10 +3313,12 @@ function render(){
       <div class="captivity-frame-bar">
         <button type="button" id="bisca-frame-close">← 返回宫殿</button>
         <div class="cap-title">${esc(b.title||"游戏")}</div>
+        <button type="button" id="bisca-bot-toggle" title="请机入座">请机</button>
         <button type="button" id="bisca-frame-host">${b.useDomain?"用IP":"用域名"}</button>
         <button type="button" id="bisca-frame-ext">新窗口</button>
       </div>
       <iframe class="captivity-frame" id="bisca-iframe" src="${escAttr(b.url)}" allow="fullscreen; autoplay"></iframe>
+      ${typeof biscaBotPanelHtml==="function" ? biscaBotPanelHtml() : ""}
     </div>`;
   }
   app.innerHTML=html;
@@ -10459,6 +10470,255 @@ const BISCA_TITLES = {
   bisca_daifugo: "大富豪",
   bisca_monopoly: "大富翁",
 };
+
+// ─── Bisca 请机入座：聊天里的机 = external 座位 ─────────────────
+function biscaApiPrefix(key){
+  if(key === "bisca_daifugo") return "/daifugo/api";
+  if(key === "bisca_monopoly") return "/monopoly/api";
+  return "/cards/api";
+}
+function biscaBotBase(){
+  try{
+    const u = (state.biscaOpen && state.biscaOpen.url) || "";
+    if(u){ const x = new URL(u); return x.origin; }
+  }catch(e){}
+  try{
+    const u = biscaLaunchUrl(state.biscaOpen && state.biscaOpen.key || "bisca_cards");
+    return new URL(u).origin;
+  }catch(e){}
+  return "http://115.29.237.172";
+}
+function ensureBiscaBot(){
+  if(!state.biscaBot || typeof state.biscaBot !== "object"){
+    state.biscaBot = { internalKey:"", agentId:"external", agentName:"Aries", roomCode:"", armed:false, status:"", panelOpen:false };
+  }
+  return state.biscaBot;
+}
+async function biscaBotFetch(path, opts){
+  const bot = ensureBiscaBot();
+  const key = (bot.internalKey || "").trim();
+  if(!key) throw new Error("还没填 Internal Key（在 VPS data/config.json 里）");
+  const base = biscaBotBase();
+  const o = Object.assign({}, opts || {});
+  o.headers = Object.assign({
+    "Content-Type": "application/json",
+    "X-Internal-Key": key,
+  }, o.headers || {});
+  const res = await fetch(base + path, o);
+  const text = await res.text();
+  let data = null;
+  try{ data = text ? JSON.parse(text) : null; }catch(e){ data = { raw: text }; }
+  if(!res.ok){
+    const msg = (data && (data.error || data.detail)) || res.statusText || "请求失败";
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return data;
+}
+function biscaBotApiRoot(){
+  const k = (state.biscaOpen && state.biscaOpen.key) || "bisca_cards";
+  return biscaApiPrefix(k);
+}
+async function biscaBotJoin(){
+  const bot = ensureBiscaBot();
+  const code = String(bot.roomCode || "").trim();
+  if(!code) throw new Error("请填写房间码");
+  const root = biscaBotApiRoot();
+  const data = await biscaBotFetch(root + "/agent/" + encodeURIComponent(code) + "/join", {
+    method: "POST",
+    body: JSON.stringify({ agent_id: bot.agentId || "external", name: bot.agentName || "Aries" }),
+  });
+  bot.status = "已入座";
+  try{ persist("biscaBot"); }catch(e){}
+  return data;
+}
+async function biscaBotView(){
+  const bot = ensureBiscaBot();
+  const code = String(bot.roomCode || "").trim();
+  const root = biscaBotApiRoot();
+  const aid = encodeURIComponent(bot.agentId || "external");
+  return biscaBotFetch(root + "/agent/" + encodeURIComponent(code) + "/view?agent_id=" + aid);
+}
+async function biscaBotAct(action){
+  const bot = ensureBiscaBot();
+  const code = String(bot.roomCode || "").trim();
+  const root = biscaBotApiRoot();
+  const body = Object.assign({ agent_id: bot.agentId || "external" }, action || {});
+  return biscaBotFetch(root + "/agent/" + encodeURIComponent(code) + "/act", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+async function biscaBotChat(text){
+  const bot = ensureBiscaBot();
+  const t = String(text || "").trim();
+  if(!t) return;
+  const code = String(bot.roomCode || "").trim();
+  const root = biscaBotApiRoot();
+  return biscaBotFetch(root + "/agent/" + encodeURIComponent(code) + "/chat", {
+    method: "POST",
+    body: JSON.stringify({ agent_id: bot.agentId || "external", text: t }),
+  });
+}
+function biscaBotPickMoveWithAI(view){
+  return new Promise(async (resolve) => {
+    try{
+      const legal = view.legal || [];
+      const lines = view.moveLines || legal.map((m,i)=> (i+1)+". "+JSON.stringify(m));
+      if(!legal.length){ resolve(null); return; }
+      if(legal.length === 1){ resolve({ index: 0, say: "" }); return; }
+      const target = state.chatTarget || "a1";
+      const ag = (typeof agentById === "function") ? agentById(target) : null;
+      if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
+        resolve({ index: 0, say: "" }); // 无 key 则兜底第一招
+        return;
+      }
+      const list = lines.map((ln, i) => "p"+(i+1)+": "+ln).join("\n");
+      const sys = "你是牌桌上的 AI 玩家（座位名可叫 Aries）。根据局面简报，从合法招里选一招。只输出一行 JSON，不要其它文字：{\"move\":\"p1\",\"say\":\"可选的一句嘴炮\"}。move 必须是 p1、p2…对应列表编号。";
+      const user = "【局面简报】\n"+(view.briefing||"（无）")+"\n\n【合法招】\n"+list+"\n\n请选择。";
+      const apiMsgs = [{ role: "user", content: user }];
+      let reply = "";
+      // 只用 callChatAPI，避免 callOneAgentReply 把出牌思考写进聊天记录
+      if(typeof callChatAPI === "function" && typeof agentToApiConfig === "function"){
+        try{ reply = await callChatAPI(agentToApiConfig(ag), apiMsgs, sys) || ""; }catch(e){ reply = ""; }
+      }
+      let idx = 0, say = "";
+      const m = String(reply).match(/\{[\s\S]*\}/);
+      if(m){
+        try{
+          const j = JSON.parse(m[0]);
+          const mv = String(j.move || j.Move || "p1");
+          const n = parseInt(mv.replace(/\D/g, ""), 10);
+          if(n >= 1 && n <= legal.length) idx = n - 1;
+          say = String(j.say || j.chat || "").slice(0, 80);
+        }catch(e){}
+      }
+      resolve({ index: idx, say });
+    }catch(e){
+      resolve({ index: 0, say: "" });
+    }
+  });
+}
+let __biscaBotTimer = null;
+let __biscaBotBusy = false;
+function biscaBotStopPoll(){
+  if(__biscaBotTimer){ clearInterval(__biscaBotTimer); __biscaBotTimer = null; }
+  const bot = ensureBiscaBot();
+  bot.armed = false;
+  try{ persist("biscaBot"); }catch(e){}
+}
+function biscaBotStartPoll(){
+  biscaBotStopPoll();
+  const bot = ensureBiscaBot();
+  bot.armed = true;
+  bot.status = "值守中…";
+  try{ persist("biscaBot"); }catch(e){}
+  const tick = async ()=>{
+    if(__biscaBotBusy) return;
+    if(!state.biscaBot || !state.biscaBot.armed) return;
+    __biscaBotBusy = true;
+    try{
+      const v = await biscaBotView();
+      if(!v || !v.yourTurn){
+        bot.status = v && v.currentName ? ("等待 "+v.currentName) : "等待回合";
+        return;
+      }
+      bot.status = "思考出牌…";
+      const pick = await biscaBotPickMoveWithAI(v);
+      const legal = v.legal || [];
+      if(!legal.length){ bot.status = "无合法招"; return; }
+      const i = Math.max(0, Math.min(legal.length - 1, (pick && pick.index) || 0));
+      const action = Object.assign({}, legal[i]);
+      await biscaBotAct(action);
+      if(pick && pick.say){
+        try{ await biscaBotChat(pick.say); }catch(e){}
+      }
+      bot.status = "已出 · "+((v.moveLines && v.moveLines[i]) || ("招"+(i+1)));
+    }catch(e){
+      bot.status = "出错："+ (e.message || e);
+    }finally{
+      __biscaBotBusy = false;
+      try{
+        const st = document.getElementById("bisca-bot-status");
+        if(st) st.textContent = ensureBiscaBot().status || "";
+      }catch(e){}
+    }
+  };
+  __biscaBotTimer = setInterval(tick, 2800);
+  tick();
+}
+function biscaBotPanelHtml(){
+  const bot = ensureBiscaBot();
+  if(!(state.biscaOpen && state.biscaOpen.url)) return "";
+  if(!bot.panelOpen){
+    return `<button type="button" id="bisca-bot-toggle" class="bisca-bot-fab" title="请机入座">机</button>`;
+  }
+  return `<div class="bisca-bot-panel" id="bisca-bot-panel">
+    <div class="bisca-bot-hd">
+      <b>请机入座</b>
+      <button type="button" id="bisca-bot-toggle">收起</button>
+    </div>
+    <div class="bisca-bot-bd">
+      <label>房间码<input id="bisca-bot-code" value="${escAttr(bot.roomCode||"")}" placeholder="建房后的房间码"/></label>
+      <label>Internal Key<input id="bisca-bot-key" value="${escAttr(bot.internalKey||"")}" placeholder="VPS data/config.json 里的 key"/></label>
+      <label>显示名<input id="bisca-bot-name" value="${escAttr(bot.agentName||"Aries")}" placeholder="Aries"/></label>
+      <div class="bisca-bot-hint">建房时在「请谁上桌」勾选 <b>外接 Agent</b>，再点入座。机用当前聊天角色的 API Key 思考出牌。</div>
+      <div class="bisca-bot-actions">
+        <button type="button" id="bisca-bot-join" class="btn-accent">入座</button>
+        <button type="button" id="bisca-bot-arm" class="btn-ghost">${bot.armed?"停止值守":"开始值守"}</button>
+      </div>
+      <div class="bisca-bot-status" id="bisca-bot-status">${esc(bot.status||"")}</div>
+    </div>
+  </div>`;
+}
+function bindBiscaBot(){
+  const tog = document.getElementById("bisca-bot-toggle");
+  if(tog) tog.onclick = (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    const bot = ensureBiscaBot();
+    bot.panelOpen = !bot.panelOpen;
+    render();
+  };
+  const saveFields = ()=>{
+    const bot = ensureBiscaBot();
+    const c = document.getElementById("bisca-bot-code");
+    const k = document.getElementById("bisca-bot-key");
+    const n = document.getElementById("bisca-bot-name");
+    if(c) bot.roomCode = c.value.trim();
+    if(k) bot.internalKey = k.value.trim();
+    if(n) bot.agentName = n.value.trim() || "Aries";
+    try{ persist("biscaBot"); }catch(e){}
+  };
+  const join = document.getElementById("bisca-bot-join");
+  if(join) join.onclick = async (e)=>{
+    e.preventDefault();
+    saveFields();
+    try{
+      await biscaBotJoin();
+      ensureBiscaBot().status = "入座成功，可开局后点值守";
+      if(typeof showToast==="function") showToast("机已入座");
+      render();
+    }catch(err){
+      ensureBiscaBot().status = "入座失败："+(err.message||err);
+      render();
+    }
+  };
+  const arm = document.getElementById("bisca-bot-arm");
+  if(arm) arm.onclick = (e)=>{
+    e.preventDefault();
+    saveFields();
+    const bot = ensureBiscaBot();
+    if(bot.armed){
+      biscaBotStopPoll();
+      bot.status = "已停止";
+      render();
+    } else {
+      biscaBotStartPoll();
+      render();
+    }
+  };
+}
+
+
 function biscaLaunchUrl(key){
   // 优先 IP（备案拦截时更稳），失败由用户点「换域名」
   return BISCA_URLS_IP[key] || BISCA_URLS[key] || "";
@@ -10488,6 +10748,7 @@ function openBiscaGame(key){
   return true;
 }
 function closeBiscaGame(){
+  try{ if(typeof biscaBotStopPoll==="function") biscaBotStopPoll(); }catch(e){}
   state.biscaOpen = null;
   if(typeof render==="function") render();
 }
