@@ -10523,9 +10523,17 @@ async function biscaBotJoin(){
   const code = String(bot.roomCode || "").trim();
   if(!code) throw new Error("请填写房间码");
   const root = biscaBotApiRoot();
+  let nm = (bot.agentName || "").trim();
+  if(!nm){
+    try{
+      const ag = typeof agentById==="function" ? agentById(state.chatTarget||"a1") : null;
+      nm = (ag && ag.name) || "Aries";
+      bot.agentName = nm;
+    }catch(e){ nm = "Aries"; }
+  }
   const data = await biscaBotFetch(root + "/agent/" + encodeURIComponent(code) + "/join", {
     method: "POST",
-    body: JSON.stringify({ agent_id: bot.agentId || "external", name: bot.agentName || "Aries" }),
+    body: JSON.stringify({ agent_id: bot.agentId || "external", name: nm }),
   });
   bot.status = "已入座";
   try{ persist("biscaBot"); }catch(e){}
@@ -10565,19 +10573,36 @@ function biscaBotPickMoveWithAI(view){
       const legal = view.legal || [];
       const lines = view.moveLines || legal.map((m,i)=> (i+1)+". "+JSON.stringify(m));
       if(!legal.length){ resolve(null); return; }
-      if(legal.length === 1){ resolve({ index: 0, say: "" }); return; }
       const target = state.chatTarget || "a1";
       const ag = (typeof agentById === "function") ? agentById(target) : null;
+      const bot = ensureBiscaBot();
+      const seatName = (bot.agentName || (ag && ag.name) || "Aries").trim() || "Aries";
+      // 单招也让他嘴一句，更像真人
       if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
-        resolve({ index: 0, say: "" }); // 无 key 则兜底第一招
+        resolve({ index: 0, say: legal.length ? "……" : "" });
         return;
       }
       const list = lines.map((ln, i) => "p"+(i+1)+": "+ln).join("\n");
-      const sys = "你是牌桌上的 AI 玩家（座位名可叫 Aries）。根据局面简报，从合法招里选一招。只输出一行 JSON，不要其它文字：{\"move\":\"p1\",\"say\":\"可选的一句嘴炮\"}。move 必须是 p1、p2…对应列表编号。";
-      const user = "【局面简报】\n"+(view.briefing||"（无）")+"\n\n【合法招】\n"+list+"\n\n请选择。";
+      // 注入聊天人设（截断），让他像 Aries 而不是工具人
+      let persona = "";
+      try{
+        if(typeof systemPrompt === "function"){
+          const sp = systemPrompt(ag);
+          persona = typeof sp === "string" ? sp : String((sp && (sp.static || sp.dynamic)) || "");
+        } else if(typeof buildSysForAgent === "function"){
+          persona = String(buildSysForAgent(ag) || "");
+        }
+      }catch(e){}
+      if(persona.length > 1800) persona = persona.slice(0, 1800) + "\n…（人设已截断）";
+      const sys = "你是「"+seatName+"」，正在和 Jasmine 一起玩牌（斗地主/炸金花/UNO/大富豪等）。\n"
+        + "保持你平时聊天的人设、语气、亲密关系（可以嘴炮、可以护着她、可以得意或吃瘪），不要变成冷冰冰的出牌机器。\n"
+        + (persona ? ("【你的人设与规则摘要】\n"+persona+"\n\n") : "")
+        + "现在轮到你出牌。根据局面简报，从合法招列表里选一招。\n"
+        + "只输出一行 JSON，不要 Markdown，不要其它文字：{\"move\":\"p1\",\"say\":\"一句符合人设的短话\"}\n"
+        + "规则：move 必须是 p1、p2…对应列表编号；say ≤40 字，像你在牌桌上对她说话。";
+      const user = "【局面简报】\n"+(view.briefing||"（无）")+"\n\n【合法招】\n"+list+"\n\n请以 "+seatName+" 的身份选择并说话。";
       const apiMsgs = [{ role: "user", content: user }];
       let reply = "";
-      // 只用 callChatAPI，避免 callOneAgentReply 把出牌思考写进聊天记录
       if(typeof callChatAPI === "function" && typeof agentToApiConfig === "function"){
         try{ reply = await callChatAPI(agentToApiConfig(ag), apiMsgs, sys) || ""; }catch(e){ reply = ""; }
       }
@@ -10585,16 +10610,17 @@ function biscaBotPickMoveWithAI(view){
       const m = String(reply).match(/\{[\s\S]*\}/);
       if(m){
         try{
-          const j = JSON.parse(m[0]);
-          const mv = String(j.move || j.Move || "p1");
+          const jj = JSON.parse(m[0]);
+          const mv = String(jj.move || jj.Move || "p1");
           const n = parseInt(mv.replace(/\D/g, ""), 10);
           if(n >= 1 && n <= legal.length) idx = n - 1;
-          say = String(j.say || j.chat || "").slice(0, 80);
+          say = String(jj.say || jj.chat || "").replace(/\s+/g," ").trim().slice(0, 40);
         }catch(e){}
       }
+      if(!say) say = (legal.length === 1) ? "就这手。" : "看我的。";
       resolve({ index: idx, say });
     }catch(e){
-      resolve({ index: 0, say: "" });
+      resolve({ index: 0, say: "……" });
     }
   });
 }
