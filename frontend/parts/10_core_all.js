@@ -15776,14 +15776,12 @@ function renderRpgStage(activeAg, isGroup){
   const cur = lines[i] || null;
   const myName = (state.coupleInfo && state.coupleInfo.myName) || "我";
   const titleName = isGroup ? "群聊" : ((activeAg && activeAg.name) || "TA");
-  // 背景：自定义壁纸 > 主题感纯色
-  let bgStyle = "";
-  if(state.customWallpaper){
-    bgStyle = `background-image:url('${String(state.customWallpaper).replace(/'/g,"")}')`;
-  } else {
-    const t = (typeof T==="function" ? T() : null) || {};
-    bgStyle = `background:linear-gradient(160deg, ${t.bg||"#2a2430"} 0%, ${t.accent||"#6a5a70"} 100%)`;
-  }
+  // 背景：RPG 固定书房场景（不跟聊天壁纸打通）
+  let bgStyle = "background-image:url('rpg-bg-study.jpg')";
+  try{
+    const spBg = state.rpgSprites && state.rpgSprites.bg;
+    if(spBg && String(spBg).trim()) bgStyle = "background-image:url('"+String(spBg).replace(/'/g,"")+"')";
+  }catch(e){}
   // 立绘：只用 rpgSprites，绝不读聊天头像（coupleInfo / agent.avatar）
   let sprite = "";
   const sp = state.rpgSprites || {};

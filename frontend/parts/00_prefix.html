@@ -2831,14 +2831,15 @@
     /* 乙游布局：立绘在对话框上方、屏幕右侧 */
     .rpg-sprite-slot {
       position: absolute;
-      right: max(4px, env(safe-area-inset-right, 0px));
+      right: max(0px, env(safe-area-inset-right, 0px));
       left: auto;
-      bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(132px + env(safe-area-inset-bottom, 0px));
       transform: none;
-      width: min(58vw, 280px);
-      height: min(58vh, 520px);
+      width: min(72vw, 340px);
+      height: min(68vh, 620px);
       display: flex; align-items: flex-end; justify-content: flex-end;
       pointer-events: none; z-index: 1;
+      overflow: visible;
     }
     .rpg-sprite-slot.me {
       /* 我方也可偏右，略往左一点避免完全重叠习惯 */
@@ -3020,15 +3021,16 @@
 
     .rpg-avatar-full {
       width: auto !important;
-      height: min(56vh, 480px) !important;
-      max-width: min(58vw, 280px) !important;
+      height: min(66vh, 560px) !important;
+      max-width: min(72vw, 340px) !important;
+      max-height: 100% !important;
       border-radius: 0 !important;
       border: none !important;
       box-shadow: none !important;
-      object-fit: contain;
-      object-position: bottom right;
+      object-fit: contain !important;
+      object-position: bottom right !important;
       background: transparent !important;
-      filter: drop-shadow(0 8px 18px rgba(0,0,0,0.35));
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,0.4));
     }
     /* 覆盖层已在主规则；此处只保证全身图不被旧居中规则拉回 */
     .rpg-sprite-slot {
