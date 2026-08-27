@@ -10649,9 +10649,11 @@ function biscaBotStartPoll(){
 function biscaBotPanelHtml(){
   const bot = ensureBiscaBot();
   if(!(state.biscaOpen && state.biscaOpen.url)) return "";
-  if(!bot.panelOpen){
-    return ""; // 顶栏已有「请机」按钮
+  // 默认展开；仅用户点「收起」后 panelOpen===false
+  if(bot.panelOpen === false){
+    return "";
   }
+  bot.panelOpen = true;
   return `<div class="bisca-bot-panel" id="bisca-bot-panel">
     <div class="bisca-bot-hd">
       <b>请机入座</b>
@@ -17925,6 +17927,54 @@ if(!window.__mpDelegated){
       }
       if(id==="bisca-frame-close"){ e.preventDefault(); e.stopImmediatePropagation(); closeBiscaGame(); return; }
       if(id==="bisca-frame-host"){ e.preventDefault(); e.stopImmediatePropagation(); biscaToggleHost(); return; }
+      if(id==="bisca-bot-toggle"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const bot = ensureBiscaBot();
+        bot.panelOpen = bot.panelOpen === false ? true : false;
+        // 点顶栏「请机」总是打开
+        if(e.target && e.target.closest && e.target.closest(".captivity-frame-bar"))
+          bot.panelOpen = true;
+        try{ persist("biscaBot"); }catch(err){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="bisca-bot-join"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        (async()=>{
+          try{
+            const bot = ensureBiscaBot();
+            const c = document.getElementById("bisca-bot-code");
+            const k = document.getElementById("bisca-bot-key");
+            const n = document.getElementById("bisca-bot-name");
+            if(c) bot.roomCode = c.value.trim();
+            if(k) bot.internalKey = k.value.trim();
+            if(n) bot.agentName = n.value.trim() || "Aries";
+            try{ persist("biscaBot"); }catch(err){}
+            await biscaBotJoin();
+            bot.status = "入座成功，可开局后点值守";
+            if(typeof showToast==="function") showToast("机已入座");
+          }catch(err){
+            ensureBiscaBot().status = "入座失败："+(err.message||err);
+          }
+          if(typeof render==="function") render();
+        })();
+        return;
+      }
+      if(id==="bisca-bot-arm"){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const bot = ensureBiscaBot();
+        const c = document.getElementById("bisca-bot-code");
+        const k = document.getElementById("bisca-bot-key");
+        const n = document.getElementById("bisca-bot-name");
+        if(c) bot.roomCode = c.value.trim();
+        if(k) bot.internalKey = k.value.trim();
+        if(n) bot.agentName = n.value.trim() || "Aries";
+        try{ persist("biscaBot"); }catch(err){}
+        if(bot.armed){ biscaBotStopPoll(); bot.status = "已停止"; }
+        else { biscaBotStartPoll(); }
+        if(typeof render==="function") render();
+        return;
+      }
       if(id==="bisca-frame-ext"){
         e.preventDefault(); e.stopImmediatePropagation();
         const u = state.biscaOpen && state.biscaOpen.url;
