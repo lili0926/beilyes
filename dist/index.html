@@ -4407,7 +4407,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
       model: "claude-sonnet-4-6",
       max_tokens: 16000,
       messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
-      thinking: { type: "enabled", budget_tokens: 8000 },
+      thinking: { type: "enabled", budget_tokens: 3000 },
     };
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -4546,7 +4546,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     const body = {
       model: "claude-sonnet-4-6", max_tokens: 16000, stream: true,
       messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
-      thinking: { type:"enabled", budget_tokens:8000 },
+      thinking: { type:"enabled", budget_tokens:3000 },
     };
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
@@ -4727,7 +4727,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
     const body = {
       model:"claude-sonnet-4-6", max_tokens:16000,
       messages:[ ...sysMsgs, ...convo ],
-      thinking:{ type:"enabled", budget_tokens:8000 },
+      thinking:{ type:"enabled", budget_tokens:3000 },
     };
     if(toolsParam) body.tools = toolsParam;
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -5185,7 +5185,7 @@ const state = {
   rpgHistOpen: false,
   memIntegrateOpen: false,
   memIntegrateDraft: { threads: ["a1","a2","group"], dateFrom: "", dateTo: "", days: 0, maxPer: 0 },
-  contextLimit: LS.get("contextLimit", 40),  // 聊天上下文最大条数（0=不限）
+  contextLimit: LS.get("contextLimit", 0),  // 聊天上下文条数（0=不限 → 启用滚动摘要，token 有界）
   apiConfig: LS.get("apiConfig",{
     channel:"claude", auxChannel:"claude",
     claudeKey:"", openaiKey:"", openaiBase:"https://api.openai.com/v1",
@@ -5672,6 +5672,16 @@ const state = {
   statusEditing: false,
   editStatus: "",
 };
+
+// 迁移：上下文默认改为「不限」(0) 以启用自动摘要。旧版默认是 40 条，
+// 存过旧默认 40 的改成 0（只做一次；用户自定义过其它值的一律不动）。
+try{
+  if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
+    LS.set("contextLimit", 0);
+    state.contextLimit = 0;
+    LS.set("_ctxModeV2", true);
+  }
+}catch(e){}
 
 function T(){ return THEMES[state.theme]||THEMES["桃气浅春"]; }
 // 旧布料名 → 新蕾丝（兼容 localStorage 里存过的旧选项）
@@ -6240,6 +6250,14 @@ function bindAppViewportHeight(){
 
 try{ if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", bindAppViewportHeight); else bindAppViewportHeight(); }catch(e){}
 
+// 省 token：低频 marker 块按需注入 —— 近 3 条消息 + 待发消息提到相关词才注入该块的语法说明。
+// 平时不占系统提示词（约省 1400 字符/轮）。常驻的只有：身份/时间/格式规则、小纸条·机日记·信箱、相册。
+function __featHot(){
+  const kws = Array.from(arguments);
+  const recent = (state.messages||[]).slice(-3).concat(state.pendingUser||[]).map(m=>String(m.content||"")).join(" ");
+  return kws.some(k=> recent.indexOf(k) !== -1);
+}
+
 function systemPrompt(ag){
   const g=state.prompts.filter(p=>p.category==="global"&&p.enabled);
   const n=state.nsfwOn?state.prompts.filter(p=>p.category==="nsfw"&&p.enabled):[];
@@ -6299,12 +6317,14 @@ ${guideText}`;
   const rpBlock = (typeof roleplayStatusPromptBlock === "function") ? roleplayStatusPromptBlock() : "";
   const puzzleBlock = (typeof puzzleStatusPromptBlock === "function") ? puzzleStatusPromptBlock() : "";
   const tipsyBlock = (typeof tipsyStatusPromptBlock === "function") ? tipsyStatusPromptBlock() : "";
-  const calendarBlock = (typeof calendarPromptBlock === "function") ? calendarPromptBlock() : "";
+  // 省 token：情侣日历仅在聊到日期/纪念日时注入，不常驻
+  const calendarBlock = (typeof calendarPromptBlock === "function" && __featHot("日历","纪念日","在一起的","周年","几天了","今天几号","日程","安排","几点")) ? calendarPromptBlock() : "";
   const prMainBlock = (typeof prMainChatPromptBlock === "function") ? prMainChatPromptBlock() : "";
   const prPlayBlock = (typeof prPlayPromptBlock === "function") ? prPlayPromptBlock() : "";
   const annoBlock = (typeof annoPromptBlock === "function") ? annoPromptBlock() : "";
-  const flightChessBlock = (typeof flightChessPromptBlock === "function") ? flightChessPromptBlock() : "";
-  const truthDareBlock = (typeof truthDarePromptBlock === "function") ? truthDarePromptBlock() : "";
+  // 省 token：飞行棋/真心话大冒险 仅在相关时注入
+  const flightChessBlock = (typeof flightChessPromptBlock === "function" && __featHot("飞行棋","掷骰","骰子","棋盘","走格","到你了")) ? flightChessPromptBlock() : "";
+  const truthDareBlock = (typeof truthDarePromptBlock === "function" && __featHot("真心话","大冒险","抽卡","抽一张","真心话大冒险")) ? truthDarePromptBlock() : "";
   const divinationBlock = (typeof divinationSkillPromptBlock === "function") ? divinationSkillPromptBlock() : "";
   // 柜子：必须显式为 true 才注入（关=false/undefined 都不注入）
   const cabinetBlock = (state.cabinetFeedChat === true && typeof cabinetStatusPromptBlock === "function") ? cabinetStatusPromptBlock() : "";
@@ -6315,7 +6335,8 @@ ${guideText}`;
     musicBlock = `\n\n【正在一起听】${n.name} - ${ar}（${n.source==="spotify"?"Spotify":"网易云"}）${state.musicPlaying?"·播放中":"·已暂停"}。你可以自然提到这首歌或分享听感，不要每句都提。`;
   }
   const ntfyOn = !!(state.ntfyConfig && state.ntfyConfig.enabled && state.ntfyConfig.topicUrl);
-  const pushBlock = ntfyOn ? `\n\n【手机上推通知（ntfy）——marker 暗号】
+  // 省 token：推送暗号仅在聊到推送/提醒时注入（仍需 ntfy 开着）
+  const pushBlock = (ntfyOn && __featHot("推送","推一下","推送到手机","上推","提醒","通知","别忘了")) ? `\n\n【手机上推通知（ntfy）——marker 暗号】
 用户已开启 ntfy 推送。当你想把一句话推到用户手机通知栏时，在正式回复里写一行：
 ⟪推送:标题|正文⟫
 或省略标题：⟪推送:正文⟫
@@ -6324,12 +6345,13 @@ ${guideText}`;
 - 标题≤20字，正文≤80字，口语短句即可。
 - 暗号会被系统识别后从气泡里删掉，用户只看到你的正常说话。
 - 同一轮回复最多一次推送。` : "";
-  const callBlock = `\n\n【通话能力（callhome）——marker 暗号】
+  // 省 token：通话暗号仅在聊到打电话/勿扰/挂断时注入
+  const callBlock = __featHot("打电话","拨号","通话","电话","勿扰","挂断","静音","出门","晚安") ? `\n\n【通话能力（callhome）——marker 暗号】
 你能给用户打电话（应用内语音通话：麦→识别→TTS 播放，不是跳去别的 App）。想打时在正式回复里写一行暗号：
 1. 决定打电话：写 ⟪拨号:一句短理由⟫（≤15字，会显示在来电卡上）。一整段对话最多拨一次；勿扰开着时不要拨。
 2. 通话尾声说完晚安想挂断：在最后写 ⟪挂断⟫。
 3. 用户说「开勿扰/关勿扰」，或语境是出门/要静音：写 ⟪勿扰开⟫ / ⟪勿扰关⟫，并口头确认一句。
-这些暗号会被系统自动识别并从显示文本中移除，用户看不到。平时自然聊天，不要乱用。`;
+这些暗号会被系统自动识别并从显示文本中移除，用户看不到。平时自然聊天，不要乱用。` : "";
   const albumBlock = `\n\n【照片收藏「相册」——marker 暗号】
 用户可以给你发照片。看到值得珍藏的画面，想存进「相册」时，在正式回复里写一行暗号：
 - 收藏最新收到的照片：⟪收藏:一句感想⟫
@@ -6339,22 +6361,25 @@ ${guideText}`;
 - 感想 ≤30 字，温柔自然，是配给照片的话。
 - 暗号会被系统识别并擦除，用户只看到它悄悄存进相册。
 - 这一轮没有收到照片时不要用。`;
-  const couponBlock = couponStatusPromptBlock(); // 券夹：⟪使用券:券名⟫
-  const puppyActionBlock = puppyActionPromptBlock(); // 小狗动作：[[action:按钮文字]]
+  const couponBlock = __featHot("券","优惠券","用券","奖励券","送券") ? couponStatusPromptBlock() : ""; // 券夹：⟪使用券:券名⟫
+  const puppyActionBlock = __featHot("小狗","按钮","爪印","按按钮","宠物","摸摸","抱抱") ? puppyActionPromptBlock() : ""; // 小狗动作：[[action:按钮文字]]
   const stickerBlock = stickerPromptBlock(); // 表情包：[sticker:名字]
-  const profileBlock = profilePromptBlock(); // 主页资料卡：改签名/简介/背景
+  const profileBlock = __featHot("签名","简介","主页","背景","资料卡","改名字") ? profilePromptBlock() : ""; // 主页资料卡：改签名/简介/背景
   const pocketBlock = (typeof pocketPromptBlock==="function") ? pocketPromptBlock() : ""; // 远程浏览器：⟪浏览器开:url⟫
-  const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫
+  const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
+  // 省 token：任务布置暗号仅在聊到任务/惩罚/奖励时注入；关闭状态提示常驻（防止误用）
   const questBlock = (state.questEnabled === false)
     ? `\n\n【每日任务——已关闭】用户暂时不想被布置每日任务。请勿写 ⟪任务:⟫ 暗号，除非用户明确主动要求。`
-    : `\n\n【每日任务「布置任务」——marker 暗号】
+    : (__featHot("任务","每日任务","布置","惩罚","奖励","服从值","耐力值","做任务")
+      ? `\n\n【每日任务「布置任务」——marker 暗号】
 你们有一套每日任务系统（功能页「每日任务」面板 + 聊天弹窗任务卡）。当你觉得今天该给 TA 布置任务时，在正式回复里写一行暗号：
 ⟪任务:JSON⟫
 JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"06:00" 或 null）。示例：
 ⟪任务:[{"title":"晨起姿势保持","desc":"醒来后立刻跪姿，双手背后，保持至少12分钟。全程不准夹腿。","reward":"完成 → 服从值 +14","penalty":"未完成 → 今晚边缘控制加时","timeLimit":"06:00"},{"title":"饮水与汇报","desc":"全天饮水≥1.8L，每2小时发一次余量文字汇报。","reward":"完成 → 耐力值 +9","penalty":"不足 → 强制补水","timeLimit":null}]⟫
 规则：
 - 一天最多布置一次，3~6 条为宜，别天天换。
-- 暗号会被系统识别并擦除，用户只看到你布置的任务卡片。`;
+- 暗号会被系统识别并擦除，用户只看到你布置的任务卡片。`
+      : "");
   // Galatea 桌游：仅当连的是 galatea/abysslumina 的 MCP 时注入玩法说明
   const galateaBlock = (state.mcpStatus === "ready"
     && state.mcpConfig && state.mcpConfig.inChat !== false
@@ -9904,15 +9929,18 @@ function memRemoteBase(){
 function memRemoteOn(){ return (state.memRemote||{}).enabled !== false && !!memRemoteBase(); }
 async function memRemoteFetch(path, opts){
   const base = memRemoteBase();
-  if(!base) return null;
+  if(!base){ window.__memCloudErr = "未配置云端地址（wakeBase 为空）"; return null; }
   try{
     const headers = { "Accept":"application/json" };
     const tok = wakeToken();
     if(tok) headers["X-Auth-Token"] = tok;
     const r = await fetch(base + path, { ...(opts||{}), headers });
-    if(!r.ok) return null;
+    if(!r.ok){
+      window.__memCloudErr = "HTTP "+r.status+(r.status===401?"（鉴权失败，检查唤醒 token）":r.status===0?"（网络不可达）":"");
+      return { ok:false, status:r.status };
+    }
     return await r.json();
-  }catch(e){ return null; }
+  }catch(e){ window.__memCloudErr = String((e && e.message) || e); return null; }
 }
 function memRemotePost(path, body){
   const base = memRemoteBase();
@@ -9967,8 +9995,14 @@ async function memRemoteRefresh(){
   try{
     if(!memRemoteOn()){ window.__memCloudInfo = { n:-1 }; return; }
     const res = await memRemoteFetch("/memories");
-    if(res && typeof res.total === "number") window.__memCloudInfo = { n: res.total };
-    else window.__memCloudInfo = { n:-2 };   // -2=连接失败
+    if(res && res.ok === false){
+      window.__memCloudInfo = { n:-2 };
+    } else if(res && (typeof res.total === "number" || Array.isArray(res.memories))){
+      // 兜底：即使后端只回 memories 没 total，也按数组长度显示
+      window.__memCloudInfo = { n: (typeof res.total === "number") ? res.total : (res.memories||[]).length };
+    } else {
+      window.__memCloudInfo = { n:-2 };
+    }
     state.memCloudCheckedAt = Date.now();
     if(state.subPage==="memory" && typeof render==="function") render();
   }catch(e){ window.__memCloudInfo = { n:-2 }; }
@@ -19970,7 +20004,7 @@ function renderMemory(){
       <div class="mem-header-top">
         <p style="font-size:11px;color:var(--sub)">${state.memories.length} 条本地记忆 · 聊天会自动沉淀</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          <span style="font-size:11px;color:var(--sub)">${(()=>{const ci=window.__memCloudInfo||{n:-1};const on=(typeof memRemoteOn==="function")&&memRemoteOn();if(!on)return "";if(ci.n===-2)return "云端 ✗ 未连接";if(ci.n>=0)return "☁️ 云端 "+ci.n+" 条";return "☁️ 云端…";})()}</span>
+          <span style="font-size:11px;color:var(--sub)" title="${(()=>{const e=window.__memCloudErr;return e?esc(e):"";})()}">${(()=>{const ci=window.__memCloudInfo||{n:-1};const on=(typeof memRemoteOn==="function")&&memRemoteOn();if(!on)return "";if(ci.n===-2)return "云端 ✗ 未连接";if(ci.n>=0)return "☁️ 云端 "+ci.n+" 条";return "☁️ 云端…";})()}</span>
           <button id="mem-cloud-toggle" class="btn-ghost auto-toggle${(state.memRemote||{}).enabled===false?" off":""}">☁️ 云端 ${(state.memRemote||{}).enabled===false?"关":"开"}</button>
           <button id="mem-auto-toggle" class="btn-ghost auto-toggle${state.memAutoDisabled?" off":""}">
             ${state.memAutoRunning?"沉淀中…":(state.memAutoDisabled?"自动沉淀 关":"自动沉淀 开")}
@@ -25057,12 +25091,13 @@ function getWindowedMessages(allMsgs, target){
   return { messages: list, summary };
 }
 
-function buildMainChatRequest(ag){
+function buildMainChatRequest(ag, extraHint){
   const target = state.chatTarget || "a1";
   const threadMsgs = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || [];
   const allMsgs = threadMsgs.length ? threadMsgs : (state.messages || []);
-  const sys = buildCachedSys(ag);
-  // 注：消息级断点会破坏扩展思考链，已去掉；只保留 system 缓存。
+  // 用 buildSysForAgent 保持与主路径一致的 systemPrompt 拼接顺序（不破坏思考链）；
+  // 摘要作为追加段附在 system 末尾。
+  let sys = buildSysForAgent(ag, extraHint || null);
   const win = getWindowedMessages(allMsgs, target);
   const apiMsgs = win.messages.map(m=>{
     if(m.role==="user"){
@@ -25073,8 +25108,7 @@ function buildMainChatRequest(ag){
     return { role:"assistant", content: truthDareCardLabel(m) + m.content };
   });
   if(win.summary){
-    sys.dynamic = (sys.dynamic? sys.dynamic+"\n\n" : "")
-      + "【早前对话摘要（压缩前的逐字记录已不必再看）】\n" + win.summary;
+    sys = (sys? sys+"\n\n" : "") + "【早前对话摘要（压缩前的逐字记录已不必再看）】\n" + win.summary;
   }
   return { apiMsgs, sys };
 }
@@ -25097,7 +25131,12 @@ async function compressThreadIfNeeded(){
     const text = oldChunk.map(m=>`${m.role==="user"?"用户":"TA"}：${String(m.content||"").slice(0,300)}`).join("\n");
     const prompt = `把下面这段已发生的对话，覆盖式压缩成一段中文摘要：保留关键人物、事件、关系进展、承诺和伏笔，删掉寒暄。这是对「上一次摘要」的整体更新，不是追加——新摘要要包含旧摘要里依然重要的内容，且总长不超过 600 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】\n${text.slice(0,8000)}`;
     const ag = agentById(target) || (state.agents||[])[0];
-    const summary = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
+    // 摘要用便宜的 aux（DeepSeek）生成，主模型（贵）兜底：省 token 大头就是省在每轮的上下文，这里只花零头
+    let summary = "";
+    try{ summary = (await callAuxAPI(state.apiConfig, prompt)) || ""; }catch(e){}
+    if(!summary.trim() && typeof callChatAPI==="function" && ag){
+      summary = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
+    }
     thread.compressed = { summary: (summary||"").slice(0,1200), upToIndex: compressTo, at: new Date().toISOString() };
     saveActiveThread();
   }catch(e){ /* 压缩失败不阻塞聊天 */ }
@@ -25403,9 +25442,11 @@ async function triggerAIReply(){
 请只以自己的身份回复，不要替别人说话。可以回应其他 AI 的发言，语气自然、像真人群聊。回复保持简短。`;
         const sys = buildSysForAgent(ag, groupHint);
         // 历史里其他 AI 的消息标成 user 侧旁白，避免模型混淆 role
+        // 群聊已弃用：无限模式（contextLimit=0）下仅给硬上限兜底，防止塞全量
         const limit = state.contextLimit || 0;
         let list = state.messages.filter(m=>m.role==="user"||m.role==="assistant");
         if(limit>0) list = list.slice(-limit);
+        else if(list.length > 80) list = list.slice(-80);
         const apiMsgs = list.map(m=>{
           if(m.role==="user") return { role:"user", content:`[时间: ${formatTimeFull(m.time)}] 用户：${m.content}` };
           if(m.speakerId === ag.id) return { role:"assistant", content: m.content };
@@ -25421,9 +25462,9 @@ async function triggerAIReply(){
       }
     } else {
       const ag = agentById(target);
-      const sys = buildSysForAgent(ag, null);
-      const apiMsgs = msgsToApiFormat(state.messages, false);
-      await callOneAgentReply(ag, apiMsgs, sys);
+      // 带滚动摘要的窗口：contextLimit=0（无限）时启用压缩，token 有界；有限窗口退化为截断
+      const req = buildMainChatRequest(ag, null);
+      await callOneAgentReply(ag, req.apiMsgs, req.sys);
     }
   }catch(e){
     showToast(`请求失败：${e.message}`); // 报错走浮窗，不留在聊天
@@ -25434,6 +25475,8 @@ async function triggerAIReply(){
   render();
   // 记忆自动沉淀：回复完成后延迟跑一次（内部有阈值+冷却，不会太频繁）
   setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 8000);
+  // 对话压缩（滚动摘要）：无限窗口下把旧消息压成摘要，token 有界
+  setTimeout(()=>{ if(typeof compressThreadIfNeeded==="function") compressThreadIfNeeded(); }, 12000);
 }
 
 /** 用指定思考内容重写这一组 assistant 回复 */
@@ -25995,8 +26038,10 @@ ${part}
 /** 每线程 user/assistant 消息数（自动沉淀检查点口径） */
 function memRelevantCount(tid){
   const th = (state.chatThreads||{})[tid];
-  if(!th || !Array.isArray(th.messages)) return 0;
-  return th.messages.filter(m=>m.role==="user"||m.role==="assistant").length;
+  if(th && Array.isArray(th.messages)) return th.messages.filter(m=>m.role==="user"||m.role==="assistant").length;
+  // 兜底：线程未落盘时，主线程消息可能在 state.messages（旧路径），别把自动沉淀饿死
+  if(tid === (state.chatTarget || "a1") && Array.isArray(state.messages)) return state.messages.filter(m=>m.role==="user"||m.role==="assistant").length;
+  return 0;
 }
 
 /** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App） */
@@ -26039,12 +26084,13 @@ async function memAutoIntegrate(){
       // 云端记忆优先：POST /mem/ingest，成功即推进检查点，本地不再重复提炼
       if(typeof memRemotePost==="function" && memRemoteOn()){
         const remoteRes = await memRemotePost("/ingest", { transcript, rangeLabel:"最近 "+info.n+" 条" });
-        if(remoteRes && remoteRes.ok){
+        if(remoteRes && remoteRes.ok && (remoteRes.count||0) > 0){
           totalRemote += (remoteRes.count || 0);
           state.memCheckpoint[tid] = cAtRun;
           persist("memCheckpoint");
           continue;
         }
+        // 云端 0 条 / 失败 → 落到本地提炼兜底，避免空结果吞掉检查点导致记忆永不生成
       }
       try{
         const created = await memDigestTranscript(transcript, "最近 "+info.n+" 条", info.n);
@@ -26182,6 +26228,7 @@ window.reinitState = function(){
 try{ restorePrNative(); }catch(e){} }catch(e){}
   // 登录后触发一次记忆自动沉淀（补足 App 关闭期间积攒的聊天）
   setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
+  setTimeout(()=>{ if(typeof compressThreadIfNeeded==="function") compressThreadIfNeeded(); }, 9000);
 };
 
 try{ applyBrandingToDom(); }catch(e){}
@@ -26189,6 +26236,7 @@ render();
 try{ applyBrandingToDom(); }catch(e){}
 // 打开 App 触发一次记忆自动沉淀（有登录态时会检查积攒的聊天）
 setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
+setTimeout(()=>{ if(typeof compressThreadIfNeeded==="function") compressThreadIfNeeded(); }, 9000);
 
 // 切到后台 / 关闭前强制落盘聊天（APK 很常见）
 function forceFlushChat(){

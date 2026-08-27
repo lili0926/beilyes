@@ -68,7 +68,7 @@ async function callLLM(task) {
   }
   if (c.channel === 'claude') {
     const sysMsgs = sys ? [{ role: 'user', content: sys }, { role: 'assistant', content: '好的，我记住了。' }] : [];
-    const body = { model: 'claude-sonnet-4-6', max_tokens: 16000, messages: sysMsgs.concat(m), thinking: { type: 'enabled', budget_tokens: 8000 } };
+    const body = { model: 'claude-sonnet-4-6', max_tokens: 16000, messages: sysMsgs.concat(m), thinking: { type: 'enabled', budget_tokens: 3000 } };
     const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': c.claudeKey || '', 'anthropic-version': '2023-06-01', 'anthropic-beta': 'interleaved-thinking-2025-05-14' }, body: JSON.stringify(body) });
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
