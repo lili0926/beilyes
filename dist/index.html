@@ -3081,6 +3081,21 @@
     .bisca-bot-actions button { flex:1; padding:10px; border-radius:10px; border:none; font-weight:700; }
     .bisca-bot-status { margin-top:8px; font-size:12px; opacity:0.9; min-height:1.2em; }
     #bisca-frame-wrap { position: relative; }
+    .bisca-bot-fab-float {
+      position: fixed !important;
+      right: 14px !important;
+      bottom: max(72px, env(safe-area-inset-bottom, 0px)) !important;
+      z-index: 10060 !important;
+      background: #e0a824 !important;
+      color: #2a1c0e !important;
+      font-weight: 800 !important;
+      border: 3px solid #3d2918 !important;
+      border-radius: 999px !important;
+      padding: 12px 18px !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+      font-size: 15px !important;
+    }
+
     .captivity-frame-bar {
       flex-wrap: wrap;
       row-gap: 6px;
@@ -6418,9 +6433,9 @@ function render(){
         <button type="button" id="bisca-frame-ext">新窗口</button>
       </div>
       <iframe class="captivity-frame" id="bisca-iframe" src="${escAttr(b.url)}" allow="fullscreen; autoplay"></iframe>
-      ${typeof biscaBotPanelHtml==="function" ? biscaBotPanelHtml() : ""}
-    </div>`;
+      </div>`;
   }
+  try{ if(typeof biscaBotPanelHtml==="function") html += biscaBotPanelHtml(); }catch(e){}
   app.innerHTML=html;
   // 补充 lucide v1.31 缺失的图标（pen-nib：书房页头），经 createIcons 传入合并图标集
   try{
@@ -13748,15 +13763,16 @@ function biscaBotStartPoll(){
 }
 function biscaBotPanelHtml(){
   const bot = ensureBiscaBot();
-  if(!(state.biscaOpen && state.biscaOpen.url)) return "";
-  // 默认展开；仅用户点「收起」后 panelOpen===false
+  const active = (state.biscaSession && state.biscaSession.key) || (state.biscaOpen && state.biscaOpen.url);
+  if(!active) return "";
   if(bot.panelOpen === false){
-    return "";
+    return `<button type="button" id="bisca-bot-toggle" class="bisca-bot-fab-float">请机</button>`;
   }
   bot.panelOpen = true;
+  const gname = (state.biscaSession && state.biscaSession.title) || (state.biscaOpen && state.biscaOpen.title) || "牌桌";
   return `<div class="bisca-bot-panel" id="bisca-bot-panel">
     <div class="bisca-bot-hd">
-      <b>请机入座</b>
+      <b>请机 · ${esc(gname)}</b>
       <button type="button" id="bisca-bot-toggle">收起</button>
     </div>
     <div class="bisca-bot-bd">
@@ -13767,6 +13783,7 @@ function biscaBotPanelHtml(){
       <div class="bisca-bot-actions">
         <button type="button" id="bisca-bot-join" class="btn-accent">入座</button>
         <button type="button" id="bisca-bot-arm" class="btn-ghost">${bot.armed?"停止值守":"开始值守"}</button>
+        <button type="button" id="bisca-bot-end" class="btn-ghost">结束</button>
       </div>
       <div class="bisca-bot-status" id="bisca-bot-status">${esc(bot.status||"")}</div>
     </div>
@@ -13839,20 +13856,33 @@ async function biscaOpenInApp(key){
 }
 function openBiscaGame(key){
   if(!BISCA_URLS[key] && !BISCA_URLS_IP[key]) return false;
+  const url = biscaLaunchUrl(key);
+  // 无论半屏小浏览器还是 iframe，都挂上「请机」会话，面板才能出现
+  state.biscaSession = { key, title: BISCA_TITLES[key]||"游戏", url: url || "" };
+  try{
+    const bot = ensureBiscaBot();
+    bot.panelOpen = true;
+    persist("biscaBot");
+  }catch(e){}
   biscaOpenInApp(key).then(ok => {
-    if(ok) return;
-    // 网页预览/无插件：回退页内 iframe（Web 下跨域 cookie 受限，卡在登录可点「新窗口」）
-    const url = biscaLaunchUrl(key);
+    if(ok){
+      // 原生半屏浏览器已开：只刷新以画出请机面板
+      if(typeof render==="function") render();
+      return;
+    }
+    // 网页预览/无插件：回退页内 iframe
     if(!url) return;
     state.biscaOpen = { key, title: BISCA_TITLES[key]||"游戏", url, useDomain:false };
-    try{ ensureBiscaBot().panelOpen = true; }catch(e){}
     if(typeof render==="function") render();
   });
+  if(typeof render==="function") render();
   return true;
 }
 function closeBiscaGame(){
   try{ if(typeof biscaBotStopPoll==="function") biscaBotStopPoll(); }catch(e){}
   state.biscaOpen = null;
+  state.biscaSession = null;
+  try{ ensureBiscaBot().panelOpen = false; }catch(e){}
   if(typeof render==="function") render();
 }
 function biscaToggleHost(){
