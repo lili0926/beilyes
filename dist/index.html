@@ -5148,8 +5148,8 @@ const state = {
     roomCode: "",
     armed: false,
     status: "",
-    panelOpen: false,
-  }) || { internalKey:"", agentId:"external", agentName:"Aries", roomCode:"", armed:false, status:"", panelOpen:false },
+    panelOpen: true,
+  }) || { internalKey:"", agentId:"external", agentName:"Aries", roomCode:"", armed:false, status:"", panelOpen:true },
   proactiveInbox: LS.get("proactiveInbox", []), // {id, content, time, speakerId, speakerName, from}
   // REM 做梦（dream-system 风格，与记忆隔离）
   dreamConfig: LS.get("dreamConfig", {
@@ -13730,7 +13730,7 @@ function biscaBotPanelHtml(){
   const bot = ensureBiscaBot();
   if(!(state.biscaOpen && state.biscaOpen.url)) return "";
   if(!bot.panelOpen){
-    return `<button type="button" id="bisca-bot-toggle" class="bisca-bot-fab" title="请机入座">机</button>`;
+    return ""; // 顶栏已有「请机」按钮
   }
   return `<div class="bisca-bot-panel" id="bisca-bot-panel">
     <div class="bisca-bot-hd">
@@ -13741,7 +13741,7 @@ function biscaBotPanelHtml(){
       <label>房间码<input id="bisca-bot-code" value="${escAttr(bot.roomCode||"")}" placeholder="建房后的房间码"/></label>
       <label>Internal Key<input id="bisca-bot-key" value="${escAttr(bot.internalKey||"")}" placeholder="VPS data/config.json 里的 key"/></label>
       <label>显示名<input id="bisca-bot-name" value="${escAttr(bot.agentName||"Aries")}" placeholder="Aries"/></label>
-      <div class="bisca-bot-hint">建房时在「请谁上桌」勾选 <b>外接 Agent</b>，再点入座。机用当前聊天角色的 API Key 思考出牌。</div>
+      <div class="bisca-bot-hint">Key 在 VPS 的 <b>data/cards/config.json</b>（或 daifugo/monopoly）里，字段一般叫 internal_key。建房请勾「外接 Agent」。机用【聊天角色】的 API Key 出牌，不是填在牌室网页里。</div>
       <div class="bisca-bot-actions">
         <button type="button" id="bisca-bot-join" class="btn-accent">入座</button>
         <button type="button" id="bisca-bot-arm" class="btn-ghost">${bot.armed?"停止值守":"开始值守"}</button>
@@ -13823,6 +13823,7 @@ function openBiscaGame(key){
     const url = biscaLaunchUrl(key);
     if(!url) return;
     state.biscaOpen = { key, title: BISCA_TITLES[key]||"游戏", url, useDomain:false };
+    try{ ensureBiscaBot().panelOpen = true; }catch(e){}
     if(typeof render==="function") render();
   });
   return true;
@@ -13838,6 +13839,7 @@ function biscaToggleHost(){
   const useDomain = !state.biscaOpen.useDomain;
   const url = useDomain ? (BISCA_URLS[key] || BISCA_URLS_IP[key]) : (BISCA_URLS_IP[key] || BISCA_URLS[key]);
   state.biscaOpen = { key, title: BISCA_TITLES[key]||"游戏", url, useDomain };
+  try{ if(typeof ensureBiscaBot==="function") ensureBiscaBot().panelOpen = true; }catch(e){}
   if(typeof render==="function") render();
 }
 
