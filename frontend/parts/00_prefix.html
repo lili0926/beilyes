@@ -31,6 +31,8 @@
     }
     body.font-nail { font-family: 'NailCatBell', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
     body.font-angel { font-family: 'NailAngelClinic', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    body.font-noto-kr, body.font-noto-kr * { font-family: "Noto Sans KR", "Noto Sans SC", -apple-system, sans-serif !important; }
+    body.font-noto-sc, body.font-noto-sc * { font-family: "Noto Sans SC", "Noto Sans KR", -apple-system, sans-serif !important; }
     body.font-kitten { font-family: 'NaiKitten', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
 
     .font-switch-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
@@ -2740,6 +2742,7 @@
   </div>
 
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=Caveat&family=Great+Vibes&family=Noto+Sans+SC:wght@300;400&family=Ma+Shan+Zheng&family=Zhi+Mang+Xing&display=swap');
     @keyframes splashGlow {
       0%,100%{opacity:0.6;transform:translate(-50%,-50%) scale(1)}
@@ -3979,8 +3982,8 @@
     body.shell-korean .bubble {
       max-width: 92% !important;
       font-size: 14px !important;
-      line-height: 1.35 !important;
-      padding: 5px 10px !important;
+      line-height: 1.32 !important;
+      padding: 3px 9px !important;
       box-shadow: none !important;
       font-weight: 400 !important;
     }
@@ -4173,13 +4176,13 @@
 
     /* 聊天：宽约 92%、细气泡、少留白 */
     body.shell-korean .korean-layout .chat-messages {
-      padding: 2px 10px 12px !important;
+      padding: 2px 10px 8px !important;
     }
     body.shell-korean .bubble {
       max-width: 92% !important;
       font-size: 14px !important;
-      line-height: 1.35 !important;
-      padding: 5px 10px !important;
+      line-height: 1.32 !important;
+      padding: 3px 9px !important;
       letter-spacing: -0.01em;
       box-shadow: none !important;
       font-weight: 400 !important;
@@ -4198,16 +4201,16 @@
       border: none !important;
     }
     body.shell-korean .bubble-row {
-      margin-bottom: 1px !important;
+      margin-bottom: 0 !important;
       gap: 4px !important;
     }
     body.shell-korean .msg-meta {
-      margin: 6px 0 1px !important;
+      margin: 4px 0 0 !important;
       align-items: center !important;
       gap: 4px !important;
     }
     body.shell-korean .msg-meta.me {
-      margin: 6px 0 1px !important;
+      margin: 4px 0 0 !important;
     }
     body.shell-korean .msg-meta-avatar,
     body.shell-korean .bubble-avatar {
@@ -4322,6 +4325,132 @@
     body.shell-korean .kr-more-sub {
       font-size: 12px; color: #AEAEB2; margin-top: 4px;
     }
+
+
+    /* IB 风格 Desk：大时钟 + 6 列图标 + 日历条 + 音乐 */
+    body.shell-korean .kr-desk-scroll {
+      padding-top: 8px !important;
+    }
+    body.shell-korean .kr-desk-date {
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      color: #AEAEB2;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    body.shell-korean .kr-desk-clock {
+      text-align: center;
+      font-size: 52px;
+      font-weight: 200;
+      letter-spacing: -0.04em;
+      color: #1C1C1E;
+      line-height: 1.05;
+      margin-bottom: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    body.shell-korean .kr-desk-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px 4px;
+      margin-bottom: 14px;
+      padding: 0 2px;
+    }
+    body.shell-korean .kr-desk-ico {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: transparent !important; border: none !important;
+      box-shadow: none !important; padding: 0;
+      cursor: pointer; font-family: inherit;
+    }
+    body.shell-korean .kr-desk-ico-bg {
+      width: 44px; height: 44px; border-radius: 14px;
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      display: flex; align-items: center; justify-content: center;
+      color: #3A3A3C;
+    }
+    body.shell-korean .kr-desk-ico-bg svg { width: 18px; height: 18px; }
+    body.shell-korean .kr-desk-ico-lab {
+      font-size: 9px; color: #8E8E93; text-align: center;
+      line-height: 1.15; max-width: 52px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.shell-korean .kr-desk-profile {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; margin-bottom: 10px;
+    }
+    body.shell-korean .kr-desk-av {
+      width: 52px; height: 52px; border-radius: 50%;
+      object-fit: cover; background: #E5E5EA; flex-shrink: 0;
+    }
+    body.shell-korean .kr-desk-prof-meta { flex: 1; min-width: 0; }
+    body.shell-korean .kr-desk-prof-name {
+      font-size: 13px; font-weight: 600; color: #1C1C1E;
+    }
+    body.shell-korean .kr-desk-prof-sub {
+      font-size: 10px; color: #AEAEB2; margin-top: 2px;
+    }
+    body.shell-korean .kr-cal {
+      flex-shrink: 0; width: 112px;
+    }
+    body.shell-korean .kr-cal-hd {
+      font-size: 9px; color: #8E8E93; margin-bottom: 4px;
+      text-align: right; letter-spacing: 0.04em;
+    }
+    body.shell-korean .kr-cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      gap: 1px; font-size: 8px; color: #AEAEB2; text-align: center;
+    }
+    body.shell-korean .kr-cal-d.on {
+      color: #1C1C1E; font-weight: 700;
+      background: rgba(0,0,0,0.06); border-radius: 4px;
+    }
+    body.shell-korean .kr-desk-cards {
+      display: grid; grid-template-columns: 1.2fr 1fr;
+      gap: 8px; margin-bottom: 10px;
+    }
+    body.shell-korean .kr-note-card,
+    body.shell-korean .kr-sched-card {
+      padding: 12px; text-align: left;
+      font-family: inherit; cursor: pointer;
+    }
+    body.shell-korean .kr-note-label,
+    body.shell-korean .kr-sched-label {
+      font-size: 9px; letter-spacing: 0.1em; color: #AEAEB2;
+      margin-bottom: 6px;
+    }
+    body.shell-korean .kr-note-text {
+      font-size: 12px; color: #3A3A3C; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    body.shell-korean .kr-sched-date {
+      font-size: 12px; font-weight: 600; color: #1C1C1E;
+    }
+    body.shell-korean .kr-sched-hint {
+      font-size: 10px; color: #8E8E93; margin-top: 4px;
+    }
+    body.shell-korean .kr-desk-music {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; margin-bottom: 8px;
+      width: 100%; border: none; cursor: pointer; font-family: inherit;
+    }
+    body.shell-korean .kr-dm-cover {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #EFEFF1; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      color: #8E8E93; flex-shrink: 0;
+    }
+    body.shell-korean .kr-dm-cover img { width: 100%; height: 100%; object-fit: cover; }
+    body.shell-korean .kr-dm-meta { flex: 1; min-width: 0; text-align: left; }
+    body.shell-korean .kr-dm-title {
+      font-size: 13px; font-weight: 600; color: #1C1C1E;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-dm-sub {
+      font-size: 10px; color: #8E8E93; margin-top: 2px;
+    }
+    body.shell-korean .kr-dm-play { color: #AEAEB2; }
 
   </style>
 
