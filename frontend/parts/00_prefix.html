@@ -4233,6 +4233,96 @@
       box-shadow: 0 0 0 1px rgba(0,0,0,0.04) !important;
     }
 
+
+    /* 韩系三面板：Desk / Space / More */
+    body.shell-korean .home-swipe-wrap.kr-home {
+      flex: 1; min-height: 0; overflow: hidden;
+      background:
+        radial-gradient(ellipse at 20% 0%, rgba(0,0,0,0.03), transparent 50%),
+        radial-gradient(ellipse at 80% 100%, rgba(0,0,0,0.04), transparent 45%),
+        #F2F2F4;
+    }
+    body.shell-korean .kr-panel {
+      background: transparent;
+    }
+    body.shell-korean .kr-panel .kr-home-scroll {
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 16px calc(100px + env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+    }
+    body.shell-korean .kr-dots {
+      margin: 14px 0 4px;
+    }
+    body.shell-korean .kr-dots .swipe-dot {
+      width: 6px; height: 6px;
+      background: #D1D1D6;
+      border-radius: 50%;
+    }
+    body.shell-korean .kr-dots .swipe-dot.on {
+      background: #1C1C1E;
+      width: 16px; border-radius: 4px;
+    }
+    body.shell-korean .kr-space-card {
+      border-radius: 24px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(255,255,255,0.75);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.06);
+      margin-bottom: 12px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    body.shell-korean .kr-space-cover {
+      position: relative; height: 120px;
+      background: linear-gradient(145deg, #E8E8EA 0%, #F5F5F7 50%, #DEDEE2 100%);
+    }
+    body.shell-korean .kr-space-gradient {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(255,255,255,0.95), transparent 55%);
+    }
+    body.shell-korean .kr-space-avs {
+      position: absolute; left: 16px; bottom: 12px;
+      display: flex; gap: 8px; z-index: 1;
+    }
+    body.shell-korean .kr-space-avs img,
+    body.shell-korean .kr-space-fb {
+      width: 52px; height: 52px; border-radius: 50%;
+      object-fit: cover; background: #E5E5EA;
+      box-shadow: 0 0 0 3px #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    body.shell-korean .kr-space-body { padding: 8px 16px 16px; }
+    body.shell-korean .kr-space-names {
+      font-size: 17px; font-weight: 600; color: #1C1C1E;
+      letter-spacing: -0.02em;
+    }
+    body.shell-korean .kr-space-days {
+      font-size: 12px; color: #8E8E93; margin-top: 4px;
+    }
+    body.shell-korean .kr-space-love {
+      margin-top: 10px; font-size: 12px; color: #8E8E93;
+      display: flex; align-items: center; gap: 8px;
+    }
+    body.shell-korean .kr-space-quote {
+      margin-top: 12px; padding: 12px 14px;
+      border-radius: 14px; background: rgba(0,0,0,0.03);
+      border-left: 2px solid #C7C7CC;
+      font-size: 13px; color: #3A3A3C; line-height: 1.45;
+    }
+    body.shell-korean .kr-more-head {
+      padding: 16px 16px 12px; margin-bottom: 10px;
+    }
+    body.shell-korean .kr-more-title {
+      font-size: 20px; font-weight: 600; color: #1C1C1E;
+      letter-spacing: -0.02em;
+    }
+    body.shell-korean .kr-more-sub {
+      font-size: 12px; color: #AEAEB2; margin-top: 4px;
+    }
+
   </style>
 
   <div id="app"></div>

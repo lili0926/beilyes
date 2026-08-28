@@ -4233,6 +4233,96 @@
       box-shadow: 0 0 0 1px rgba(0,0,0,0.04) !important;
     }
 
+
+    /* 韩系三面板：Desk / Space / More */
+    body.shell-korean .home-swipe-wrap.kr-home {
+      flex: 1; min-height: 0; overflow: hidden;
+      background:
+        radial-gradient(ellipse at 20% 0%, rgba(0,0,0,0.03), transparent 50%),
+        radial-gradient(ellipse at 80% 100%, rgba(0,0,0,0.04), transparent 45%),
+        #F2F2F4;
+    }
+    body.shell-korean .kr-panel {
+      background: transparent;
+    }
+    body.shell-korean .kr-panel .kr-home-scroll {
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 16px calc(100px + env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+    }
+    body.shell-korean .kr-dots {
+      margin: 14px 0 4px;
+    }
+    body.shell-korean .kr-dots .swipe-dot {
+      width: 6px; height: 6px;
+      background: #D1D1D6;
+      border-radius: 50%;
+    }
+    body.shell-korean .kr-dots .swipe-dot.on {
+      background: #1C1C1E;
+      width: 16px; border-radius: 4px;
+    }
+    body.shell-korean .kr-space-card {
+      border-radius: 24px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(255,255,255,0.75);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.06);
+      margin-bottom: 12px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    body.shell-korean .kr-space-cover {
+      position: relative; height: 120px;
+      background: linear-gradient(145deg, #E8E8EA 0%, #F5F5F7 50%, #DEDEE2 100%);
+    }
+    body.shell-korean .kr-space-gradient {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(255,255,255,0.95), transparent 55%);
+    }
+    body.shell-korean .kr-space-avs {
+      position: absolute; left: 16px; bottom: 12px;
+      display: flex; gap: 8px; z-index: 1;
+    }
+    body.shell-korean .kr-space-avs img,
+    body.shell-korean .kr-space-fb {
+      width: 52px; height: 52px; border-radius: 50%;
+      object-fit: cover; background: #E5E5EA;
+      box-shadow: 0 0 0 3px #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    body.shell-korean .kr-space-body { padding: 8px 16px 16px; }
+    body.shell-korean .kr-space-names {
+      font-size: 17px; font-weight: 600; color: #1C1C1E;
+      letter-spacing: -0.02em;
+    }
+    body.shell-korean .kr-space-days {
+      font-size: 12px; color: #8E8E93; margin-top: 4px;
+    }
+    body.shell-korean .kr-space-love {
+      margin-top: 10px; font-size: 12px; color: #8E8E93;
+      display: flex; align-items: center; gap: 8px;
+    }
+    body.shell-korean .kr-space-quote {
+      margin-top: 12px; padding: 12px 14px;
+      border-radius: 14px; background: rgba(0,0,0,0.03);
+      border-left: 2px solid #C7C7CC;
+      font-size: 13px; color: #3A3A3C; line-height: 1.45;
+    }
+    body.shell-korean .kr-more-head {
+      padding: 16px 16px 12px; margin-bottom: 10px;
+    }
+    body.shell-korean .kr-more-title {
+      font-size: 20px; font-weight: 600; color: #1C1C1E;
+      letter-spacing: -0.02em;
+    }
+    body.shell-korean .kr-more-sub {
+      font-size: 12px; color: #AEAEB2; margin-top: 4px;
+    }
+
   </style>
 
   <div id="app"></div>
@@ -7781,6 +7871,15 @@ function renderHomeSwipe(){
 }
 
 /** 韩系桌面式主页：黑白灰毛玻璃组件 */
+function homeDotsKorean(active){
+  return `<div class="swipe-dots kr-dots">
+    <div class="swipe-dot${active===0?" on":""}" onclick="setHomePage(0)" title="桌面"></div>
+    <div class="swipe-dot${active===1?" on":""}" onclick="setHomePage(1)" title="名片"></div>
+    <div class="swipe-dot${active===2?" on":""}" onclick="setHomePage(2)" title="更多"></div>
+  </div>`;
+}
+
+/** 韩系三面板（学 IB：Desk 桌面 / Space 名片 / 更多） */
 function renderHomeKorean(){
   const c = state.coupleInfo || {};
   const love = (state.loveScore && state.loveScore.value != null) ? state.loveScore.value : 50;
@@ -7798,6 +7897,7 @@ function renderHomeKorean(){
   const taName = c.partnerName || "TA";
   const days = (typeof daysSince==="function") ? daysSince() : "—";
   const status = c.statusMsg || "今天也在一起";
+  const startDate = c.startDate || "";
 
   let title = "一起听";
   let artist = "点进选歌";
@@ -7811,119 +7911,149 @@ function renderHomeKorean(){
     }
   }catch(e){}
 
-  // 右上四格：高频入口
-  const top4 = [
+  const iconBtn = (it, sm) => `
+    <button type="button" class="feat-card kr-app-icon${sm?" kr-app-sm":""}" data-sub="${escAttr(it.key)}">
+      <span class="kr-app-ico"><i data-lucide="${it.icon}"></i></span>
+      <span class="kr-app-label">${esc(it.label)}</span>
+    </button>`;
+
+  const desk4 = [
     {key:"mdiary", icon:"notebook-pen", label:"日记"},
     {key:"mailbox", icon:"mail", label:"信箱"},
     {key:"phone", icon:"phone", label:"电话"},
     {key:"theme", icon:"palette", label:"外观"},
-  ];
-  const top4Html = top4.map(it => `
-    <button type="button" class="feat-card kr-app-icon" data-sub="${escAttr(it.key)}">
-      <span class="kr-app-ico"><i data-lucide="${it.icon}"></i></span>
-      <span class="kr-app-label">${esc(it.label)}</span>
-    </button>
-  `).join("");
+  ].map(it => iconBtn(it, false)).join("");
 
-  // 下方更多入口（小）
-  const more = [
+  const deskMore = [
+    {key:"music", icon:"headphones", label:"乐库"},
     {key:"read", icon:"book-open", label:"一起读"},
     {key:"watch", icon:"film", label:"一起看"},
     {key:"body", icon:"heart", label:"身体"},
+  ].map(it => iconBtn(it, true)).join("");
+
+  const moreApps = [
     {key:"bisca_cards", icon:"spade", label:"牌室"},
     {key:"prompts", icon:"sparkles", label:"提示词"},
     {key:"usage", icon:"smartphone", label:"屏幕"},
     {key:"vps", icon:"monitor", label:"VPS"},
-    {key:"music", icon:"headphones", label:"乐库"},
-  ];
-  const moreHtml = more.map(it => `
-    <button type="button" class="feat-card kr-app-icon kr-app-sm" data-sub="${escAttr(it.key)}">
-      <span class="kr-app-ico"><i data-lucide="${it.icon}"></i></span>
-      <span class="kr-app-label">${esc(it.label)}</span>
-    </button>
-  `).join("");
+    {key:"ntfy", icon:"bell", label:"通知"},
+    {key:"branding", icon:"tag", label:"品牌"},
+    {key:"calendar", icon:"calendar", label:"日历"},
+    {key:"baby", icon:"baby", label:"育儿"},
+  ].map(it => iconBtn(it, true)).join("");
 
-  // 最近一条对方消息预览（有趣一点）
   let preview = "";
   try{
     const msgs = state.messages || [];
     for(let i = msgs.length - 1; i >= 0; i--){
       const m = msgs[i];
       if(m && m.role === "assistant" && m.content){
-        const t = String(m.content).replace(/<[^>]+>/g,"").trim().slice(0, 42);
+        const t = String(m.content).replace(/<[^>]+>/g,"").trim().slice(0, 48);
         if(t){ preview = t; break; }
       }
     }
   }catch(e){}
 
-  return `<div class="kr-home" id="home-swipe">
-    <div class="kr-home-scroll">
-      <div class="kr-top-row">
-        <div class="kr-widget kr-time-card">
-          <div class="kr-clock">${hh}:${mm}</div>
-          <div class="kr-date">${esc(dateLine)}</div>
+  // —— Panel 0 Desk ——
+  const desk = `
+    <div class="home-panel kr-panel">
+      <div class="kr-home-scroll">
+        <div class="kr-top-row">
+          <div class="kr-widget kr-time-card">
+            <div class="kr-clock">${hh}:${mm}</div>
+            <div class="kr-date">${esc(dateLine)}</div>
+          </div>
+          <div class="kr-widget kr-weather-card">
+            <div class="kr-w-temp">${esc(String(temp))}</div>
+            <div class="kr-w-label">${esc(wLabel)}</div>
+          </div>
         </div>
-        <div class="kr-widget kr-weather-card">
-          <div class="kr-w-temp">${esc(String(temp))}</div>
-          <div class="kr-w-label">${esc(wLabel)}</div>
+        <div class="kr-mid-row">
+          <button type="button" class="feat-card kr-vinyl-card" data-sub="music">
+            <div class="kr-vinyl-disc${cover ? " has-track" : ""}">
+              <div class="kr-vinyl-ring"></div>
+              <div class="kr-vinyl-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</div>
+              <div class="kr-vinyl-hole"></div>
+            </div>
+            <div class="kr-vinyl-meta">
+              <div class="kr-vinyl-title">${esc(title)}</div>
+              <div class="kr-vinyl-artist">${esc(artist)}</div>
+            </div>
+          </button>
+          <div class="kr-quad">${desk4}</div>
         </div>
+        <div class="kr-widget kr-apps kr-apps-more">
+          <div class="kr-apps-grid kr-apps-grid-8">${deskMore}</div>
+        </div>
+        ${homeDotsKorean(0)}
+        <div class="kr-home-foot">desk · swipe →</div>
       </div>
+    </div>`;
 
-      <div class="kr-mid-row">
-        <button type="button" class="feat-card kr-vinyl-card" data-sub="music">
-          <div class="kr-vinyl-disc${cover ? " has-track" : ""}">
-            <div class="kr-vinyl-ring"></div>
-            <div class="kr-vinyl-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</div>
-            <div class="kr-vinyl-hole"></div>
+  // —— Panel 1 Space（名片）——
+  const space = `
+    <div class="home-panel kr-panel">
+      <div class="kr-home-scroll">
+        <div class="kr-space-card">
+          <div class="kr-space-cover">
+            <div class="kr-space-gradient"></div>
+            <div class="kr-space-avs">
+              ${myAv?`<img src="${escAttr(myAv)}" alt=""/>`:`<div class="kr-space-fb">🙂</div>`}
+              ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<div class="kr-space-fb">💬</div>`}
+            </div>
           </div>
-          <div class="kr-vinyl-meta">
-            <div class="kr-vinyl-title">${esc(title)}</div>
-            <div class="kr-vinyl-artist">${esc(artist)}</div>
+          <div class="kr-space-body">
+            <div class="kr-space-names">${esc(myName)} · ${esc(taName)}</div>
+            <div class="kr-space-days">在一起 ${esc(String(days))} 天${startDate?` · since ${esc(startDate)}`:""}</div>
+            <div class="kr-space-love">
+              <span class="kr-hearts">${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}</span>
+              <span>${esc(String(love))}</span>
+            </div>
+            <div class="kr-space-quote">${esc(status)}</div>
           </div>
+        </div>
+        <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
+          <div class="kr-cp-top">
+            ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
+            <div class="kr-cp-name">${esc(taName)}</div>
+            <div class="kr-cp-go">打开聊天</div>
+          </div>
+          <div class="kr-cp-text">${esc(preview || "还没有新消息 · 去说一句吧")}</div>
         </button>
-        <div class="kr-quad">
-          ${top4Html}
-        </div>
+        ${homeDotsKorean(1)}
+        <div class="kr-home-foot">space · profile</div>
       </div>
+    </div>`;
 
-      <div class="kr-widget kr-profile-card">
-        <div class="kr-prof-left">
-          ${taAv?`<img src="${escAttr(taAv)}" class="kr-prof-av" alt=""/>`:`<div class="kr-prof-av kr-id-fallback">💬</div>`}
-          <div>
-            <div class="kr-prof-name">${esc(taName)}</div>
-            <div class="kr-prof-sub">@ with ${esc(myName)} · ${esc(String(days))}d</div>
+  // —— Panel 2 更多 ——
+  const more = `
+    <div class="home-panel kr-panel">
+      <div class="kr-home-scroll">
+        <div class="kr-widget kr-more-head">
+          <div class="kr-more-title">更多</div>
+          <div class="kr-more-sub">功能入口 · 和 IB 一样从桌面进</div>
+        </div>
+        <div class="kr-widget kr-apps">
+          <div class="kr-apps-grid kr-apps-grid-8">${moreApps}</div>
+        </div>
+        <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
+          <div class="kr-cp-top">
+            <div class="kr-cp-name">聊天</div>
+            <div class="kr-cp-go">→</div>
           </div>
-        </div>
-        <div class="kr-prof-quote">${esc(status)}</div>
-        <div class="kr-prof-love">
-          <span class="kr-hearts">${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}</span>
-          <span>${esc(String(love))}</span>
-        </div>
+          <div class="kr-cp-text">回到和 ${esc(taName)} 的对话</div>
+        </button>
+        ${homeDotsKorean(2)}
+        <div class="kr-home-foot">← swipe · more</div>
       </div>
+    </div>`;
 
-      ${preview ? `
-      <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
-        <div class="kr-cp-top">
-          ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
-          <div class="kr-cp-name">${esc(taName)}</div>
-          <div class="kr-cp-go">聊天</div>
-        </div>
-        <div class="kr-cp-text">${esc(preview)}</div>
-      </button>` : `
-      <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
-        <div class="kr-cp-top">
-          ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
-          <div class="kr-cp-name">${esc(taName)}</div>
-          <div class="kr-cp-go">聊天</div>
-        </div>
-        <div class="kr-cp-text">还没有新消息 · 去说一句吧</div>
-      </button>`}
-
-      <div class="kr-widget kr-apps kr-apps-more">
-        <div class="kr-apps-grid kr-apps-grid-8">${moreHtml}</div>
-      </div>
-
-      <div class="kr-home-foot">mono · quiet days</div>
+  const p = state.homePage === 0 ? "page0" : state.homePage === 2 ? "page2" : "page1";
+  return `<div class="home-swipe-wrap kr-home" id="home-swipe">
+    <div class="home-track ${p}" id="home-track">
+      ${desk}
+      ${space}
+      ${more}
     </div>
   </div>`;
 }
