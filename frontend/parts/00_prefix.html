@@ -2828,22 +2828,26 @@
       display: flex; flex-direction: column; justify-content: flex-end;
       padding: 12px 14px 8px;
     }
-    /* 乙游布局：立绘在对话框上方、屏幕右侧 */
+/* 乙游布局：他说话左侧立绘，我说话右侧立绘 */
     .rpg-sprite-slot {
       position: absolute;
-      right: max(0px, env(safe-area-inset-right, 0px));
-      left: auto;
       bottom: calc(132px + env(safe-area-inset-bottom, 0px));
       transform: none;
       width: min(72vw, 340px);
       height: min(68vh, 620px);
-      display: flex; align-items: flex-end; justify-content: flex-end;
+      display: flex; align-items: flex-end;
       pointer-events: none; z-index: 1;
       overflow: visible;
     }
+    .rpg-sprite-slot.them {
+      left: max(0px, env(safe-area-inset-left, 0px));
+      right: auto;
+      justify-content: flex-start;
+    }
     .rpg-sprite-slot.me {
-      /* 我方也可偏右，略往左一点避免完全重叠习惯 */
-      right: max(8px, env(safe-area-inset-right, 0px));
+      right: max(0px, env(safe-area-inset-right, 0px));
+      left: auto;
+      justify-content: flex-end;
     }
     .rpg-sprite-slot .rpg-avatar {
       width: 120px; height: 120px; border-radius: 50%;
@@ -3019,6 +3023,8 @@
     }
 
 
+    .rpg-sprite-slot.them .rpg-avatar-full { object-position: bottom left !important; }
+    .rpg-sprite-slot.me .rpg-avatar-full { object-position: bottom right !important; }
     .rpg-avatar-full {
       width: auto !important;
       height: min(66vh, 560px) !important;

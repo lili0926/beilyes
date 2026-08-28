@@ -1905,7 +1905,7 @@ const state = {
   uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
-  rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "" }) || { me: "jasmine-sprite.png", them: "" },
+  rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "aries-sprite.png" }) || { me: "jasmine-sprite.png", them: "aries-sprite.png" },
   rpgLineIndex: null, // RPG 当前演到第几条可展示消息
   rpgHistOpen: false,
   memIntegrateOpen: false,
@@ -2401,7 +2401,15 @@ const state = {
 // 迁移：上下文默认改为「不限」(0) 以启用自动摘要。旧版默认是 40 条，
 // 存过旧默认 40 的改成 0（只做一次；用户自定义过其它值的一律不动）。
 try{
-  if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
+  
+// RPG 立绘：Aries 默认 aries-sprite.png
+try{
+  if(!state.rpgSprites) state.rpgSprites = {};
+  if(!state.rpgSprites.them){ state.rpgSprites.them = "aries-sprite.png"; try{ persist("rpgSprites"); }catch(e){} }
+  if(!state.rpgSprites.me){ state.rpgSprites.me = "jasmine-sprite.png"; try{ persist("rpgSprites"); }catch(e){} }
+}catch(e){}
+
+if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
     LS.set("contextLimit", 0);
     state.contextLimit = 0;
     LS.set("_ctxModeV2", true);
@@ -15918,14 +15926,10 @@ function renderRpgStage(activeAg, isGroup){
   let sprite = "";
   const sp = state.rpgSprites || {};
   const defaultMeSprite = "jasmine-sprite.png";
+  const defaultThemSprite = "aries-sprite.png";
   if(cur && !cur.isMe){
-    let av = (sp.them && String(sp.them).trim()) || "";
-    if(av){
-      sprite = `<div class="rpg-sprite-slot them"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
-    } else {
-      const ch = (cur.name || "TA").slice(0,1);
-      sprite = `<div class="rpg-sprite-slot them"><div class="rpg-avatar-fallback">${esc(ch)}</div></div>`;
-    }
+    let av = (sp.them && String(sp.them).trim()) || defaultThemSprite;
+    sprite = `<div class="rpg-sprite-slot them"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
   } else if(cur && cur.isMe){
     let av = (sp.me && String(sp.me).trim()) || defaultMeSprite;
     sprite = `<div class="rpg-sprite-slot me"><img class="rpg-avatar rpg-avatar-full" src="${escAttr(av)}" alt=""/></div>`;
