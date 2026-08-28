@@ -1902,7 +1902,7 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude | korean
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "aries-sprite.png" }) || { me: "jasmine-sprite.png", them: "aries-sprite.png" },
@@ -2883,11 +2883,12 @@ function applyThemeVars(){
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
   else if(sh === "claude") document.body.classList.add("shell-claude");
+  else if(sh === "korean") document.body.classList.add("shell-korean");
   else document.body.classList.add("shell-classic");
   if(state.chatViewMode === "rpg" && state.tab === "chat")
     document.body.classList.add("rpg-chat-on");
@@ -15347,6 +15348,7 @@ function renderProjectOverlays(){
 
 function renderChatSidebar(){
   const open = !!state.chatSidebarOpen;
+  try{ document.body.classList.toggle("kr-sb-open", open && (state.uiShell||"")==="korean"); }catch(e){}
   const clock = sbClockParts();
   const w = state.weatherCache || {};
   const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
@@ -15386,7 +15388,7 @@ function renderChatSidebar(){
     <div class="chat-sidebar-mask${open?" open":""}" id="chat-sidebar-mask"></div>
     <aside class="chat-sidebar${open?" open":""}" id="chat-sidebar" aria-hidden="${open?"false":"true"}">
       <div class="chat-sidebar-head">
-        <div class="sb-title">${(state.uiShell||"")==="claude" ? "Menu" : "侧栏"}</div>
+        <div class="sb-title">${(state.uiShell||"")==="claude" ? "Menu" : ((state.uiShell||"")==="korean" ? "메뉴" : "侧栏")}</div>
         <button type="button" class="sb-close" id="chat-sidebar-close" aria-label="关闭">✕</button>
       </div>
       <div class="chat-sidebar-body">
@@ -15611,6 +15613,7 @@ function bindChatSidebar(){
   if(openBtn) openBtn.onclick = (e)=>{
     e.stopPropagation();
     state.chatSidebarOpen = true;
+    try{ document.body.classList.add("kr-sb-open"); }catch(e){}
     sbEnsureWeather(false);
     render();
     // 侧栏打开时每 30s 刷新一次时钟显示
@@ -15622,9 +15625,9 @@ function bindChatSidebar(){
     }, 15000);
   };
   const closeBtn = document.getElementById("chat-sidebar-close");
-  if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
+  if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
   const mask = document.getElementById("chat-sidebar-mask");
-  if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
+  if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
   const wr = document.getElementById("sb-weather-refresh");
   if(wr) wr.onclick = ()=>{ sbEnsureWeather(true); showToast("正在刷新天气…"); };
   const tzSel = document.getElementById("sb-tz-select");
@@ -16181,13 +16184,39 @@ function renderChat(){
     try{ rpgJumpToEnd(); }catch(e){}
   }
   const isClaude = shell === "claude";
+  const isKorean = shell === "korean";
   const chatName = isGroup ? "群聊" : ((activeAg&&activeAg.name)||"聊天");
   const switchHtml = rpgAllowed ? `
       <div class="chat-view-switch${isClaude?" claude-view-switch":""}" title="聊天 / RPG">
         <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
         <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
       </div>` : "";
-  const headerHtml = isClaude ? `
+  // 韩系顶栏：左返回+头像+名字/状态，右侧栏开关
+  let krAvatar = "";
+  try{
+    if(!isGroup && activeAg && activeAg.avatar) krAvatar = String(activeAg.avatar);
+    else if(state.profileThem && state.profileThem.avatar) krAvatar = String(state.profileThem.avatar);
+  }catch(e){}
+  const krStatus = (state.coupleInfo && state.coupleInfo.status) || (isGroup ? "群聊中" : "泪が止まらない");
+  let headerHtml;
+  if(isKorean){
+    headerHtml = `
+    <div class="chat-header korean-header">
+      <button type="button" class="kr-back" id="chat-exit-home" title="返回"><i data-lucide="chevron-left"></i></button>
+      <div class="kr-peer">
+        ${krAvatar ? `<img class="kr-peer-av" src="${escAttr(krAvatar)}" alt=""/>` : `<div class="kr-peer-av kr-peer-fallback">${esc((chatName||"TA").slice(0,1))}</div>`}
+        <div class="kr-peer-txt">
+          <div class="kr-peer-name">${esc(chatName)}</div>
+          <div class="kr-peer-status">${esc(krStatus)}</div>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <button type="button" class="kr-side-toggle" id="chat-sidebar-open" title="侧栏" aria-label="侧栏">
+        <span class="kr-toggle-track"><span class="kr-toggle-thumb"></span></span>
+      </button>
+    </div>`;
+  } else if(isClaude){
+    headerHtml = `
     <div class="chat-header claude-header">
       <button type="button" class="claude-round-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="menu"></i></button>
       <div class="claude-style-chip" title="${escAttr(chatName)}">
@@ -16197,7 +16226,9 @@ function renderChat(){
       <div style="flex:1"></div>
       ${switchHtml}
       <button type="button" class="claude-round-btn" id="chat-exit-home" title="回首页"><i data-lucide="x"></i></button>
-    </div>` : `
+    </div>`;
+  } else {
+    headerHtml = `
     <div class="chat-header chat-header-slim">
       <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
@@ -16206,7 +16237,8 @@ function renderChat(){
       </div>
       ${switchHtml}
     </div>`;
-  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}">
+  }
+  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}${isKorean?" korean-layout":""}">
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     ${headerHtml}
@@ -17239,6 +17271,7 @@ function renderTheme(){
         <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
         <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
         <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
+        <button type="button" class="font-chip${state.uiShell==="korean"?" active":""}" data-ui-shell="korean">韩系</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
     </div>

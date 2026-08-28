@@ -3532,6 +3532,178 @@
       padding: 8px 18px 28px;
     }
 
+
+    /* ═══════════ 壳：韩系（极简白气泡 + 右侧栏） ═══════════ */
+    body.shell-korean {
+      --bg: #F7F7F8;
+      --card: #FFFFFF;
+      --text: #1C1C1E;
+      --sub: #8E8E93;
+      --border: #E5E5EA;
+      --accent: #1C1C1E;
+      --accent2: #AEAEB2;
+      --danger: #FF3B30;
+      background: #F7F7F8 !important;
+      color: var(--text);
+      font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans SC", "Helvetica Neue", sans-serif !important;
+    }
+    body.shell-korean #app { background: #F7F7F8; }
+    body.shell-korean .bottom-nav {
+      background: rgba(255,255,255,0.92) !important;
+      border-top: 1px solid rgba(0,0,0,0.06) !important;
+      box-shadow: none !important;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    body.shell-korean .bottom-nav button { color: #8E8E93 !important; }
+    body.shell-korean .bottom-nav button.active { color: #1C1C1E !important; }
+
+    /* 韩系顶栏 */
+    body.shell-korean .korean-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px 10px 6px !important;
+      background: #F7F7F8 !important;
+      border-bottom: none !important;
+      flex-shrink: 0;
+    }
+    body.shell-korean .kr-back {
+      width: 36px; height: 36px; border: none; background: transparent;
+      color: #1C1C1E; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 50%; cursor: pointer; padding: 0;
+    }
+    body.shell-korean .kr-peer {
+      display: flex; align-items: center; gap: 10px; min-width: 0;
+    }
+    body.shell-korean .kr-peer-av {
+      width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+      background: #E5E5EA; flex-shrink: 0;
+    }
+    body.shell-korean .kr-peer-fallback {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 600; color: #636366;
+    }
+    body.shell-korean .kr-peer-txt { min-width: 0; }
+    body.shell-korean .kr-peer-name {
+      font-size: 15px; font-weight: 600; color: #1C1C1E;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-peer-status {
+      font-size: 11px; color: #8E8E93;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-side-toggle {
+      border: none; background: transparent; padding: 6px; cursor: pointer;
+      flex-shrink: 0;
+    }
+    body.shell-korean .kr-toggle-track {
+      display: block; width: 42px; height: 26px; border-radius: 13px;
+      background: #E5E5EA; position: relative;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+    }
+    body.shell-korean .kr-toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #FFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      transition: transform .2s ease;
+    }
+    body.shell-korean.kr-sb-open .kr-toggle-thumb {
+      transform: translateX(16px);
+    }
+    body.shell-korean.kr-sb-open .kr-toggle-track {
+      background: #1C1C1E;
+    }
+    body.shell-korean .korean-layout .chat-messages {
+      background: #F7F7F8;
+      padding: 12px 14px 20px;
+    }
+    body.shell-korean .msg-meta,
+    body.shell-korean .msg-meta.me {
+      opacity: 0.85;
+    }
+    body.shell-korean .msg-meta-name { color: #8E8E93 !important; font-weight: 500; font-size: 11px; }
+    body.shell-korean .msg-meta-time { color: #C7C7CC !important; font-size: 10px; }
+    body.shell-korean .msg-meta-heart { display: none !important; }
+    body.shell-korean .bubble.them,
+    body.shell-korean .bubble:not(.me) {
+      background: #E9E9EB !important;
+      color: #1C1C1E !important;
+      border: none !important;
+      border-radius: 18px !important;
+      box-shadow: none !important;
+      padding: 10px 14px !important;
+    }
+    body.shell-korean .bubble.me {
+      background: #1C1C1E !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      border-radius: 18px !important;
+      box-shadow: none !important;
+      padding: 10px 14px !important;
+    }
+    body.shell-korean .chat-input-bar {
+      background: #F7F7F8 !important;
+      border-top: none !important;
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.shell-korean .chat-input-bar input,
+    body.shell-korean .chat-input-bar textarea {
+      background: #FFFFFF !important;
+      border: none !important;
+      border-radius: 22px !important;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.06) !important;
+      color: #1C1C1E !important;
+      padding: 10px 16px !important;
+    }
+    body.shell-korean .feat-card,
+    body.shell-korean .card,
+    body.shell-korean .setting-section {
+      background: #FFFFFF !important;
+      border: none !important;
+      border-radius: 14px !important;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.04) !important;
+    }
+    body.shell-korean .btn-accent,
+    body.shell-korean .btn-accent2 {
+      background: #1C1C1E !important;
+      border: none !important;
+      color: #FFF !important;
+      border-radius: 12px !important;
+    }
+    body.shell-korean .font-chip.active {
+      background: #1C1C1E !important;
+      color: #FFF !important;
+      border-color: #1C1C1E !important;
+    }
+    /* 右侧滑出侧栏 */
+    body.shell-korean .chat-sidebar {
+      left: auto !important;
+      right: 0 !important;
+      border-right: none !important;
+      border-left: 1px solid rgba(0,0,0,0.06) !important;
+      box-shadow: -8px 0 28px rgba(0,0,0,0.08) !important;
+      transform: translateX(105%) !important;
+      background: #FFFFFF !important;
+    }
+    body.shell-korean .chat-sidebar.open {
+      transform: translateX(0) !important;
+    }
+    body.shell-korean .chat-sidebar-head {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(0,0,0,0.06) !important;
+    }
+    body.shell-korean .sb-card {
+      background: #F7F7F8 !important;
+      border: none !important;
+      border-radius: 14px !important;
+      box-shadow: none !important;
+    }
+    body.shell-korean .think-peek-btn {
+      background: #E9E9EB !important;
+      color: #8E8E93 !important;
+      box-shadow: none !important;
+    }
+
   </style>
 
   <div id="app"></div>
@@ -5441,7 +5613,7 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude | korean
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "aries-sprite.png" }) || { me: "jasmine-sprite.png", them: "aries-sprite.png" },
@@ -6422,11 +6594,12 @@ function applyThemeVars(){
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
   else if(sh === "claude") document.body.classList.add("shell-claude");
+  else if(sh === "korean") document.body.classList.add("shell-korean");
   else document.body.classList.add("shell-classic");
   if(state.chatViewMode === "rpg" && state.tab === "chat")
     document.body.classList.add("rpg-chat-on");
@@ -18886,6 +19059,7 @@ function renderProjectOverlays(){
 
 function renderChatSidebar(){
   const open = !!state.chatSidebarOpen;
+  try{ document.body.classList.toggle("kr-sb-open", open && (state.uiShell||"")==="korean"); }catch(e){}
   const clock = sbClockParts();
   const w = state.weatherCache || {};
   const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
@@ -18925,7 +19099,7 @@ function renderChatSidebar(){
     <div class="chat-sidebar-mask${open?" open":""}" id="chat-sidebar-mask"></div>
     <aside class="chat-sidebar${open?" open":""}" id="chat-sidebar" aria-hidden="${open?"false":"true"}">
       <div class="chat-sidebar-head">
-        <div class="sb-title">${(state.uiShell||"")==="claude" ? "Menu" : "侧栏"}</div>
+        <div class="sb-title">${(state.uiShell||"")==="claude" ? "Menu" : ((state.uiShell||"")==="korean" ? "메뉴" : "侧栏")}</div>
         <button type="button" class="sb-close" id="chat-sidebar-close" aria-label="关闭">✕</button>
       </div>
       <div class="chat-sidebar-body">
@@ -19150,6 +19324,7 @@ function bindChatSidebar(){
   if(openBtn) openBtn.onclick = (e)=>{
     e.stopPropagation();
     state.chatSidebarOpen = true;
+    try{ document.body.classList.add("kr-sb-open"); }catch(e){}
     sbEnsureWeather(false);
     render();
     // 侧栏打开时每 30s 刷新一次时钟显示
@@ -19161,9 +19336,9 @@ function bindChatSidebar(){
     }, 15000);
   };
   const closeBtn = document.getElementById("chat-sidebar-close");
-  if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
+  if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
   const mask = document.getElementById("chat-sidebar-mask");
-  if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; render(); };
+  if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
   const wr = document.getElementById("sb-weather-refresh");
   if(wr) wr.onclick = ()=>{ sbEnsureWeather(true); showToast("正在刷新天气…"); };
   const tzSel = document.getElementById("sb-tz-select");
@@ -19720,13 +19895,39 @@ function renderChat(){
     try{ rpgJumpToEnd(); }catch(e){}
   }
   const isClaude = shell === "claude";
+  const isKorean = shell === "korean";
   const chatName = isGroup ? "群聊" : ((activeAg&&activeAg.name)||"聊天");
   const switchHtml = rpgAllowed ? `
       <div class="chat-view-switch${isClaude?" claude-view-switch":""}" title="聊天 / RPG">
         <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
         <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
       </div>` : "";
-  const headerHtml = isClaude ? `
+  // 韩系顶栏：左返回+头像+名字/状态，右侧栏开关
+  let krAvatar = "";
+  try{
+    if(!isGroup && activeAg && activeAg.avatar) krAvatar = String(activeAg.avatar);
+    else if(state.profileThem && state.profileThem.avatar) krAvatar = String(state.profileThem.avatar);
+  }catch(e){}
+  const krStatus = (state.coupleInfo && state.coupleInfo.status) || (isGroup ? "群聊中" : "泪が止まらない");
+  let headerHtml;
+  if(isKorean){
+    headerHtml = `
+    <div class="chat-header korean-header">
+      <button type="button" class="kr-back" id="chat-exit-home" title="返回"><i data-lucide="chevron-left"></i></button>
+      <div class="kr-peer">
+        ${krAvatar ? `<img class="kr-peer-av" src="${escAttr(krAvatar)}" alt=""/>` : `<div class="kr-peer-av kr-peer-fallback">${esc((chatName||"TA").slice(0,1))}</div>`}
+        <div class="kr-peer-txt">
+          <div class="kr-peer-name">${esc(chatName)}</div>
+          <div class="kr-peer-status">${esc(krStatus)}</div>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <button type="button" class="kr-side-toggle" id="chat-sidebar-open" title="侧栏" aria-label="侧栏">
+        <span class="kr-toggle-track"><span class="kr-toggle-thumb"></span></span>
+      </button>
+    </div>`;
+  } else if(isClaude){
+    headerHtml = `
     <div class="chat-header claude-header">
       <button type="button" class="claude-round-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="menu"></i></button>
       <div class="claude-style-chip" title="${escAttr(chatName)}">
@@ -19736,7 +19937,9 @@ function renderChat(){
       <div style="flex:1"></div>
       ${switchHtml}
       <button type="button" class="claude-round-btn" id="chat-exit-home" title="回首页"><i data-lucide="x"></i></button>
-    </div>` : `
+    </div>`;
+  } else {
+    headerHtml = `
     <div class="chat-header chat-header-slim">
       <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
@@ -19745,7 +19948,8 @@ function renderChat(){
       </div>
       ${switchHtml}
     </div>`;
-  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}">
+  }
+  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}${isKorean?" korean-layout":""}">
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     ${headerHtml}
@@ -20778,6 +20982,7 @@ function renderTheme(){
         <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
         <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
         <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
+        <button type="button" class="font-chip${state.uiShell==="korean"?" active":""}" data-ui-shell="korean">韩系</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
     </div>

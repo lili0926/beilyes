@@ -3532,6 +3532,178 @@
       padding: 8px 18px 28px;
     }
 
+
+    /* ═══════════ 壳：韩系（极简白气泡 + 右侧栏） ═══════════ */
+    body.shell-korean {
+      --bg: #F7F7F8;
+      --card: #FFFFFF;
+      --text: #1C1C1E;
+      --sub: #8E8E93;
+      --border: #E5E5EA;
+      --accent: #1C1C1E;
+      --accent2: #AEAEB2;
+      --danger: #FF3B30;
+      background: #F7F7F8 !important;
+      color: var(--text);
+      font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans SC", "Helvetica Neue", sans-serif !important;
+    }
+    body.shell-korean #app { background: #F7F7F8; }
+    body.shell-korean .bottom-nav {
+      background: rgba(255,255,255,0.92) !important;
+      border-top: 1px solid rgba(0,0,0,0.06) !important;
+      box-shadow: none !important;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    body.shell-korean .bottom-nav button { color: #8E8E93 !important; }
+    body.shell-korean .bottom-nav button.active { color: #1C1C1E !important; }
+
+    /* 韩系顶栏 */
+    body.shell-korean .korean-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px 10px 6px !important;
+      background: #F7F7F8 !important;
+      border-bottom: none !important;
+      flex-shrink: 0;
+    }
+    body.shell-korean .kr-back {
+      width: 36px; height: 36px; border: none; background: transparent;
+      color: #1C1C1E; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 50%; cursor: pointer; padding: 0;
+    }
+    body.shell-korean .kr-peer {
+      display: flex; align-items: center; gap: 10px; min-width: 0;
+    }
+    body.shell-korean .kr-peer-av {
+      width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+      background: #E5E5EA; flex-shrink: 0;
+    }
+    body.shell-korean .kr-peer-fallback {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 600; color: #636366;
+    }
+    body.shell-korean .kr-peer-txt { min-width: 0; }
+    body.shell-korean .kr-peer-name {
+      font-size: 15px; font-weight: 600; color: #1C1C1E;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-peer-status {
+      font-size: 11px; color: #8E8E93;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-side-toggle {
+      border: none; background: transparent; padding: 6px; cursor: pointer;
+      flex-shrink: 0;
+    }
+    body.shell-korean .kr-toggle-track {
+      display: block; width: 42px; height: 26px; border-radius: 13px;
+      background: #E5E5EA; position: relative;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+    }
+    body.shell-korean .kr-toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #FFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      transition: transform .2s ease;
+    }
+    body.shell-korean.kr-sb-open .kr-toggle-thumb {
+      transform: translateX(16px);
+    }
+    body.shell-korean.kr-sb-open .kr-toggle-track {
+      background: #1C1C1E;
+    }
+    body.shell-korean .korean-layout .chat-messages {
+      background: #F7F7F8;
+      padding: 12px 14px 20px;
+    }
+    body.shell-korean .msg-meta,
+    body.shell-korean .msg-meta.me {
+      opacity: 0.85;
+    }
+    body.shell-korean .msg-meta-name { color: #8E8E93 !important; font-weight: 500; font-size: 11px; }
+    body.shell-korean .msg-meta-time { color: #C7C7CC !important; font-size: 10px; }
+    body.shell-korean .msg-meta-heart { display: none !important; }
+    body.shell-korean .bubble.them,
+    body.shell-korean .bubble:not(.me) {
+      background: #E9E9EB !important;
+      color: #1C1C1E !important;
+      border: none !important;
+      border-radius: 18px !important;
+      box-shadow: none !important;
+      padding: 10px 14px !important;
+    }
+    body.shell-korean .bubble.me {
+      background: #1C1C1E !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      border-radius: 18px !important;
+      box-shadow: none !important;
+      padding: 10px 14px !important;
+    }
+    body.shell-korean .chat-input-bar {
+      background: #F7F7F8 !important;
+      border-top: none !important;
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.shell-korean .chat-input-bar input,
+    body.shell-korean .chat-input-bar textarea {
+      background: #FFFFFF !important;
+      border: none !important;
+      border-radius: 22px !important;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.06) !important;
+      color: #1C1C1E !important;
+      padding: 10px 16px !important;
+    }
+    body.shell-korean .feat-card,
+    body.shell-korean .card,
+    body.shell-korean .setting-section {
+      background: #FFFFFF !important;
+      border: none !important;
+      border-radius: 14px !important;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.04) !important;
+    }
+    body.shell-korean .btn-accent,
+    body.shell-korean .btn-accent2 {
+      background: #1C1C1E !important;
+      border: none !important;
+      color: #FFF !important;
+      border-radius: 12px !important;
+    }
+    body.shell-korean .font-chip.active {
+      background: #1C1C1E !important;
+      color: #FFF !important;
+      border-color: #1C1C1E !important;
+    }
+    /* 右侧滑出侧栏 */
+    body.shell-korean .chat-sidebar {
+      left: auto !important;
+      right: 0 !important;
+      border-right: none !important;
+      border-left: 1px solid rgba(0,0,0,0.06) !important;
+      box-shadow: -8px 0 28px rgba(0,0,0,0.08) !important;
+      transform: translateX(105%) !important;
+      background: #FFFFFF !important;
+    }
+    body.shell-korean .chat-sidebar.open {
+      transform: translateX(0) !important;
+    }
+    body.shell-korean .chat-sidebar-head {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(0,0,0,0.06) !important;
+    }
+    body.shell-korean .sb-card {
+      background: #F7F7F8 !important;
+      border: none !important;
+      border-radius: 14px !important;
+      box-shadow: none !important;
+    }
+    body.shell-korean .think-peek-btn {
+      background: #E9E9EB !important;
+      color: #8E8E93 !important;
+      box-shadow: none !important;
+    }
+
   </style>
 
   <div id="app"></div>
