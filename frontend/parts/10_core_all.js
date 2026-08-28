@@ -1091,6 +1091,13 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
   const geminiKey = ag ? ag.geminiKey : (apiConfig.geminiKey || "");
   const geminiModel = (ag ? ag.geminiModel : apiConfig.geminiModel) || "gemini-2.0-flash";
 
+  // —— CC 通道：走 VPS hub（非流式兜底）——
+  if (channel === "cc") {
+    const wsUrl = (ag&&ag.ccWsUrl) || apiConfig.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
+    const pin = (ag&&ag.ccPin) || apiConfig.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
+    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), {});
+  }
+
   if (channel === "gemini") {
     if (!geminiKey) throw new Error("未配置 Gemini API Key");
     // Gemini generateContent：把 system 与多轮拼进 contents
@@ -1237,6 +1244,104 @@ async function* __sse(body){
  * reply 与 callChatAPI 同格式（thinking 已包进 <thinking>），下游 parseThinking / marker 管线直接复用。
  * opts.onLive({thinking,text}) 每收到一段增量回调（内部节流），用于实时气泡。
  * 失败 reject，调用方回退非流式。 */
+// ─── CC 通道：直连 VPS hub (WebSocket) ─────────────────────
+const __cc = { ws:null, wsUrl:"", pin:"", ready:false, ccAlive:false, _retry:0, _replyCbs:[], _editCbs:[], _statusCbs:[], _retryT:null };
+function __ccConnect(wsUrl, pin){
+  if(__cc.ws && __cc.wsUrl===wsUrl && (__cc.ws.readyState===WebSocket.OPEN || __cc.ws.readyState===WebSocket.CONNECTING)) return __cc.ws;
+  try{ if(__cc.ws){ __cc.ws.onclose=null; __cc.ws.close(); } }catch(e){}
+  __cc.wsUrl = wsUrl; __cc.pin = pin||""; __cc.ready = false; __cc.ccAlive = false;
+  let ws=null; try{ ws = new WebSocket(wsUrl); }catch(e){ return null; }
+  __cc.ws = ws;
+  ws.onopen = ()=>{ try{ ws.send(JSON.stringify({ type:"auth", pin: __cc.pin })); }catch(e){} };
+  ws.onmessage = (ev)=>{
+    let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+    if(!m || !m.type) return;
+    if(m.type==="auth_ok"){ __cc.ready=true; __cc.ccAlive=!!m.cc_alive; __cc._retry=0; __cc._statusCbs.forEach(f=>{try{f(__cc.ccAlive)}catch(e){}}); return; }
+    if(m.type==="cc_status"){ __cc.ccAlive=!!m.alive; __cc._statusCbs.forEach(f=>{try{f(__cc.ccAlive)}catch(e){}}); return; }
+    if(m.type==="message" && m.role==="assistant"){ __cc._replyCbs.forEach(f=>{try{f(m)}catch(e){}}); return; }
+    if(m.type==="edit"){ __cc._editCbs.forEach(f=>{try{f(m)}catch(e){}}); return; }
+    if(m.type==="error"){ __cc._replyCbs.forEach(f=>{try{f({ __err:m.message })}catch(e){}}); return; }
+  };
+  ws.onclose = ()=>{
+    if(__cc.ws!==ws) return;
+    __cc.ws=null; __cc.ready=false; __cc.ccAlive=false;
+    clearTimeout(__cc._retryT);
+    const _r = __cc._retry || 0; __cc._retry = _r + 1;
+    const d = Math.min(30000, 1000*Math.pow(2, _r));
+    __cc._retryT = setTimeout(()=>{ if(!__cc.ws && __cc.wsUrl) __ccConnect(__cc.wsUrl, __cc.pin); }, d);
+  };
+  ws.onerror = ()=>{};
+  return ws;
+}
+/** 发一条消息给 CC，resolve 其完整回复；opts.onLive 收 edit 流。 */
+function __ccHubSend(wsUrl, pin, content, opts){
+  return new Promise((resolve, reject)=>{
+    const o = opts||{};
+    const ws = __ccConnect(wsUrl, pin);
+    if(!ws){ reject(new Error("CC hub 连接失败(检查 ws 地址)")); return; }
+    let settled=false;
+    let __onReply=null, __onEdit=null, __onStatus=null;
+    const timer=setTimeout(()=>fail(new Error("CC 回复超时")), 180000);
+    function cleanup(){
+      clearTimeout(timer);
+      if(__onReply) __cc._replyCbs = __cc._replyCbs.filter(f=>f!==__onReply);
+      if(__onEdit) __cc._editCbs = __cc._editCbs.filter(f=>f!==__onEdit);
+      if(__onStatus) __cc._statusCbs = __cc._statusCbs.filter(f=>f!==__onStatus);
+    }
+    function done(v){ if(settled) return; settled=true; cleanup(); resolve(v); }
+    function fail(e){ if(settled) return; settled=true; cleanup(); reject(e); }
+    __onReply=(m)=>{ if(m.__err){ fail(new Error(m.__err)); return; } done(m.content||""); };
+    __onEdit=(m)=>{ if(typeof o.onLive==="function"){ try{ o.onLive({ thinking:"", text: m.content||"" }); }catch(e){} } };
+    __onStatus=()=>{};
+    __cc._replyCbs.push(__onReply); __cc._editCbs.push(__onEdit); __cc._statusCbs.push(__onStatus);
+    const trySend=()=>{
+      if(settled) return;
+      if(__cc.ready){ if(__cc.ccAlive){ try{ ws.send(JSON.stringify({ type:"message", content })); }catch(e){ fail(e); } } else fail(new Error("CC 离线")); }
+      else { setTimeout(trySend, 300); }
+    };
+    trySend();
+  });
+}
+/** cc 通道内容拼装：系统设定(短)+ 最近对话。长设定放 VPS 的 CLAUDE.md，不重发。 */
+function __ccBuildContent(messages, systemPrompt){
+  const sys = (systemPrompt && typeof systemPrompt==="object")
+    ? ((systemPrompt.static||"") + (systemPrompt.dynamic? "\n\n"+systemPrompt.dynamic:""))
+    : (systemPrompt? String(systemPrompt):"");
+  const recent = (Array.isArray(messages)? messages.slice(-12):[]).map(m=>{
+    const c = m.image? "[图片] "+(m.content||"") : (m.content||"");
+    return (m.role==="user"?"用户: ":"助手: ")+c;
+  }).join("\n\n");
+  const parts = [];
+  if(sys && sys.length < 2000) parts.push("【设定】\n"+sys);
+  if(recent) parts.push(recent);
+  return parts.join("\n\n");
+}
+
+/** 拉取 Claude 订阅用量（经 VPS hub 的 /api/quota 代理），写入 state.claudeQuota 供侧栏展示。 */
+async function __fetchClaudeQuota(){
+  const wsUrl = (state.callConfig && state.callConfig.ccWsUrl)
+    || (state.agents && state.agents[0] && state.agents[0].ccWsUrl)
+    || "ws://115.29.237.172:3456";
+  const base = String(wsUrl).replace(/^wss?:\/\//, "http://").replace(/\/$/, "");
+  const qUrl = base + "/api/quota";
+  try{
+    const res = await fetch(qUrl, { cache: "no-store" });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const data = await res.json();
+    state.__quotaErr = (data && data.error) ? data.error : "";
+    const mk = (w)=>({ used: (w&&w.used!=null)?w.used:null, limit: (w&&w.limit!=null)?w.limit:null, resetAt: (w&&w.resetAt)||null });
+    state.claudeQuota = {
+      window5h: mk(data && data.window5h),
+      weekly: mk(data && data.weekly),
+      updatedAt: (data && data.updatedAt) || Date.now(),
+    };
+    persist("claudeQuota");
+  }catch(e){
+    state.__quotaErr = "额度获取失败："+e.message;
+  }
+  return state.claudeQuota;
+}
+
 async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   const o = opts || {};
   const ag = cfg._agent || null;
@@ -1247,6 +1352,14 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   const openaiModel = (ag ? ag.openaiModel : cfg.openaiModel) || "gpt-4o";
   const geminiKey = ag ? ag.geminiKey : (cfg.geminiKey || "");
   const geminiModel = (ag ? ag.geminiModel : cfg.geminiModel) || "gemini-2.0-flash";
+
+  // —— CC 通道：走 VPS hub，不直调 API ——
+  if(channel === "cc"){
+    const wsUrl = (ag&&ag.ccWsUrl) || cfg.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
+    const pin = (ag&&ag.ccPin) || cfg.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
+    const reply = await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), o);
+    return { reply, usage: undefined };
+  }
 
   let thinking = "", text = "";
   let lastLive = 0;
@@ -2443,6 +2556,8 @@ function defaultAgents(){
       openaiModel: a.openaiModel || "gpt-4o",
       geminiKey: a.geminiKey || "",
       geminiModel: a.geminiModel || "gemini-2.0-flash",
+      ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456",
+      ccPin: (state.callConfig&&state.callConfig.ccPin) || "498898",
       avatar: (state.coupleInfo && state.coupleInfo.partnerAvatar) || "",
       color: "#D4A5A5",
       thoughtGuide: state.thoughtGuide || "",
@@ -2466,6 +2581,8 @@ function ensureAgents(){
       }
       if(!ag.channel) ag.channel = "claude";
       if(ag.enabled === undefined) ag.enabled = true;
+      if(typeof ag.ccWsUrl !== "string" || !ag.ccWsUrl) ag.ccWsUrl = (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
+      if(typeof ag.ccPin !== "string" || !ag.ccPin) ag.ccPin = (state.callConfig&&state.callConfig.ccPin) || "498898";
     });
     if(!state.agents.find(a=>a.id==="a1")){
       state.agents = defaultAgents().concat(state.agents);
@@ -2786,6 +2903,7 @@ function agentHasKey(ag){
   if(!ag) return false;
   if(ag.channel==="claude") return !!ag.claudeKey;
   if(ag.channel==="gemini") return !!ag.geminiKey;
+  if(ag.channel==="cc") return !!(ag.ccWsUrl);
   return !!(ag.openaiKey);
 }
 function agentToApiConfig(ag){
@@ -2796,6 +2914,8 @@ function agentToApiConfig(ag){
     openaiKey: ag.openaiKey||"",
     openaiBase: ag.openaiBase||"https://api.openai.com/v1",
     openaiModel: ag.openaiModel||"gpt-4o",
+    ccWsUrl: ag.ccWsUrl||"",
+    ccPin: ag.ccPin||"",
     _agent: ag,
   };
 }
@@ -15503,6 +15623,10 @@ function sbQuotaPct(used, limit){
   if(used == null || limit == null || !(+limit > 0)) return null;
   return Math.max(0, Math.min(100, Math.round((+used / +limit) * 100)));
 }
+function sbFmtReset(ts){
+  if(!ts) return "";
+  try{ return " · 重置 "+new Date(ts).toLocaleString("zh",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; }
+}
 
 function renderProject(){
   const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
@@ -15611,8 +15735,8 @@ function renderChatSidebar(){
   const qw = q.weekly || {};
   const p5 = sbQuotaPct(q5.used, q5.limit);
   const pw = sbQuotaPct(qw.used, qw.limit);
-  const q5Text = (q5.used != null && q5.limit != null) ? `${q5.used} / ${q5.limit}` : "— / —";
-  const qwText = (qw.used != null && qw.limit != null) ? `${qw.used} / ${qw.limit}` : "— / —";
+  const q5Text = q5.used != null ? `已用 ${q5.used}%` : "— / —";
+  const qwText = qw.used != null ? `已用 ${qw.used}%` : "— / —";
 
   let fileHtml = "";
   if(!files.length){
@@ -15694,17 +15818,19 @@ function renderChatSidebar(){
           <span style="color:var(--sub);font-size:16px">›</span>
         </button>
         <div class="sb-quota-wrap">
-          <div class="sb-section-title"><span>额度</span></div>
+          <div class="sb-section-title" style="display:flex;align-items:center;justify-content:space-between"><span>额度</span><button type="button" class="btn-ghost" id="sb-quota-refresh" style="padding:4px 10px;font-size:11px">刷新</button></div>
           <div class="sb-card">
             <div class="sb-quota-row">
               <div class="sb-quota-head">5 小时窗口 <span>${esc(q5Text)}</span></div>
               <div class="sb-quota-bar"><div class="sb-quota-fill" style="width:${p5==null?0:p5}%"></div></div>
+              <div style="font-size:10px;color:var(--sub);margin-top:3px">${esc(sbFmtReset(q5.resetAt))}</div>
             </div>
             <div class="sb-quota-row">
               <div class="sb-quota-head">本周额度 <span>${esc(qwText)}</span></div>
               <div class="sb-quota-bar"><div class="sb-quota-fill" style="width:${pw==null?0:pw}%"></div></div>
+              <div style="font-size:10px;color:var(--sub);margin-top:3px">${esc(sbFmtReset(qw.resetAt))}</div>
             </div>
-            <div class="sb-quota-hint">占位中。Claude 会员开通后对上官方用量接口即可显示真实剩余。</div>
+            <div class="sb-quota-hint">${state.__quotaErr ? esc("⚠ "+state.__quotaErr) : "订阅用量，来自官方接口（经 VPS hub 代理）。"}</div>
           </div>
         </div>
       </div>
@@ -15863,6 +15989,7 @@ function bindChatSidebar(){
     state.chatSidebarOpen = true;
     try{ document.body.classList.add("kr-sb-open"); }catch(e){}
     sbEnsureWeather(false);
+    if(typeof __fetchClaudeQuota === "function") __fetchClaudeQuota().then(()=>{ try{ render(); }catch(e){} });
     render();
     // 侧栏打开时每 30s 刷新一次时钟显示
     if(window._sbClockTimer) clearInterval(window._sbClockTimer);
@@ -15876,6 +16003,8 @@ function bindChatSidebar(){
   if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
   const mask = document.getElementById("chat-sidebar-mask");
   if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
+  const quotaBtn = document.getElementById("sb-quota-refresh");
+  if(quotaBtn) quotaBtn.onclick = ()=>{ if(typeof __fetchClaudeQuota==="function") __fetchClaudeQuota().then(()=>{ try{ render(); }catch(e){} }); };
   const wr = document.getElementById("sb-weather-refresh");
   if(wr) wr.onclick = ()=>{ sbEnsureWeather(true); showToast("正在刷新天气…"); };
   const tzSel = document.getElementById("sb-tz-select");
@@ -17622,6 +17751,7 @@ function renderAgentSettingsBlock(ag, idx){
           <button class="channel-btn${ag.channel==="claude"?" active":""}" data-ag-channel="${ag.id}" data-val="claude">Claude</button>
           <button class="channel-btn${ag.channel==="openai"?" active":""}" data-ag-channel="${ag.id}" data-val="openai">OpenAI 兼容</button>
           <button class="channel-btn${ag.channel==="gemini"?" active":""}" data-ag-channel="${ag.id}" data-val="gemini">Gemini</button>
+          <button class="channel-btn${ag.channel==="cc"?" active":""}" data-ag-channel="${ag.id}" data-val="cc">CC · VPS hub</button>
         </div>
       </div>
       ${ag.channel==="claude"?`
@@ -17633,6 +17763,12 @@ function renderAgentSettingsBlock(ag, idx){
         <div class="setting-row"><span class="setting-label">模型</span>
           <input id="${prefix}-geminiModel" value="${escAttr(ag.geminiModel||"gemini-2.0-flash")}" placeholder="gemini-2.0-flash"/></div>
         <div class="setting-row"><span class="setting-label" style="font-size:10px;opacity:0.75;line-height:1.45">免费层级可用 gemini-2.0-flash / gemini-1.5-flash。需在 Google AI Studio 申请 Key。浏览器直连可能遇 CORS，若失败请走 OpenAI 兼容中转。</span></div>
+      `:ag.channel==="cc"?`
+        <div class="setting-row"><span class="setting-label">Hub 地址</span>
+          <input id="${prefix}-ccWsUrl" value="${escAttr(ag.ccWsUrl||"ws://115.29.237.172:3456")}" placeholder="ws://IP:3456"/></div>
+        <div class="setting-row"><span class="setting-label">Hub PIN</span>
+          <input type="password" id="${prefix}-ccPin" value="${escAttr(ag.ccPin||"")}" placeholder="hub PIN"/></div>
+        <div class="setting-row"><span class="setting-label" style="font-size:10px;opacity:0.75;line-height:1.45">CC 通道：消息经 WebSocket 发到 VPS hub → tmux 里的 Claude Code 回复。VPS 需已订阅登录。侧栏额度接官方用量。</span></div>
       `:`
         <div class="setting-row"><span class="setting-label">API Key</span>
           <input type="password" id="${prefix}-openaiKey" value="${escAttr(ag.openaiKey||"")}" placeholder="sk-..."/></div>
@@ -19940,6 +20076,8 @@ function bindEvents(){
     bind("color", prefix+"-color", true);
     bind("avatar", prefix+"-avatar", true);
     bind("thoughtGuide", prefix+"-thoughtGuide");
+    bind("ccWsUrl", prefix+"-ccWsUrl");
+    bind("ccPin", prefix+"-ccPin");
     // 头像文件上传
     const fileInp = document.getElementById(prefix+"-avatar-file");
     if(fileInp){
@@ -22291,7 +22429,9 @@ async function callOneAgentReply(ag, apiMsgs, sys){
 
   // ── MCP 工具集成：已连接 && 开了 inChat && 有工具 && 本轮无图片时走工具循环 ──
   let reply = "", toolEvents = [];
-  const mcpInChat = state.mcpStatus === "ready"
+  const isCC = ag.channel === "cc";
+  const mcpInChat = !isCC
+    && state.mcpStatus === "ready"
     && state.mcpConfig && state.mcpConfig.inChat !== false
     && (state.mcpTools||[]).length > 0
     && !(apiMsgs||[]).some(m=>m && m.image);
@@ -22312,7 +22452,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     }
     return { error: "unknown tool "+name };
   }
-  if(mcpInChat || ariesCam){
+  if(!isCC && (mcpInChat || ariesCam)){
     try{
       let tools = mcpInChat
         ? (state.mcpTools||[]).map(t=>({ name:t.name, description:t.description||"", inputSchema:t.inputSchema||t.parameters||{} }))
@@ -23314,6 +23454,8 @@ render();
 try{ applyBrandingToDom(); }catch(e){}
 // 打开 App 触发一次记忆自动沉淀（有登录态时会检查积攒的聊天）
 setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
+// 启动时预取一次 Claude 订阅额度（侧栏展示用，失败静默）
+setTimeout(()=>{ if(typeof __fetchClaudeQuota==="function") __fetchClaudeQuota().then(()=>{ try{ render(); }catch(e){} }); }, 8000);
 setTimeout(()=>{ if(typeof compressThreadIfNeeded==="function") compressThreadIfNeeded(); }, 9000);
 
 // 切到后台 / 关闭前强制落盘聊天（APK 很常见）
