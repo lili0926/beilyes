@@ -3549,7 +3549,7 @@ function renderHomeKorean(){
   const hh = String(now.getHours()).padStart(2,"0");
   const mm = String(now.getMinutes()).padStart(2,"0");
   const weekNames = ["日","一","二","三","四","五","六"];
-  const dateLine = `${now.getMonth()+1}月${now.getDate()}日 周${weekNames[now.getDay()]}`;
+  const dateLine = `${now.getMonth()+1}月${now.getDate()}日 · 周${weekNames[now.getDay()]}`;
   const temp = (w.temp != null) ? `${Math.round(w.temp)}°` : "—°";
   const wLabel = w.label || "天气";
   const myAv = c.myAvatar || "";
@@ -3559,56 +3559,62 @@ function renderHomeKorean(){
   const days = (typeof daysSince==="function") ? daysSince() : "—";
   const status = c.statusMsg || "今天也在一起";
 
-  // 音乐条
-  let musicHtml = "";
+  let title = "一起听";
+  let artist = "点进选歌";
+  let cover = "";
   try{
     const mn = state.musicNow;
     if(mn && (mn.title || mn.name)){
-      const title = mn.title || mn.name || "正在播放";
-      const artist = mn.artist || mn.ar || "";
-      const cover = mn.cover || mn.pic || "";
-      musicHtml = `<div class="kr-widget kr-music feat-card" data-sub="music" role="button">
-        <div class="kr-music-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="headphones"></i>`}</div>
-        <div class="kr-music-meta">
-          <div class="kr-music-title">${esc(title)}</div>
-          <div class="kr-music-sub">${esc(artist || "一起听")}</div>
-        </div>
-        <div class="kr-music-ico"><i data-lucide="play"></i></div>
-      </div>`;
-    } else {
-      musicHtml = `<div class="kr-widget kr-music feat-card" data-sub="music" role="button">
-        <div class="kr-music-cover"><i data-lucide="headphones"></i></div>
-        <div class="kr-music-meta">
-          <div class="kr-music-title">一起听</div>
-          <div class="kr-music-sub">点这里选歌</div>
-        </div>
-        <div class="kr-music-ico"><i data-lucide="chevron-right"></i></div>
-      </div>`;
+      title = mn.title || mn.name || title;
+      artist = mn.artist || mn.ar || "Now Playing";
+      cover = mn.cover || mn.pic || "";
     }
-  }catch(e){ musicHtml = ""; }
+  }catch(e){}
 
-  // 桌面图标：适合插件/入口的留下，重型游戏仍走功能页
-  const icons = [
-    {key:"music", icon:"headphones", label:"音乐"},
-    {key:"read", icon:"book-open", label:"一起读"},
-    {key:"watch", icon:"film", label:"一起看"},
+  // 右上四格：高频入口
+  const top4 = [
     {key:"mdiary", icon:"notebook-pen", label:"日记"},
     {key:"mailbox", icon:"mail", label:"信箱"},
-    {key:"body", icon:"heart", label:"身体"},
     {key:"phone", icon:"phone", label:"电话"},
     {key:"theme", icon:"palette", label:"外观"},
-    {key:"bisca_cards", icon:"spade", label:"牌室"},
-    {key:"prompts", icon:"sparkles", label:"提示词"},
-    {key:"usage", icon:"smartphone", label:"屏幕"},
-    {key:"vps", icon:"monitor", label:"VPS"},
   ];
-  // diary/album may be subPage names - check
-  const iconGrid = icons.map(it => `
+  const top4Html = top4.map(it => `
     <button type="button" class="feat-card kr-app-icon" data-sub="${escAttr(it.key)}">
       <span class="kr-app-ico"><i data-lucide="${it.icon}"></i></span>
       <span class="kr-app-label">${esc(it.label)}</span>
     </button>
   `).join("");
+
+  // 下方更多入口（小）
+  const more = [
+    {key:"read", icon:"book-open", label:"一起读"},
+    {key:"watch", icon:"film", label:"一起看"},
+    {key:"body", icon:"heart", label:"身体"},
+    {key:"bisca_cards", icon:"spade", label:"牌室"},
+    {key:"prompts", icon:"sparkles", label:"提示词"},
+    {key:"usage", icon:"smartphone", label:"屏幕"},
+    {key:"vps", icon:"monitor", label:"VPS"},
+    {key:"music", icon:"headphones", label:"乐库"},
+  ];
+  const moreHtml = more.map(it => `
+    <button type="button" class="feat-card kr-app-icon kr-app-sm" data-sub="${escAttr(it.key)}">
+      <span class="kr-app-ico"><i data-lucide="${it.icon}"></i></span>
+      <span class="kr-app-label">${esc(it.label)}</span>
+    </button>
+  `).join("");
+
+  // 最近一条对方消息预览（有趣一点）
+  let preview = "";
+  try{
+    const msgs = state.messages || [];
+    for(let i = msgs.length - 1; i >= 0; i--){
+      const m = msgs[i];
+      if(m && m.role === "assistant" && m.content){
+        const t = String(m.content).replace(/<[^>]+>/g,"").trim().slice(0, 42);
+        if(t){ preview = t; break; }
+      }
+    }
+  }catch(e){}
 
   return `<div class="kr-home" id="home-swipe">
     <div class="kr-home-scroll">
@@ -3623,32 +3629,65 @@ function renderHomeKorean(){
         </div>
       </div>
 
-      <div class="kr-widget kr-id-card">
-        <div class="kr-id-avs">
-          ${myAv?`<img src="${escAttr(myAv)}" class="kr-id-av" alt=""/>`:`<div class="kr-id-av kr-id-fallback">🙂</div>`}
-          ${taAv?`<img src="${escAttr(taAv)}" class="kr-id-av" alt=""/>`:`<div class="kr-id-av kr-id-fallback">💬</div>`}
-        </div>
-        <div class="kr-id-body">
-          <div class="kr-id-names">${esc(myName)} · ${esc(taName)}</div>
-          <div class="kr-id-days">在一起 ${esc(String(days))} 天</div>
-          <div class="kr-id-love">
-            ${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}
-            <span>${esc(String(love))}</span>
+      <div class="kr-mid-row">
+        <button type="button" class="feat-card kr-vinyl-card" data-sub="music">
+          <div class="kr-vinyl-disc${cover ? " has-track" : ""}">
+            <div class="kr-vinyl-ring"></div>
+            <div class="kr-vinyl-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</div>
+            <div class="kr-vinyl-hole"></div>
           </div>
-          <div class="kr-id-status">${esc(status)}</div>
+          <div class="kr-vinyl-meta">
+            <div class="kr-vinyl-title">${esc(title)}</div>
+            <div class="kr-vinyl-artist">${esc(artist)}</div>
+          </div>
+        </button>
+        <div class="kr-quad">
+          ${top4Html}
         </div>
       </div>
 
-      ${musicHtml}
+      <div class="kr-widget kr-profile-card">
+        <div class="kr-prof-left">
+          ${taAv?`<img src="${escAttr(taAv)}" class="kr-prof-av" alt=""/>`:`<div class="kr-prof-av kr-id-fallback">💬</div>`}
+          <div>
+            <div class="kr-prof-name">${esc(taName)}</div>
+            <div class="kr-prof-sub">@ with ${esc(myName)} · ${esc(String(days))}d</div>
+          </div>
+        </div>
+        <div class="kr-prof-quote">${esc(status)}</div>
+        <div class="kr-prof-love">
+          <span class="kr-hearts">${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}</span>
+          <span>${esc(String(love))}</span>
+        </div>
+      </div>
 
-      <div class="kr-widget kr-apps">
-        <div class="kr-apps-grid">${iconGrid}</div>
+      ${preview ? `
+      <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
+        <div class="kr-cp-top">
+          ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
+          <div class="kr-cp-name">${esc(taName)}</div>
+          <div class="kr-cp-go">聊天</div>
+        </div>
+        <div class="kr-cp-text">${esc(preview)}</div>
+      </button>` : `
+      <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
+        <div class="kr-cp-top">
+          ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
+          <div class="kr-cp-name">${esc(taName)}</div>
+          <div class="kr-cp-go">聊天</div>
+        </div>
+        <div class="kr-cp-text">还没有新消息 · 去说一句吧</div>
+      </button>`}
+
+      <div class="kr-widget kr-apps kr-apps-more">
+        <div class="kr-apps-grid kr-apps-grid-8">${moreHtml}</div>
       </div>
 
       <div class="kr-home-foot">mono · quiet days</div>
     </div>
   </div>`;
 }
+
 
 /** 统计各会话按日的消息条数（用户+助手） */
 function collectChatHeatMap(){
