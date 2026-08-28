@@ -5761,6 +5761,26 @@ function __ccHubSend(wsUrl, pin, content, opts){
     trySend();
   });
 }
+/** 往 CC 终端注入一条原始命令（如 /model），不包 <channel>。 */
+function __ccSendCommand(cmd, wsUrl, pin){
+  return new Promise((resolve, reject)=>{
+    const ws = __ccConnect(wsUrl, pin);
+    if(!ws){ reject(new Error("CC hub 连接失败")); return; }
+    let settled=false;
+    const timer=setTimeout(()=>{ if(!settled){ settled=true; resolve(false); } }, 8000);
+    function done(v){ if(settled) return; settled=true; clearTimeout(timer); resolve(v); }
+    function fail(e){ if(settled) return; settled=true; clearTimeout(timer); reject(e); }
+    const trySend=()=>{
+      if(settled) return;
+      if(__cc.ready){
+        if(!__cc.ccAlive){ fail(new Error("CC 离线")); return; }
+        try{ ws.send(JSON.stringify({ type:"terminal_input", text:cmd, enter:true })); done(true); }catch(e){ fail(e); }
+      } else { setTimeout(trySend, 300); }
+    };
+    trySend();
+  });
+}
+
 /** cc 通道内容拼装：系统设定(短)+ 最近对话。长设定放 VPS 的 CLAUDE.md，不重发。 */
 function __ccBuildContent(messages, systemPrompt){
   const sys = (systemPrompt && typeof systemPrompt==="object")
@@ -7017,6 +7037,7 @@ function defaultAgents(){
       geminiModel: a.geminiModel || "gemini-2.0-flash",
       ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456",
       ccPin: (state.callConfig&&state.callConfig.ccPin) || "498898",
+      ccModel: "",
       avatar: (state.coupleInfo && state.coupleInfo.partnerAvatar) || "",
       color: "#D4A5A5",
       thoughtGuide: state.thoughtGuide || "",
@@ -7042,6 +7063,7 @@ function ensureAgents(){
       if(ag.enabled === undefined) ag.enabled = true;
       if(typeof ag.ccWsUrl !== "string" || !ag.ccWsUrl) ag.ccWsUrl = (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
       if(typeof ag.ccPin !== "string" || !ag.ccPin) ag.ccPin = (state.callConfig&&state.callConfig.ccPin) || "498898";
+      if(typeof ag.ccModel !== "string") ag.ccModel = "";
     });
     if(!state.agents.find(a=>a.id==="a1")){
       state.agents = defaultAgents().concat(state.agents);
@@ -22227,6 +22249,15 @@ function renderAgentSettingsBlock(ag, idx){
           <input id="${prefix}-ccWsUrl" value="${escAttr(ag.ccWsUrl||"ws://115.29.237.172:3456")}" placeholder="ws://IP:3456"/></div>
         <div class="setting-row"><span class="setting-label">Hub PIN</span>
           <input type="password" id="${prefix}-ccPin" value="${escAttr(ag.ccPin||"")}" placeholder="hub PIN"/></div>
+        <div class="setting-row"><span class="setting-label">模型</span>
+          <select id="${prefix}-ccModel" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+            <option value="" ${!ag.ccModel?"selected":""}>跟随默认（Sonnet 5）</option>
+            <option value="claude-sonnet-5" ${ag.ccModel==="claude-sonnet-5"?"selected":""}>Sonnet 5 · 日常</option>
+            <option value="claude-opus-4-8" ${ag.ccModel==="claude-opus-4-8"?"selected":""}>Opus 4.8 · 最强</option>
+            <option value="claude-fable-5" ${ag.ccModel==="claude-fable-5"?"selected":""}>Fable 5 · 长任务</option>
+            <option value="claude-haiku-4-5-20251001" ${ag.ccModel==="claude-haiku-4-5-20251001"?"selected":""}>Haiku 4.5 · 最省</option>
+          </select>
+          <div style="font-size:10px;opacity:0.75;line-height:1.45;margin-top:4px">切换会立即发到 CC（/model），选中的模型成为 CC 新会话默认。</div></div>
         <div class="setting-row"><span class="setting-label" style="font-size:10px;opacity:0.75;line-height:1.45">CC 通道：消息经 WebSocket 发到 VPS hub → tmux 里的 Claude Code 回复。VPS 需已订阅登录。侧栏额度接官方用量。</span></div>
       `:`
         <div class="setting-row"><span class="setting-label">API Key</span>
@@ -24537,6 +24568,23 @@ function bindEvents(){
     bind("thoughtGuide", prefix+"-thoughtGuide");
     bind("ccWsUrl", prefix+"-ccWsUrl");
     bind("ccPin", prefix+"-ccPin");
+    // 模型切换：持久化 + 立即发 /model 到 CC
+    const ccModelSel = document.getElementById(prefix+"-ccModel");
+    if(ccModelSel){
+      ccModelSel.onchange = ()=>{
+        ag.ccModel = ccModelSel.value;
+        persist("agents");
+        const hubUrl = ag.ccWsUrl || "ws://115.29.237.172:3456";
+        const hubPin = ag.ccPin || "";
+        const id = ccModelSel.value;
+        if(!id){ if(typeof showToast==="function") showToast("已跟随 CC 默认，未发切换命令"); return; }
+        if(typeof __ccSendCommand === "function"){
+          __ccSendCommand("/model "+id, hubUrl, hubPin)
+            .then(ok=>{ if(ok && typeof showToast==="function") showToast("模型切换指令已发送"); })
+            .catch(e=>{ if(typeof showToast==="function") showToast("切换失败："+e.message); });
+        }
+      };
+    }
     // 头像文件上传
     const fileInp = document.getElementById(prefix+"-avatar-file");
     if(fileInp){
