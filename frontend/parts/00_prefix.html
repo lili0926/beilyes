@@ -2840,14 +2840,24 @@
       overflow: visible;
     }
     .rpg-sprite-slot.them {
-      left: max(0px, env(safe-area-inset-left, 0px));
+      left: max(-12px, env(safe-area-inset-left, 0px) - 8px);
       right: auto;
       justify-content: flex-start;
+      width: min(78vw, 380px);
+    }
+    .rpg-sprite-slot.them .rpg-avatar-full {
+      object-position: bottom left !important;
+      transform: translateX(-6%);
     }
     .rpg-sprite-slot.me {
-      right: max(0px, env(safe-area-inset-right, 0px));
+      right: max(-8px, env(safe-area-inset-right, 0px) - 4px);
       left: auto;
       justify-content: flex-end;
+      width: min(78vw, 380px);
+    }
+    .rpg-sprite-slot.me .rpg-avatar-full {
+      object-position: bottom right !important;
+      transform: translateX(4%);
     }
     .rpg-sprite-slot .rpg-avatar {
       width: 120px; height: 120px; border-radius: 50%;

@@ -2840,14 +2840,24 @@
       overflow: visible;
     }
     .rpg-sprite-slot.them {
-      left: max(0px, env(safe-area-inset-left, 0px));
+      left: max(-12px, env(safe-area-inset-left, 0px) - 8px);
       right: auto;
       justify-content: flex-start;
+      width: min(78vw, 380px);
+    }
+    .rpg-sprite-slot.them .rpg-avatar-full {
+      object-position: bottom left !important;
+      transform: translateX(-6%);
     }
     .rpg-sprite-slot.me {
-      right: max(0px, env(safe-area-inset-right, 0px));
+      right: max(-8px, env(safe-area-inset-right, 0px) - 4px);
       left: auto;
       justify-content: flex-end;
+      width: min(78vw, 380px);
+    }
+    .rpg-sprite-slot.me .rpg-avatar-full {
+      object-position: bottom right !important;
+      transform: translateX(4%);
     }
     .rpg-sprite-slot .rpg-avatar {
       width: 120px; height: 120px; border-radius: 50%;
@@ -19084,7 +19094,12 @@ function bindRpgView(){
   document.querySelectorAll("[data-chat-view]").forEach(btn=>{
     btn.onclick = (e)=>{
       e.stopPropagation();
-      const mode = btn.getAttribute("data-chat-view") || "chat";
+      let mode = btn.getAttribute("data-chat-view") || "chat";
+      // RPG 仅深渊壳
+      if(mode === "rpg" && (state.uiShell || "classic") !== "eldritch"){
+        mode = "chat";
+        if(typeof showToast==="function") showToast("RPG 模式请先切换到「深渊」壳");
+      }
       state.chatViewMode = mode === "rpg" ? "rpg" : "chat";
       try{ persist("chatViewMode"); }catch(e){}
       if(state.chatViewMode === "rpg"){
@@ -19693,12 +19708,24 @@ function renderChat(){
   const guideAg = agentById(state.guideEditAgentId) || activeAg || agents[0];
   const hasAnyGuide = agents.some(a=>a.thoughtGuide && a.thoughtGuide.trim());
 
-  const viewMode = (state.chatViewMode === "rpg") ? "rpg" : "chat";
+  // RPG 仅深渊壳可用；其它壳强制普通聊天
+  const shell = state.uiShell || "classic";
+  const rpgAllowed = shell === "eldritch";
+  if(!rpgAllowed && state.chatViewMode === "rpg"){
+    state.chatViewMode = "chat";
+    try{ persist("chatViewMode"); }catch(e){}
+  }
+  const viewMode = (rpgAllowed && state.chatViewMode === "rpg") ? "rpg" : "chat";
   if(viewMode === "rpg" && state.rpgLineIndex == null){
     try{ rpgJumpToEnd(); }catch(e){}
   }
-  const isClaude = (state.uiShell || "") === "claude";
+  const isClaude = shell === "claude";
   const chatName = isGroup ? "群聊" : ((activeAg&&activeAg.name)||"聊天");
+  const switchHtml = rpgAllowed ? `
+      <div class="chat-view-switch${isClaude?" claude-view-switch":""}" title="聊天 / RPG">
+        <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
+        <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
+      </div>` : "";
   const headerHtml = isClaude ? `
     <div class="chat-header claude-header">
       <button type="button" class="claude-round-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="menu"></i></button>
@@ -19707,10 +19734,7 @@ function renderChat(){
         <span>${esc(chatName)}</span>
       </div>
       <div style="flex:1"></div>
-      <div class="chat-view-switch claude-view-switch" title="聊天 / RPG">
-        <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
-        <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
-      </div>
+      ${switchHtml}
       <button type="button" class="claude-round-btn" id="chat-exit-home" title="回首页"><i data-lucide="x"></i></button>
     </div>` : `
     <div class="chat-header chat-header-slim">
@@ -19719,10 +19743,7 @@ function renderChat(){
       <div class="chat-title-wrap" style="flex:1;min-width:0;pointer-events:none">
         <span class="chat-name" style="font-size:14px">${esc(chatName)}</span>
       </div>
-      <div class="chat-view-switch" title="聊天 / RPG">
-        <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
-        <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
-      </div>
+      ${switchHtml}
     </div>`;
   return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}">
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
@@ -23024,6 +23045,10 @@ function bindEvents(){
     btn.onclick = ()=>{
       state.uiShell = btn.dataset.uiShell || "classic";
       persist("uiShell");
+      if(state.uiShell !== "eldritch" && state.chatViewMode === "rpg"){
+        state.chatViewMode = "chat";
+        try{ persist("chatViewMode"); }catch(e){}
+      }
       applyThemeVars();
       render();
     };
