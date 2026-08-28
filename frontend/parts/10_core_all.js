@@ -2925,7 +2925,7 @@ function agentHasKey(ag){
   if(!ag) return false;
   if(ag.channel==="claude") return !!ag.claudeKey;
   if(ag.channel==="gemini") return !!ag.geminiKey;
-  if(ag.channel==="cc") return !!(ag.ccWsUrl);
+  if(ag.channel==="cc") return true; // cc 通道自带默认 hub 地址兜底，不需要 API key
   return !!(ag.openaiKey);
 }
 function agentToApiConfig(ag){
