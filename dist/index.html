@@ -3320,6 +3320,113 @@
     }
     .stream-think-label { display: inline-flex; align-items: center; gap: 4px; }
 
+
+    /* ═══════════ 壳：纸感 Claude（仿官端暖米白） ═══════════ */
+    body.shell-claude {
+      --bg: #F5F3EE;
+      --card: #FBFAF7;
+      --text: #1A1815;
+      --sub: #6B665E;
+      --border: #E1DDD4;
+      --accent: #3A362F;
+      --accent2: #8A857B;
+      --danger: #8b3a4a;
+      background: #F5F3EE !important;
+      color: var(--text);
+      font-family: -apple-system, "Noto Sans SC", "Helvetica Neue", sans-serif !important;
+      letter-spacing: -0.01em;
+    }
+    body.shell-claude #app { background: transparent; }
+    body.shell-claude .bottom-nav,
+    body.shell-claude .chat-header,
+    body.shell-claude .chat-header-slim {
+      background: #F5F3EE !important;
+      border-color: rgba(43,38,30,0.06) !important;
+      box-shadow: none !important;
+      color: #1A1815 !important;
+    }
+    body.shell-claude .chat-header-slim button,
+    body.shell-claude .bottom-nav button {
+      color: #48453E !important;
+    }
+    body.shell-claude .feat-card,
+    body.shell-claude .card,
+    body.shell-claude .setting-section {
+      background: #FFF !important;
+      border: none !important;
+      border-radius: 16px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.05), 0 2px 6px rgba(43,38,30,0.05) !important;
+    }
+    body.shell-claude .bubble.them,
+    body.shell-claude .bubble:not(.me) {
+      background: #FFF !important;
+      border: none !important;
+      color: #1A1815 !important;
+      border-radius: 18px 18px 18px 6px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.04), 0 1px 3px rgba(43,38,30,0.04) !important;
+    }
+    body.shell-claude .bubble.me {
+      background: #EDE9E0 !important;
+      border: none !important;
+      color: #1A1815 !important;
+      border-radius: 18px 18px 6px 18px !important;
+      box-shadow: none !important;
+    }
+    body.shell-claude .chat-input-bar {
+      background: #F5F3EE !important;
+      border-top: 1px solid rgba(43,38,30,0.06) !important;
+    }
+    body.shell-claude .chat-input-bar input,
+    body.shell-claude .chat-input-bar textarea {
+      background: #FFF !important;
+      border: none !important;
+      border-radius: 22px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.06), 0 2px 6px rgba(43,38,30,0.04) !important;
+      color: #1A1815 !important;
+    }
+    body.shell-claude .msg-meta-name { color: #3A362F !important; font-weight: 600; }
+    body.shell-claude .msg-meta-time { color: #9A958B !important; }
+    body.shell-claude .think-peek-btn {
+      background: #FFF !important;
+      color: #6B665E !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.06) !important;
+    }
+    body.shell-claude .think-modal-mask {
+      background: transparent !important;
+    }
+    body.shell-claude .think-modal {
+      background: rgba(255,255,255,0.92) !important;
+      border: none !important;
+      border-radius: 16px 16px 0 0 !important;
+      box-shadow: 0 -8px 32px rgba(43,38,30,0.12) !important;
+      backdrop-filter: blur(30px) saturate(180%);
+      -webkit-backdrop-filter: blur(30px) saturate(180%);
+      color: #1A1815 !important;
+    }
+    body.shell-claude .think-modal-title { color: #1A1815 !important; }
+    body.shell-claude .think-modal-pre { color: #2B2620 !important; }
+    body.shell-claude .btn-accent,
+    body.shell-claude .btn-accent2 {
+      background: #2B2620 !important;
+      border: none !important;
+      color: #F5F3EE !important;
+      border-radius: 20px !important;
+    }
+    body.shell-claude .font-chip.active,
+    body.shell-claude .chat-view-switch button.active {
+      background: #2B2620 !important;
+      color: #F5F3EE !important;
+      border-color: #2B2620 !important;
+    }
+    body.shell-claude .rpg-dialog {
+      background: rgba(255,255,255,0.92) !important;
+      border: none !important;
+      border-radius: 16px !important;
+      box-shadow: 0 8px 28px rgba(43,38,30,0.12) !important;
+      backdrop-filter: blur(20px);
+      color: #1A1815 !important;
+    }
+
   </style>
 
   <div id="app"></div>
@@ -5229,7 +5336,7 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "" }) || { me: "jasmine-sprite.png", them: "" },
@@ -6202,10 +6309,11 @@ function applyThemeVars(){
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
+  else if(sh === "claude") document.body.classList.add("shell-claude");
   else document.body.classList.add("shell-classic");
   if(state.chatViewMode === "rpg" && state.tab === "chat")
     document.body.classList.add("rpg-chat-on");
@@ -20531,6 +20639,7 @@ function renderTheme(){
         <button type="button" class="font-chip${(state.uiShell||"classic")==="classic"?" active":""}" data-ui-shell="classic">经典</button>
         <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
         <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
+        <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
     </div>

@@ -3320,6 +3320,113 @@
     }
     .stream-think-label { display: inline-flex; align-items: center; gap: 4px; }
 
+
+    /* ═══════════ 壳：纸感 Claude（仿官端暖米白） ═══════════ */
+    body.shell-claude {
+      --bg: #F5F3EE;
+      --card: #FBFAF7;
+      --text: #1A1815;
+      --sub: #6B665E;
+      --border: #E1DDD4;
+      --accent: #3A362F;
+      --accent2: #8A857B;
+      --danger: #8b3a4a;
+      background: #F5F3EE !important;
+      color: var(--text);
+      font-family: -apple-system, "Noto Sans SC", "Helvetica Neue", sans-serif !important;
+      letter-spacing: -0.01em;
+    }
+    body.shell-claude #app { background: transparent; }
+    body.shell-claude .bottom-nav,
+    body.shell-claude .chat-header,
+    body.shell-claude .chat-header-slim {
+      background: #F5F3EE !important;
+      border-color: rgba(43,38,30,0.06) !important;
+      box-shadow: none !important;
+      color: #1A1815 !important;
+    }
+    body.shell-claude .chat-header-slim button,
+    body.shell-claude .bottom-nav button {
+      color: #48453E !important;
+    }
+    body.shell-claude .feat-card,
+    body.shell-claude .card,
+    body.shell-claude .setting-section {
+      background: #FFF !important;
+      border: none !important;
+      border-radius: 16px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.05), 0 2px 6px rgba(43,38,30,0.05) !important;
+    }
+    body.shell-claude .bubble.them,
+    body.shell-claude .bubble:not(.me) {
+      background: #FFF !important;
+      border: none !important;
+      color: #1A1815 !important;
+      border-radius: 18px 18px 18px 6px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.04), 0 1px 3px rgba(43,38,30,0.04) !important;
+    }
+    body.shell-claude .bubble.me {
+      background: #EDE9E0 !important;
+      border: none !important;
+      color: #1A1815 !important;
+      border-radius: 18px 18px 6px 18px !important;
+      box-shadow: none !important;
+    }
+    body.shell-claude .chat-input-bar {
+      background: #F5F3EE !important;
+      border-top: 1px solid rgba(43,38,30,0.06) !important;
+    }
+    body.shell-claude .chat-input-bar input,
+    body.shell-claude .chat-input-bar textarea {
+      background: #FFF !important;
+      border: none !important;
+      border-radius: 22px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.06), 0 2px 6px rgba(43,38,30,0.04) !important;
+      color: #1A1815 !important;
+    }
+    body.shell-claude .msg-meta-name { color: #3A362F !important; font-weight: 600; }
+    body.shell-claude .msg-meta-time { color: #9A958B !important; }
+    body.shell-claude .think-peek-btn {
+      background: #FFF !important;
+      color: #6B665E !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.06) !important;
+    }
+    body.shell-claude .think-modal-mask {
+      background: transparent !important;
+    }
+    body.shell-claude .think-modal {
+      background: rgba(255,255,255,0.92) !important;
+      border: none !important;
+      border-radius: 16px 16px 0 0 !important;
+      box-shadow: 0 -8px 32px rgba(43,38,30,0.12) !important;
+      backdrop-filter: blur(30px) saturate(180%);
+      -webkit-backdrop-filter: blur(30px) saturate(180%);
+      color: #1A1815 !important;
+    }
+    body.shell-claude .think-modal-title { color: #1A1815 !important; }
+    body.shell-claude .think-modal-pre { color: #2B2620 !important; }
+    body.shell-claude .btn-accent,
+    body.shell-claude .btn-accent2 {
+      background: #2B2620 !important;
+      border: none !important;
+      color: #F5F3EE !important;
+      border-radius: 20px !important;
+    }
+    body.shell-claude .font-chip.active,
+    body.shell-claude .chat-view-switch button.active {
+      background: #2B2620 !important;
+      color: #F5F3EE !important;
+      border-color: #2B2620 !important;
+    }
+    body.shell-claude .rpg-dialog {
+      background: rgba(255,255,255,0.92) !important;
+      border: none !important;
+      border-radius: 16px !important;
+      box-shadow: 0 8px 28px rgba(43,38,30,0.12) !important;
+      backdrop-filter: blur(20px);
+      color: #1A1815 !important;
+    }
+
   </style>
 
   <div id="app"></div>

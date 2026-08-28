@@ -1902,7 +1902,7 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "" }) || { me: "jasmine-sprite.png", them: "" },
@@ -2875,10 +2875,11 @@ function applyThemeVars(){
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
+  else if(sh === "claude") document.body.classList.add("shell-claude");
   else document.body.classList.add("shell-classic");
   if(state.chatViewMode === "rpg" && state.tab === "chat")
     document.body.classList.add("rpg-chat-on");
@@ -17204,6 +17205,7 @@ function renderTheme(){
         <button type="button" class="font-chip${(state.uiShell||"classic")==="classic"?" active":""}" data-ui-shell="classic">经典</button>
         <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
         <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
+        <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
     </div>
