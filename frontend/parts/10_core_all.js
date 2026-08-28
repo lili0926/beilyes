@@ -2823,7 +2823,13 @@ function contrastFg(hex){
 function applyThemeVars(){
   const t=T();
   const r=document.documentElement;
-  ["bg","card","accent","accent2","text","sub","border"].forEach(k=>r.style.setProperty("--"+k,t[k]));
+  // 韩系壳：锁定浅灰黑白变量，避免主题色盘把桌面冲花
+  if((state.uiShell||"")==="korean"){
+    const kr = {bg:"#F4F4F6",card:"#FFFFFF",accent:"#1C1C1E",accent2:"#8E8E93",text:"#1C1C1E",sub:"#8E8E93",border:"#E5E5EA"};
+    Object.keys(kr).forEach(k=>r.style.setProperty("--"+k, kr[k]));
+  } else {
+    ["bg","card","accent","accent2","text","sub","border"].forEach(k=>r.style.setProperty("--"+k,t[k]));
+  }
   const style = state.bubbleStyle || "solid";
   const op = Math.min(1, Math.max(0.15, Number(state.bubbleOpacity)||0.72));
   const meBase = (state.bubbleMeColor && state.bubbleMeColor.trim()) || t.bubble_me;

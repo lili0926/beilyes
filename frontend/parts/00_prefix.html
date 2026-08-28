@@ -3852,6 +3852,182 @@
       padding: 6px 10px !important;
     }
 
+
+    /* ══ 韩系：全 App 铺开 + 聊天精修 + Dock 不露边 ══ */
+    body.shell-korean #app {
+      background: #F4F4F6 !important;
+    }
+    body.shell-korean .page {
+      background: #F4F4F6 !important;
+      padding: 12px 16px 100px !important;
+      color: #1C1C1E !important;
+    }
+    body.shell-korean .page-title,
+    body.shell-korean .sub-header,
+    body.shell-korean .sub-header .sub-title,
+    body.shell-korean [class*="header"] {
+      color: #1C1C1E !important;
+    }
+    body.shell-korean .sub-header {
+      background: #F4F4F6 !important;
+      border-bottom: 1px solid rgba(0,0,0,0.05) !important;
+      box-shadow: none !important;
+    }
+    body.shell-korean .feat-card,
+    body.shell-korean .card,
+    body.shell-korean .setting-section,
+    body.shell-korean .status-card,
+    body.shell-korean .mem-card,
+    body.shell-korean .add-form,
+    body.shell-korean .vital-card {
+      background: #FFFFFF !important;
+      border: none !important;
+      border-radius: 16px !important;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04) !important;
+    }
+    body.shell-korean input,
+    body.shell-korean textarea,
+    body.shell-korean select {
+      border-radius: 12px !important;
+      border: 1px solid rgba(0,0,0,0.06) !important;
+      background: #FFF !important;
+      color: #1C1C1E !important;
+    }
+    body.shell-korean .btn-ghost {
+      background: #EFEFF1 !important;
+      color: #3A3A3C !important;
+      border: none !important;
+      border-radius: 12px !important;
+    }
+    body.shell-korean .theme-swatch,
+    body.shell-korean .color-dot {
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    }
+    /* Dock：固定贴底，圆角悬浮，不再 sticky 露缝 */
+    body.shell-korean .bottom-nav.kr-dock,
+    body.shell-korean .bottom-nav {
+      position: absolute !important;
+      left: 14px !important;
+      right: 14px !important;
+      bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+      width: auto !important;
+      border-radius: 26px !important;
+      background: rgba(255,255,255,0.92) !important;
+      border: 1px solid rgba(0,0,0,0.05) !important;
+      box-shadow: 0 10px 36px rgba(0,0,0,0.1) !important;
+      backdrop-filter: blur(24px) saturate(160%) !important;
+      -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+      padding: 8px 8px !important;
+      padding-bottom: 8px !important;
+      z-index: 120 !important;
+    }
+    body.shell-korean .bottom-nav button {
+      font-size: 10px !important;
+      gap: 2px !important;
+      color: #AEAEB2 !important;
+    }
+    body.shell-korean .bottom-nav button.active {
+      color: #1C1C1E !important;
+      font-weight: 600 !important;
+    }
+    body.shell-korean .kr-home-scroll {
+      padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    /* 聊天页：细、透、韩系参考 */
+    body.shell-korean .chat-page,
+    body.shell-korean .korean-layout {
+      background: #F7F7F8 !important;
+    }
+    body.shell-korean .korean-header {
+      background: #F7F7F8 !important;
+      padding: 8px 12px 8px 4px !important;
+      border-bottom: none !important;
+    }
+    body.shell-korean .korean-layout .chat-messages {
+      background: #F7F7F8 !important;
+      padding: 6px 14px 18px !important;
+      gap: 0;
+    }
+    body.shell-korean .msg-meta {
+      margin: 10px 0 4px !important;
+      gap: 6px !important;
+    }
+    body.shell-korean .msg-meta.me {
+      margin: 10px 0 4px !important;
+    }
+    body.shell-korean .msg-meta-avatar,
+    body.shell-korean .bubble-avatar {
+      width: 34px !important;
+      height: 34px !important;
+      border-radius: 50% !important;
+      overflow: hidden;
+    }
+    body.shell-korean .msg-meta-name {
+      font-size: 11px !important;
+      color: #AEAEB2 !important;
+      font-weight: 500 !important;
+    }
+    body.shell-korean .msg-meta-time {
+      font-size: 10px !important;
+      color: #C7C7CC !important;
+    }
+    body.shell-korean .bubble-row {
+      margin-bottom: 4px !important;
+      gap: 6px !important;
+    }
+    body.shell-korean .bubble {
+      max-width: 78% !important;
+      font-size: 15px !important;
+      line-height: 1.45 !important;
+      padding: 10px 14px !important;
+      box-shadow: none !important;
+      font-weight: 400 !important;
+    }
+    body.shell-korean .bubble.them,
+    body.shell-korean .bubble:not(.me) {
+      background: #E9E9EB !important;
+      color: #1C1C1E !important;
+      border-radius: 18px !important;
+      border: none !important;
+    }
+    body.shell-korean .bubble.me {
+      background: #2C2C2E !important;
+      color: #FFFFFF !important;
+      border-radius: 18px !important;
+      border: none !important;
+    }
+    body.shell-korean .chat-input-bar {
+      background: #F7F7F8 !important;
+      border-top: none !important;
+      padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+      gap: 8px;
+    }
+    body.shell-korean .chat-input-bar input,
+    body.shell-korean .chat-input-bar textarea {
+      background: #FFFFFF !important;
+      border: none !important;
+      border-radius: 22px !important;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.05) !important;
+      min-height: 40px !important;
+      font-size: 14px !important;
+      padding: 10px 16px !important;
+    }
+    body.shell-korean .chat-empty {
+      color: #C7C7CC !important;
+    }
+    body.shell-korean .think-peek-btn {
+      background: transparent !important;
+      color: #C7C7CC !important;
+      font-size: 12px !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+    /* 外观色盘页也铺浅灰底 */
+    body.shell-korean .theme-section,
+    body.shell-korean .settings-block {
+      background: transparent !important;
+    }
+
   </style>
 
   <div id="app"></div>
