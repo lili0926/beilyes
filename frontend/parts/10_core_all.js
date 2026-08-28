@@ -3224,6 +3224,50 @@ function formatTimeFull(iso){
 }
 
 /** 从回复中拆出思考链与正文 */
+
+function thinkModalHtml(){
+  const mid = state.thinkModalId;
+  if(!mid) return "";
+  const msgs = state.messages || [];
+  let m = null, idx = -1;
+  for(let i=0;i<msgs.length;i++){
+    const x = msgs[i];
+    if(x && x.role==="assistant" && x.thinking && (x.msgId===mid || ("t"+i)===mid)){
+      m = x; idx = i; break;
+    }
+  }
+  if(!m) return "";
+  const tid = m.msgId || ("t"+idx);
+  const editing = state.editingThinkId === tid;
+  const u = m.usage || null;
+  const usageTip = u ? `读缓存 ${u.cache_read||0} · 写缓存 ${u.cache_write||0} · 输入 ${u.input||0} · 输出 ${u.output||0}` : "";
+  return `<div class="think-modal-mask" id="think-modal-mask" data-think-modal-close="1">
+    <div class="think-modal" role="dialog" aria-label="思考链" onclick="event.stopPropagation()">
+      <div class="think-modal-hd">
+        <div class="think-modal-title"><i data-lucide="brain"></i> 思考链</div>
+        <div class="think-modal-acts">
+          ${!editing?`
+            <button type="button" class="think-mini-btn think-icn" data-think-save-fav="${tid}" data-msg-idx="${idx}" title="收藏"><i data-lucide="bookmark"></i></button>
+            <button type="button" class="think-mini-btn think-icn" data-think-edit="${tid}" title="编辑"><i data-lucide="pencil"></i></button>
+            <button type="button" class="think-mini-btn think-icn" data-think-regen="${tid}" data-msg-idx="${idx}" title="重写"><i data-lucide="refresh-cw"></i></button>
+          `:""}
+          <button type="button" class="think-mini-btn" data-think-modal-close="1">关闭</button>
+        </div>
+      </div>
+      ${u?`<div class="think-modal-usage" title="${escAttr(usageTip)}">⚡ ${((u.input||0)+(u.output||0)).toLocaleString()} tok</div>`:""}
+      <div class="think-modal-body">
+        ${editing
+          ? `<textarea id="think-edit-${tid}">${esc(m.thinking)}</textarea>
+             <div class="thinking-actions">
+               <button type="button" data-think-apply="${tid}" data-msg-idx="${idx}" style="background:var(--accent);color:#fff">按此思考重写回复</button>
+               <button type="button" data-think-cancel="${tid}" style="background:var(--border);color:var(--text)">取消</button>
+             </div>`
+          : `<pre class="think-modal-pre">${esc(m.thinking)}</pre>`}
+      </div>
+    </div>
+  </div>`;
+}
+
 function parseThinking(text){
   if(!text) return { thinking:null, body:text||"" };
   let thinking = null;
@@ -14840,8 +14884,7 @@ function renderStreamLiveMsg(){
       <div class="bubble them" id="stream-live-msg">
         ${hasThink ? `
           <div class="stream-think-wrap" id="stream-live-think-wrap">
-            <div class="stream-think-label"><i data-lucide="message-square"></i> 思考中…</div>
-            <div class="stream-think-body" id="stream-live-think">${esc(sl.thinking)}</div>
+            <div class="stream-think-label"><i data-lucide="brain"></i> 思考中…</div>
           </div>` : ""}
         <div class="stream-body" id="stream-live-body">${esc(liveText)}</div><span class="stream-cursor">▍</span>
       </div>
@@ -15982,40 +16025,7 @@ function renderChat(){
 
       const idx = startIdx + i; // 真实索引，供编辑/重写定位
       if(choiceHideIdx[idx]) return; // 已被选项卡合并
-      if(m.role==="assistant" && m.thinking){
-        const tid = m.msgId || ("t"+idx);
-        const open = state.openThinkIds[tid] !== false;
-        const editing = state.editingThinkId === tid;
-        const u = m.usage || null;
-        const usageTip = u ? `本通 token：读 ${u.cache_read} · 写 ${u.cache_write} · 输入 ${u.input} · 输出 ${u.output}` : "";
-        msgs+=`<div class="thinking-block">
-          <div class="thinking-toggle" style="cursor:default">
-            <button type="button" data-think="${tid}" style="display:flex;align-items:center;gap:6px;border:none;background:transparent;padding:0;cursor:pointer;font-size:11px;color:var(--sub);flex:1;text-align:left">
-              <span class="arrow${open?" open":""}">▸</span>
-              <span style="display:inline-flex;align-items:center"><i data-lucide="message-square"></i></span>
-              ${u?`<span class="think-usage" title="${escAttr(usageTip)}">⚡${((u.input||0)+(u.output||0)).toLocaleString()} tok</span>`:""}
-              <span style="opacity:0.5">${open?"收起":"展开"}</span>
-            </button>
-            ${!editing?`
-              <div class="thinking-head-actions">
-                <button type="button" class="think-mini-btn think-icn" data-think-save-fav="${tid}" data-msg-idx="${idx}" title="收藏思考链"><i data-lucide="bookmark"></i></button>
-                <button type="button" class="think-mini-btn think-icn" data-think-edit="${tid}" title="编辑思考"><i data-lucide="pencil"></i></button>
-                <button type="button" class="think-mini-btn think-icn" data-think-regen="${tid}" data-msg-idx="${idx}" title="重写思考"><i data-lucide="refresh-cw"></i></button>
-              </div>
-            `:""}
-          </div>
-          <div class="thinking-body${open?" open":""}">
-            ${editing
-              ? `<textarea id="think-edit-${tid}">${esc(m.thinking)}</textarea>
-                 <div class="thinking-actions">
-                   <button class="btn-accent" data-think-save="${tid}" data-msg-idx="${idx}" style="background:var(--accent);color:#fff">保存</button>
-                   <button class="btn-accent" data-think-regen="${tid}" data-msg-idx="${idx}" style="background:var(--accent);color:#fff">重写</button>
-                   <button class="btn-ghost" data-think-cancel="${tid}">取消</button>
-                 </div>`
-              : `${esc(m.thinking)}`}
-          </div>
-        </div>`;
-      }
+      // 思考链 → meta 旁小图标 + 弹窗（不占气泡流）
       // MCP 工具足迹：一行居中的暗色小气泡
       if(m.toolNote){
         msgs+=`<div style="text-align:center;margin:2px 0"><span style="display:inline-block;font-size:10px;color:var(--sub);opacity:0.85;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:3px 10px">${esc(m.content)}</span></div>`;
@@ -16040,6 +16050,7 @@ function renderChat(){
           <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them")}</div>
           <span class="msg-meta-name">${esc(speakerName)}</span>
           ${m.time?`<span class="msg-meta-heart">♥</span><span class="msg-meta-time">${formatTime(m.time)}</span>`:""}
+          ${(!isMe && m.thinking)?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
         </div>`) : "";
       // 券夹卡片：AI 送出的券面
       if(m.couponId){
@@ -16098,7 +16109,8 @@ function renderChat(){
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
       </div>`;
       if(m.time && !showMeta && firstInRun){
-        msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}</div>`;
+        const tIcon = (!isMe && m.thinking)?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
+        msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}${tIcon}</div>`;
       }
     });
     state.pendingUser.forEach(m=>{
@@ -16167,6 +16179,7 @@ function renderChat(){
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>
+    ${typeof thinkModalHtml==="function" ? thinkModalHtml() : ""}
     ${viewMode==="rpg" ? renderRpgStage(activeAg, isGroup) : ""}
     <div class="chat-input-bar">
       ${guideOpen?`
@@ -19165,15 +19178,32 @@ function bindEvents(){
     thoughtGuideEl.onchange=saveGuide;
   }
 
-  // 思考链展开/收起
-  document.querySelectorAll("[data-think]").forEach(btn=>{
-    btn.onclick=()=>{
-      const id=btn.dataset.think;
-      // 默认 true，取反时若 undefined 则视为关掉
-      const cur = state.openThinkIds[id] !== false;
-      state.openThinkIds[id]=!cur;
-      if(!state.openThinkIds[id] && state.editingThinkId===id) state.editingThinkId=null;
-      render();
+  // 思考链：弹窗
+  document.querySelectorAll(".think-peek-btn[data-think-modal]").forEach(btn=>{
+    btn.onclick=(e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const id = btn.getAttribute("data-think-modal");
+      if(!id) return;
+      state.thinkModalId = id;
+      if(typeof render==="function") render();
+    };
+  });
+  const thinkMask = document.getElementById("think-modal-mask");
+  if(thinkMask){
+    thinkMask.onclick=(e)=>{
+      if(e.target !== thinkMask) return;
+      state.thinkModalId = null;
+      state.editingThinkId = null;
+      if(typeof render==="function") render();
+    };
+  }
+  document.querySelectorAll("[data-think-modal-close]").forEach(btn=>{
+    if(btn.id==="think-modal-mask") return;
+    btn.onclick=(e)=>{
+      e.preventDefault(); e.stopPropagation();
+      state.thinkModalId = null;
+      state.editingThinkId = null;
+      if(typeof render==="function") render();
     };
   });
   document.querySelectorAll("[data-think-save-fav]").forEach(btn=>{
@@ -19186,6 +19216,7 @@ function bindEvents(){
     btn.onclick=()=>{
       const id=btn.dataset.thinkEdit;
       state.editingThinkId=id;
+      state.thinkModalId = id;
       state.openThinkIds[id]=true;
       render();
     };
@@ -22120,7 +22151,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   }
   // 偷听：AI 回复也悄悄喂给宝宝
   if(cleanBody) babyOverhearChat(cleanBody.replace(/\[action[^\]]*\]/g, "").replace(/\[sticker[^\]]*\]/g, "").trim(), "assistant");
-  state.openThinkIds[msgId] = true;
+  state.openThinkIds[msgId] = false;
   saveActiveThread(); // 每轮回复立即落盘，杀进程不丢
   // 页面在后台时：普通回复也上推，方便锁屏收到
   try{
@@ -22268,7 +22299,7 @@ ${thinkingText}`;
         usage: i===0 ? lastUsage : null,
       });
     });
-    state.openThinkIds[msgId] = true;
+    state.openThinkIds[msgId] = false;
   }catch(e){
     showToast(`重写失败：${e.message}`); // 报错走浮窗，不留在聊天
   }
