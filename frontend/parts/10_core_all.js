@@ -3242,10 +3242,11 @@ function thinkModalHtml(){
   const editing = state.editingThinkId === tid;
   const u = m.usage || null;
   const usageTip = u ? `读缓存 ${u.cache_read||0} · 写缓存 ${u.cache_write||0} · 输入 ${u.input||0} · 输出 ${u.output||0}` : "";
-  return `<div class="think-modal-mask" id="think-modal-mask" data-think-modal-close="1">
-    <div class="think-modal" role="dialog" aria-label="思考链" onclick="event.stopPropagation()">
+  const claudeSheet = (state.uiShell || "") === "claude";
+  return `<div class="think-modal-mask${claudeSheet?" claude-thought-mask":""}" id="think-modal-mask" data-think-modal-close="1">
+    <div class="think-modal${claudeSheet?" claude-thought-sheet":""}" role="dialog" aria-label="Thought process" onclick="event.stopPropagation()">
       <div class="think-modal-hd">
-        <div class="think-modal-title"><i data-lucide="brain"></i> 思考链</div>
+        <div class="think-modal-title">${claudeSheet ? "Thought process" : `<i data-lucide="brain"></i> 思考链`}</div>
         <div class="think-modal-acts">
           ${!editing?`
             <button type="button" class="think-mini-btn think-icn" data-think-save-fav="${tid}" data-msg-idx="${idx}" title="收藏"><i data-lucide="bookmark"></i></button>
@@ -15377,7 +15378,7 @@ function renderChatSidebar(){
     <div class="chat-sidebar-mask${open?" open":""}" id="chat-sidebar-mask"></div>
     <aside class="chat-sidebar${open?" open":""}" id="chat-sidebar" aria-hidden="${open?"false":"true"}">
       <div class="chat-sidebar-head">
-        <div class="sb-title">侧栏</div>
+        <div class="sb-title">${(state.uiShell||"")==="claude" ? "Menu" : "侧栏"}</div>
         <button type="button" class="sb-close" id="chat-sidebar-close" aria-label="关闭">✕</button>
       </div>
       <div class="chat-sidebar-body">
@@ -16163,20 +16164,37 @@ function renderChat(){
   if(viewMode === "rpg" && state.rpgLineIndex == null){
     try{ rpgJumpToEnd(); }catch(e){}
   }
-  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}">
-    ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
-    ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
+  const isClaude = (state.uiShell || "") === "claude";
+  const chatName = isGroup ? "群聊" : ((activeAg&&activeAg.name)||"聊天");
+  const headerHtml = isClaude ? `
+    <div class="chat-header claude-header">
+      <button type="button" class="claude-round-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="menu"></i></button>
+      <div class="claude-style-chip" title="${escAttr(chatName)}">
+        <img src="claude-feather.svg" alt="" class="claude-feather" onerror="this.style.display='none'"/>
+        <span>${esc(chatName)}</span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="chat-view-switch claude-view-switch" title="聊天 / RPG">
+        <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
+        <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
+      </div>
+      <button type="button" class="claude-round-btn" id="chat-exit-home" title="回首页"><i data-lucide="x"></i></button>
+    </div>` : `
     <div class="chat-header chat-header-slim">
       <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
       <div class="chat-title-wrap" style="flex:1;min-width:0;pointer-events:none">
-        <span class="chat-name" style="font-size:14px">${isGroup?"群聊":esc((activeAg&&activeAg.name)||"聊天")}</span>
+        <span class="chat-name" style="font-size:14px">${esc(chatName)}</span>
       </div>
       <div class="chat-view-switch" title="聊天 / RPG">
         <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
         <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
       </div>
-    </div>
+    </div>`;
+  return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}">
+    ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
+    ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
+    ${headerHtml}
     ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>

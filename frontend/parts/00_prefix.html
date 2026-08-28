@@ -3427,6 +3427,95 @@
       color: #1A1815 !important;
     }
 
+
+    /* Claude 布局专属：顶栏圆钮 + 侧栏抽屉纸感 + Thought process sheet */
+    body.shell-claude .claude-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px 10px !important;
+      background: #F5F3EE !important;
+      border-bottom: none !important;
+      flex-shrink: 0;
+    }
+    body.shell-claude .claude-round-btn {
+      width: 40px; height: 40px; border-radius: 50% !important;
+      background: #FFF !important; border: none !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,.05), 0 2px 6px rgba(43,38,30,.05) !important;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #48453E !important; cursor: pointer; padding: 0 !important;
+    }
+    body.shell-claude .claude-style-chip {
+      height: 40px; display: inline-flex; align-items: center; gap: 6px;
+      background: #FFF; border-radius: 20px; padding: 0 14px;
+      box-shadow: 0 0 0 1px rgba(43,38,30,.05), 0 2px 6px rgba(43,38,30,.05);
+      font-size: 13.5px; font-weight: 600; color: #3A362F;
+      max-width: 160px; overflow: hidden;
+    }
+    body.shell-claude .claude-style-chip span {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.shell-claude .claude-feather {
+      width: 22px; height: 20px; flex: none; display: block;
+    }
+    body.shell-claude .claude-view-switch {
+      background: #FFF; border-radius: 20px; padding: 3px;
+      box-shadow: 0 0 0 1px rgba(43,38,30,.05);
+    }
+    body.shell-claude .claude-view-switch button {
+      border-radius: 16px !important; border: none !important;
+      padding: 6px 12px !important; font-size: 12px !important;
+    }
+    body.shell-claude .claude-layout .chat-messages {
+      background: #F5F3EE;
+      padding: 8px 16px 16px;
+    }
+    body.shell-claude .chat-sidebar {
+      background: #F5F3EE !important;
+      border-right: none !important;
+      box-shadow: 8px 0 32px rgba(43,38,30,0.08) !important;
+    }
+    body.shell-claude .chat-sidebar-head {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(43,38,30,0.06) !important;
+    }
+    body.shell-claude .sb-title {
+      font-weight: 600; color: #1A1815; letter-spacing: -0.02em;
+    }
+    body.shell-claude .sb-card {
+      background: #FFF !important;
+      border: none !important;
+      border-radius: 16px !important;
+      box-shadow: 0 0 0 1px rgba(43,38,30,0.05), 0 2px 6px rgba(43,38,30,0.04) !important;
+    }
+    body.shell-claude .claude-thought-mask {
+      background: transparent !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+      padding: 36px 0 0 !important;
+    }
+    body.shell-claude .claude-thought-sheet {
+      width: 100% !important; max-width: none !important;
+      max-height: none !important; height: 100% !important;
+      border-radius: 16px 16px 0 0 !important;
+      background: rgba(255,255,255,0.88) !important;
+      backdrop-filter: blur(30px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
+      box-shadow: 0 -8px 40px rgba(43,38,30,0.1) !important;
+      border: none !important;
+    }
+    body.shell-claude .claude-thought-sheet .think-modal-title {
+      font-size: 16px; font-weight: 600; letter-spacing: -0.02em;
+      color: #1A1815 !important;
+    }
+    body.shell-claude .claude-thought-sheet .think-modal-pre {
+      font-size: 14px; line-height: 1.65; color: #2B2620 !important;
+    }
+    body.shell-claude .claude-thought-sheet .think-modal-hd {
+      padding: 16px 18px 10px;
+    }
+    body.shell-claude .claude-thought-sheet .think-modal-body {
+      padding: 8px 18px 28px;
+    }
+
   </style>
 
   <div id="app"></div>
