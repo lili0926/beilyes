@@ -17794,9 +17794,13 @@ function renderAgentSettingsBlock(ag, idx){
           <select id="${prefix}-ccModel" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
             <option value="" ${!ag.ccModel?"selected":""}>跟随默认（Sonnet 5）</option>
             <option value="claude-sonnet-5" ${ag.ccModel==="claude-sonnet-5"?"selected":""}>Sonnet 5 · 日常</option>
-            <option value="claude-opus-4-8" ${ag.ccModel==="claude-opus-4-8"?"selected":""}>Opus 4.8 · 最强</option>
-            <option value="claude-fable-5" ${ag.ccModel==="claude-fable-5"?"selected":""}>Fable 5 · 长任务</option>
+            <option value="claude-opus-5" ${ag.ccModel==="claude-opus-5"?"selected":""}>Opus 5 · 最新最强</option>
+            <option value="claude-opus-4-8" ${ag.ccModel==="claude-opus-4-8"?"selected":""}>Opus 4.8</option>
+            <option value="claude-opus-4-7" ${ag.ccModel==="claude-opus-4-7"?"selected":""}>Opus 4.7</option>
+            <option value="claude-opus-4-6" ${ag.ccModel==="claude-opus-4-6"?"selected":""}>Opus 4.6</option>
+            <option value="claude-opus-4-5" ${ag.ccModel==="claude-opus-4-5"?"selected":""}>Opus 4.5</option>
             <option value="claude-haiku-4-5-20251001" ${ag.ccModel==="claude-haiku-4-5-20251001"?"selected":""}>Haiku 4.5 · 最省</option>
+            <option value="claude-fable-5" disabled>Fable 5 · 需 usage credits（Pro 不可用）</option>
           </select>
           <div style="font-size:10px;opacity:0.75;line-height:1.45;margin-top:4px">切换会立即发到 CC（/model），选中的模型成为 CC 新会话默认。</div></div>
         <div class="setting-row"><span class="setting-label" style="font-size:10px;opacity:0.75;line-height:1.45">CC 通道：消息经 WebSocket 发到 VPS hub → tmux 里的 Claude Code 回复。VPS 需已订阅登录。侧栏额度接官方用量。</span></div>
