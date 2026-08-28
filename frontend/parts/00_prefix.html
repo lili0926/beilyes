@@ -3704,6 +3704,154 @@
       box-shadow: none !important;
     }
 
+
+    /* 韩系桌面主页 */
+    body.shell-korean .kr-home {
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 20% 0%, rgba(0,0,0,0.03), transparent 50%),
+        radial-gradient(ellipse at 80% 100%, rgba(0,0,0,0.04), transparent 45%),
+        #F2F2F4;
+    }
+    body.shell-korean .kr-home-scroll {
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 16px calc(88px + env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+    }
+    body.shell-korean .kr-widget {
+      background: rgba(255,255,255,0.72);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.7);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.04);
+    }
+    body.shell-korean .kr-top-row {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    body.shell-korean .kr-time-card,
+    body.shell-korean .kr-weather-card {
+      padding: 16px 14px;
+    }
+    body.shell-korean .kr-clock {
+      font-size: 34px; font-weight: 300; letter-spacing: -0.03em;
+      color: #1C1C1E; line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+    body.shell-korean .kr-date {
+      margin-top: 6px; font-size: 12px; color: #8E8E93;
+    }
+    body.shell-korean .kr-w-temp {
+      font-size: 28px; font-weight: 300; color: #1C1C1E;
+    }
+    body.shell-korean .kr-w-label {
+      margin-top: 6px; font-size: 12px; color: #8E8E93;
+    }
+    body.shell-korean .kr-id-card {
+      display: flex; gap: 14px; align-items: center;
+      padding: 16px; margin-bottom: 10px;
+    }
+    body.shell-korean .kr-id-avs {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    body.shell-korean .kr-id-av {
+      width: 44px; height: 44px; border-radius: 50%;
+      object-fit: cover; background: #E5E5EA;
+      box-shadow: 0 0 0 2px #fff;
+    }
+    body.shell-korean .kr-id-fallback {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    body.shell-korean .kr-id-body { flex: 1; min-width: 0; }
+    body.shell-korean .kr-id-names {
+      font-size: 15px; font-weight: 600; color: #1C1C1E;
+    }
+    body.shell-korean .kr-id-days {
+      font-size: 12px; color: #8E8E93; margin-top: 2px;
+    }
+    body.shell-korean .kr-id-love {
+      margin-top: 6px; font-size: 12px; color: #636366;
+      display: flex; align-items: center; gap: 6px;
+    }
+    body.shell-korean .kr-id-love span {
+      font-variant-numeric: tabular-nums; color: #8E8E93;
+    }
+    body.shell-korean .kr-id-status {
+      margin-top: 6px; font-size: 12px; color: #AEAEB2;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-music {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; margin-bottom: 10px;
+      cursor: pointer; border: none; width: 100%; text-align: left;
+      font-family: inherit;
+    }
+    body.shell-korean .kr-music-cover {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: #EFEFF1; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      color: #8E8E93; flex-shrink: 0;
+    }
+    body.shell-korean .kr-music-cover img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    body.shell-korean .kr-music-meta { flex: 1; min-width: 0; }
+    body.shell-korean .kr-music-title {
+      font-size: 14px; font-weight: 600; color: #1C1C1E;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-music-sub {
+      font-size: 11px; color: #8E8E93; margin-top: 2px;
+    }
+    body.shell-korean .kr-music-ico { color: #AEAEB2; flex-shrink: 0; }
+    body.shell-korean .kr-apps {
+      padding: 14px 10px 10px; margin-bottom: 12px;
+    }
+    body.shell-korean .kr-apps-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px 6px;
+    }
+    body.shell-korean .kr-app-icon {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      background: transparent !important; border: none !important;
+      box-shadow: none !important; padding: 4px 2px;
+      cursor: pointer; font-family: inherit;
+    }
+    body.shell-korean .kr-app-ico {
+      width: 52px; height: 52px; border-radius: 16px;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      display: flex; align-items: center; justify-content: center;
+      color: #3A3A3C;
+    }
+    body.shell-korean .kr-app-ico svg { width: 22px; height: 22px; }
+    body.shell-korean .kr-app-label {
+      font-size: 10px; color: #636366;
+      text-align: center; line-height: 1.2;
+    }
+    body.shell-korean .kr-home-foot {
+      text-align: center; font-size: 11px; color: #C7C7CC;
+      letter-spacing: 0.12em; padding: 8px 0 16px;
+    }
+    body.shell-korean .bottom-nav.kr-dock {
+      left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      width: auto; border-radius: 24px !important;
+      background: rgba(255,255,255,0.88) !important;
+      border: 1px solid rgba(0,0,0,0.04) !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.08) !important;
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      padding: 6px 10px !important;
+    }
+
   </style>
 
   <div id="app"></div>

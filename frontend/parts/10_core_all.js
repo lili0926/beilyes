@@ -3472,12 +3472,17 @@ function render(){
 function renderBottomNav(){
   if(state.subPage) return "";
   if(state.tab==="chat") return "";
-  const items=[
+  const kr = (state.uiShell || "") === "korean";
+  const items = kr ? [
+    {key:"home",icon:"home",label:"主页"},
+    {key:"chat",icon:"message-circle",label:"聊天"},
+    {key:"settings",icon:"settings",label:"设置"},
+  ] : [
     {key:"home",icon:"home",label:"首页"},
     {key:"chat",icon:"message-circle",label:"聊天"},
     {key:"settings",icon:"settings",label:"设置"},
   ];
-  return `<div class="bottom-nav">
+  return `<div class="bottom-nav${kr?" kr-dock":""}">
     ${items.map(it=>`
       <button data-tab="${it.key}" class="${state.tab===it.key&&!state.subPage?"active":""}">
         <span class="icon"><i data-lucide="${it.icon}"></i></span><span>${it.label}</span>
@@ -3514,6 +3519,10 @@ function updateHomeDots(){
 }
 
 function renderHomeSwipe(){
+  if((state.uiShell || "") === "korean"){
+    try{ if(typeof sbEnsureWeather==="function") sbEnsureWeather(false); }catch(e){}
+    return renderHomeKorean();
+  }
   const p = state.homePage === 0 ? "page0" : state.homePage === 2 ? "page2" : "page1";
   return `<div class="home-swipe-wrap" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
@@ -3521,6 +3530,116 @@ function renderHomeSwipe(){
       <div class="home-panel">${renderHomeMain()}</div>
       <div class="home-panel">${renderHomeFeat()}</div>
       ${typeof renderPet==="function" ? renderPet() : ""}
+    </div>
+  </div>`;
+}
+
+/** 韩系桌面式主页：黑白灰毛玻璃组件 */
+function renderHomeKorean(){
+  const c = state.coupleInfo || {};
+  const love = (state.loveScore && state.loveScore.value != null) ? state.loveScore.value : 50;
+  const w = state.weatherCache || {};
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  const weekNames = ["日","一","二","三","四","五","六"];
+  const dateLine = `${now.getMonth()+1}月${now.getDate()}日 周${weekNames[now.getDay()]}`;
+  const temp = (w.temp != null) ? `${Math.round(w.temp)}°` : "—°";
+  const wLabel = w.label || "天气";
+  const myAv = c.myAvatar || "";
+  const taAv = c.partnerAvatar || "";
+  const myName = c.myName || "我";
+  const taName = c.partnerName || "TA";
+  const days = (typeof daysSince==="function") ? daysSince() : "—";
+  const status = c.statusMsg || "今天也在一起";
+
+  // 音乐条
+  let musicHtml = "";
+  try{
+    const mn = state.musicNow;
+    if(mn && (mn.title || mn.name)){
+      const title = mn.title || mn.name || "正在播放";
+      const artist = mn.artist || mn.ar || "";
+      const cover = mn.cover || mn.pic || "";
+      musicHtml = `<div class="kr-widget kr-music feat-card" data-sub="music" role="button">
+        <div class="kr-music-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="headphones"></i>`}</div>
+        <div class="kr-music-meta">
+          <div class="kr-music-title">${esc(title)}</div>
+          <div class="kr-music-sub">${esc(artist || "一起听")}</div>
+        </div>
+        <div class="kr-music-ico"><i data-lucide="play"></i></div>
+      </div>`;
+    } else {
+      musicHtml = `<div class="kr-widget kr-music feat-card" data-sub="music" role="button">
+        <div class="kr-music-cover"><i data-lucide="headphones"></i></div>
+        <div class="kr-music-meta">
+          <div class="kr-music-title">一起听</div>
+          <div class="kr-music-sub">点这里选歌</div>
+        </div>
+        <div class="kr-music-ico"><i data-lucide="chevron-right"></i></div>
+      </div>`;
+    }
+  }catch(e){ musicHtml = ""; }
+
+  // 桌面图标：适合插件/入口的留下，重型游戏仍走功能页
+  const icons = [
+    {key:"music", icon:"headphones", label:"音乐"},
+    {key:"read", icon:"book-open", label:"一起读"},
+    {key:"watch", icon:"film", label:"一起看"},
+    {key:"diary", icon:"notebook-pen", label:"日记"},
+    {key:"album", icon:"image", label:"相册"},
+    {key:"body", icon:"heart", label:"身体"},
+    {key:"phone", icon:"phone", label:"电话"},
+    {key:"theme", icon:"palette", label:"外观"},
+    {key:"bisca_cards", icon:"spade", label:"牌室"},
+    {key:"prompts", icon:"sparkles", label:"提示词"},
+    {key:"usage", icon:"smartphone", label:"屏幕"},
+    {key:"vps", icon:"monitor", label:"VPS"},
+  ];
+  // diary/album may be subPage names - check
+  const iconGrid = icons.map(it => `
+    <button type="button" class="feat-card kr-app-icon" data-sub="${escAttr(it.key)}">
+      <span class="kr-app-ico"><i data-lucide="${it.icon}"></i></span>
+      <span class="kr-app-label">${esc(it.label)}</span>
+    </button>
+  `).join("");
+
+  return `<div class="kr-home" id="home-swipe">
+    <div class="kr-home-scroll">
+      <div class="kr-top-row">
+        <div class="kr-widget kr-time-card">
+          <div class="kr-clock">${hh}:${mm}</div>
+          <div class="kr-date">${esc(dateLine)}</div>
+        </div>
+        <div class="kr-widget kr-weather-card">
+          <div class="kr-w-temp">${esc(String(temp))}</div>
+          <div class="kr-w-label">${esc(wLabel)}</div>
+        </div>
+      </div>
+
+      <div class="kr-widget kr-id-card">
+        <div class="kr-id-avs">
+          ${myAv?`<img src="${escAttr(myAv)}" class="kr-id-av" alt=""/>`:`<div class="kr-id-av kr-id-fallback">🙂</div>`}
+          ${taAv?`<img src="${escAttr(taAv)}" class="kr-id-av" alt=""/>`:`<div class="kr-id-av kr-id-fallback">💬</div>`}
+        </div>
+        <div class="kr-id-body">
+          <div class="kr-id-names">${esc(myName)} · ${esc(taName)}</div>
+          <div class="kr-id-days">在一起 ${esc(String(days))} 天</div>
+          <div class="kr-id-love">
+            ${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}
+            <span>${esc(String(love))}</span>
+          </div>
+          <div class="kr-id-status">${esc(status)}</div>
+        </div>
+      </div>
+
+      ${musicHtml}
+
+      <div class="kr-widget kr-apps">
+        <div class="kr-apps-grid">${iconGrid}</div>
+      </div>
+
+      <div class="kr-home-foot">mono · quiet days</div>
     </div>
   </div>`;
 }
@@ -17840,7 +17959,7 @@ if(!window.__mpDelegated){
         return;
       }
       // 功能入口：仅功能卡，避免子页内部误伤
-      const subBtn = raw.closest("button.feat-card[data-sub]");
+      const subBtn = raw.closest("button.feat-card[data-sub], .feat-card[data-sub]");
       if(subBtn && !raw.closest(".bottom-nav")){
         const key = subBtn.getAttribute("data-sub") || subBtn.dataset.sub;
         if(key){
