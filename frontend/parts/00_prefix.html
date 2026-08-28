@@ -3620,6 +3620,7 @@
     body.shell-korean .msg-meta,
     body.shell-korean .msg-meta.me {
       opacity: 0.85;
+      margin: 6px 0 1px !important;
     }
     body.shell-korean .msg-meta-name { color: #8E8E93 !important; font-weight: 500; font-size: 11px; }
     body.shell-korean .msg-meta-time { color: #C7C7CC !important; font-size: 10px; }
@@ -3976,24 +3977,24 @@
       gap: 6px !important;
     }
     body.shell-korean .bubble {
-      max-width: 78% !important;
-      font-size: 15px !important;
-      line-height: 1.45 !important;
-      padding: 10px 14px !important;
+      max-width: 92% !important;
+      font-size: 14px !important;
+      line-height: 1.35 !important;
+      padding: 5px 10px !important;
       box-shadow: none !important;
       font-weight: 400 !important;
     }
     body.shell-korean .bubble.them,
     body.shell-korean .bubble:not(.me) {
-      background: #E9E9EB !important;
+      background: #E8E8EA !important;
       color: #1C1C1E !important;
-      border-radius: 18px !important;
+      border-radius: 12px !important;
       border: none !important;
     }
     body.shell-korean .bubble.me {
-      background: #2C2C2E !important;
-      color: #FFFFFF !important;
-      border-radius: 18px !important;
+      background: #1C1C1E !important;
+      color: #F5F5F7 !important;
+      border-radius: 12px !important;
       border: none !important;
     }
     body.shell-korean .chat-input-bar {
@@ -4170,39 +4171,48 @@
       width: 46px; height: 46px; border-radius: 14px;
     }
 
-    /* 聊天：更贴参考图——细、空、浅灰/深色气泡 */
+    /* 聊天：宽约 92%、细气泡、少留白 */
     body.shell-korean .korean-layout .chat-messages {
-      padding: 4px 16px 24px !important;
+      padding: 2px 10px 12px !important;
     }
     body.shell-korean .bubble {
-      max-width: 72% !important;
-      font-size: 14.5px !important;
-      line-height: 1.4 !important;
-      padding: 9px 13px !important;
+      max-width: 92% !important;
+      font-size: 14px !important;
+      line-height: 1.35 !important;
+      padding: 5px 10px !important;
       letter-spacing: -0.01em;
+      box-shadow: none !important;
+      font-weight: 400 !important;
     }
     body.shell-korean .bubble.them,
     body.shell-korean .bubble:not(.me) {
       background: #E8E8EA !important;
       color: #1C1C1E !important;
-      border-radius: 16px !important;
+      border-radius: 12px !important;
+      border: none !important;
     }
     body.shell-korean .bubble.me {
       background: #1C1C1E !important;
       color: #F5F5F7 !important;
-      border-radius: 16px !important;
+      border-radius: 12px !important;
+      border: none !important;
     }
     body.shell-korean .bubble-row {
-      margin-bottom: 3px !important;
+      margin-bottom: 1px !important;
+      gap: 4px !important;
     }
     body.shell-korean .msg-meta {
-      margin: 14px 0 3px !important;
+      margin: 6px 0 1px !important;
       align-items: center !important;
+      gap: 4px !important;
+    }
+    body.shell-korean .msg-meta.me {
+      margin: 6px 0 1px !important;
     }
     body.shell-korean .msg-meta-avatar,
     body.shell-korean .bubble-avatar {
-      width: 36px !important; height: 36px !important;
-      border-radius: 10px !important; /* 参考图偏方圆头像 */
+      width: 28px !important; height: 28px !important;
+      border-radius: 8px !important;
     }
     body.shell-korean .msg-meta-name {
       font-size: 10px !important; color: #B0B0B5 !important;
