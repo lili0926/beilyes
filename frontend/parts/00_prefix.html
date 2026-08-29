@@ -4452,6 +4452,31 @@
     }
     body.shell-korean .kr-dm-play { color: #AEAEB2; }
 
+
+    /* 工作间 */
+    .ws-page { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 0 !important; }
+    .ws-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; flex-wrap: wrap; }
+    .ws-status { font-size: 12px; color: var(--sub); flex: 1; }
+    .ws-cfg { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); }
+    .ws-cfg input { width: 100%; margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; }
+    .ws-err { background: #fee; color: #a30; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 8px; }
+    .ws-last-meta { font-size: 11px; color: var(--sub); margin-bottom: 8px; word-break: break-all; }
+    .ws-msgs { flex: 1; min-height: 180px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0 12px; }
+    .ws-empty { text-align: center; color: var(--sub); font-size: 13px; padding: 40px 16px; line-height: 1.6; }
+    .ws-row { margin-bottom: 10px; }
+    .ws-row.me { display: flex; flex-direction: column; align-items: flex-end; }
+    .ws-row.bot { display: flex; flex-direction: column; align-items: flex-start; }
+    .ws-bubble { max-width: 92%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; word-break: break-word; }
+    .ws-bubble.me { background: var(--accent); color: #fff; border-radius: 12px 12px 4px 12px; }
+    .ws-bubble.bot { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px 12px 12px 4px; }
+    .ws-text { white-space: pre-wrap; }
+    .ws-code { margin: 8px 0; padding: 10px; background: #1e1e1e; color: #d4d4d4; border-radius: 8px; overflow-x: auto; font-size: 11px; line-height: 1.4; }
+    .ws-code code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .ws-meta { font-size: 11px; color: var(--sub); margin-top: 4px; }
+    .ws-input-bar { display: flex; gap: 8px; padding: 8px 0 calc(8px + env(safe-area-inset-bottom,0px)); border-top: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
+    .ws-input-bar textarea { flex: 1; border-radius: 12px; border: 1px solid var(--border); padding: 8px 10px; font-size: 14px; resize: none; background: var(--card); color: var(--text); font-family: inherit; }
+    .ws-input-bar button { flex-shrink: 0; padding: 0 16px; border-radius: 12px; }
+
   </style>
 
   <div id="app"></div>

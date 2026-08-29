@@ -4452,6 +4452,31 @@
     }
     body.shell-korean .kr-dm-play { color: #AEAEB2; }
 
+
+    /* 工作间 */
+    .ws-page { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 0 !important; }
+    .ws-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; flex-wrap: wrap; }
+    .ws-status { font-size: 12px; color: var(--sub); flex: 1; }
+    .ws-cfg { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); }
+    .ws-cfg input { width: 100%; margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; }
+    .ws-err { background: #fee; color: #a30; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 8px; }
+    .ws-last-meta { font-size: 11px; color: var(--sub); margin-bottom: 8px; word-break: break-all; }
+    .ws-msgs { flex: 1; min-height: 180px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0 12px; }
+    .ws-empty { text-align: center; color: var(--sub); font-size: 13px; padding: 40px 16px; line-height: 1.6; }
+    .ws-row { margin-bottom: 10px; }
+    .ws-row.me { display: flex; flex-direction: column; align-items: flex-end; }
+    .ws-row.bot { display: flex; flex-direction: column; align-items: flex-start; }
+    .ws-bubble { max-width: 92%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; word-break: break-word; }
+    .ws-bubble.me { background: var(--accent); color: #fff; border-radius: 12px 12px 4px 12px; }
+    .ws-bubble.bot { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px 12px 12px 4px; }
+    .ws-text { white-space: pre-wrap; }
+    .ws-code { margin: 8px 0; padding: 10px; background: #1e1e1e; color: #d4d4d4; border-radius: 8px; overflow-x: auto; font-size: 11px; line-height: 1.4; }
+    .ws-code code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .ws-meta { font-size: 11px; color: var(--sub); margin-top: 4px; }
+    .ws-input-bar { display: flex; gap: 8px; padding: 8px 0 calc(8px + env(safe-area-inset-bottom,0px)); border-top: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
+    .ws-input-bar textarea { flex: 1; border-radius: 12px; border: 1px solid var(--border); padding: 8px 10px; font-size: 14px; resize: none; background: var(--card); color: var(--text); font-family: inherit; }
+    .ws-input-bar button { flex-shrink: 0; padding: 0 16px; border-radius: 12px; }
+
   </style>
 
   <div id="app"></div>
@@ -6495,6 +6520,14 @@ const state = {
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
   uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude | korean
+  // 工作间（独立 WS，绝不复用 __cc 恋爱通道）
+  wsWsUrl: LS.get("wsWsUrl", "ws://115.29.237.172/ws/workshop") || "ws://115.29.237.172/ws/workshop",
+  wsPin: LS.get("wsPin", "521314") || "521314",
+  wsMessages: Array.isArray(LS.get("wsMessages", [])) ? LS.get("wsMessages", []) : [],
+  wsBusy: false,
+  wsStatus: "idle", // idle | connecting | ready | busy | error
+  wsLastMeta: null,
+  wsError: "",
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "aries-sprite.png" }) || { me: "jasmine-sprite.png", them: "aries-sprite.png" },
@@ -7794,7 +7827,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -8336,6 +8369,7 @@ function renderHomeKorean(){
     {key:"cooking", icon:"chef-hat", label:"烹饪"},
     {key:"soup", icon:"turtle", label:"海龟汤"},
     {key:"htmlgame", icon:"gamepad-2", label:"HTML"},
+    {key:"workshop", icon:"hammer", label:"工作间"},
     {key:"roleplay", icon:"theater", label:"扮演"},
   ].map(it => `
     <button type="button" class="feat-card kr-desk-ico" data-sub="${escAttr(it.key)}">
@@ -8537,6 +8571,7 @@ function renderHomeFeat(){
         {key:"menu",     icon:"clipboard-list", label:"菜单",     desc:"自建菜单·开关注入·手记点单"},
         {key:"cmdgame",  icon:"scroll-text", label:"指令游戏", desc:"存你的专属指令"},
         {key:"htmlgame", icon:"gamepad-2", label:"HTML游戏", desc:"载入你的小游戏"},
+        {key:"workshop", icon:"hammer", label:"工作间", desc:"CC 改前端 · 独立通道 · 推分支"},
         {key:"mcphall",  icon:"plug", label:"MCP大厅", desc:"连接任意 MCP 游戏服务"},
         {key:"baby",     icon:"baby", label:"育儿模拟", desc:"加速成长·共同养育"},
         {key:"roleplay", icon:"theater", label:"角色扮演", desc:"情趣设定·应用进聊天"},
@@ -10452,6 +10487,315 @@ ${cellBlock}
 }
 
 // ─── 子页面路由 ──────────────────────────────────────────────────────────────
+
+// ─── 工作间：独立 WebSocket（禁止复用 __cc）────────────────────────────────
+const __wsWork = {
+  ws: null,
+  url: "",
+  pin: "",
+  ready: false,
+  _retry: 0,
+  _retryT: null,
+  _streamBuf: "",
+};
+function wsWorkStatusLabel(){
+  if(state.wsBusy) return "忙碌 · 改代码中";
+  const s = state.wsStatus || "idle";
+  if(s === "ready") return "已连接";
+  if(s === "connecting") return "连接中…";
+  if(s === "busy") return "忙碌";
+  if(s === "error") return "出错";
+  return "未连接";
+}
+function wsWorkDisconnect(){
+  try{
+    if(__wsWork._retryT) clearTimeout(__wsWork._retryT);
+    if(__wsWork.ws){ __wsWork.ws.onclose = null; __wsWork.ws.onmessage = null; __wsWork.ws.close(); }
+  }catch(e){}
+  __wsWork.ws = null; __wsWork.ready = false; __wsWork.url = "";
+}
+function wsWorkConnect(force){
+  const url = (state.wsWsUrl || "").trim();
+  const pin = (state.wsPin || "").trim();
+  if(!url){ state.wsStatus = "error"; state.wsError = "未配置工作间地址"; return; }
+  if(!force && __wsWork.ws && __wsWork.url === url &&
+     (__wsWork.ws.readyState === WebSocket.OPEN || __wsWork.ws.readyState === WebSocket.CONNECTING)){
+    return __wsWork.ws;
+  }
+  wsWorkDisconnect();
+  state.wsStatus = "connecting";
+  state.wsError = "";
+  __wsWork.url = url; __wsWork.pin = pin; __wsWork.ready = false;
+  let ws;
+  try{ ws = new WebSocket(url); }catch(e){
+    state.wsStatus = "error"; state.wsError = String(e.message || e);
+    return null;
+  }
+  __wsWork.ws = ws;
+  ws.onopen = ()=>{
+    try{ ws.send(JSON.stringify({ type: "auth", pin: pin })); }catch(e){}
+  };
+  ws.onmessage = (ev)=>{
+    let m;
+    try{ m = JSON.parse(ev.data); }catch(e){ return; }
+    if(!m || !m.type) return;
+    if(m.type === "auth_ok"){
+      __wsWork.ready = true;
+      __wsWork._retry = 0;
+      state.wsStatus = "ready";
+      state.wsError = "";
+      if(state.subPage === "workshop") render();
+      return;
+    }
+    if(m.type === "busy"){
+      state.wsBusy = !!m.value || m.busy === true || m.status === "busy";
+      // 兼容：busy 可能是 {type:"busy"} 无字段，或任务开始信号
+      if(m.value === false || m.busy === false) state.wsBusy = false;
+      else if(m.type === "busy" && m.value === undefined && m.busy === undefined) state.wsBusy = true;
+      state.wsStatus = state.wsBusy ? "busy" : (__wsWork.ready ? "ready" : state.wsStatus);
+      if(state.subPage === "workshop"){
+        const el = document.getElementById("ws-status");
+        if(el) el.textContent = wsWorkStatusLabel();
+        const btn = document.getElementById("ws-send");
+        if(btn) btn.disabled = !!state.wsBusy;
+      }
+      return;
+    }
+    if(m.type === "delta"){
+      const piece = m.text != null ? m.text : (m.content != null ? m.content : (m.delta || ""));
+      __wsWork._streamBuf += String(piece || "");
+      // 更新最后一条 assistant
+      const msgs = state.wsMessages || [];
+      let last = msgs.length ? msgs[msgs.length - 1] : null;
+      if(!last || last.role !== "assistant" || !last.streaming){
+        msgs.push({ role: "assistant", content: __wsWork._streamBuf, streaming: true, time: new Date().toISOString() });
+      } else {
+        last.content = __wsWork._streamBuf;
+      }
+      state.wsMessages = msgs;
+      if(state.subPage === "workshop") wsWorkPatchStream();
+      return;
+    }
+    if(m.type === "done"){
+      state.wsBusy = false;
+      state.wsStatus = __wsWork.ready ? "ready" : "idle";
+      const msgs = state.wsMessages || [];
+      let last = msgs.length ? msgs[msgs.length - 1] : null;
+      const finalText = (m.content != null ? m.content : null) || __wsWork._streamBuf || (last && last.content) || "";
+      if(last && last.role === "assistant"){
+        last.content = finalText;
+        last.streaming = false;
+        if(m.meta) last.meta = m.meta;
+      } else {
+        msgs.push({ role: "assistant", content: finalText, streaming: false, meta: m.meta || null, time: new Date().toISOString() });
+      }
+      state.wsMessages = msgs;
+      state.wsLastMeta = m.meta || null;
+      __wsWork._streamBuf = "";
+      try{ persist("wsMessages"); }catch(e){}
+      if(state.subPage === "workshop") render();
+      return;
+    }
+    if(m.type === "error"){
+      state.wsBusy = false;
+      state.wsStatus = "error";
+      state.wsError = m.message || m.error || "工作间错误";
+      const msgs = state.wsMessages || [];
+      msgs.push({ role: "assistant", content: "⚠️ " + state.wsError, streaming: false, time: new Date().toISOString() });
+      state.wsMessages = msgs;
+      __wsWork._streamBuf = "";
+      try{ persist("wsMessages"); }catch(e){}
+      if(state.subPage === "workshop") render();
+      return;
+    }
+  };
+  ws.onclose = ()=>{
+    if(__wsWork.ws !== ws) return;
+    __wsWork.ws = null; __wsWork.ready = false;
+    state.wsBusy = false;
+    if(state.wsStatus !== "error") state.wsStatus = "idle";
+    clearTimeout(__wsWork._retryT);
+    const r = __wsWork._retry || 0;
+    __wsWork._retry = r + 1;
+    const d = Math.min(10000, 1000 * Math.pow(1.5, r));
+    __wsWork._retryT = setTimeout(()=>{
+      if(!__wsWork.ws && state.subPage === "workshop" && state.wsWsUrl) wsWorkConnect(true);
+    }, d);
+    if(state.subPage === "workshop"){
+      const el = document.getElementById("ws-status");
+      if(el) el.textContent = wsWorkStatusLabel();
+    }
+  };
+  ws.onerror = ()=>{ state.wsError = "WebSocket 错误"; };
+  return ws;
+}
+function wsWorkPatchStream(){
+  const box = document.getElementById("ws-msgs");
+  if(!box) return;
+  const msgs = state.wsMessages || [];
+  const last = msgs[msgs.length - 1];
+  if(!last || last.role !== "assistant") return;
+  let streamEl = document.getElementById("ws-stream");
+  if(!streamEl){
+    // 粗暴刷新列表末尾
+    render();
+    const b = document.getElementById("ws-msgs");
+    if(b) b.scrollTop = b.scrollHeight;
+    return;
+  }
+  streamEl.innerHTML = wsFormatContent(last.content || "");
+  box.scrollTop = box.scrollHeight;
+}
+function wsFormatContent(text){
+  // 轻量 markdown：代码块 + 行内 code + 换行
+  const raw = String(text || "");
+  const parts = [];
+  const re = /```([\w.-]*)\n?([\s\S]*?)```/g;
+  let last = 0, m;
+  while((m = re.exec(raw))){
+    if(m.index > last) parts.push({ t: "text", v: raw.slice(last, m.index) });
+    parts.push({ t: "code", lang: m[1] || "", v: m[2] });
+    last = m.index + m[0].length;
+  }
+  if(last < raw.length) parts.push({ t: "text", v: raw.slice(last) });
+  if(!parts.length) parts.push({ t: "text", v: raw });
+  return parts.map(p => {
+    if(p.t === "code"){
+      return `<pre class="ws-code"><code>${esc(p.v)}</code></pre>`;
+    }
+    return `<div class="ws-text">${esc(p.v).replace(/\n/g, "<br>")}</div>`;
+  }).join("");
+}
+function wsWorkSendTask(content){
+  const text = String(content || "").trim();
+  if(!text) return;
+  if(state.wsBusy) return;
+  if(!__wsWork.ready || !__wsWork.ws || __wsWork.ws.readyState !== WebSocket.OPEN){
+    wsWorkConnect(true);
+    // 等 auth 后再发
+    const t0 = Date.now();
+    const wait = setInterval(()=>{
+      if(__wsWork.ready && __wsWork.ws && __wsWork.ws.readyState === WebSocket.OPEN){
+        clearInterval(wait); _wsDoSend(text);
+      } else if(Date.now() - t0 > 8000){
+        clearInterval(wait);
+        state.wsError = "连接超时，请检查地址/PIN";
+        state.wsStatus = "error";
+        if(state.subPage === "workshop") render();
+      }
+    }, 200);
+    return;
+  }
+  _wsDoSend(text);
+}
+function _wsDoSend(text){
+  const msgs = state.wsMessages || [];
+  msgs.push({ role: "user", content: text, time: new Date().toISOString() });
+  msgs.push({ role: "assistant", content: "", streaming: true, time: new Date().toISOString() });
+  state.wsMessages = msgs;
+  state.wsBusy = true;
+  state.wsStatus = "busy";
+  __wsWork._streamBuf = "";
+  try{ persist("wsMessages"); }catch(e){}
+  try{
+    __wsWork.ws.send(JSON.stringify({ type: "task", content: text }));
+  }catch(e){
+    state.wsBusy = false;
+    state.wsError = String(e.message || e);
+    state.wsStatus = "error";
+  }
+  if(state.subPage === "workshop") render();
+}
+
+function renderWorkshop(){
+  const msgs = state.wsMessages || [];
+  let list = "";
+  if(!msgs.length){
+    list = `<div class="ws-empty">给工作间下任务，例如：<br>「韩系气泡 padding 再减 1px，保持 92% 宽」<br><span style="opacity:.7">会开 feat/workshop-* 分支并推 GitHub</span></div>`;
+  } else {
+    list = msgs.map((m, idx) => {
+      const isMe = m.role === "user";
+      const meta = m.meta ? `<div class="ws-meta">🌿 ${esc(m.meta.branch || "")} · ${esc((m.meta.files || []).join(", ") || m.meta.stat || "")}</div>` : "";
+      const sid = (m.streaming && idx === msgs.length - 1) ? ' id="ws-stream"' : "";
+      return `<div class="ws-row ${isMe?"me":"bot"}">
+        <div class="ws-bubble ${isMe?"me":"bot"}"${sid}>${isMe ? esc(m.content || "").replace(/\n/g,"<br>") : wsFormatContent(m.content || (m.streaming ? "…" : ""))}</div>
+        ${meta}
+      </div>`;
+    }).join("");
+  }
+  const st = wsWorkStatusLabel();
+  const err = state.wsError ? `<div class="ws-err">${esc(state.wsError)}</div>` : "";
+  const lastMeta = state.wsLastMeta ? `<div class="ws-last-meta">最近：${esc(state.wsLastMeta.branch || "")} ${esc(JSON.stringify(state.wsLastMeta.files || state.wsLastMeta.stat || ""))}</div>` : "";
+
+  return `<div class="page ws-page">
+    ${subHeader("工作间")}
+    <div class="ws-toolbar">
+      <span class="ws-status" id="ws-status">${esc(st)}</span>
+      <button type="button" class="btn-ghost" id="ws-connect" style="padding:4px 10px;font-size:11px">重连</button>
+      <button type="button" class="btn-ghost" id="ws-clear" style="padding:4px 10px;font-size:11px">清空</button>
+      <button type="button" class="btn-ghost" id="ws-cfg-toggle" style="padding:4px 10px;font-size:11px">配置</button>
+    </div>
+    <div id="ws-cfg" class="ws-cfg" style="display:none">
+      <label class="setting-label">WebSocket 地址</label>
+      <input id="ws-url" value="${escAttr(state.wsWsUrl || "")}" placeholder="ws://…/ws/workshop" />
+      <label class="setting-label">PIN</label>
+      <input id="ws-pin" value="${escAttr(state.wsPin || "")}" type="password" autocomplete="off" />
+      <button type="button" class="btn-accent" id="ws-cfg-save" style="margin-top:8px;width:100%">保存并连接</button>
+      <p class="page-sub" style="margin-top:8px">独立通道，不占用恋爱 __cc。任务耗 Pro 额度。</p>
+    </div>
+    ${err}
+    ${lastMeta}
+    <div class="ws-msgs" id="ws-msgs">${list}</div>
+    <div class="ws-input-bar">
+      <textarea id="ws-input" rows="2" placeholder="描述要改的前端…" ${state.wsBusy ? "disabled" : ""}></textarea>
+      <button type="button" class="btn-accent" id="ws-send" ${state.wsBusy ? "disabled" : ""}>发送</button>
+    </div>
+  </div>`;
+}
+function bindWorkshop(){
+  if(state.subPage !== "workshop") return;
+  // 进入页面自动连
+  if(!__wsWork.ready) wsWorkConnect(false);
+  const box = document.getElementById("ws-msgs");
+  if(box) box.scrollTop = box.scrollHeight;
+
+  const conn = document.getElementById("ws-connect");
+  if(conn) conn.onclick = ()=>{ wsWorkConnect(true); render(); };
+  const clr = document.getElementById("ws-clear");
+  if(clr) clr.onclick = ()=>{
+    state.wsMessages = [];
+    state.wsLastMeta = null;
+    persist("wsMessages");
+    render();
+  };
+  const tog = document.getElementById("ws-cfg-toggle");
+  const cfg = document.getElementById("ws-cfg");
+  if(tog && cfg) tog.onclick = ()=>{ cfg.style.display = cfg.style.display === "none" ? "block" : "none"; };
+  const save = document.getElementById("ws-cfg-save");
+  if(save) save.onclick = ()=>{
+    const u = document.getElementById("ws-url");
+    const p = document.getElementById("ws-pin");
+    if(u) state.wsWsUrl = u.value.trim();
+    if(p) state.wsPin = p.value.trim();
+    persist("wsWsUrl"); persist("wsPin");
+    wsWorkConnect(true);
+    render();
+  };
+  const send = document.getElementById("ws-send");
+  const inp = document.getElementById("ws-input");
+  const doSend = ()=>{
+    if(!inp) return;
+    const t = inp.value;
+    inp.value = "";
+    wsWorkSendTask(t);
+  };
+  if(send) send.onclick = doSend;
+  if(inp) inp.onkeydown = (e)=>{
+    if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); doSend(); }
+  };
+}
+
+
 function renderSubPage(){
   const map={
     body: renderBody,
@@ -10500,6 +10844,7 @@ function renderSubPage(){
     htmlgame: renderHtmlGame,
     mcphall: renderMcpHall,
     project: renderProject,
+    workshop: renderWorkshop,
     theme: renderTheme,
     branding: renderBranding,
     hisphone: renderHisPhone,
@@ -22680,6 +23025,7 @@ function bindCoreNav(){
       }catch(e){ console.error(e); }
     };
   });
+  if(typeof bindWorkshop==="function") try{ bindWorkshop(); }catch(e){ console.warn(e); }
   const back=document.getElementById("sub-back");
   if(back) back.onclick=()=>{
     if(state.subPage==="shufang" && state.shufangTab==="editor" && typeof shufangSaveChapter==="function") shufangSaveChapter(true);
