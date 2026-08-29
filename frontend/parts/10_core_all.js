@@ -3809,10 +3809,10 @@ function renderHomeSwipe(){
 
 /** 韩系桌面式主页：黑白灰毛玻璃组件 */
 function homeDotsKorean(active){
-  // 韩系仅两面：0 桌面(全应用) · 1 空间名片
+  // 韩系两面：0 大时钟桌面 · 1 更多（原一起听页改版）
   return `<div class="swipe-dots kr-dots">
     <div class="swipe-dot${active===0?" on":""}" onclick="setHomePage(0)" title="桌面"></div>
-    <div class="swipe-dot${active===1?" on":""}" onclick="setHomePage(1)" title="空间"></div>
+    <div class="swipe-dot${active===1?" on":""}" onclick="setHomePage(1)" title="更多"></div>
   </div>`;
 }
 
@@ -3850,6 +3850,8 @@ function renderHomeKorean(){
   const taName = c.partnerName || "TA";
   const days = (typeof daysSince==="function") ? daysSince() : "—";
   const status = c.statusMsg || "今天也在一起";
+  const temp = (w.temp != null) ? (String(w.temp) + "°") : "—";
+  const wText = w.text || w.desc || "天气";
 
   let title = "Music";
   let artist = "一起听";
@@ -3869,8 +3871,8 @@ function renderHomeKorean(){
       <span class="kr-desk-ico-lab">${esc(it.label)}</span>
     </button>`;
 
-  // 原桌面 + 原「更多」合并，去重 key，一行 6 个
-  const allAppDefs = [
+  // 默认桌面：大时钟页上的日常入口（一行 6 × 两行）
+  const deskApps = [
     {key:"mailbox", icon:"mail", label:"信箱"},
     {key:"prompts", icon:"sparkles", label:"记忆"},
     {key:"mdiary", icon:"notebook-pen", label:"日记"},
@@ -3883,6 +3885,10 @@ function renderHomeKorean(){
     {key:"music", icon:"music", label:"音乐"},
     {key:"read", icon:"book-open", label:"一起读"},
     {key:"phone", icon:"phone", label:"电话"},
+  ].map(iconBtn).join("");
+
+  // 第二页：原「更多」扩展入口（替换掉大唱片一起听）
+  const moreApps = [
     {key:"bisca_cards", icon:"spade", label:"牌室"},
     {key:"watch", icon:"film", label:"一起看"},
     {key:"ntfy", icon:"bell", label:"通知"},
@@ -3892,13 +3898,10 @@ function renderHomeKorean(){
     {key:"htmlgame", icon:"gamepad-2", label:"HTML"},
     {key:"workshop", icon:"hammer", label:"工作间"},
     {key:"roleplay", icon:"theater", label:"扮演"},
-  ];
-  const seen = {};
-  const allApps = allAppDefs.filter(it => {
-    if(seen[it.key]) return false;
-    seen[it.key] = true;
-    return true;
-  }).map(iconBtn).join("");
+    {key:"diary", icon:"book", label:"手帐"},
+    {key:"album", icon:"image", label:"相册"},
+    {key:"coupon", icon:"ticket", label:"优惠券"},
+  ].map(iconBtn).join("");
 
   let preview = "";
   try{
@@ -3914,16 +3917,15 @@ function renderHomeKorean(){
 
   const scheduleDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
-  // 若还停在旧第三页，收回第二页
   if(state.homePage > 1) state.homePage = 1;
 
-  // Panel 0：大钟 + 全应用 + 名片/日历 + 便签/日程 + 音乐
+  // Panel 0 默认：大时间桌面（图四）
   const desk = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll kr-desk-scroll">
         <div class="kr-desk-date">${esc(dateTop)}</div>
         <div class="kr-desk-clock">${hh}:${mm}</div>
-        <div class="kr-desk-grid kr-desk-grid-all">${allApps}</div>
+        <div class="kr-desk-grid">${deskApps}</div>
         <div class="kr-desk-row2">
           <div class="kr-widget kr-desk-profile">
             ${taAv?`<img class="kr-desk-av" src="${escAttr(taAv)}" alt=""/>`:`<div class="kr-desk-av kr-id-fallback">💬</div>`}
@@ -3958,36 +3960,37 @@ function renderHomeKorean(){
       </div>
     </div>`;
 
-  // Panel 1：空间名片
-  const space = `
+  // Panel 1：原「更多」+ 原一起听页合并；大唱片改成天气+近况卡片
+  const more = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll">
-        <div class="kr-space-card">
-          <div class="kr-space-cover">
-            <div class="kr-space-gradient"></div>
-            <div class="kr-space-avs">
-              ${myAv?`<img src="${escAttr(myAv)}" alt=""/>`:`<span class="kr-space-fb">J</span>`}
-              ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-space-fb">A</span>`}
-            </div>
-            <div class="kr-space-names">${esc(myName)} · ${esc(taName)}</div>
-            <div class="kr-space-sub">在一起 ${esc(String(days))} 天${c.startDate?` · since ${esc(c.startDate)}`:""}</div>
-            <div class="kr-space-love">
-              <span class="kr-space-hearts">${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}</span>
-              <span>${esc(String(love))}</span>
-            </div>
-            <div class="kr-space-quote">${esc(status)}</div>
+        <div class="kr-more-top-row">
+          <div class="kr-widget kr-weather-card">
+            <div class="kr-weather-temp">${esc(temp)}</div>
+            <div class="kr-weather-text">${esc(wText)}</div>
+            <div class="kr-weather-sub">${esc(hh)}:${esc(mm)} · 今天</div>
           </div>
+          <button type="button" class="kr-widget kr-status-card feat-card" data-sub="mdiary">
+            <div class="kr-status-lab">近况</div>
+            <div class="kr-status-body">${esc(status)}</div>
+            <div class="kr-status-go">日记 →</div>
+          </button>
         </div>
+        <div class="kr-widget kr-more-head">
+          <div class="kr-more-title">更多</div>
+          <div class="kr-more-sub">游戏与扩展入口</div>
+        </div>
+        <div class="kr-desk-grid">${moreApps}</div>
         <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
           <div class="kr-cp-top">
             ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
             <div class="kr-cp-name">${esc(taName)}</div>
             <div class="kr-cp-go">打开聊天</div>
           </div>
-          <div class="kr-cp-text">${esc(preview || "还没有新消息 · 去说一句吧")}</div>
+          <div class="kr-cp-text">${esc(preview || "回到对话")}</div>
         </button>
         ${homeDotsKorean(1)}
-        <div class="kr-home-foot">space · profile</div>
+        <div class="kr-home-foot">← swipe · more</div>
       </div>
     </div>`;
 
@@ -3995,7 +3998,7 @@ function renderHomeKorean(){
   return `<div class="home-swipe-wrap kr-home" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
       ${desk}
-      ${space}
+      ${more}
     </div>
   </div>`;
 }
