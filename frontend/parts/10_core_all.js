@@ -1173,7 +1173,9 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
   if (channel === "cc") {
     const wsUrl = (ag&&ag.ccWsUrl) || apiConfig.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
     const pin = (ag&&ag.ccPin) || apiConfig.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
-    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), {});
+    const modelId = (ag && ag.ccModel) || apiConfig.ccModel || "";
+    try{ await __ccEnsureModel(wsUrl, pin, modelId); }catch(e){}
+    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), { model: __ccModelAlias(modelId) });
   }
 
   if (channel === "gemini") {
@@ -1323,7 +1325,7 @@ async function* __sse(body){
  * opts.onLive({thinking,text}) 每收到一段增量回调（内部节流），用于实时气泡。
  * 失败 reject，调用方回退非流式。 */
 // ─── CC 通道：直连 VPS hub (WebSocket) ─────────────────────
-const __cc = { ws:null, wsUrl:"", pin:"", ready:false, ccAlive:false, _retry:0, _replyCbs:[], _editCbs:[], _statusCbs:[], _retryT:null };
+const __cc = { ws:null, wsUrl:"", pin:"", ready:false, ccAlive:false, _retry:0, _replyCbs:[], _editCbs:[], _statusCbs:[], _retryT:null, _lastModel:"" };
 function __ccConnect(wsUrl, pin){
   if(__cc.ws && __cc.wsUrl===wsUrl && (__cc.ws.readyState===WebSocket.OPEN || __cc.ws.readyState===WebSocket.CONNECTING)) return __cc.ws;
   try{ if(__cc.ws){ __cc.ws.onclose=null; __cc.ws.close(); } }catch(e){}
@@ -1374,13 +1376,45 @@ function __ccHubSend(wsUrl, pin, content, opts){
     __cc._replyCbs.push(__onReply); __cc._editCbs.push(__onEdit); __cc._statusCbs.push(__onStatus);
     const trySend=()=>{
       if(settled) return;
-      if(__cc.ready){ if(__cc.ccAlive){ try{ ws.send(JSON.stringify({ type:"message", content })); }catch(e){ fail(e); } } else fail(new Error("CC 离线")); }
+      if(__cc.ready){ if(__cc.ccAlive){ try{ const payload={ type:"message", content }; if(o.model) payload.model=o.model; ws.send(JSON.stringify(payload)); }catch(e){ fail(e); } } else fail(new Error("CC 离线")); }
       else { setTimeout(trySend, 300); }
     };
     trySend();
   });
 }
 /** 往 CC 终端注入一条原始命令（如 /model），不包 <channel>。 */
+
+/** CC /model 可用的名字：优先短名（opus/sonnet/haiku），完整 id 原样保留 */
+function __ccModelAlias(id){
+  const raw = String(id || "").trim();
+  if(!raw) return "";
+  const m = raw.toLowerCase();
+  // CC 交互里短名最稳；完整 API id 常被忽略仍停在默认 Sonnet
+  if(m === "opus" || m.includes("opus")) return "opus";
+  if(m === "haiku" || m.includes("haiku")) return "haiku";
+  if(m === "sonnet" || m.includes("sonnet")) return "sonnet";
+  return raw;
+}
+/** 发消息前确保 CC 会话已切到目标模型（避免只改了前端下拉、会话仍停在 Sonnet） */
+async function __ccEnsureModel(wsUrl, pin, modelId){
+  const alias = __ccModelAlias(modelId);
+  if(!alias) return false;
+  // 同一模型且 30s 内已确认过则跳过，避免每条都刷 /model
+  const now = Date.now();
+  if(__cc._lastModel === alias && __cc.ready && __cc.ccAlive && __cc._lastModelAt && (now - __cc._lastModelAt < 30000))
+    return true;
+  try{
+    await __ccSendCommand("/model " + alias, wsUrl, pin);
+    __cc._lastModel = alias;
+    __cc._lastModelAt = now;
+    return true;
+  }catch(e){
+    console.warn("[cc model]", e);
+    return false;
+  }
+}
+
+
 function __ccSendCommand(cmd, wsUrl, pin){
   return new Promise((resolve, reject)=>{
     const ws = __ccConnect(wsUrl, pin);
@@ -1455,7 +1489,9 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   if(channel === "cc"){
     const wsUrl = (ag&&ag.ccWsUrl) || cfg.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
     const pin = (ag&&ag.ccPin) || cfg.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
-    const reply = await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), o);
+    const modelId = (ag && ag.ccModel) || cfg.ccModel || "";
+    try{ await __ccEnsureModel(wsUrl, pin, modelId); }catch(e){}
+    const reply = await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), Object.assign({}, o, { model: __ccModelAlias(modelId) }));
     return { reply, usage: undefined };
   }
 
@@ -18190,17 +18226,15 @@ function renderAgentSettingsBlock(ag, idx){
           <input type="password" id="${prefix}-ccPin" value="${escAttr(ag.ccPin||"")}" placeholder="hub PIN"/></div>
         <div class="setting-row"><span class="setting-label">模型</span>
           <select id="${prefix}-ccModel" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
-            <option value="" ${!ag.ccModel?"selected":""}>跟随默认（Sonnet 5）</option>
-            <option value="claude-sonnet-5" ${ag.ccModel==="claude-sonnet-5"?"selected":""}>Sonnet 5 · 日常</option>
-            <option value="claude-opus-5" ${ag.ccModel==="claude-opus-5"?"selected":""}>Opus 5 · 最新最强</option>
-            <option value="claude-opus-4-8" ${ag.ccModel==="claude-opus-4-8"?"selected":""}>Opus 4.8</option>
-            <option value="claude-opus-4-7" ${ag.ccModel==="claude-opus-4-7"?"selected":""}>Opus 4.7</option>
-            <option value="claude-opus-4-6" ${ag.ccModel==="claude-opus-4-6"?"selected":""}>Opus 4.6</option>
-            <option value="claude-opus-4-5" ${ag.ccModel==="claude-opus-4-5"?"selected":""}>Opus 4.5</option>
-            <option value="claude-haiku-4-5-20251001" ${ag.ccModel==="claude-haiku-4-5-20251001"?"selected":""}>Haiku 4.5 · 最省</option>
-            <option value="claude-fable-5" disabled>Fable 5 · 需 usage credits（Pro 不可用）</option>
+            <option value="" ${!ag.ccModel?"selected":""}>跟随默认（当前会话）</option>
+            <option value="sonnet" ${ag.ccModel==="sonnet"||ag.ccModel==="claude-sonnet-5"?"selected":""}>Sonnet · 日常（推荐短名）</option>
+            <option value="opus" ${ag.ccModel==="opus"||(ag.ccModel||"").includes("opus")?"selected":""}>Opus · 更强（推荐短名）</option>
+            <option value="haiku" ${ag.ccModel==="haiku"||(ag.ccModel||"").includes("haiku")?"selected":""}>Haiku · 最省</option>
+            <option value="claude-sonnet-5" ${ag.ccModel==="claude-sonnet-5"?"selected":""}>claude-sonnet-5</option>
+            <option value="claude-opus-4-6" ${ag.ccModel==="claude-opus-4-6"?"selected":""}>claude-opus-4-6</option>
+            <option value="claude-opus-4-5" ${ag.ccModel==="claude-opus-4-5"?"selected":""}>claude-opus-4-5</option>
           </select>
-          <div style="font-size:10px;opacity:0.75;line-height:1.45;margin-top:4px">切换会立即发到 CC（/model），选中的模型成为 CC 新会话默认。</div></div>
+          <div style="font-size:10px;opacity:0.75;line-height:1.45;margin-top:4px">切换会发 /model 短名（opus/sonnet/haiku）；每条聊天发送前会再确认一次。若仍不变，到 VPS 看 tmux 里 CC 是否收到命令。</div></div>
         <div class="setting-row"><span class="setting-label" style="font-size:10px;opacity:0.75;line-height:1.45">CC 通道：消息经 WebSocket 发到 VPS hub → tmux 里的 Claude Code 回复。VPS 需已订阅登录。侧栏额度接官方用量。</span></div>
       `:`
         <div class="setting-row"><span class="setting-label">API Key</span>
@@ -20521,10 +20555,19 @@ function bindEvents(){
         const hubUrl = ag.ccWsUrl || "ws://115.29.237.172:3456";
         const hubPin = ag.ccPin || "";
         const id = ccModelSel.value;
-        if(!id){ if(typeof showToast==="function") showToast("已跟随 CC 默认，未发切换命令"); return; }
+        if(!id){
+          __cc._lastModel = "";
+          if(typeof showToast==="function") showToast("已跟随 CC 默认，未发切换命令");
+          return;
+        }
+        const alias = typeof __ccModelAlias==="function" ? __ccModelAlias(id) : id;
+        __cc._lastModel = ""; // 强制下次 ensure 再发
         if(typeof __ccSendCommand === "function"){
-          __ccSendCommand("/model "+id, hubUrl, hubPin)
-            .then(ok=>{ if(ok && typeof showToast==="function") showToast("模型切换指令已发送"); })
+          __ccSendCommand("/model "+alias, hubUrl, hubPin)
+            .then(ok=>{
+              if(ok){ __cc._lastModel = alias; }
+              if(typeof showToast==="function") showToast(ok ? ("已发送 /model "+alias+"（下一条消息会再确认）") : "指令已发但可能未确认");
+            })
             .catch(e=>{ if(typeof showToast==="function") showToast("切换失败："+e.message); });
         }
       };
