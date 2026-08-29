@@ -2843,24 +2843,24 @@
       overflow: visible;
     }
     .rpg-sprite-slot.them {
-      left: max(-12px, env(safe-area-inset-left, 0px) - 8px);
+      left: 0;
       right: auto;
       justify-content: flex-start;
-      width: min(78vw, 380px);
+      width: min(88vw, 420px);
     }
     .rpg-sprite-slot.them .rpg-avatar-full {
       object-position: bottom left !important;
-      transform: translateX(-6%);
+      transform: none;
     }
     .rpg-sprite-slot.me {
-      right: max(-8px, env(safe-area-inset-right, 0px) - 4px);
+      right: 0;
       left: auto;
       justify-content: flex-end;
-      width: min(78vw, 380px);
+      width: min(88vw, 420px);
     }
     .rpg-sprite-slot.me .rpg-avatar-full {
       object-position: bottom right !important;
-      transform: translateX(4%);
+      transform: none;
     }
     .rpg-sprite-slot .rpg-avatar {
       width: 120px; height: 120px; border-radius: 50%;
@@ -3036,29 +3036,55 @@
     }
 
 
-    .rpg-sprite-slot.them .rpg-avatar-full { object-position: bottom left !important; }
-    .rpg-sprite-slot.me .rpg-avatar-full { object-position: bottom right !important; }
+    /* RPG 立绘：他靠最左完整显示，我靠右；禁止一律贴右导致截断 */
+    .rpg-sprite-slot {
+      position: absolute !important;
+      bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+      top: auto !important;
+      width: min(88vw, 420px) !important;
+      height: min(72vh, 640px) !important;
+      overflow: visible !important;
+      transform: none !important;
+      pointer-events: none;
+      z-index: 1;
+      display: flex !important;
+      align-items: flex-end !important;
+    }
+    .rpg-sprite-slot.them {
+      left: 0 !important;
+      right: auto !important;
+      justify-content: flex-start !important;
+      padding-left: max(0px, env(safe-area-inset-left, 0px));
+    }
+    .rpg-sprite-slot.me {
+      right: 0 !important;
+      left: auto !important;
+      justify-content: flex-end !important;
+      padding-right: max(0px, env(safe-area-inset-right, 0px));
+    }
     .rpg-avatar-full {
       width: auto !important;
-      height: min(66vh, 560px) !important;
-      max-width: min(72vw, 340px) !important;
+      height: min(70vh, 600px) !important;
+      max-width: min(86vw, 400px) !important;
       max-height: 100% !important;
       border-radius: 0 !important;
       border: none !important;
       box-shadow: none !important;
       object-fit: contain !important;
-      object-position: bottom right !important;
       background: transparent !important;
       filter: drop-shadow(0 10px 22px rgba(0,0,0,0.4));
     }
-    /* 覆盖层已在主规则；此处只保证全身图不被旧居中规则拉回 */
-    .rpg-sprite-slot {
-      left: auto !important;
-      right: max(4px, env(safe-area-inset-right, 0px)) !important;
+    .rpg-sprite-slot.them .rpg-avatar-full {
+      object-position: bottom left !important;
       transform: none !important;
-      justify-content: flex-end !important;
-      align-items: flex-end !important;
+      margin-left: 0 !important;
     }
+    .rpg-sprite-slot.me .rpg-avatar-full {
+      object-position: bottom right !important;
+      transform: none !important;
+    }
+    .rpg-stage { overflow: hidden; }
+    .rpg-stage-body { overflow: visible; }
     .rpg-think-box {
       margin-top: 8px; padding: 10px 12px;
       background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.15);
@@ -3633,17 +3659,17 @@
       background: #E9E9EB !important;
       color: #1C1C1E !important;
       border: none !important;
-      border-radius: 18px !important;
+      border-radius: 14px !important;
       box-shadow: none !important;
-      padding: 10px 14px !important;
+      padding: 2px 12px !important; /* 只压上下内边距 */
     }
     body.shell-korean .bubble.me {
       background: #1C1C1E !important;
       color: #FFFFFF !important;
       border: none !important;
-      border-radius: 18px !important;
+      border-radius: 14px !important;
       box-shadow: none !important;
-      padding: 10px 14px !important;
+      padding: 2px 12px !important;
     }
     body.shell-korean .chat-input-bar {
       background: #F7F7F8 !important;
@@ -4181,8 +4207,8 @@
     body.shell-korean .bubble {
       max-width: 92% !important;
       font-size: 14px !important;
-      line-height: 1.32 !important;
-      padding: 3px 9px !important;
+      line-height: 1.35 !important;
+      padding: 2px 11px !important; /* 上下薄、左右够 */
       letter-spacing: -0.01em;
       box-shadow: none !important;
       font-weight: 400 !important;
@@ -4201,8 +4227,8 @@
       border: none !important;
     }
     body.shell-korean .bubble-row {
-      margin-bottom: 0 !important;
-      gap: 4px !important;
+      margin-bottom: 6px !important; /* 气泡之间间距保留 */
+      gap: 6px !important;
     }
     body.shell-korean .msg-meta {
       margin: 4px 0 0 !important;
