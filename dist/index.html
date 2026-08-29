@@ -28548,7 +28548,9 @@ try{ restorePrNative(); }catch(e){}
 if(!window.__hisPhoneSched){
   window.__hisPhoneSched = true;
   setTimeout(()=>{ try{ hisPhoneTrySchedule(); }catch(e){} }, 4000);
-  setInterval(()=>{ try{ hisPhoneTrySchedule(); }catch(e){} }, 15*60*1000);
+  if(!window.__hisPhoneTimer){
+    window.__hisPhoneTimer = setInterval(()=>{ try{ hisPhoneTrySchedule(); }catch(e){} }, 15*60*1000);
+  }
 }
 
 // 身体状态缓慢 tick（约每 45 秒）
