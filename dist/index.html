@@ -22946,7 +22946,9 @@ function backupRemindCheck(forceToast){
 function backupRemindInit(){
   try{
     backupRemindCheck(true);
-    setInterval(()=>backupRemindCheck(false), 3600000);
+    if(!window.__backupRemindTimer){
+      window.__backupRemindTimer = setInterval(()=>backupRemindCheck(false), 3600000);
+    }
   }catch(e){}
 }
 
@@ -29245,9 +29247,11 @@ try{
     if(document.hidden){ if(typeof bgGenSubmit === "function") bgGenSubmit().catch(()=>{}); }
     else { if(typeof bgGenPollResult === "function") bgGenPollResult().catch(()=>{}); }
   });
-  setInterval(()=>{
+  if(!window.__bgGenTimer){
+  window.__bgGenTimer = setInterval(()=>{
     try{ if(document.visibilityState !== "hidden" && typeof bgGenPollResult === "function") bgGenPollResult().catch(()=>{}); }catch(e){}
   }, 30000);
+}
 }catch(e){}
 
 // ─── 诊断：JS 报错时顶部显示小角标（便于反馈）────────────────────────────
