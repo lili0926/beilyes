@@ -5725,7 +5725,7 @@ async function __apiFetch(url, options, timeoutMs){
 }
 
 
-async function callChatAPI(apiConfig, messages, systemPrompt) {
+async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
   // 支持直接传 agent 对象（apiConfig._agent 或 apiConfig 本身带 channel=gemini）
   const ag = apiConfig._agent || null;
   const channel = ag ? ag.channel : apiConfig.channel;
@@ -5742,7 +5742,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
     const pin = (ag&&ag.ccPin) || apiConfig.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
     const modelId = (ag && ag.ccModel) || apiConfig.ccModel || "";
     try{ await __ccEnsureModel(wsUrl, pin, modelId); }catch(e){}
-    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), { model: __ccModelAlias(modelId) });
+    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), { model: __ccModelAlias(modelId), timeoutMs: (opts && opts.timeoutMs) });
   }
 
   if (channel === "gemini") {
@@ -5928,7 +5928,7 @@ function __ccHubSend(wsUrl, pin, content, opts){
     if(!ws){ reject(new Error("CC hub 连接失败(检查 ws 地址)")); return; }
     let settled=false;
     let __onReply=null, __onEdit=null, __onStatus=null;
-    const timer=setTimeout(()=>fail(new Error("CC 回复超时")), 180000);
+    const timer=setTimeout(()=>fail(new Error("CC 回复超时")), (o.timeoutMs||180000));
     function cleanup(){
       clearTimeout(timer);
       if(__onReply) __cc._replyCbs = __cc._replyCbs.filter(f=>f!==__onReply);
@@ -18179,17 +18179,30 @@ async function callAiTurn(userText){
     s.caps.push({ who:"them", text:"（还没配置 API Key，我只能在这里陪你坐一会儿。）" });
     s.loading = false; render(); return;
   }
-  const hist = (s.caps||[]).slice(-8).map(c=>(c.who==="me"?"用户：":"你：")+c.text).join("\n");
   const meta = s.lastVoiceMeta || {};
   const metaLine = (meta.emotion||meta.tone) ? `\n用户语音线索：情绪=${meta.emotion||"?"}，语气=${meta.tone||"?"}` : "";
-  const prompt = `你在和用户「打电话」。口语、短句、一次 1-3 句，像真的通话不要长文。
+  let prompt, ccOpts = null;
+  if(ag.channel === "cc"){
+    // cc 是一条长会话：他自己就记得刚才说过什么，再把 caps 喂一遍纯属重复；
+    // 而「只输出你要说的话、不要旁白」这类指令会永久留在同一个会话里，
+    // 挂了电话之后的正常聊天也会被带偏。通话怎么说话写在 VPS 的 CLAUDE.md，
+    // 这里只标明「现在在电话上」。
+    prompt = (userText && userText.startsWith("（"))
+      ? `[电话·系统] ${userText}${metaLine}`
+      : `[电话] ${userText || ""}${metaLine}`;
+    ccOpts = { timeoutMs: 60000 };  // 打电话等 3 分钟没有意义
+  } else {
+    // 直连通道没有记忆，仍要把背景和历史带上
+    const hist = (s.caps||[]).slice(-8).map(c=>(c.who==="me"?"用户：":"你：")+c.text).join("\n");
+    prompt = `你在和用户「打电话」。口语、短句、一次 1-3 句，像真的通话不要长文。
 来电/通话背景：${s.reason||"闲聊"}${metaLine}
 历史：
 ${hist}
 ${userText && userText.startsWith("（") ? "系统："+userText : "用户刚说："+(userText||"")}
 只输出你要说的话，不要引号，不要旁白。匹配对方能量。`;
+  }
   try{
-    let text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
+    let text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, ccOpts);
     if(typeof parseThinking==="function") text = parseThinking(text).body || text;
     text = String(text||"").trim().slice(0,300) || "……我在听。";
     // callhome ⟪挂断⟫：说完晚安后留赖床窗，期间用户说话可留住

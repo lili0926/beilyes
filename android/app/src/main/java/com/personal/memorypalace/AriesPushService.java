@@ -9,10 +9,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -49,6 +55,9 @@ public class AriesPushService extends Service {
     private static final int NOTIF_ONGOING = 4201;
     // 真正的消息通知
     private static final String CH_MESSAGE = "aries_message";
+    // 来电：独立渠道，最高优先级 + 铃声由服务自己循环播放
+    private static final String CH_CALL = "aries_call";
+    private static final int NOTIF_CALL = 4202;
     private static int msgNotifId = 4300;
 
     private static final String PREFS = "aries_push";
@@ -64,6 +73,10 @@ public class AriesPushService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean stopping = false;
     private int retryCount = 0;
+    private Ringtone ringtone;
+    private Vibrator vibrator;
+    private String ringingInviteId = "";
+    private Runnable ringTimeout;
 
     public static void start(Context ctx) {
         Intent i = new Intent(ctx, AriesPushService.class);
@@ -98,6 +111,7 @@ public class AriesPushService extends Service {
     @Override
     public void onDestroy() {
         stopping = true;
+        stopRinging();
         try { if (ws != null) ws.close(1000, "service destroyed"); } catch (Exception ignored) {}
         super.onDestroy();
     }
@@ -155,6 +169,14 @@ public class AriesPushService extends Service {
         message.setShowBadge(true);
         message.enableVibration(true);
         nm.createNotificationChannel(message);
+
+        // 铃声/震动由服务自己驱动，渠道本身设静音，免得叠两层声音
+        NotificationChannel call = new NotificationChannel(
+                CH_CALL, "来电", NotificationManager.IMPORTANCE_HIGH);
+        call.setShowBadge(true);
+        call.enableVibration(false);
+        call.setSound(null, null);
+        nm.createNotificationChannel(call);
     }
 
     private void notifyMessage(String body, int extraCount) {
@@ -260,6 +282,18 @@ public class AriesPushService extends Service {
             return;
         }
 
+        if ("call".equals(type)) {
+            startRinging(o.optString("invite_id", ""),
+                         o.optString("reason", "想打给你"),
+                         o.optDouble("expires_at", 0));
+            return;
+        }
+
+        if ("call_end".equals(type)) {
+            stopRinging();
+            return;
+        }
+
         if ("message".equals(type)) {
             if (!"assistant".equals(o.optString("role", ""))) return;
             // unread=false 表示 App 正开着在前台，用户自己看得见，不用打扰
@@ -269,6 +303,81 @@ public class AriesPushService extends Service {
             notifyMessage(o.optString("content", ""), 1);
             if (!id.isEmpty()) prefs().edit().putString(KEY_LAST_NOTIFIED, id).apply();
         }
+    }
+
+    // ─── 来电响铃 ───────────────────────────────────────────────────────────
+
+    private void startRinging(String inviteId, String reason, double expiresAtSec) {
+        if (inviteId.isEmpty() || inviteId.equals(ringingInviteId)) return;
+        stopRinging();
+        ringingInviteId = inviteId;
+
+        Notification n = new NotificationCompat.Builder(this, CH_CALL)
+                .setContentTitle("Aries 来电")
+                .setContentText(reason)
+                .setSmallIcon(android.R.drawable.sym_call_incoming)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setContentIntent(openAppIntent())
+                // 锁屏时直接把 App 顶到前台，像真的来电
+                .setFullScreenIntent(openAppIntent(), true)
+                .build();
+        try {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.notify(NOTIF_CALL, n);
+        } catch (Exception ignored) {}
+
+        try {
+            Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            if (uri != null) {
+                ringtone = RingtoneManager.getRingtone(getApplicationContext(), uri);
+                if (ringtone != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        ringtone.setAudioAttributes(new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build());
+                    }
+                    // P 以下没有 setLooping，靠下面的超时兜底停掉
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) ringtone.setLooping(true);
+                    ringtone.play();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            if (vibrator == null) vibrator = getSystemService(Vibrator.class);
+            long[] pattern = {0, 700, 700};
+            if (vibrator != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
+                } else {
+                    vibrator.vibrate(pattern, 0);
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 邀请过期就自己停，别一直响下去
+        long ms = expiresAtSec > 0
+                ? Math.max(5000L, (long) (expiresAtSec * 1000L - System.currentTimeMillis()))
+                : 45000L;
+        ringTimeout = this::stopRinging;
+        handler.postDelayed(ringTimeout, Math.min(ms, 120000L));
+    }
+
+    private void stopRinging() {
+        ringingInviteId = "";
+        if (ringTimeout != null) { handler.removeCallbacks(ringTimeout); ringTimeout = null; }
+        try { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); } catch (Exception ignored) {}
+        ringtone = null;
+        try { if (vibrator != null) vibrator.cancel(); } catch (Exception ignored) {}
+        try {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.cancel(NOTIF_CALL);
+        } catch (Exception ignored) {}
     }
 
     /** 重连时把断线期间积压的未读补一条汇总通知，不逐条轰炸。 */
