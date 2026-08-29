@@ -4503,6 +4503,21 @@
     .ws-input-bar textarea { flex: 1; border-radius: 12px; border: 1px solid var(--border); padding: 8px 10px; font-size: 14px; resize: none; background: var(--card); color: var(--text); font-family: inherit; }
     .ws-input-bar button { flex-shrink: 0; padding: 0 16px; border-radius: 12px; }
 
+
+    /* 韩系主页仅两面：桌面 | 空间 */
+    body.shell-korean .kr-home .home-track {
+      width: 200% !important;
+    }
+    body.shell-korean .kr-home .home-panel {
+      width: 50% !important;
+    }
+    body.shell-korean .kr-home .home-track.page0 { transform: translateX(0) !important; }
+    body.shell-korean .kr-home .home-track.page1 { transform: translateX(-50%) !important; }
+    body.shell-korean .kr-home .home-track.page2 { transform: translateX(-50%) !important; }
+    body.shell-korean .kr-desk-grid-all {
+      grid-template-columns: repeat(6, 1fr) !important;
+      gap: 10px 6px !important;
+    }
   </style>
 
   <div id="app"></div>
@@ -8284,7 +8299,8 @@ function homeDots(active){
 
 /** 点小圆点切页：与手势划页一致，只更新轨道位置与圆点高亮，不整页重渲染（保留滚动位置） */
 function setHomePage(n){
-  n = Math.max(0, Math.min(2, n|0));
+  const maxP = (state.uiShell === "korean") ? 1 : 2;
+  n = Math.max(0, Math.min(maxP, n|0));
   state.homePage = n;
   const track = document.getElementById("home-track");
   if(track){
@@ -8318,10 +8334,10 @@ function renderHomeSwipe(){
 
 /** 韩系桌面式主页：黑白灰毛玻璃组件 */
 function homeDotsKorean(active){
+  // 韩系仅两面：0 桌面(全应用) · 1 空间名片
   return `<div class="swipe-dots kr-dots">
     <div class="swipe-dot${active===0?" on":""}" onclick="setHomePage(0)" title="桌面"></div>
-    <div class="swipe-dot${active===1?" on":""}" onclick="setHomePage(1)" title="名片"></div>
-    <div class="swipe-dot${active===2?" on":""}" onclick="setHomePage(2)" title="更多"></div>
+    <div class="swipe-dot${active===1?" on":""}" onclick="setHomePage(1)" title="空间"></div>
   </div>`;
 }
 
@@ -8359,7 +8375,6 @@ function renderHomeKorean(){
   const taName = c.partnerName || "TA";
   const days = (typeof daysSince==="function") ? daysSince() : "—";
   const status = c.statusMsg || "今天也在一起";
-  const startDate = c.startDate || "";
 
   let title = "Music";
   let artist = "一起听";
@@ -8379,25 +8394,8 @@ function renderHomeKorean(){
       <span class="kr-desk-ico-lab">${esc(it.label)}</span>
     </button>`;
 
-  // 一行 6 个，两行共 12
-  const deskIcons = [
-    {key:"mailbox", icon:"mail", label:"信箱"},
-    {key:"prompts", icon:"sparkles", label:"记忆"},
-    {key:"mdiary", icon:"notebook-pen", label:"日记"},
-    {key:"vps", icon:"monitor", label:"工作区"},
-    {key:"data", icon:"database", label:"数据"},
-    {key:"theme", icon:"message-circle", label:"对话"},
-    {key:"branding", icon:"eye", label:"视觉"},
-    {key:"calendar", icon:"circle", label:"Circle"},
-    {key:"calendar", icon:"calendar-days", label:"日历"},
-    {key:"music", icon:"music", label:"音乐"},
-    {key:"read", icon:"book-open", label:"一起读"},
-    {key:"phone", icon:"phone", label:"电话"},
-  ].map(iconBtn).join("");
-
-  // 修 data: 若无 data 子页则用 theme 替代——检查
-  // use existing keys only
-  const deskIconsSafe = [
+  // 原桌面 + 原「更多」合并，去重 key，一行 6 个
+  const allAppDefs = [
     {key:"mailbox", icon:"mail", label:"信箱"},
     {key:"prompts", icon:"sparkles", label:"记忆"},
     {key:"mdiary", icon:"notebook-pen", label:"日记"},
@@ -8410,7 +8408,22 @@ function renderHomeKorean(){
     {key:"music", icon:"music", label:"音乐"},
     {key:"read", icon:"book-open", label:"一起读"},
     {key:"phone", icon:"phone", label:"电话"},
-  ].map(iconBtn).join("");
+    {key:"bisca_cards", icon:"spade", label:"牌室"},
+    {key:"watch", icon:"film", label:"一起看"},
+    {key:"ntfy", icon:"bell", label:"通知"},
+    {key:"baby", icon:"baby", label:"育儿"},
+    {key:"cooking", icon:"chef-hat", label:"烹饪"},
+    {key:"soup", icon:"turtle", label:"海龟汤"},
+    {key:"htmlgame", icon:"gamepad-2", label:"HTML"},
+    {key:"workshop", icon:"hammer", label:"工作间"},
+    {key:"roleplay", icon:"theater", label:"扮演"},
+  ];
+  const seen = {};
+  const allApps = allAppDefs.filter(it => {
+    if(seen[it.key]) return false;
+    seen[it.key] = true;
+    return true;
+  }).map(iconBtn).join("");
 
   let preview = "";
   try{
@@ -8426,13 +8439,16 @@ function renderHomeKorean(){
 
   const scheduleDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
-  // Panel 0 Desk ≈ IB Home
+  // 若还停在旧第三页，收回第二页
+  if(state.homePage > 1) state.homePage = 1;
+
+  // Panel 0：大钟 + 全应用 + 名片/日历 + 便签/日程 + 音乐
   const desk = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll kr-desk-scroll">
         <div class="kr-desk-date">${esc(dateTop)}</div>
         <div class="kr-desk-clock">${hh}:${mm}</div>
-        <div class="kr-desk-grid">${deskIconsSafe}</div>
+        <div class="kr-desk-grid kr-desk-grid-all">${allApps}</div>
         <div class="kr-desk-row2">
           <div class="kr-widget kr-desk-profile">
             ${taAv?`<img class="kr-desk-av" src="${escAttr(taAv)}" alt=""/>`:`<div class="kr-desk-av kr-id-fallback">💬</div>`}
@@ -8440,33 +8456,34 @@ function renderHomeKorean(){
               <div class="kr-desk-prof-name">${esc(taName)}</div>
               <div class="kr-desk-prof-sub">${esc(myName)} · ${esc(String(days))}d</div>
             </div>
-            ${krMiniCalHtml()}
+            <div class="kr-desk-cal-mini">${typeof krMiniCalHtml==="function"?krMiniCalHtml():""}</div>
           </div>
         </div>
         <div class="kr-desk-cards">
           <div class="kr-widget kr-note-card">
-            <div class="kr-note-label">NOTE</div>
-            <div class="kr-note-text">${esc(status)}</div>
+            <div class="kr-note-lab">NOTE</div>
+            <div class="kr-note-body">${esc(status)}</div>
           </div>
-          <button type="button" class="kr-widget kr-sched-card feat-card" data-sub="calendar">
-            <div class="kr-sched-label">Schedule</div>
+          <div class="kr-widget kr-sched-card">
+            <div class="kr-sched-lab">Schedule</div>
             <div class="kr-sched-date">${esc(scheduleDate)}</div>
             <div class="kr-sched-hint">纪念日 · 计划</div>
-          </button>
+          </div>
         </div>
         <button type="button" class="kr-widget kr-desk-music feat-card" data-sub="music">
-          <div class="kr-dm-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</div>
-          <div class="kr-dm-meta">
-            <div class="kr-dm-title">${esc(title)}</div>
-            <div class="kr-dm-sub">${esc(artist)}</div>
-          </div>
-          <div class="kr-dm-play"><i data-lucide="play"></i></div>
+          <span class="kr-desk-music-ico">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</span>
+          <span class="kr-desk-music-meta">
+            <span class="kr-desk-music-title">${esc(title)}</span>
+            <span class="kr-desk-music-sub">${esc(artist)}</span>
+          </span>
+          <span class="kr-desk-music-go">▶</span>
         </button>
         ${homeDotsKorean(0)}
+        <div class="kr-home-foot">desk · swipe →</div>
       </div>
     </div>`;
 
-  // Panel 1 Space
+  // Panel 1：空间名片
   const space = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll">
@@ -8474,15 +8491,13 @@ function renderHomeKorean(){
           <div class="kr-space-cover">
             <div class="kr-space-gradient"></div>
             <div class="kr-space-avs">
-              ${myAv?`<img src="${escAttr(myAv)}" alt=""/>`:`<div class="kr-space-fb">🙂</div>`}
-              ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<div class="kr-space-fb">💬</div>`}
+              ${myAv?`<img src="${escAttr(myAv)}" alt=""/>`:`<span class="kr-space-fb">J</span>`}
+              ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-space-fb">A</span>`}
             </div>
-          </div>
-          <div class="kr-space-body">
             <div class="kr-space-names">${esc(myName)} · ${esc(taName)}</div>
-            <div class="kr-space-days">在一起 ${esc(String(days))} 天${startDate?` · since ${esc(startDate)}`:""}</div>
+            <div class="kr-space-sub">在一起 ${esc(String(days))} 天${c.startDate?` · since ${esc(c.startDate)}`:""}</div>
             <div class="kr-space-love">
-              <span class="kr-hearts">${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}</span>
+              <span class="kr-space-hearts">${"♥".repeat(Math.min(5, Math.max(1, Math.round(love/20))))}</span>
               <span>${esc(String(love))}</span>
             </div>
             <div class="kr-space-quote">${esc(status)}</div>
@@ -8501,48 +8516,11 @@ function renderHomeKorean(){
       </div>
     </div>`;
 
-  const moreApps = [
-    {key:"bisca_cards", icon:"spade", label:"牌室"},
-    {key:"watch", icon:"film", label:"一起看"},
-    {key:"ntfy", icon:"bell", label:"通知"},
-    {key:"baby", icon:"baby", label:"育儿"},
-    {key:"cooking", icon:"chef-hat", label:"烹饪"},
-    {key:"soup", icon:"turtle", label:"海龟汤"},
-    {key:"htmlgame", icon:"gamepad-2", label:"HTML"},
-    {key:"workshop", icon:"hammer", label:"工作间"},
-    {key:"roleplay", icon:"theater", label:"扮演"},
-  ].map(it => `
-    <button type="button" class="feat-card kr-desk-ico" data-sub="${escAttr(it.key)}">
-      <span class="kr-desk-ico-bg"><i data-lucide="${it.icon}"></i></span>
-      <span class="kr-desk-ico-lab">${esc(it.label)}</span>
-    </button>`).join("");
-
-  const more = `
-    <div class="home-panel kr-panel">
-      <div class="kr-home-scroll">
-        <div class="kr-widget kr-more-head">
-          <div class="kr-more-title">更多</div>
-          <div class="kr-more-sub">游戏与扩展入口</div>
-        </div>
-        <div class="kr-desk-grid">${moreApps}</div>
-        <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
-          <div class="kr-cp-top">
-            <div class="kr-cp-name">聊天</div>
-            <div class="kr-cp-go">→</div>
-          </div>
-          <div class="kr-cp-text">回到和 ${esc(taName)} 的对话</div>
-        </button>
-        ${homeDotsKorean(2)}
-        <div class="kr-home-foot">← swipe · more</div>
-      </div>
-    </div>`;
-
-  const p = state.homePage === 0 ? "page0" : state.homePage === 2 ? "page2" : "page1";
+  const p = state.homePage === 1 ? "page1" : "page0";
   return `<div class="home-swipe-wrap kr-home" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
       ${desk}
       ${space}
-      ${more}
     </div>
   </div>`;
 }
@@ -27020,7 +26998,8 @@ function _swipeCommit(){
   const track = document.getElementById("home-track");
   if(!track) return;
   track.style.transition="";
-  if(w.dx < -50) state.homePage = Math.min(2, state.homePage + 1);
+  const maxP = (state.uiShell === "korean") ? 1 : 2;
+  if(w.dx < -50) state.homePage = Math.min(maxP, state.homePage + 1);
   else if(w.dx > 50) state.homePage = Math.max(0, state.homePage - 1);
   track.classList.remove("page0","page1","page2");
   track.classList.add("page"+state.homePage);

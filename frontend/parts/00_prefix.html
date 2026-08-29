@@ -4503,6 +4503,21 @@
     .ws-input-bar textarea { flex: 1; border-radius: 12px; border: 1px solid var(--border); padding: 8px 10px; font-size: 14px; resize: none; background: var(--card); color: var(--text); font-family: inherit; }
     .ws-input-bar button { flex-shrink: 0; padding: 0 16px; border-radius: 12px; }
 
+
+    /* 韩系主页仅两面：桌面 | 空间 */
+    body.shell-korean .kr-home .home-track {
+      width: 200% !important;
+    }
+    body.shell-korean .kr-home .home-panel {
+      width: 50% !important;
+    }
+    body.shell-korean .kr-home .home-track.page0 { transform: translateX(0) !important; }
+    body.shell-korean .kr-home .home-track.page1 { transform: translateX(-50%) !important; }
+    body.shell-korean .kr-home .home-track.page2 { transform: translateX(-50%) !important; }
+    body.shell-korean .kr-desk-grid-all {
+      grid-template-columns: repeat(6, 1fr) !important;
+      gap: 10px 6px !important;
+    }
   </style>
 
   <div id="app"></div>
