@@ -5994,24 +5994,34 @@ function __ccSendCommand(cmd, wsUrl, pin){
       if(settled) return;
       if(__cc.ready){
         if(!__cc.ccAlive){ fail(new Error("CC 离线")); return; }
-        try{ ws.send(JSON.stringify({ type:"terminal_input", text:cmd, enter:true })); done(true); }catch(e){ fail(e); }
+        try{
+          ws.send(JSON.stringify({ type:"terminal_input", text:cmd, enter:true }));
+          // /model 这类斜杠命令可能打开全屏面板，2.5s 后补一发 Esc 兜底关掉，避免 CC 卡面板吞消息
+          setTimeout(()=>{ try{ ws.send(JSON.stringify({ type:"terminal_signal", signal:"Escape" })); }catch(e){} }, 2500);
+          done(true);
+        }catch(e){ fail(e); }
       } else { setTimeout(trySend, 300); }
     };
     trySend();
   });
 }
 
-/** cc 通道内容拼装：系统设定(短)+ 最近对话。长设定放 VPS 的 CLAUDE.md，不重发。 */
+/** cc 通道内容拼装：系统设定(短)+ 最近对话。长设定头部放 VPS 的 CLAUDE.md，不重发。 */
 function __ccBuildContent(messages, systemPrompt){
-  const sys = (systemPrompt && typeof systemPrompt==="object")
+  let sys = (systemPrompt && typeof systemPrompt==="object")
     ? ((systemPrompt.static||"") + (systemPrompt.dynamic? "\n\n"+systemPrompt.dynamic:""))
     : (systemPrompt? String(systemPrompt):"");
+  // 人设必须带上：CC 是长会话，消息里没有身份锚点它会退回「我是 Claude 编程助手」。
+  // 设定过长时保头部（身份+规则）+ 尾部（动态记忆），省略中段，控制 token。
+  if(sys && sys.length > 2200){
+    sys = sys.slice(0, 1600) + "\n…（设定中段已省略，完整人设见 VPS CLAUDE.md）…\n" + sys.slice(-500);
+  }
   const recent = (Array.isArray(messages)? messages.slice(-12):[]).map(m=>{
     const c = m.image? "[图片] "+(m.content||"") : (m.content||"");
     return (m.role==="user"?"用户: ":"助手: ")+c;
   }).join("\n\n");
   const parts = [];
-  if(sys && sys.length < 2000) parts.push("【设定】\n"+sys);
+  if(sys) parts.push("【设定】\n"+sys);
   if(recent) parts.push(recent);
   return parts.join("\n\n");
 }
