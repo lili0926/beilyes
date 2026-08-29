@@ -5564,6 +5564,84 @@ function compressImage(file, maxW, maxH, quality){
   });
 }
 
+
+/** 网络错误 → 中文 */
+function __toCnNetError(e){
+  const msg = String((e && e.message) || e || "");
+  const name = (e && e.name) || "";
+  if(name === "AbortError" || /aborted|timeout/i.test(msg)) return "请求超时，请稍后重试";
+  if(/Failed to fetch|NetworkError|network|ERR_INTERNET|ERR_CONNECTION|Load failed/i.test(msg))
+    return "网络连接失败，请检查网络或代理";
+  if(/CORS|cross-origin/i.test(msg)) return "跨域被拦截（CORS），请检查接口地址或走 VPS 反代";
+  return msg || "未知网络错误";
+}
+/** HTTP 状态 → 中文 */
+function __httpErrCn(status, body){
+  const s = Number(status) || 0;
+  let detail = "";
+  try{
+    if(typeof body === "string" && body.trim()){
+      const j = JSON.parse(body);
+      detail = j.error?.message || j.message || j.error || "";
+      if(typeof detail === "object") detail = JSON.stringify(detail);
+    }
+  }catch(e){ detail = ""; }
+  const base =
+    s === 401 ? "认证失败（Key 无效或过期）" :
+    s === 403 ? "无权限访问该接口" :
+    s === 404 ? "接口不存在（404）" :
+    s === 429 ? "请求过于频繁，请稍后再试" :
+    s >= 500 ? "服务端错误，请稍后重试" :
+    s ? ("HTTP " + s) : "请求失败";
+  return detail ? (base + "：" + String(detail).slice(0, 160)) : base;
+}
+/**
+ * 带超时 + 有限重试的 fetch（仅用于 AI 聊天类请求）
+ * @param {string} url
+ * @param {RequestInit} options
+ * @param {number} [timeoutMs=60000]
+ */
+async function __apiFetch(url, options, timeoutMs){
+  const ms = timeoutMs == null ? 60000 : timeoutMs;
+  const maxTry = 3; // 1 次 + 最多 2 次重试
+  let lastErr;
+  for(let attempt = 0; attempt < maxTry; attempt++){
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=> ctrl.abort(), ms);
+    try{
+      const opts = Object.assign({}, options || {}, {
+        signal: ctrl.signal,
+      });
+      // 若调用方已有 signal，合并：任一方 abort 都中止
+      if(options && options.signal){
+        if(options.signal.aborted) ctrl.abort();
+        else options.signal.addEventListener("abort", ()=> ctrl.abort(), { once: true });
+      }
+      const res = await fetch(url, opts);
+      clearTimeout(timer);
+      // 429 / 5xx 可重试
+      if((res.status === 429 || res.status >= 500) && attempt < maxTry - 1){
+        let body = "";
+        try{ body = await res.text(); }catch(e){}
+        lastErr = new Error(__httpErrCn(res.status, body));
+        await new Promise(r => setTimeout(r, res.status === 429 ? 3000 * (attempt + 1) : 1500 * (attempt + 1)));
+        continue;
+      }
+      return res;
+    }catch(e){
+      clearTimeout(timer);
+      lastErr = e;
+      if(attempt < maxTry - 1){
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw new Error(__toCnNetError(e));
+    }
+  }
+  throw lastErr || new Error("请求失败");
+}
+
+
 async function callChatAPI(apiConfig, messages, systemPrompt) {
   // 支持直接传 agent 对象（apiConfig._agent 或 apiConfig 本身带 channel=gemini）
   const ag = apiConfig._agent || null;
@@ -5597,7 +5675,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
       });
     });
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const res = await fetch(url, {
+    const res = await __apiFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -5625,7 +5703,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
       messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
       thinking: { type: "enabled", budget_tokens: 3000 },
     };
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -5665,7 +5743,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt) {
     return thinking ? (`<thinking>\n${thinking}\n</thinking>\n\n${text}`) : text;
   } else {
     // OpenAI 兼容（含后续把 Gemini 走代理的情况）
-    const res = await fetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
+    const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
       body: JSON.stringify({
@@ -5890,7 +5968,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
       messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
       thinking: { type:"enabled", budget_tokens:3000 },
     };
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01", "anthropic-beta":"interleaved-thinking-2025-05-14" },
       body: JSON.stringify(body),
@@ -5927,7 +6005,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     }
     (messages||[]).forEach(m=> contents.push({ role: m.role==="assistant" ? "model" : "user", parts: m.image ? __chatContentForChannel("gemini", m) : [{ text: m.content||"" }] }));
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(geminiKey)}`;
-    const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ contents, generationConfig:{ temperature:0.9, maxOutputTokens:8192 } }) });
+    const res = await __apiFetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ contents, generationConfig:{ temperature:0.9, maxOutputTokens:8192 } }) });
     if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
     let input=0, output=0, cacheRead=0;
     for await (const ev of __sse(res.body)){
@@ -5950,7 +6028,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
       ? [{ role:"system", content: systemPrompt }, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m)]
       : messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m),
   };
-  const res = await fetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
+  const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
     body: JSON.stringify(body),
@@ -6045,7 +6123,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
     const body = { contents, generationConfig:{ temperature:0.9, maxOutputTokens:8192 } };
     if(toolsParam) body.tools = toolsParam;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) });
+    const res = await __apiFetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
     if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     __recordUsageFromGemini(data); // 记 token 用量
@@ -6072,7 +6150,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
       thinking:{ type:"enabled", budget_tokens:3000 },
     };
     if(toolsParam) body.tools = toolsParam;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01", "anthropic-beta":"interleaved-thinking-2025-05-14" },
       body: JSON.stringify(body),
@@ -6110,7 +6188,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
     messages: systemPrompt ? [{ role:"system", content: systemPrompt }, ...convo] : convo,
   };
   if(toolsParam){ body.tools = toolsParam; body.tool_choice = "auto"; }
-  const res = await fetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
+  const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
     body: JSON.stringify(body),
@@ -6198,7 +6276,7 @@ async function ariesRequestPhoto(facing){
   }
   // 2) 回退 HTTP（仅非混合内容环境）
   try{
-    const res = await fetch("http://127.0.0.1:18888/take-photo", {
+    const res = await __apiFetch("http://127.0.0.1:18888/take-photo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ camera: cam }),
@@ -6330,7 +6408,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
 async function callAuxAPI(apiConfig, prompt) {
   const { auxChannel, claudeKey, openaiKey, openaiBase, openaiModel, auxOpenaiBase, auxOpenaiKey, auxOpenaiModel } = apiConfig;
   if (auxChannel === "claude") {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{ "Content-Type":"application/json","x-api-key":claudeKey,"anthropic-version":"2023-06-01" },
       body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1024, messages:[{ role:"user", content:prompt }] }),
@@ -6338,7 +6416,7 @@ async function callAuxAPI(apiConfig, prompt) {
     const data = await res.json();
     return data.content?.[0]?.text || "";
   } else {
-    const res = await fetch(`${auxOpenaiBase||openaiBase}/chat/completions`, {
+    const res = await __apiFetch(`${auxOpenaiBase||openaiBase}/chat/completions`, {
       method:"POST",
       headers:{ "Content-Type":"application/json","Authorization":`Bearer ${auxOpenaiKey||openaiKey}` },
       body: JSON.stringify({
