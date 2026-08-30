@@ -3898,22 +3898,7 @@ function renderHomeKorean(){
       <span class="kr-desk-ico-lab">${esc(it.label)}</span>
     </button>`;
 
-  // 桌面日常入口（音乐走底栏一起听，不再单独占一格）
-  const deskApps = [
-    {key:"mailbox", icon:"mail", label:"信箱"},
-    {key:"prompts", icon:"sparkles", label:"记忆"},
-    {key:"mdiary", icon:"notebook-pen", label:"日记"},
-    {key:"vps", icon:"monitor", label:"工作区"},
-    {key:"usage", icon:"smartphone", label:"屏幕"},
-    {key:"theme", icon:"palette", label:"外观"},
-    {key:"branding", icon:"eye", label:"视觉"},
-    {key:"body", icon:"heart", label:"身体"},
-    {key:"calendar", icon:"calendar-days", label:"日历"},
-    {key:"read", icon:"book-open", label:"一起读"},
-    {key:"phone", icon:"phone", label:"电话"},
-    {key:"watch", icon:"film", label:"一起看"},
-  ].map(iconBtn).join("");
-
+  // 桌面不再放 app 网格（与「更多」重复）；入口只在更多页
   // 更多页：尽量铺全 subPage 入口（去重）
   const allAppDefs = [
     {key:"mailbox", icon:"mail", label:"信箱"},
@@ -4009,7 +3994,6 @@ function renderHomeKorean(){
         <div class="kr-desk-date">${esc(dateTop)}</div>
         <div class="kr-desk-clock">${hh}:${mm}</div>
         ${dualFrame}
-        <div class="kr-desk-grid">${deskApps}</div>
         <div class="kr-desk-row2">
           <div class="kr-widget kr-desk-profile">
             ${taAv?`<img class="kr-desk-av" src="${escAttr(taAv)}" alt=""/>`:`<div class="kr-desk-av kr-id-fallback">💬</div>`}
@@ -4059,10 +4043,6 @@ function renderHomeKorean(){
             <div class="kr-status-body">${esc(status)}</div>
             <div class="kr-status-go">日记 →</div>
           </button>
-        </div>
-        <div class="kr-widget kr-more-head">
-          <div class="kr-more-title">更多</div>
-          <div class="kr-more-sub">全部功能入口</div>
         </div>
         <div class="kr-desk-grid kr-desk-grid-all">${moreApps}</div>
         <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
