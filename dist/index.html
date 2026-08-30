@@ -4560,6 +4560,44 @@
     body.shell-korean .kr-status-go {
       font-size: 11px; color: #8E8E93;
     }
+
+    /* 大时钟下双人头像框 */
+    body.shell-korean .kr-love-frame {
+      position: relative;
+      width: min(92%, 340px);
+      margin: 6px auto 14px;
+      aspect-ratio: 2.4 / 1;
+    }
+    body.shell-korean .kr-love-frame-bg {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+    }
+    body.shell-korean .kr-love-slot {
+      position: absolute;
+      top: 52%;
+      width: 28%;
+      aspect-ratio: 1;
+      transform: translateY(-50%);
+      border-radius: 42% / 38%;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+    body.shell-korean .kr-love-slot.me { left: 10.5%; }
+    body.shell-korean .kr-love-slot.them { right: 10.5%; left: auto; }
+    body.shell-korean .kr-love-slot img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    body.shell-korean .kr-love-fb {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 18px; font-weight: 600;
+      background: #3a3a3c;
+    }
   </style>
 
   <div id="app"></div>
@@ -8448,7 +8486,7 @@ function renderHomeKorean(){
       <span class="kr-desk-ico-lab">${esc(it.label)}</span>
     </button>`;
 
-  // 默认桌面：大时钟页上的日常入口（一行 6 × 两行）
+  // 桌面日常入口（音乐走底栏一起听，不再单独占一格）
   const deskApps = [
     {key:"mailbox", icon:"mail", label:"信箱"},
     {key:"prompts", icon:"sparkles", label:"记忆"},
@@ -8459,26 +8497,70 @@ function renderHomeKorean(){
     {key:"branding", icon:"eye", label:"视觉"},
     {key:"body", icon:"heart", label:"身体"},
     {key:"calendar", icon:"calendar-days", label:"日历"},
-    {key:"music", icon:"music", label:"音乐"},
     {key:"read", icon:"book-open", label:"一起读"},
     {key:"phone", icon:"phone", label:"电话"},
+    {key:"watch", icon:"film", label:"一起看"},
   ].map(iconBtn).join("");
 
-  // 第二页：原「更多」扩展入口（替换掉大唱片一起听）
-  const moreApps = [
-    {key:"bisca_cards", icon:"spade", label:"牌室"},
-    {key:"watch", icon:"film", label:"一起看"},
-    {key:"ntfy", icon:"bell", label:"通知"},
-    {key:"baby", icon:"baby", label:"育儿"},
-    {key:"cooking", icon:"chef-hat", label:"烹饪"},
-    {key:"soup", icon:"turtle", label:"海龟汤"},
-    {key:"htmlgame", icon:"gamepad-2", label:"HTML"},
-    {key:"workshop", icon:"hammer", label:"工作间"},
-    {key:"roleplay", icon:"theater", label:"扮演"},
+  // 更多页：尽量铺全 subPage 入口（去重）
+  const allAppDefs = [
+    {key:"mailbox", icon:"mail", label:"信箱"},
+    {key:"prompts", icon:"sparkles", label:"记忆"},
+    {key:"mdiary", icon:"notebook-pen", label:"日记"},
     {key:"diary", icon:"book", label:"手帐"},
+    {key:"vps", icon:"monitor", label:"工作区"},
+    {key:"usage", icon:"smartphone", label:"屏幕"},
+    {key:"theme", icon:"palette", label:"外观"},
+    {key:"branding", icon:"eye", label:"视觉"},
+    {key:"body", icon:"heart", label:"身体"},
+    {key:"calendar", icon:"calendar-days", label:"日历"},
+    {key:"read", icon:"book-open", label:"一起读"},
+    {key:"watch", icon:"film", label:"一起看"},
+    {key:"phone", icon:"phone", label:"电话"},
+    {key:"ntfy", icon:"bell", label:"通知"},
     {key:"album", icon:"image", label:"相册"},
     {key:"coupon", icon:"ticket", label:"优惠券"},
-  ].map(iconBtn).join("");
+    {key:"love", icon:"heart-handshake", label:"恋爱"},
+    {key:"profile", icon:"user", label:"资料"},
+    {key:"wardrobe", icon:"shirt", label:"衣橱"},
+    {key:"duty", icon:"clipboard-list", label:"值日"},
+    {key:"quest", icon:"target", label:"任务"},
+    {key:"dream", icon:"moon", label:"梦境"},
+    {key:"baby", icon:"baby", label:"育儿"},
+    {key:"roleplay", icon:"theater", label:"扮演"},
+    {key:"divination", icon:"sparkles", label:"占卜"},
+    {key:"truthdare", icon:"dices", label:"真心话"},
+    {key:"captivity", icon:"lock", label:"囚禁"},
+    {key:"eatapple", icon:"apple", label:"吃苹果"},
+    {key:"tavern", icon:"wine", label:"酒馆"},
+    {key:"cabinets", icon:"archive", label:"柜子"},
+    {key:"bisca_cards", icon:"spade", label:"牌室"},
+    {key:"flightchess", icon:"dice-5", label:"飞行棋"},
+    {key:"puzzle", icon:"puzzle", label:"解谜"},
+    {key:"game", icon:"gamepad", label:"游戏"},
+    {key:"guess", icon:"help-circle", label:"猜词"},
+    {key:"soup", icon:"turtle", label:"海龟汤"},
+    {key:"cooking", icon:"chef-hat", label:"烹饪"},
+    {key:"menu", icon:"utensils", label:"菜单"},
+    {key:"cmdgame", icon:"terminal", label:"命令"},
+    {key:"htmlgame", icon:"gamepad-2", label:"HTML"},
+    {key:"workshop", icon:"hammer", label:"工作间"},
+    {key:"project", icon:"folder", label:"项目"},
+    {key:"mcphall", icon:"plug", label:"MCP"},
+    {key:"hisphone", icon:"smartphone", label:"他的机"},
+    {key:"backup", icon:"hard-drive", label:"备份"},
+    {key:"savedchat", icon:"message-square", label:"存档"},
+    {key:"notes", icon:"sticky-note", label:"笔记"},
+    {key:"shufang", icon:"library", label:"书房"},
+    {key:"sparkvault", icon:"vault", label:"火花"},
+    {key:"pr", icon:"swords", label:"对戏"},
+  ];
+  const seen = {};
+  const moreApps = allAppDefs.filter(it => {
+    if(seen[it.key]) return false;
+    seen[it.key] = true;
+    return true;
+  }).map(iconBtn).join("");
 
   let preview = "";
   try{
@@ -8494,14 +8576,27 @@ function renderHomeKorean(){
 
   const scheduleDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
-  if(state.homePage > 1) state.homePage = 1;
+  // 打开主页默认大时钟桌面（page0）
+  if(state.homePage > 1) state.homePage = 0;
 
-  // Panel 0 默认：大时间桌面（图四）
+  const dualFrame = `
+    <div class="kr-love-frame" aria-hidden="false">
+      <img class="kr-love-frame-bg" src="love-dual-frame.png" alt=""/>
+      <div class="kr-love-slot me">
+        ${myAv?`<img src="${escAttr(myAv)}" alt="${escAttr(myName)}"/>`:`<span class="kr-love-fb">${esc((myName||"我").slice(0,1))}</span>`}
+      </div>
+      <div class="kr-love-slot them">
+        ${taAv?`<img src="${escAttr(taAv)}" alt="${escAttr(taName)}"/>`:`<span class="kr-love-fb">${esc((taName||"TA").slice(0,1))}</span>`}
+      </div>
+    </div>`;
+
+  // Panel 0 默认：大时间 + 双人头像框 + 日常入口 + 小组件 + 一起听
   const desk = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll kr-desk-scroll">
         <div class="kr-desk-date">${esc(dateTop)}</div>
         <div class="kr-desk-clock">${hh}:${mm}</div>
+        ${dualFrame}
         <div class="kr-desk-grid">${deskApps}</div>
         <div class="kr-desk-row2">
           <div class="kr-widget kr-desk-profile">
@@ -8537,7 +8632,7 @@ function renderHomeKorean(){
       </div>
     </div>`;
 
-  // Panel 1：原「更多」+ 原一起听页合并；大唱片改成天气+近况卡片
+  // Panel 1：更多 + 全应用
   const more = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll">
@@ -8555,9 +8650,9 @@ function renderHomeKorean(){
         </div>
         <div class="kr-widget kr-more-head">
           <div class="kr-more-title">更多</div>
-          <div class="kr-more-sub">游戏与扩展入口</div>
+          <div class="kr-more-sub">全部功能入口</div>
         </div>
-        <div class="kr-desk-grid">${moreApps}</div>
+        <div class="kr-desk-grid kr-desk-grid-all">${moreApps}</div>
         <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
           <div class="kr-cp-top">
             ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
@@ -8571,7 +8666,9 @@ function renderHomeKorean(){
       </div>
     </div>`;
 
-  const p = state.homePage === 1 ? "page1" : "page0";
+  // 强制默认展示桌面（大时钟）
+  const pageIdx = state.homePage === 1 ? 1 : 0;
+  const p = pageIdx === 1 ? "page1" : "page0";
   return `<div class="home-swipe-wrap kr-home" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
       ${desk}
@@ -23247,7 +23344,7 @@ if(!window.__mpDelegated){
           state.pendingUser = th.pendingUser || [];
           state.needChatScroll = true;
         }
-        state.tab = next; state.subPage = null; state.homePage = 1;
+        state.tab = next; state.subPage = null; state.homePage = (state.uiShell==="korean" ? 0 : 1);
         if(typeof render==="function") render();
         return;
       }

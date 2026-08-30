@@ -4560,6 +4560,44 @@
     body.shell-korean .kr-status-go {
       font-size: 11px; color: #8E8E93;
     }
+
+    /* 大时钟下双人头像框 */
+    body.shell-korean .kr-love-frame {
+      position: relative;
+      width: min(92%, 340px);
+      margin: 6px auto 14px;
+      aspect-ratio: 2.4 / 1;
+    }
+    body.shell-korean .kr-love-frame-bg {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+    }
+    body.shell-korean .kr-love-slot {
+      position: absolute;
+      top: 52%;
+      width: 28%;
+      aspect-ratio: 1;
+      transform: translateY(-50%);
+      border-radius: 42% / 38%;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+    body.shell-korean .kr-love-slot.me { left: 10.5%; }
+    body.shell-korean .kr-love-slot.them { right: 10.5%; left: auto; }
+    body.shell-korean .kr-love-slot img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    body.shell-korean .kr-love-fb {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 18px; font-weight: 600;
+      background: #3a3a3c;
+    }
   </style>
 
   <div id="app"></div>
