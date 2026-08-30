@@ -52,6 +52,16 @@
       -webkit-font-smoothing: antialiased;
       background: #F5EEE8;
       overscroll-behavior: none;
+      overflow: hidden;
+    }
+    /* 文档本身永远不滚动，只有内部容器滚。
+       以前 body 是可滚的：键盘弹起后布局视口没变、可视视口缩了，
+       往下一拖就把整个文档拖上去，输入框和键盘之间露出一大片空白。
+       钉死之后那块空白没地方可露。 */
+    body {
+      position: fixed;
+      inset: 0;
+      width: 100%;
     }
     #app {
       max-width: 480px;
@@ -71,6 +81,49 @@
     button, a, [data-sub], [data-tab] { touch-action: manipulation; }
     input, textarea, select { font-family: inherit; }
     textarea { resize: none; }
+
+    /* ── 手感：统一的按下反馈 ────────────────────────────────────────
+       全站几百个可点元素，之前只有 30 来个写了 :active，其余按下去毫无反应，
+       在手机上就显得「按了没反应 / 迟钝」。这里给一个统一的兜底：
+       按下轻微回弹 + 压暗一点。个别组件自己写了 :active 的仍然优先。 */
+    button, [role="button"], [data-sub], [data-tab], [data-tab-jump],
+    .chip, .feat-card, .card-btn, .theme-chip, .font-chip, .filter-chip, .game-btn {
+      transition: transform .11s cubic-bezier(.2,.7,.3,1), opacity .11s ease;
+    }
+    button:active, [role="button"]:active, [data-sub]:active, [data-tab]:active,
+    [data-tab-jump]:active, .feat-card:active, .theme-chip:active,
+    .font-chip:active, .filter-chip:active, .game-btn:active {
+      transform: scale(.965);
+      opacity: .82;
+    }
+    button:disabled:active, button[disabled]:active {
+      transform: none; opacity: .5;
+    }
+    /* 长按 UI 不要选中文字；消息正文仍然可选可复制 */
+    button, .bottom-nav, .sub-header, .chat-header, .theme-chip, .font-chip, .filter-chip {
+      -webkit-user-select: none; user-select: none;
+    }
+    /* 内层滚动到头时不要把整页一起拖动 */
+    .chat-messages, .page, .puppy-overlay-card, .think-modal-body {
+      overscroll-behavior: contain;
+    }
+    /* 键盘焦点要看得见（之前 outline 全靠浏览器默认，暗色主题下几乎看不到） */
+    button:focus-visible, a:focus-visible, input:focus-visible,
+    textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent, #8a6a55);
+      outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+      button:active, [role="button"]:active, [data-sub]:active, [data-tab]:active,
+      [data-tab-jump]:active, .feat-card:active, .theme-chip:active,
+      .font-chip:active, .filter-chip:active, .game-btn:active { transform: none; }
+    }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
 
@@ -489,6 +542,17 @@
     }
     .pr-bubble.user { margin-left: auto; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
     .pr-bubble.ai { margin-right: auto; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    /* 存档条上的类型角标：续玩点 vs 已完结，一眼分得开 */
+    .pr-slot-tag {
+      font-size: 9px; letter-spacing: .06em; padding: 2px 7px; border-radius: 20px;
+      background: color-mix(in srgb, var(--accent) 16%, var(--card));
+      color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      flex-shrink: 0;
+    }
+    .pr-slot-tag.quick {
+      background: color-mix(in srgb, #d19a4a 16%, var(--card));
+      color: #b07f38; border-color: color-mix(in srgb, #d19a4a 34%, transparent);
+    }
     .pr-input-row {
       flex-shrink: 0; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom,0));
       border-top: 1px solid var(--border); background: var(--card);
@@ -1704,6 +1768,16 @@
       background: color-mix(in srgb, #c45 25%, var(--card));
       border-color: #c45; color: #c45;
     }
+    /* 免提锁定：实线边 + 呼吸，跟「按住中」区分开 */
+    .call-hold.rec.locked {
+      border-style: solid;
+      background: color-mix(in srgb, #c45 16%, var(--card));
+      animation: call-hold-breathe 1.6s ease-in-out infinite;
+    }
+    @keyframes call-hold-breathe {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(204,68,85,.30); }
+      50%      { box-shadow: 0 0 0 7px rgba(204,68,85,0); }
+    }
     .call-hold:disabled { opacity: 0.5; }
     .call-incoming-mask {
       position: fixed; inset: 0; z-index: 200; background: rgba(40,30,28,.35);
@@ -2072,6 +2146,333 @@
       display: flex; align-items: center; gap: 7px; padding: 11px 12px; border-radius: 12px;
       font-size: 12px; line-height: 1.35;
     }
+    /* ─── 一起听 · 网易云向 ─────────────────────────────
+       原来音源/后端/登录/浏览/播放/搜索六块平铺在一页上，密度高又没主次。
+       现在：顶部一行分区 + 齿轮收起配置，中间黑胶播放器，下面纯列表。 */
+    .nm { --nm-red: #EC4141; }
+    .nm-nav {
+      display: flex; align-items: center; gap: 4px;
+      margin-bottom: 14px; overflow-x: auto; scrollbar-width: none;
+    }
+    .nm-nav::-webkit-scrollbar { display: none; }
+    .nm-tab {
+      border: none; background: transparent; color: var(--sub);
+      font-size: 14px; padding: 6px 10px; position: relative;
+      font-family: inherit; white-space: nowrap; flex-shrink: 0;
+    }
+    .nm-tab.on { color: var(--text); font-weight: 600; }
+    .nm-tab.on::after {
+      content: ""; position: absolute; left: 50%; bottom: 0;
+      width: 16px; height: 3px; border-radius: 2px;
+      background: var(--nm-red); transform: translateX(-50%);
+    }
+    .nm-gear {
+      margin-left: auto; flex-shrink: 0;
+      border: none; background: transparent; color: var(--sub);
+      padding: 6px 8px; display: flex; align-items: center;
+    }
+    .nm-gear.on { color: var(--nm-red); }
+    .nm-gear svg { width: 18px; height: 18px; }
+    .nm-settings {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px; margin-bottom: 14px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .nm-seg { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .nm-seg button {
+      flex: 1; border: none; background: var(--bg); color: var(--sub);
+      font-size: 12px; padding: 8px 6px; font-family: inherit;
+      border-right: 1px solid var(--border);
+    }
+    .nm-seg button:last-child { border-right: none; }
+    .nm-seg button.on { background: var(--nm-red); color: #fff; }
+
+    /* 黑胶播放器 */
+    .nm-player {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 22px 16px 16px; margin-bottom: 16px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    }
+    .nm-disc {
+      position: relative; width: 168px; height: 168px; border-radius: 50%;
+      background: radial-gradient(circle at 50% 50%,
+        #2a2a2c 0 32%, #1c1c1e 32% 34%, #232325 34% 100%);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 26px rgba(0,0,0,.22);
+    }
+    .nm-disc.spin { animation: nm-spin 18s linear infinite; }
+    @keyframes nm-spin { to { transform: rotate(360deg); } }
+    .nm-disc-ring {
+      position: absolute; inset: 6px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .nm-disc-cover {
+      width: 62%; height: 62%; border-radius: 50%; object-fit: cover;
+      display: block;
+    }
+    .nm-disc-blank {
+      display: flex; align-items: center; justify-content: center;
+      background: var(--accent2); color: #fff;
+    }
+    .nm-disc-blank svg { width: 26px; height: 26px; }
+    .nm-disc-hole {
+      position: absolute; width: 13px; height: 13px; border-radius: 50%;
+      background: var(--card); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
+    .nm-meta { text-align: center; margin-top: 16px; max-width: 100%; }
+    .nm-title {
+      font-size: 16px; font-weight: 600; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .nm-artist { font-size: 12px; color: var(--sub); margin-top: 4px; }
+    .nm-queue { font-size: 11px; color: var(--sub); margin-top: 6px; opacity: .8; }
+    .nm-lyric {
+      font-size: 12px; color: var(--sub); margin-top: 10px; line-height: 1.6;
+      max-width: 28em; opacity: .9;
+    }
+    .nm-ctrl { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+    .nm-btn {
+      border: none; background: transparent; color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; border-radius: 50%;
+    }
+    .nm-btn svg { width: 20px; height: 20px; }
+    .nm-btn:disabled { opacity: .3; }
+    .nm-btn.nm-play {
+      width: 54px; height: 54px; background: var(--nm-red); color: #fff;
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--nm-red) 35%, transparent);
+    }
+    .nm-btn.nm-play svg { width: 24px; height: 24px; }
+    .nm-btn.nm-side { color: var(--sub); width: 34px; height: 34px; }
+    .nm-btn.nm-side svg { width: 17px; height: 17px; }
+
+    /* 搜索条 */
+    .nm-search {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 22px; padding: 4px 6px 4px 14px; margin-bottom: 12px;
+    }
+    .nm-search > svg { width: 16px; height: 16px; color: var(--sub); flex-shrink: 0; }
+    .nm-search input {
+      flex: 1; min-width: 0; border: none; background: transparent;
+      color: var(--text); font-size: 14px; outline: none; padding: 8px 0; font-family: inherit;
+    }
+    .nm-search button {
+      border: none; background: var(--nm-red); color: #fff;
+      border-radius: 18px; padding: 8px 16px; font-size: 13px; font-family: inherit; flex-shrink: 0;
+    }
+
+    /* 列表 */
+    .nm-list { display: flex; flex-direction: column; }
+    .nm-row {
+      display: flex; align-items: center; gap: 12px; width: 100%;
+      border: none; background: transparent; text-align: left;
+      padding: 11px 4px; border-bottom: 1px solid var(--border); font-family: inherit;
+    }
+    .nm-row:last-child { border-bottom: none; }
+    .nm-idx {
+      width: 26px; flex-shrink: 0; text-align: center;
+      font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums;
+    }
+    .nm-row.on .nm-idx { color: var(--nm-red); }
+    .nm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .nm-name {
+      font-size: 14.5px; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .nm-row.on .nm-name { color: var(--nm-red); }
+    .nm-by {
+      font-size: 11.5px; color: var(--sub);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .nm-go { color: var(--sub); display: flex; flex-shrink: 0; opacity: .55; }
+    .nm-go svg { width: 17px; height: 17px; }
+    .nm-pl-cover {
+      width: 44px; height: 44px; border-radius: 8px; object-fit: cover;
+      flex-shrink: 0; background: var(--accent2);
+    }
+    /* 正在播放的三根跳动竖条 */
+    .nm-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+    .nm-bars i {
+      width: 2px; background: var(--nm-red); border-radius: 1px;
+      animation: nm-bar .9s ease-in-out infinite;
+    }
+    .nm-bars i:nth-child(1) { height: 6px; animation-delay: 0s; }
+    .nm-bars i:nth-child(2) { height: 11px; animation-delay: .25s; }
+    .nm-bars i:nth-child(3) { height: 8px; animation-delay: .5s; }
+    @keyframes nm-bar { 0%,100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+    .nm-err { font-size: 11px; color: #c66; margin-bottom: 8px; }
+
+    /* 聊天里的点歌卡 */
+    .song-chip {
+      display: inline-flex; align-items: center; gap: 9px;
+      margin: 4px 2px; padding: 8px 13px 8px 10px; border-radius: 14px;
+      border: 1px solid var(--border); background: var(--card);
+      font-size: 12.5px; color: var(--text); cursor: pointer; max-width: 100%;
+    }
+    .song-chip svg { width: 15px; height: 15px; color: #EC4141; flex-shrink: 0; }
+    .song-chip-main { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .song-chip-go { color: var(--sub); font-size: 11px; flex-shrink: 0; }
+
+    /* ─── 一起读 · 划线 ───────────────────────────────── */
+    .read-hl {
+      background: color-mix(in srgb, var(--accent) 22%, transparent);
+      color: inherit; border-radius: 3px; padding: 0 1px;
+      box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    .read-hl.ai {
+      background: color-mix(in srgb, #d19a4a 24%, transparent);
+      box-shadow: inset 0 -2px 0 color-mix(in srgb, #d19a4a 55%, transparent);
+    }
+    .read-mark-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .read-mark-item {
+      position: relative; padding: 8px 26px 8px 10px; border-radius: 10px;
+      background: var(--bg); border-left: 3px solid var(--accent); font-size: 12px;
+    }
+    .read-mark-item.ai { border-left-color: #d19a4a; }
+    .read-mark-q { color: var(--text); line-height: 1.5; }
+    .read-mark-n { color: var(--sub); margin-top: 3px; line-height: 1.45; }
+    .read-mark-del {
+      position: absolute; top: 4px; right: 4px;
+      border: none; background: transparent; color: var(--sub);
+      font-size: 15px; line-height: 1; padding: 3px 6px; cursor: pointer;
+    }
+    .read-mark-del:active { color: #c45; }
+
+    /* ─── 钱包 ───────────────────────────────────────── */
+    .wal-balance {
+      background: linear-gradient(135deg,
+        color-mix(in srgb, var(--accent) 16%, var(--card)),
+        color-mix(in srgb, var(--accent) 5%, var(--card)));
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+      border-radius: 18px; padding: 20px 18px; margin-bottom: 12px;
+    }
+    .wal-bal-lab { font-size: 11px; color: var(--sub); letter-spacing: .1em; }
+    .wal-bal-num {
+      font-size: 40px; font-weight: 300; color: var(--text); line-height: 1.15;
+      margin-top: 4px; font-variant-numeric: tabular-nums;
+    }
+    .wal-bal-unit { font-size: 14px; color: var(--sub); margin-left: 8px; font-weight: 400; }
+    .wal-send {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .wal-send-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .wal-quick {
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      border-radius: 20px; padding: 7px 15px; font-size: 13px; font-family: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+    .wal-in {
+      border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px;
+      background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit;
+      outline: none; min-width: 0;
+    }
+    .wal-in:focus { border-color: var(--accent); }
+    .wal-hint { font-size: 11px; color: var(--sub); opacity: .85; }
+    .wal-shop { display: flex; flex-direction: column; gap: 8px; }
+    .wal-item {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 11px 12px;
+    }
+    .wal-item-new { border-style: dashed; }
+    .wal-item-emoji { font-size: 22px; flex-shrink: 0; width: 30px; text-align: center; }
+    .wal-item-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .wal-item-name { font-size: 14px; font-weight: 600; color: var(--text); }
+    .wal-item-desc { font-size: 11px; color: var(--sub); }
+    .wal-item-price {
+      font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums;
+      flex-shrink: 0; font-weight: 600;
+    }
+    .wal-item-price.poor { color: var(--sub); opacity: .7; }
+    .wal-item-acts { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    .wal-ledger {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+    }
+    .wal-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
+    }
+    .wal-row:last-child { border-bottom: none; }
+    .wal-row-amt {
+      font-variant-numeric: tabular-nums; font-weight: 600; width: 62px; flex-shrink: 0;
+    }
+    .wal-row-amt.in { color: #4E7A5C; }
+    .wal-row-amt.out { color: #c45; }
+    .wal-row-note { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wal-row-time { color: var(--sub); font-size: 10px; flex-shrink: 0; }
+    /* 聊天气泡里的钱包卡片 */
+    .wal-chip {
+      display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      margin: 4px 2px; padding: 8px 12px; border-radius: 14px;
+      font-size: 12.5px; line-height: 1.35;
+      border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+      background: color-mix(in srgb, var(--accent) 10%, var(--card));
+      color: var(--text);
+    }
+    .wal-chip svg { width: 15px; height: 15px; color: var(--accent); flex-shrink: 0; }
+    .wal-chip-main { font-weight: 600; }
+    .wal-chip-sub { color: var(--sub); font-size: 11.5px; }
+    .wal-chip.ask[data-wal-pay] { cursor: pointer; }
+    .wal-chip-go {
+      background: var(--accent); color: #fff; border-radius: 20px;
+      padding: 3px 11px; font-size: 11px; margin-left: 2px;
+    }
+    .wal-chip.buy {
+      border-style: dashed;
+      background: color-mix(in srgb, var(--accent) 5%, var(--card));
+    }
+    .wal-chip.fail {
+      border-color: var(--border); background: var(--bg); color: var(--sub);
+    }
+    .wal-chip.fail svg { color: var(--sub); }
+
+    /* ─── 自定义小狗按钮 ─────────────────────────────── */
+    .puppy-custom { margin-top: 14px; }
+    .puppy-custom-lab {
+      font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--sub); margin-bottom: 8px;
+    }
+    .puppy-custom-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .puppy-custom-chip {
+      display: inline-flex; align-items: stretch; overflow: hidden;
+      border: 1px solid var(--border); border-radius: 18px; background: var(--card);
+    }
+    .puppy-custom-send {
+      border: none; background: transparent; color: var(--text);
+      font-size: 12px; padding: 7px 8px 7px 12px; cursor: pointer; font-family: inherit;
+      max-width: 15em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .puppy-custom-del {
+      border: none; background: transparent; color: var(--sub);
+      font-size: 14px; line-height: 1; padding: 0 9px 0 4px; cursor: pointer;
+      border-left: 1px solid var(--border);
+    }
+    .puppy-custom-del:active { color: #c45; }
+    .puppy-custom-add {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px dashed var(--border); background: transparent; color: var(--sub);
+      border-radius: 18px; padding: 7px 13px; font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+    .puppy-custom-add svg { width: 13px; height: 13px; }
+    .puppy-custom-form { display: flex; gap: 6px; align-items: center; flex: 1 1 100%; }
+    .puppy-custom-form input {
+      flex: 1; min-width: 0; border: 1px solid var(--accent); border-radius: 18px;
+      padding: 8px 13px; font-size: 13px; font-family: inherit;
+      background: var(--bg); color: var(--text); outline: none;
+    }
+    .puppy-custom-ok {
+      border: none; border-radius: 18px; padding: 8px 15px; font-size: 12px;
+      background: var(--accent); color: #fff; cursor: pointer; font-family: inherit; flex-shrink: 0;
+    }
+    .puppy-custom-cancel {
+      border: none; background: transparent; color: var(--sub);
+      font-size: 12px; padding: 8px 4px; cursor: pointer; font-family: inherit; flex-shrink: 0;
+    }
+    .puppy-custom-hint { font-size: 10px; color: var(--sub); margin-top: 7px; opacity: .85; }
+
     /* ─── 表情包 [sticker:xxx] ─────────────────────────── */
     .sticker-floats { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 4px; }
     .sticker-img {
@@ -3331,7 +3732,12 @@
       padding: 0 0 env(safe-area-inset-bottom, 0);
     }
     .think-modal {
-      width: min(100%, 520px); max-height: min(72vh, 640px);
+      width: min(100%, 520px);
+      /* 固定半屏，对齐官方 app：以前只有 max-height，高度是内容撑的——
+         短思考弹一个小条、长思考顶到 72vh，每次都不一样，看着很跳。
+         现在所有壳（含纸感 Claude）统一半屏，短内容也把面板铺满，位置稳定。 */
+      height: min(56vh, 560px);
+      max-height: min(56vh, 560px);
       background: var(--card, #1a1522); color: var(--text, #eee);
       border-radius: 18px 18px 0 0;
       border: 1px solid var(--border, #333);
@@ -3531,15 +3937,12 @@
       border-radius: 16px !important;
       box-shadow: 0 0 0 1px rgba(43,38,30,0.05), 0 2px 6px rgba(43,38,30,0.04) !important;
     }
+    /* 纸感 Claude 以前把思考链做成整屏铺满的 sheet，和别的壳不是一个东西。
+       统一成跟其他壳一样的固定高度底部面板，只保留它的磨砂纸质感。 */
     body.shell-claude .claude-thought-mask {
-      background: transparent !important;
-      align-items: stretch !important;
-      justify-content: stretch !important;
-      padding: 36px 0 0 !important;
+      background: rgba(43,38,30,0.18) !important;
     }
     body.shell-claude .claude-thought-sheet {
-      width: 100% !important; max-width: none !important;
-      max-height: none !important; height: 100% !important;
       border-radius: 16px 16px 0 0 !important;
       background: rgba(255,255,255,0.88) !important;
       backdrop-filter: blur(30px) saturate(180%) !important;
@@ -4353,130 +4756,173 @@
     }
 
 
-    /* IB 风格 Desk：大时钟 + 6 列图标 + 日历条 + 音乐 */
+    /* ── 韩系桌面（Desk）──────────────────────────────────────────────
+       重写说明：这一段原本有一半是死规则。JS 输出的是 kr-note-lab / kr-sched-lab /
+       kr-note-body / kr-desk-music-ico|meta|title|sub|go / kr-desk-row2 / kr-desk-cal-mini，
+       而 CSS 里写的却是 kr-note-label / kr-note-text / kr-dm-cover|meta|title|sub|play——
+       名字对不上，所以便签卡、纪念日卡、音乐条的内文全是没样式的默认 14px 黑字，
+       三个组件一起塌掉。现在按 JS 实际吐出的类名重写，并顺手收紧版式。 */
     body.shell-korean .kr-desk-scroll {
-      padding-top: 8px !important;
+      padding-top: 10px !important;
+    }
+    /* 抬头：日期 / 大时钟 / 天气，锁屏式居中 */
+    body.shell-korean .kr-desk-head {
+      text-align: center;
+      padding: 6px 0 20px;
     }
     body.shell-korean .kr-desk-date {
-      text-align: center;
       font-size: 10px;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.14em;
       color: #AEAEB2;
       text-transform: uppercase;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     body.shell-korean .kr-desk-clock {
-      text-align: center;
-      font-size: 52px;
+      font-size: 60px;
       font-weight: 200;
-      letter-spacing: -0.04em;
+      letter-spacing: -0.045em;
       color: #1C1C1E;
-      line-height: 1.05;
-      margin-bottom: 18px;
+      line-height: 1;
       font-variant-numeric: tabular-nums;
     }
+    body.shell-korean .kr-desk-weather {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #8E8E93;
+      font-variant-numeric: tabular-nums;
+    }
+    /* 应用格：4 列，图标大一号、标签给足宽度，不再挤成 6 列小字 */
     body.shell-korean .kr-desk-grid {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px 4px;
-      margin-bottom: 14px;
-      padding: 0 2px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px 8px;
+      margin-bottom: 20px;
+      padding: 0 4px;
     }
     body.shell-korean .kr-desk-ico {
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
       background: transparent !important; border: none !important;
       box-shadow: none !important; padding: 0;
       cursor: pointer; font-family: inherit;
     }
     body.shell-korean .kr-desk-ico-bg {
-      width: 44px; height: 44px; border-radius: 14px;
-      background: rgba(255,255,255,0.85);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      width: 56px; height: 56px; border-radius: 18px;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 3px 12px rgba(0,0,0,0.05);
       display: flex; align-items: center; justify-content: center;
       color: #3A3A3C;
+      transition: transform .12s ease;
     }
-    body.shell-korean .kr-desk-ico-bg svg { width: 18px; height: 18px; }
+    body.shell-korean .kr-desk-ico:active .kr-desk-ico-bg { transform: scale(.93); }
+    body.shell-korean .kr-desk-ico-bg svg { width: 22px; height: 22px; }
     body.shell-korean .kr-desk-ico-lab {
-      font-size: 9px; color: #8E8E93; text-align: center;
-      line-height: 1.15; max-width: 52px;
+      font-size: 10px; color: #8E8E93; text-align: center;
+      line-height: 1.2; max-width: 72px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    /* 两人卡 + 迷你日历：并排两个独立组件（以前日历是硬塞进两人卡里的） */
+    body.shell-korean .kr-desk-row2 {
+      display: grid; grid-template-columns: 1fr 124px;
+      gap: 8px; margin-bottom: 8px;
+    }
     body.shell-korean .kr-desk-profile {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 11px;
+      padding: 12px; min-width: 0;
+      cursor: pointer; font-family: inherit; text-align: left;
     }
     body.shell-korean .kr-desk-av {
-      width: 52px; height: 52px; border-radius: 50%;
+      width: 46px; height: 46px; border-radius: 50%;
       object-fit: cover; background: #E5E5EA; flex-shrink: 0;
     }
-    body.shell-korean .kr-desk-prof-meta { flex: 1; min-width: 0; }
+    body.shell-korean .kr-desk-av-fb {
+      display: flex; align-items: center; justify-content: center; font-size: 19px;
+    }
+    body.shell-korean .kr-desk-prof-meta {
+      flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+    }
     body.shell-korean .kr-desk-prof-name {
-      font-size: 13px; font-weight: 600; color: #1C1C1E;
+      font-size: 14px; font-weight: 600; color: #1C1C1E;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     body.shell-korean .kr-desk-prof-sub {
-      font-size: 10px; color: #AEAEB2; margin-top: 2px;
+      font-size: 11px; color: #AEAEB2;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    body.shell-korean .kr-cal {
-      flex-shrink: 0; width: 112px;
-    }
+    body.shell-korean .kr-desk-cal-mini { padding: 10px 11px; }
+    body.shell-korean .kr-cal { width: 100%; }
+    body.shell-korean .kr-cal-empty { visibility: hidden; }
     body.shell-korean .kr-cal-hd {
-      font-size: 9px; color: #8E8E93; margin-bottom: 4px;
-      text-align: right; letter-spacing: 0.04em;
+      font-size: 9px; color: #8E8E93; margin-bottom: 5px;
+      text-align: center; letter-spacing: 0.06em; text-transform: uppercase;
     }
     body.shell-korean .kr-cal-grid {
       display: grid; grid-template-columns: repeat(7, 1fr);
       gap: 1px; font-size: 8px; color: #AEAEB2; text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    body.shell-korean .kr-cal-d {
+      line-height: 1.5; border-radius: 4px;
     }
     body.shell-korean .kr-cal-d.on {
-      color: #1C1C1E; font-weight: 700;
-      background: rgba(0,0,0,0.06); border-radius: 4px;
+      color: #fff; font-weight: 700;
+      background: #1C1C1E;
     }
+    /* 便签 / 纪念日 */
     body.shell-korean .kr-desk-cards {
-      display: grid; grid-template-columns: 1.2fr 1fr;
-      gap: 8px; margin-bottom: 10px;
+      display: grid; grid-template-columns: 1.25fr 1fr;
+      gap: 8px; margin-bottom: 8px;
     }
     body.shell-korean .kr-note-card,
     body.shell-korean .kr-sched-card {
-      padding: 12px; text-align: left;
-      font-family: inherit; cursor: pointer;
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 13px; text-align: left;
+      font-family: inherit; cursor: pointer; min-width: 0;
     }
-    body.shell-korean .kr-note-label,
-    body.shell-korean .kr-sched-label {
-      font-size: 9px; letter-spacing: 0.1em; color: #AEAEB2;
-      margin-bottom: 6px;
+    body.shell-korean .kr-card-lab {
+      font-size: 9px; letter-spacing: 0.14em; color: #AEAEB2;
+      text-transform: uppercase;
     }
-    body.shell-korean .kr-note-text {
-      font-size: 12px; color: #3A3A3C; line-height: 1.4;
-      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    body.shell-korean .kr-note-body {
+      font-size: 12px; color: #3A3A3C; line-height: 1.45;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
       overflow: hidden;
     }
     body.shell-korean .kr-sched-date {
-      font-size: 12px; font-weight: 600; color: #1C1C1E;
+      font-size: 13px; font-weight: 600; color: #1C1C1E;
+      font-variant-numeric: tabular-nums;
     }
     body.shell-korean .kr-sched-hint {
-      font-size: 10px; color: #8E8E93; margin-top: 4px;
+      font-size: 10px; color: #8E8E93;
     }
+    /* 一起听 */
     body.shell-korean .kr-desk-music {
       display: flex; align-items: center; gap: 12px;
-      padding: 10px 12px; margin-bottom: 8px;
+      padding: 11px 13px; margin-bottom: 10px;
       width: 100%; border: none; cursor: pointer; font-family: inherit;
     }
-    body.shell-korean .kr-dm-cover {
-      width: 40px; height: 40px; border-radius: 50%;
+    body.shell-korean .kr-desk-music-ico {
+      width: 42px; height: 42px; border-radius: 50%;
       background: #EFEFF1; overflow: hidden;
       display: flex; align-items: center; justify-content: center;
       color: #8E8E93; flex-shrink: 0;
     }
-    body.shell-korean .kr-dm-cover img { width: 100%; height: 100%; object-fit: cover; }
-    body.shell-korean .kr-dm-meta { flex: 1; min-width: 0; text-align: left; }
-    body.shell-korean .kr-dm-title {
+    body.shell-korean .kr-desk-music-ico img { width: 100%; height: 100%; object-fit: cover; }
+    body.shell-korean .kr-desk-music-ico svg { width: 19px; height: 19px; }
+    body.shell-korean .kr-desk-music-meta {
+      flex: 1; min-width: 0; text-align: left;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    body.shell-korean .kr-desk-music-title {
       font-size: 13px; font-weight: 600; color: #1C1C1E;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    body.shell-korean .kr-dm-sub {
-      font-size: 10px; color: #8E8E93; margin-top: 2px;
+    body.shell-korean .kr-desk-music-sub {
+      font-size: 11px; color: #8E8E93;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    body.shell-korean .kr-dm-play { color: #AEAEB2; }
+    body.shell-korean .kr-desk-music-go {
+      color: #C7C7CC; font-size: 13px; flex-shrink: 0; padding-right: 2px;
+    }
 
 
     /* 工作间 */
@@ -4600,9 +5046,18 @@
     }
 
     
-    /* ========== Kakao 图气泡皮肤（border-image + fill）========== */
-    body[class*="bubble-skin-"] .chat-messages .bubble.them[class*="skin-"],
-    body[class*="bubble-skin-"] .chat-messages .bubble.me[class*="skin-"] {
+    /* ========== Kakao 图气泡皮肤 ==========
+       水色(suisei) 的四张图是「云朵铺满整张画布」，9-slice（border-image）切得干净，保留原做法。
+       轻松熊/鱼饼熊/彩虹熊 的素材不是 9-patch：本体是圆形/圆角块 + 挂件(熊)蹲在角上，
+       而且本体只占画布的一半（另一半全透明）。用 9-slice 会有两个后果：
+         1) 边/角从透明区采样 → 气泡缺一条边；
+         2) 挂件落在 top 切片里 → 被压成十几 px 高再横向拉伸 → 糊成一条。
+       所以这三个皮肤改成：本体用纯 CSS 画（颜色直接取自原图），
+       挂件用 ::before 按原比例裁切贴在气泡角上，永不拉伸。 */
+
+    /* ---- 水色：保留 9-slice ---- */
+    body.bubble-skin-suisei .bubble.them.skin-suisei,
+    body.bubble-skin-suisei .bubble.me.skin-suisei {
       background: transparent !important;
       background-image: none !important;
       border-style: solid !important;
@@ -4611,60 +5066,111 @@
       box-shadow: none !important;
       border-image-repeat: stretch !important;
       padding: 2px 4px !important;
-    }
-    /* 水色 하늘모지：主题 16px 20px ×2 */
-    body.bubble-skin-suisei .chat-messages .bubble.them.skin-suisei,
-    body.bubble-skin-suisei .chat-messages .bubble.me.skin-suisei {
       border-width: 12px 14px !important;
       border-image-slice: 40 32 40 32 fill !important;
       border-image-width: 12px 14px !important;
       color: #627075 !important;
     }
-    body.bubble-skin-suisei .chat-messages .bubble.them.skin-suisei { border-image-source: url("bubbles/suisei/them-01.png") !important; }
-    body.bubble-skin-suisei .chat-messages .bubble.them.skin-suisei.cont { border-image-source: url("bubbles/suisei/them-02.png") !important; }
-    body.bubble-skin-suisei .chat-messages .bubble.me.skin-suisei { border-image-source: url("bubbles/suisei/me-01.png") !important; }
-    body.bubble-skin-suisei .chat-messages .bubble.me.skin-suisei.cont { border-image-source: url("bubbles/suisei/me-02.png") !important; }
+    body.bubble-skin-suisei .bubble.them.skin-suisei { border-image-source: url("bubbles/suisei/them-01.png") !important; }
+    body.bubble-skin-suisei .bubble.them.skin-suisei.cont { border-image-source: url("bubbles/suisei/them-02.png") !important; }
+    body.bubble-skin-suisei .bubble.me.skin-suisei { border-image-source: url("bubbles/suisei/me-01.png") !important; }
+    body.bubble-skin-suisei .bubble.me.skin-suisei.cont { border-image-source: url("bubbles/suisei/me-02.png") !important; }
 
-    /* 轻松熊 쿨쿨：01 装饰大（顶边距大），02 素泡 */
-    body.bubble-skin-cool .chat-messages .bubble.them.skin-cool,
-    body.bubble-skin-cool .chat-messages .bubble.me.skin-cool {
-      border-width: 14px 16px !important;
-      border-image-slice: 50 30 28 30 fill !important;
-      border-image-width: 14px 16px !important;
-      color: #5a5048 !important;
+    /* ---- 三个熊系皮肤：CSS 本体 ---- */
+    body.bubble-skin-cool .bubble.skin-cool,
+    body.bubble-skin-fish .bubble.skin-fish,
+    body.bubble-skin-rainbow .bubble.skin-rainbow {
+      background-image: none !important;
+      border-style: solid !important;
+      border-width: 1.5px !important;
+      border-image: none !important;
+      padding: 9px 14px !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+      position: relative;
+      overflow: visible;
     }
-    body.bubble-skin-cool .chat-messages .bubble.them.skin-cool { border-image-source: url("bubbles/cool/them-01.png") !important; }
-    body.bubble-skin-cool .chat-messages .bubble.them.skin-cool.cont { border-image-source: url("bubbles/cool/them-02.png") !important; border-image-slice: 28 30 28 30 fill !important; }
-    body.bubble-skin-cool .chat-messages .bubble.me.skin-cool { border-image-source: url("bubbles/cool/me-01.png") !important; }
-    body.bubble-skin-cool .chat-messages .bubble.me.skin-cool.cont { border-image-source: url("bubbles/cool/me-02.png") !important; border-image-slice: 28 30 28 30 fill !important; }
+    /* 挂件只挂在一轮消息的第一条上（.cont = 同一轮的后续气泡） */
+    body.bubble-skin-cool .bubble.skin-cool:not(.cont)::before,
+    body.bubble-skin-fish .bubble.skin-fish:not(.cont)::before,
+    body.bubble-skin-rainbow .bubble.skin-rainbow:not(.cont)::before {
+      content: "";
+      position: absolute;
+      background-repeat: no-repeat;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* 轻松熊 쿨쿨 */
+    body.bubble-skin-cool .bubble.them.skin-cool {
+      background: #E4EEF6 !important; border-color: #BCD6E9 !important;
+      border-radius: 6px 18px 18px 18px !important; color: #5a5048 !important;
+    }
+    body.bubble-skin-cool .bubble.me.skin-cool {
+      background: #FDDDDE !important; border-color: #F1C6C8 !important;
+      border-radius: 18px 6px 18px 18px !important; color: #5a5048 !important;
+    }
+    body.bubble-skin-cool .bubble.skin-cool:not(.cont) { margin-top: 30px; }
+    body.bubble-skin-cool .bubble.them.skin-cool:not(.cont)::before {
+      width: 66.6px; height: 42.4px; left: -2px; top: -30px;
+      background-image: url("bubbles/cool/them-01.png");
+      background-size: 82.5px 91.9px; background-position: -1.1px -6.1px;
+    }
+    body.bubble-skin-cool .bubble.me.skin-cool:not(.cont)::before {
+      width: 56.2px; height: 42.1px; right: -2px; top: -30px;
+      background-image: url("bubbles/cool/me-01.png");
+      background-size: 81.1px 86.8px; background-position: -20.3px -3.6px;
+    }
 
     /* 鱼饼熊 붕어빵 */
-    body.bubble-skin-fish .chat-messages .bubble.them.skin-fish,
-    body.bubble-skin-fish .chat-messages .bubble.me.skin-fish {
-      border-width: 12px 14px !important;
-      border-image-slice: 42 28 28 28 fill !important;
-      border-image-width: 12px 14px !important;
-      color: #5c5348 !important;
+    body.bubble-skin-fish .bubble.them.skin-fish {
+      background: #F1F3DF !important; border-color: #DFE3C2 !important;
+      border-radius: 8px 20px 20px 20px !important; color: #5c5348 !important;
     }
-    body.bubble-skin-fish .chat-messages .bubble.them.skin-fish { border-image-source: url("bubbles/fish/them-01.png") !important; }
-    body.bubble-skin-fish .chat-messages .bubble.them.skin-fish.cont { border-image-source: url("bubbles/fish/them-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
-    body.bubble-skin-fish .chat-messages .bubble.me.skin-fish { border-image-source: url("bubbles/fish/me-01.png") !important; }
-    body.bubble-skin-fish .chat-messages .bubble.me.skin-fish.cont { border-image-source: url("bubbles/fish/me-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
-
-    /* 彩虹熊：从 APK .9.png 去边得到 */
-    body.bubble-skin-rainbow .chat-messages .bubble.them.skin-rainbow,
-    body.bubble-skin-rainbow .chat-messages .bubble.me.skin-rainbow {
-      border-width: 14px 16px !important;
-      border-image-slice: 48 28 28 28 fill !important;
-      border-image-width: 14px 16px !important;
-      color: #4a4450 !important;
+    body.bubble-skin-fish .bubble.me.skin-fish {
+      background: #F3DFDF !important; border-color: #E7C9CB !important;
+      border-radius: 20px 8px 20px 20px !important; color: #5c5348 !important;
     }
-    body.bubble-skin-rainbow .chat-messages .bubble.them.skin-rainbow { border-image-source: url("bubbles/rainbow/them-01.png") !important; }
-    body.bubble-skin-rainbow .chat-messages .bubble.them.skin-rainbow.cont { border-image-source: url("bubbles/rainbow/them-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
-    body.bubble-skin-rainbow .chat-messages .bubble.me.skin-rainbow { border-image-source: url("bubbles/rainbow/me-01.png") !important; }
-    body.bubble-skin-rainbow .chat-messages .bubble.me.skin-rainbow.cont { border-image-source: url("bubbles/rainbow/me-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
+    body.bubble-skin-fish .bubble.skin-fish:not(.cont) { margin-top: 21px; }
+    body.bubble-skin-fish .bubble.them.skin-fish:not(.cont)::before {
+      width: 47.7px; height: 29.1px; left: -4px; top: -21px;
+      background-image: url("bubbles/fish/them-01.png");
+      background-size: 93px 73.8px; background-position: -1.2px -0.6px;
+    }
+    body.bubble-skin-fish .bubble.me.skin-fish:not(.cont)::before {
+      width: 46.5px; height: 28.5px; right: -4px; top: -21px;
+      background-image: url("bubbles/fish/me-01.png");
+      background-size: 93px 73.8px; background-position: -45.3px -1.2px;
+    }
 
-    body[class*="bubble-skin-"] .chat-messages .bubble[class*="skin-"] {
+    /* 彩虹熊：素材里首条/续条本来就是两种配色，照搬 */
+    body.bubble-skin-rainbow .bubble.them.skin-rainbow {
+      background: #FFE3E1 !important; border-color: #F6C8CA !important;
+      border-radius: 8px 20px 20px 20px !important; color: #4a4450 !important;
+    }
+    body.bubble-skin-rainbow .bubble.them.skin-rainbow.cont {
+      background: #E9F5FB !important; border-color: #C9E2D0 !important;
+    }
+    body.bubble-skin-rainbow .bubble.me.skin-rainbow {
+      background: #EAF8DA !important; border-color: #CBE7B2 !important;
+      border-radius: 20px 8px 20px 20px !important; color: #4a4450 !important;
+    }
+    body.bubble-skin-rainbow .bubble.me.skin-rainbow.cont {
+      background: #FFF9C8 !important; border-color: #C6E9FA !important;
+    }
+    body.bubble-skin-rainbow .bubble.them.skin-rainbow:not(.cont) { margin-top: 30px; }
+    body.bubble-skin-rainbow .bubble.me.skin-rainbow:not(.cont) { margin-top: 22px; }
+    body.bubble-skin-rainbow .bubble.them.skin-rainbow:not(.cont)::before {
+      width: 47.5px; height: 41.5px; right: -6px; top: -30px;
+      background-image: url("bubbles/rainbow/them-01.png");
+      background-size: 74.5px 85px; background-position: -26px -4px;
+    }
+    body.bubble-skin-rainbow .bubble.me.skin-rainbow:not(.cont)::before {
+      width: 29.1px; height: 28.5px; right: -2px; top: -22px;
+      background-image: url("bubbles/rainbow/me-01.png");
+      background-size: 66.3px 60.8px; background-position: -37.2px 0;
+    }
+
+    body[class*="bubble-skin-"] .bubble[class*="skin-"] {
       max-width: 92% !important;
     }
 

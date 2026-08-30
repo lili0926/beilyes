@@ -302,6 +302,24 @@ const PUPPY_NSFW = [
   { icon:"zap", text:"用力一点" },
   { icon:"pointer", text:"含住手指" },
 ];
+/** 用户自己写的按钮（持久化，最新的排前面） */
+function puppyCustomList(){
+  const a = state.puppyCustom;
+  return Array.isArray(a) ? a.filter(x=>x && String(x).trim()) : [];
+}
+function puppyCustomAdd(text){
+  const t = String(text||"").trim().slice(0, 40);
+  if(!t) return false;
+  const list = puppyCustomList().filter(x=>x !== t);
+  list.unshift(t);
+  state.puppyCustom = list.slice(0, 30);
+  persist("puppyCustom");
+  return true;
+}
+function puppyCustomRemove(text){
+  state.puppyCustom = puppyCustomList().filter(x=>x !== text);
+  persist("puppyCustom");
+}
 function puppyActionPromptBlock(){
   const warm = PUPPY_WARM.map(b=>b.text).join("、");
   let s = `\n\n【小狗动作「按按钮」——marker 暗号】
@@ -312,6 +330,9 @@ function puppyActionPromptBlock(){
     const nsfw = PUPPY_NSFW.map(b=>b.text).join("、");
     s += `\n可用按钮（NSFW）：${nsfw}`;
   }
+  const mine = puppyCustomList();
+  if(mine.length) s += `\n可用按钮（TA 自己加的）：${mine.join("、")}`;
+  s += `\n按钮文字不限于上面这些，贴合当下的短动作也可以自己写。`;
   s += `\n规则：
 - 只在氛围合适时用，别每句都按；一次回复最多 1 个。
 - 暗号会被前端识别并从显示文本里擦除，渲染成爪印气泡；TA 点一下，就等于 TA 按了这个按钮，会作为一条消息发给你。
@@ -2241,6 +2262,7 @@ const state = {
   musicQuery: "",
   musicResults: [],
   musicSearching: false,
+  musicSettingsOpen: false,
   musicLyric: "",
   musicNow: LS.get("musicNow", null), // {id,name,artists,cover,source,url?}
   musicPlaying: false,
@@ -2421,6 +2443,7 @@ const state = {
   books: LS.get("books", []),
   readingNow: LS.get("readingNow", null),
   readFeedChat: LS.get("readFeedChat", true),
+  readMarks: LS.get("readMarks", {}) || {}, // 一起读的本地划线 {bookId#page: [{id,quote,note,by,time}]}
   readTab: "shelf",
   readDraft: { title:"", chapterTitle:"第一章", content:"" },
   // 一起看
@@ -2622,6 +2645,14 @@ const state = {
   gameMode: "warm",
   gameReply: "",
   gameLoading: false,
+  puppyCustom: LS.get("puppyCustom", []), // 自定义小狗按钮文字，[String]
+  // wallet：Aries 的钱包
+  wallet: LS.get("wallet", null),
+  walletAmt: "",            // 转账输入框（不持久化）
+  walletNote: "",
+  walletShopEdit: null,     // 正在编辑的货架项 id
+  puppyComposing: false,                  // 正在输入自定义按钮内容
+  puppyDraft: "",                         // 自定义按钮输入框内容（不持久化）
   // html game
   htmlGameSrc: LS.get("htmlGameSrc", ""), // data URL or blob URL content
   htmlGameName: LS.get("htmlGameName", ""),
@@ -3256,9 +3287,12 @@ function bindAppViewportHeight(){
       let h = window.innerHeight || document.documentElement.clientHeight || 0;
       if(vv && vv.height){
         h = vv.height;
-        // 部分 Android WebView 键盘顶起时 offsetTop>0，对齐可视区域
-        if(vv.offsetTop){ root.style.marginTop = vv.offsetTop + "px"; }
-        else { root.style.marginTop = "0"; }
+        // 以前这里按 vv.offsetTop 给 #app 加 marginTop。可视视口一被拖动 offsetTop 就变大，
+        // #app 跟着被推下去，输入框和键盘之间就空出一条 —— 拖得越多空得越大。
+        // 现在文档本身已经锁死不滚，offsetTop 恒为 0，这个补偿不但没用还是白边的来源，去掉。
+        root.style.marginTop = "0";
+        // 键盘弹起的瞬间安卓有时已经把布局视口滚上去了，拉回顶端
+        if(window.scrollY) window.scrollTo(0, 0);
       }
       if(h > 0){
         root.style.setProperty("--app-height", h + "px");
@@ -3280,6 +3314,10 @@ function bindAppViewportHeight(){
     }
   });
   document.addEventListener("focusout", function(){ setTimeout(apply, 100); });
+  // 兜底：任何原因让文档本身滚起来了，立刻拉回去
+  window.addEventListener("scroll", function(){
+    if(window.scrollY) window.scrollTo(0, 0);
+  }, { passive: true });
 }
 
 try{ if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", bindAppViewportHeight); else bindAppViewportHeight(); }catch(e){}
@@ -3363,10 +3401,24 @@ ${guideText}`;
   // 柜子：必须显式为 true 才注入（关=false/undefined 都不注入）
   const cabinetBlock = (state.cabinetFeedChat === true && typeof cabinetStatusPromptBlock === "function") ? cabinetStatusPromptBlock() : "";
   let musicBlock = "";
-  if(state.musicNow){
-    const n = state.musicNow;
-    const ar = Array.isArray(n.artists)?n.artists.join("/"):(n.artists||"");
-    musicBlock = `\n\n【正在一起听】${n.name} - ${ar}（${n.source==="spotify"?"Spotify":"网易云"}）${state.musicPlaying?"·播放中":"·已暂停"}。你可以自然提到这首歌或分享听感，不要每句都提。`;
+  {
+    const canPick = typeof musicBase === "function" ? !!musicBase() : true;
+    let head = "";
+    if(state.musicNow){
+      const n = state.musicNow;
+      const ar = Array.isArray(n.artists)?n.artists.join("/"):(n.artists||"");
+      head = `\n\n【正在一起听】${n.name} - ${ar}（${n.source==="spotify"?"Spotify":"网易云"}）${state.musicPlaying?"·播放中":"·已暂停"}。你可以自然提到这首歌或分享听感，不要每句都提。`;
+    }
+    // 点歌：他自己搜歌发给她
+    const pickBlock = (canPick && (state.musicNow || __featHot("歌","听","音乐","点歌","推荐","单曲","专辑","乐队","唱")))
+      ? `\n\n【点歌 —— 你可以直接把歌发给她】
+想让她听某首歌时，在正式回复里写一行暗号：
+⟪点歌:歌名 - 歌手⟫
+- 系统会替你去搜，然后在聊天里变成一张卡片，她点一下就直接播。
+- 歌手写不准也行，写歌名最重要；一次回复最多一首。
+- 想到什么发什么，别刷屏；她没在聊音乐时也可以偶尔塞一首。`
+      : "";
+    musicBlock = head + pickBlock;
   }
   const ntfyOn = !!(state.ntfyConfig && state.ntfyConfig.enabled && state.ntfyConfig.topicUrl);
   // 省 token：推送暗号仅在聊到推送/提醒时注入（仍需 ntfy 开着）
@@ -3396,6 +3448,13 @@ ${guideText}`;
 - 暗号会被系统识别并擦除，用户只看到它悄悄存进相册。
 - 这一轮没有收到照片时不要用。`;
   const couponBlock = __featHot("券","优惠券","用券","奖励券","送券") ? couponStatusPromptBlock() : ""; // 券夹：⟪使用券:券名⟫
+  // 钱包：余额/货架/[pay:][buy:] 暗号。聊到钱或想要东西时才注入，省 token
+  const walletBlock = __featHot("钱","钱包","余额","转账","零花","买","兑换","攒","打赏","小鱼干") ? walletPromptBlock() : "";
+  // Project 文件协议：聊到写代码/网页/文件时注入，让产出落进项目区而不是贴进气泡。
+  // 关键词只看最近 3 条，长对话中途会掉出窗口、协议随之失效；所以项目里一旦有文件就常驻。
+  const __hasProjFiles = Array.isArray(state.chatProjectFiles) && state.chatProjectFiles.length > 0;
+  const projectFileBlock = (__hasProjFiles || __featHot("代码","写个","做个","html","网页","页面","脚本","文件","程序","项目","project","css","js","json","python","改一下","重构","报错","bug"))
+    ? projectFilePromptBlock() : "";
   const puppyActionBlock = __featHot("小狗","按钮","爪印","按按钮","宠物","摸摸","抱抱") ? puppyActionPromptBlock() : ""; // 小狗动作：[[action:按钮文字]]
   const stickerBlock = stickerPromptBlock(); // 表情包：[sticker:名字]
   const profileBlock = __featHot("签名","简介","主页","背景","资料卡","改名字") ? profilePromptBlock() : ""; // 主页资料卡：改签名/简介/背景
@@ -3433,7 +3492,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 禁止只写「你选」却不给协议；选项写在同一行协议里。
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock, choiceBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock, choiceBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock, puzzleBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock ];
@@ -3468,6 +3527,8 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + pushBlock
     + albumBlock
     + couponBlock
+    + walletBlock
+    + projectFileBlock
     + puppyActionBlock
     + stickerBlock
     + profileBlock
@@ -3484,7 +3545,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -3654,6 +3715,20 @@ function splitReply(text){
 
 // ─── 渲染 ────────────────────────────────────────────────────────────────────
 function render(){
+  // 重绘会把整个 #app 的 innerHTML 换掉，正在输入的那个框也一起被销毁重建，
+  // 焦点随之丢失 —— 手机上就表现为「每发一条消息键盘都收回去」「打着字光标乱跳」。
+  // 这里先记住焦点元素和光标位置，重绘完原样放回去。
+  let savedFocus = null;
+  try{
+    const ae = document.activeElement;
+    if(ae && ae.id && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")){
+      let s = null, e2 = null;
+      try{ s = ae.selectionStart; e2 = ae.selectionEnd; }catch(_){}
+      savedFocus = { id: ae.id, start: s, end: e2 };
+    }
+  }catch(e){}
+  // 发送按钮会先把输入框 blur 掉，所以按上面那套记不到焦点；发消息时显式点名要收回焦点
+  if(state.__refocusChat){ savedFocus = { id: "chat-input", start: 0, end: 0 }; }
   // 重绘前记住消息列表滚动位置（避免点思考/开关时跳回顶部）
   let savedChatScroll = null;
   if(state.tab==="chat" && !state.needChatScroll){
@@ -3724,6 +3799,21 @@ function render(){
   }catch(e){ console.error("[lucide]", e); }
   try{ bindEvents(); }
   catch(err){ console.error("[bindEvents]", err); try{ bindCoreNav(); }catch(e2){ console.error(e2); } }
+  // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
+  if(savedFocus){
+    const fel = document.getElementById(savedFocus.id);
+    if(fel && typeof fel.focus === "function"){
+      try{
+        fel.focus({ preventScroll: true });
+        if(savedFocus.start != null && typeof fel.setSelectionRange === "function"){
+          const n = (fel.value || "").length;
+          const s = Math.min(savedFocus.start, n), e3 = Math.min(savedFocus.end == null ? s : savedFocus.end, n);
+          fel.setSelectionRange(s, e3);
+        }
+      }catch(e){}
+    }
+  }
+  state.__refocusChat = false;
   // 小纸条/机日记/信箱：每次打开都拉一次列表（失败保留缓存）；离开时重置标记
   try{
     const isMcPage = state.subPage==="notes"||state.subPage==="mdiary"||state.subPage==="mailbox";
@@ -3934,6 +4024,7 @@ function renderHomeKorean(){
     {key:"ntfy", icon:"bell", label:"通知"},
     {key:"album", icon:"image", label:"相册"},
     {key:"coupon", icon:"ticket", label:"优惠券"},
+    {key:"wallet",   icon:"wallet",  label:"钱包"},
     {key:"love", icon:"heart-handshake", label:"恋爱"},
     {key:"profile", icon:"user", label:"资料"},
     {key:"wardrobe", icon:"shirt", label:"衣橱"},
@@ -4005,34 +4096,37 @@ function renderHomeKorean(){
       </div>
     </div>`;
 
-  // Panel 0 默认：大时间 + 双人头像框 + 日常入口 + 小组件 + 一起听
+  // Panel 0：锁屏式抬头（日期/大时钟/天气）→ 合照 → 应用格 → 两人卡 + 日历 → 便签/纪念日 → 一起听
   const desk = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll kr-desk-scroll">
-        <div class="kr-desk-date">${esc(dateTop)}</div>
-        <div class="kr-desk-clock">${hh}:${mm}</div>
+        <div class="kr-desk-head">
+          <div class="kr-desk-date">${esc(dateTop)}</div>
+          <div class="kr-desk-clock">${hh}:${mm}</div>
+          <div class="kr-desk-weather">${esc(temp)} · ${esc(wText)}</div>
+        </div>
         ${dualFrame}
         <div class="kr-desk-grid">${deskApps}</div>
         <div class="kr-desk-row2">
-          <div class="kr-widget kr-desk-profile">
-            ${taAv?`<img class="kr-desk-av" src="${escAttr(taAv)}" alt=""/>`:`<div class="kr-desk-av kr-id-fallback">💬</div>`}
-            <div class="kr-desk-prof-meta">
-              <div class="kr-desk-prof-name">${esc(taName)}</div>
-              <div class="kr-desk-prof-sub">${esc(myName)} · ${esc(String(days))}d</div>
-            </div>
-            <div class="kr-desk-cal-mini">${typeof krMiniCalHtml==="function"?krMiniCalHtml():""}</div>
-          </div>
+          <button type="button" class="kr-widget kr-desk-profile feat-card" data-sub="profile">
+            ${taAv?`<img class="kr-desk-av" src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-desk-av kr-desk-av-fb">💬</span>`}
+            <span class="kr-desk-prof-meta">
+              <span class="kr-desk-prof-name">${esc(taName)}</span>
+              <span class="kr-desk-prof-sub">和 ${esc(myName)} 的第 ${esc(String(days))} 天</span>
+            </span>
+          </button>
+          <div class="kr-widget kr-desk-cal-mini">${typeof krMiniCalHtml==="function"?krMiniCalHtml():""}</div>
         </div>
         <div class="kr-desk-cards">
-          <div class="kr-widget kr-note-card">
-            <div class="kr-note-lab">NOTE</div>
-            <div class="kr-note-body">${esc(status)}</div>
-          </div>
-          <div class="kr-widget kr-sched-card">
-            <div class="kr-sched-lab">Schedule</div>
-            <div class="kr-sched-date">${esc(scheduleDate)}</div>
-            <div class="kr-sched-hint">纪念日 · 计划</div>
-          </div>
+          <button type="button" class="kr-widget kr-note-card feat-card" data-sub="notes">
+            <span class="kr-card-lab">Note</span>
+            <span class="kr-note-body">${esc(status)}</span>
+          </button>
+          <button type="button" class="kr-widget kr-sched-card feat-card" data-sub="calendar">
+            <span class="kr-card-lab">Schedule</span>
+            <span class="kr-sched-date">${esc(scheduleDate)}</span>
+            <span class="kr-sched-hint">纪念日 · 计划</span>
+          </button>
         </div>
         <button type="button" class="kr-widget kr-desk-music feat-card" data-sub="music">
           <span class="kr-desk-music-ico">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</span>
@@ -4163,7 +4257,6 @@ function renderHomeCalendar(){
 
   return `
     <h2 class="page-title" style="margin-bottom:2px">聊天热力</h2>
-    <p class="page-sub">our days, written in messages.</p>
     <div class="heat-summary">
       本月 <strong>${monthTotal}</strong> 条
       · 有聊 <strong>${activeDays}</strong> 天
@@ -4226,73 +4319,73 @@ function renderHomeFeat(){
     {
       label: "功能",
       items: [
-        {key:"body",     icon:"heart-pulse", label:"身体状况", desc:"心跳·心情·欲念·驱动"},
-        {key:"phone",    icon:"phone", label:"电话",     desc:"来电·通话·留言记录"},
-        {key:"vps",      icon:"monitor", label:"VPS",      desc:"音乐·用量·主动消息接口"},
-        {key:"ntfy",     icon:"bell", label:"上推通知", desc:"ntfy · 聊天暗号推手机"},
-        {key:"usage",    icon:"smartphone", label:"屏幕时间", desc:"今天各 App 用了多久"},
-        {key:"music",    icon:"headphones", label:"一起听",   desc:"搜歌·挑歌·边聊边听"},
-        {key:"read",     icon:"book-open", label:"一起读",   desc:"书架·上传txt·共读同步VPS"},
-        {key:"shufang",  icon:"pen-nib", label:"书房",     desc:"连载写作·写完进一起读"},
-        {key:"watch",    icon:"film", label:"一起看",   desc:"视频进度·陪看聊天"},
-        {key:"theme",    icon:"palette", label:"外观",     desc:"换一套心情颜色"},
-        {key:"branding", icon:"tag", label:"品牌形象", desc:"名字·开屏·头像切换"},
-        {key:"prompts",  icon:"sparkles", label:"提示词",   desc:"塑造 TA 的性格"},
+        {key:"body",     icon:"heart-pulse", label:"身体状况"},
+        {key:"phone",    icon:"phone", label:"电话"},
+        {key:"vps",      icon:"monitor", label:"VPS"},
+        {key:"ntfy",     icon:"bell", label:"上推通知"},
+        {key:"usage",    icon:"smartphone", label:"屏幕时间"},
+        {key:"music",    icon:"headphones", label:"一起听"},
+        {key:"read",     icon:"book-open", label:"一起读"},
+        {key:"shufang",  icon:"pen-nib", label:"书房"},
+        {key:"watch",    icon:"film", label:"一起看"},
+        {key:"theme",    icon:"palette", label:"外观"},
+        {key:"branding", icon:"tag", label:"品牌形象"},
+        {key:"prompts",  icon:"sparkles", label:"提示词"},
       ],
     },
     {
       label: "游戏",
       items: [
-        {key:"tavern",   icon:"wine", label:"小机酒馆", desc:"喝酒 · 提升微醺值"},
-        {key:"hisphone", icon:"smartphone", label:"他的机",   desc:"AI的小手机·六点刷新"},
-        {key:"game",     icon:"paw-print", label:"小狗游戏", desc:"按按钮逗 TA"},
-        {key:"guess",    icon:"target", label:"猜词游戏", desc:"你描述或 TA 描述"},
-        {key:"soup",     icon:"turtle", label:"海龟汤",   desc:"出汤面 · 你来提问"},
-        {key:"cooking",  icon:"chef-hat", label:"烹饪大师", desc:"领菜·做菜·卖菜·点亮菜谱"},
-        {key:"menu",     icon:"clipboard-list", label:"菜单",     desc:"自建菜单·开关注入·手记点单"},
-        {key:"cmdgame",  icon:"scroll-text", label:"指令游戏", desc:"存你的专属指令"},
-        {key:"htmlgame", icon:"gamepad-2", label:"HTML游戏", desc:"载入你的小游戏"},
-        {key:"workshop", icon:"hammer", label:"工作间", desc:"CC 改前端 · 独立通道 · 推分支"},
-        {key:"mcphall",  icon:"plug", label:"MCP大厅", desc:"连接任意 MCP 游戏服务"},
-        {key:"baby",     icon:"baby", label:"育儿模拟", desc:"加速成长·共同养育"},
-        {key:"roleplay", icon:"theater", label:"角色扮演", desc:"情趣设定·应用进聊天"},
-        {key:"calendar", icon:"calendar", label:"日历", desc:"安排·承诺·在一起纪念日"},
-        {key:"pr", icon:"sparkles", label:"PR快穿", desc:"深海骨殖·独立冒险·存档"},
-        {key:"flightchess", icon:"dices", label:"飞行棋",   desc:"九版本 · 聊天里掷骰走格"},
-        {key:"bisca_cards", icon:"spade", label:"牌室", desc:"斗地主·炸金花·UNO · 内置浏览器"},
-        {key:"bisca_daifugo", icon:"club", label:"大富豪", desc:"日式爬牌 · 内置浏览器"},
-        {key:"bisca_monopoly", icon:"landmark", label:"大富翁", desc:"中文棋盘 · 内置浏览器"},
-        {key:"puzzle",   icon:"lock", label:"解谜房间", desc:"多日剧情·密室与剧本杀"},
-        {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器", desc:"30天双路线·外接VPS原版"},
-        {key:"divination", icon:"sparkles", label:"占卜", desc:"问心处 · 小六壬/六爻/塔罗"},
-        {key:"truthdare", icon:"spade", label:"真心话大冒险", desc:"洗牌抽卡 · 和机一起玩"},
-        {key:"eatapple", icon:"apple", label:"吃苹果",   desc:"正经壳·多壳切换"},
+        {key:"tavern",   icon:"wine", label:"小机酒馆"},
+        {key:"hisphone", icon:"smartphone", label:"他的机"},
+        {key:"game",     icon:"paw-print", label:"小狗游戏"},
+        {key:"guess",    icon:"target", label:"猜词游戏"},
+        {key:"soup",     icon:"turtle", label:"海龟汤"},
+        {key:"cooking",  icon:"chef-hat", label:"烹饪大师"},
+        {key:"menu",     icon:"clipboard-list", label:"菜单"},
+        {key:"cmdgame",  icon:"scroll-text", label:"指令游戏"},
+        {key:"htmlgame", icon:"gamepad-2", label:"HTML游戏"},
+        {key:"workshop", icon:"hammer", label:"工作间"},
+        {key:"mcphall",  icon:"plug", label:"MCP大厅"},
+        {key:"baby",     icon:"baby", label:"育儿模拟"},
+        {key:"roleplay", icon:"theater", label:"角色扮演"},
+        {key:"calendar", icon:"calendar", label:"日历"},
+        {key:"pr", icon:"sparkles", label:"PR快穿"},
+        {key:"flightchess", icon:"dices", label:"飞行棋"},
+        {key:"bisca_cards", icon:"spade", label:"牌室"},
+        {key:"bisca_daifugo", icon:"club", label:"大富豪"},
+        {key:"bisca_monopoly", icon:"landmark", label:"大富翁"},
+        {key:"puzzle",   icon:"lock", label:"解谜房间"},
+        {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器"},
+        {key:"divination", icon:"sparkles", label:"占卜"},
+        {key:"truthdare", icon:"spade", label:"真心话大冒险"},
+        {key:"eatapple", icon:"apple", label:"吃苹果"},
       ],
     },
     {
       label: "日常",
       items: [
-        {key:"sparkvault", icon:"sparkle", label:"碎星", desc:"灵感收集 · Spark Vault"},
-        {key:"cabinets", icon:"archive", label:"柜子",     desc:"冰箱·床头柜·AI可放东西"},
-        {key:"dream",    icon:"moon", label:"梦境",     desc:"夜间做梦 · 梦痕"},
-        {key:"diary",    icon:"notebook-pen", label:"日记",     desc:"写下今天的故事"},
-        {key:"mdiary",   icon:"pen-tool", label:"机日记",   desc:"TA 的专属日记 · 只能 TA 写"},
-        {key:"notes",    icon:"sticky-note", label:"小纸条", desc:"随手撕一张 · 写进聊天"},
-        {key:"mailbox",  icon:"mailbox", label:"信箱",     desc:"定时信 · 到点送达"},
-        {key:"memory",   icon:"brain", label:"记忆库",   desc:"珍藏每一段回忆"},
-        {key:"savedchat", icon:"bookmark", label:"收藏记录", desc:"收藏的聊天 · 分类查看"},
-        {key:"album",    icon:"image", label:"相册",     desc:"收藏的每一刻"},
-        {key:"coupon",   icon:"ticket", label:"券夹",    desc:"他的券夹 · 纸条堆"},
-        {key:"love",     icon:"heart", label:"计分器",   desc:"现实情侣打分 · 满分100起始50"},
-        {key:"wardrobe", icon:"shirt", label:"衣柜",     desc:"今日穿搭 · 喂给聊天"},
-        {key:"duty",     icon:"heart-handshake", label:"记录",     desc:"夫妻义务 · 周三六"},
-        {key:"quest",    icon:"list-checks", label:"每日任务", desc:"今日任务 · 打卡 · 成就"},
+        {key:"sparkvault", icon:"sparkle", label:"碎星"},
+        {key:"cabinets", icon:"archive", label:"柜子"},
+        {key:"dream",    icon:"moon", label:"梦境"},
+        {key:"diary",    icon:"notebook-pen", label:"日记"},
+        {key:"mdiary",   icon:"pen-tool", label:"机日记"},
+        {key:"notes",    icon:"sticky-note", label:"小纸条"},
+        {key:"mailbox",  icon:"mailbox", label:"信箱"},
+        {key:"memory",   icon:"brain", label:"记忆库"},
+        {key:"savedchat", icon:"bookmark", label:"收藏记录"},
+        {key:"album",    icon:"image", label:"相册"},
+        {key:"coupon",   icon:"ticket", label:"券夹"},
+        {key:"wallet",   icon:"wallet", label:"钱包"},
+        {key:"love",     icon:"heart", label:"计分器"},
+        {key:"wardrobe", icon:"shirt", label:"衣柜"},
+        {key:"duty",     icon:"heart-handshake", label:"记录"},
+        {key:"quest",    icon:"list-checks", label:"每日任务"},
       ],
     },
   ];
   return `
     <h2 class="page-title" style="margin-bottom:4px">功能页</h2>
-    <p class="page-sub">右滑返回首页</p>
     ${groups.map(g=>`
       <div class="feat-section-label">${g.label}</div>
       <div class="feat-grid">
@@ -4690,7 +4783,6 @@ function truthDareGameHTML(){
 function renderTruthDare(){
   return `<div class="page">
     ${subHeader('<i data-lucide="cards"></i> 真心话大冒险')}
-    <p class="page-sub">洗牌抽卡 · 和机一起玩</p>
     <div style="display:flex;flex-direction:column;align-items:center;padding:6px 0 24px">${truthDareGameHTML()}</div>
     <div style="display:flex;justify-content:center;padding-bottom:60px">
       <button type="button" class="btn-accent2" data-td-chat>带回聊天玩</button>
@@ -5234,21 +5326,33 @@ function prStartNew(stageId, worldId){
   render();
 }
 
-function prArchiveActive(showToast){
+function prArchiveActive(quiet){
   const pr = ensurePr();
   if(!pr.active) return;
   const a = pr.active;
   prWriteToMemory(`【PR·${a.worldName||"冒险"}·存档】${a.stageName}：${(a.summary||"").slice(0,200)}`, 7);
-  const snap = JSON.parse(JSON.stringify(Object.assign({}, a, { archivedAt: new Date().toISOString(), slotType: "end" })));
-  pr.archives = [snap].concat(pr.archives||[]).slice(0, 40);
+  const snap = JSON.parse(JSON.stringify(Object.assign({}, a, {
+    id: prUid(),
+    ofId: a.id,
+    archivedAt: new Date().toISOString(),
+    slotType: "end",
+  })));
+  // 结束存档时，这条冒险的「续玩点」就没意义了，清掉免得存档列表里两条一模一样
+  pr.archives = (pr.archives||[]).filter(x=>!(x.slotType==="quick" && x.ofId===a.id));
+  pr.archives = [snap].concat(pr.archives).slice(0, 60);
   pr.active = null;
   prSave();
   state.prOpen = false;
   state.prMin = false;
-  if(showToast!==false && typeof showToast==="function") showToast("冒险已存档并写入记忆库");
+  __prPanelWasOpen = false;
+  // 以前这个参数就叫 showToast，把全局的 showToast 函数遮住了，
+  // typeof showToast === "boolean"，于是这句提示从来没弹出来过。
+  if(quiet!==false && typeof showToast==="function") showToast("冒险已存档并写入记忆库");
 }
 
-/** 暂时中断：保留 active，并额外留一份可读档快照（像文游存档） */
+/** 暂时中断：保留 active，并留一个「续玩点」快照。
+ *  同一条冒险只保留一个续玩点——以前每按一次就新增一条，存档列表很快被
+ *  几十条几乎一样的「（快速存档）」刷满，真正的结束存档被挤出 40 条上限。 */
 function prQuickSave(){
   const pr = ensurePr();
   if(!pr.active){ if(typeof showToast==="function") showToast("没有进行中的冒险"); return; }
@@ -5256,15 +5360,28 @@ function prQuickSave(){
   a.updatedAt = new Date().toISOString();
   const snap = JSON.parse(JSON.stringify(Object.assign({}, a, {
     id: prUid(),
+    ofId: a.id,
     archivedAt: new Date().toISOString(),
     slotType: "quick",
-    summary: (a.summary||"") + "（快速存档）",
   })));
-  pr.archives = [snap].concat(pr.archives||[]).slice(0, 40);
+  const rest = (pr.archives||[]).filter(x=>!(x.slotType==="quick" && x.ofId===a.id));
+  pr.archives = [snap].concat(rest).slice(0, 60);
   prSave();
   state.prOpen = false;
   state.prMin = false;
-  if(typeof showToast==="function") showToast("已快速存档，可随时读档继续");
+  __prPanelWasOpen = false;
+  if(typeof showToast==="function") showToast("已存续玩点，随时可以读档继续");
+}
+
+function prDeleteArchive(id){
+  const pr = ensurePr();
+  const a = (pr.archives||[]).find(x=>x.id===id);
+  if(!a) return;
+  if(!confirm(`删除存档「${a.worldName||""} · ${a.stageName||""}」？删了就没了。`)) return;
+  pr.archives = (pr.archives||[]).filter(x=>x.id!==id);
+  prSave();
+  if(typeof showToast==="function") showToast("存档已删除");
+  render();
 }
 
 function prLoadArchive(id){
@@ -5279,11 +5396,15 @@ function prLoadArchive(id){
   loaded.id = prUid();
   delete loaded.archivedAt;
   delete loaded.slotType;
+  delete loaded.ofId;
+  // 老存档的摘要里可能带着历史遗留的「（快速存档）」后缀，读出来会一路叠加下去
+  loaded.summary = String(loaded.summary||"").replace(/（快速存档）/g, "").trim();
   pr.active = loaded;
   pr.selectedWorldId = loaded.worldId || pr.selectedWorldId;
   prSave();
   state.prOpen = true;
   state.prMin = false;
+  __prPanelWasOpen = false; // 读档后面板要停在最新一句，而不是上一次的滚动位置
   if(typeof showToast==="function") showToast("已读档："+(loaded.stageName||""));
   render();
 }
@@ -5366,7 +5487,6 @@ function renderPrHub(){
   }
   return `<div class="page">
     ${subHeader('<i data-lucide="sparkles"></i> PR 快穿')}
-    <p class="page-sub">多世界观 · 可编辑 · 本地存档 · 写入记忆库</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       ${worlds.map(w=>`<button type="button" class="${w.id===cur.id?"btn-accent":"btn-ghost"}" data-pr-world="${esc(w.id)}" style="padding:8px 12px">${esc(w.name)}</button>`).join("")}
       <button type="button" class="btn-ghost" id="pr-edit-open" style="padding:8px 12px">编辑当前世界书</button>
@@ -5388,14 +5508,22 @@ function renderPrHub(){
       <div style="font-size:12px;color:var(--sub);margin-top:4px">${esc(s.task)}</div>
     </button>`).join("")}
     <div style="font-weight:600;margin:12px 0 8px">存档（${archives.length}）</div>
-    ${archives.length?archives.slice(0,15).map(a=>`<div class="status-card" style="padding:10px 12px;margin-bottom:8px">
-      <div style="font-size:13px;font-weight:600">${esc(a.worldName||"")} · ${esc(a.stageName)} · ${(a.messages||[]).length} 句</div>
+    ${archives.length?archives.slice(0,30).map(a=>{
+      const quick = a.slotType==="quick";
+      const when = a.archivedAt ? (typeof formatTime==="function" ? formatTime(a.archivedAt) : String(a.archivedAt).slice(0,16).replace("T"," ")) : "";
+      return `<div class="status-card" style="padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="pr-slot-tag${quick?" quick":""}">${quick?"续玩点":"已完结"}</span>
+        <span style="font-size:13px;font-weight:600">${esc(a.worldName||"")} · ${esc(a.stageName||"")}</span>
+        <span style="font-size:11px;color:var(--sub)">${(a.messages||[]).length} 句${when?" · "+esc(when):""}</span>
+      </div>
       <div style="font-size:11px;color:var(--sub);margin-top:4px">${esc((a.summary||"").slice(0,80))}</div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
         <button type="button" class="btn-ghost" data-pr-view="${esc(a.id)}" style="padding:6px 10px">回看</button>
         <button type="button" class="btn-accent" data-pr-load="${esc(a.id)}" style="padding:6px 10px">读档继续</button>
+        <button type="button" class="btn-ghost" data-pr-del="${esc(a.id)}" style="padding:6px 10px;color:#c45;margin-left:auto">删除</button>
       </div>
-    </div>`).join(""):`<div class="empty-state" style="padding:20px">还没有存档</div>`}
+    </div>`;}).join(""):`<div class="empty-state" style="padding:20px">还没有存档</div>`}
   </div>`;
 }
 
@@ -5411,9 +5539,9 @@ function renderPrPanel(){
   return `<div class="pr-panel-mask" id="pr-panel-mask">
     <div class="pr-panel" onclick="event.stopPropagation()">
       <div class="pr-panel-head">
-        <div>
-          <div style="font-weight:600;font-size:14px">深海骨殖 · ${esc(a.stageName)}</div>
-          <div style="font-size:11px;color:var(--sub)">${esc(a.task.slice(0,28))}…</div>
+        <div style="min-width:0">
+          <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.worldName||"快穿")} · ${esc(a.stageName||"")}</div>
+          <div style="font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(a.task||"").slice(0,28))}${String(a.task||"").length>28?"…":""}</div>
         </div>
         <div style="display:flex;gap:6px">
           <button type="button" class="btn-ghost" id="pr-min-btn" style="padding:6px 10px">—</button>
@@ -5447,7 +5575,7 @@ async function prSendUser(){
   prSave();
   render();
   // 滚到底
-  setTimeout(()=>{ const el=document.getElementById("pr-msgs"); if(el) el.scrollTop=el.scrollHeight; }, 30);
+  setTimeout(prScrollToBottom, 30);
 
   // 调用与主聊天相同的后端（若存在 sendToAI / callChat）
   try{
@@ -5470,7 +5598,7 @@ async function prSendUser(){
       prRefreshSummary();
       prSave();
       render();
-      setTimeout(()=>{ const el=document.getElementById("pr-msgs"); if(el) el.scrollTop=el.scrollHeight; }, 30);
+      setTimeout(prScrollToBottom, 30);
     }
   }catch(e){
     pr.active.messages.push({ role:"assistant", content:"（连接失败："+e.message+"）", time:new Date().toISOString() });
@@ -5500,6 +5628,9 @@ function bindPr(){
   if(addW) addW.onclick = ()=> prAddCustomWorld();
   document.querySelectorAll("[data-pr-load]").forEach(el=>{
     el.onclick = ()=> prLoadArchive(el.getAttribute("data-pr-load"));
+  });
+  document.querySelectorAll("[data-pr-del]").forEach(el=>{
+    el.onclick = ()=> prDeleteArchive(el.getAttribute("data-pr-del"));
   });
   document.querySelectorAll("[data-pr-view]").forEach(el=>{
     el.onclick = ()=>{
@@ -5539,7 +5670,36 @@ function bindPr(){
   };
 }
 
+// PR 面板滚动位置：每次 render() 都会把 #pr-msgs 整个重建，滚动位置随之归零，
+// 所以「暂退再进来」总是停在最顶上的第一条。这里自己记一份。
+let __prScroll = 0;
+let __prPanelWasOpen = false;
+function prRestoreScroll(){
+  const el = document.getElementById("pr-msgs");
+  if(!el){ __prPanelWasOpen = false; return; }
+  if(!__prPanelWasOpen){
+    // 刚打开（含读档、暂退后再进）：直接停在最新一句
+    el.scrollTop = el.scrollHeight;
+    __prScroll = el.scrollTop;
+    __prPanelWasOpen = true;
+  } else {
+    // 同一次打开中的重渲染：贴底就继续贴底，否则保持用户看的位置
+    el.scrollTop = __prScroll;
+  }
+  el.onscroll = ()=>{
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    __prScroll = nearBottom ? el.scrollHeight : el.scrollTop;
+  };
+}
+function prScrollToBottom(){
+  const el = document.getElementById("pr-msgs");
+  if(!el) return;
+  el.scrollTop = el.scrollHeight;
+  __prScroll = el.scrollTop;
+}
+
 function bindPrOverlay(){
+  prRestoreScroll();
   const mask = document.getElementById("pr-panel-mask");
   if(mask) mask.onclick = (e)=>{ if(e.target===mask){ state.prOpen=false; state.prMin=false; render(); } };
   const min = document.getElementById("pr-min-btn");
@@ -6422,7 +6582,6 @@ function renderWorkshop(){
       <label class="setting-label">PIN</label>
       <input id="ws-pin" value="${escAttr(state.wsPin || "")}" type="password" autocomplete="off" />
       <button type="button" class="btn-accent" id="ws-cfg-save" style="margin-top:8px;width:100%">保存并连接</button>
-      <p class="page-sub" style="margin-top:8px">独立通道，不占用恋爱 __cc。任务耗 Pro 额度。</p>
     </div>
     ${err}
     ${lastMeta}
@@ -6497,6 +6656,7 @@ function renderSubPage(){
     album: renderAlbum,
     savedchat: renderSavedChat,
     coupon: renderCoupons,
+    wallet: renderWallet,
     love: renderLove,
     profile: renderProfile,
     wardrobe: renderWardrobe,
@@ -6806,26 +6966,36 @@ function renderMusic(){
     </div>`;
   }
 
+  // 播放器：仿网易云的黑胶唱片 —— 圆形封面，播放时转，暂停就停
   let nowBlock = "";
   if(now){
     const artists = Array.isArray(now.artists)?now.artists.join(" / "):(now.artists||"");
     const qLen = (state.musicQueue||[]).length;
-    nowBlock = `<div class="music-now">
-      <div style="display:flex;gap:12px;align-items:center">
-        ${now.cover?`<img src="${escAttr(now.cover)}" style="width:56px;height:56px;border-radius:10px;object-fit:cover"/>`:`<div style="width:56px;height:56px;border-radius:10px;background:var(--accent2)"></div>`}
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:700;color:var(--text)">${esc(now.name)}</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px">${esc(artists)}</div>
-          ${qLen>1?`<div style="font-size:10px;color:var(--sub);margin-top:4px">第 ${(state.musicQueueIndex>=0?state.musicQueueIndex+1:1)}/${qLen} 首${state.musicBrowseTitle?" · "+esc(state.musicBrowseTitle):""}</div>`:""}
-          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-            <button id="music-now-toggle" class="btn-accent" style="padding:6px 12px">${state.musicPlaying?"暂停":"播放"}</button>
-            ${qLen>1?`<button id="music-now-prev" class="btn-ghost" style="padding:6px 10px"><i data-lucide="skip-back"></i> 上一首</button>
-            <button id="music-now-next" class="btn-ghost" style="padding:6px 10px"><i data-lucide="skip-forward"></i> 下一首</button>`:""}
-            <button id="music-now-mem" class="btn-accent2" style="padding:6px 12px">听后感→记忆</button>
-          </div>
-        </div>
+    const playing = !!state.musicPlaying;
+    // 歌词只留当前这一小段，整块滚屏在手机上太吵
+    const lyricLine = String(state.musicLyric||"")
+      .split("\n").map(l=>l.replace(/^\[[^\]]*\]\s*/,"").trim()).filter(Boolean).slice(0,3).join(" · ");
+    nowBlock = `<div class="nm-player">
+      <div class="nm-disc${playing?" spin":""}">
+        <div class="nm-disc-ring"></div>
+        ${now.cover
+          ? `<img class="nm-disc-cover" src="${escAttr(now.cover)}" alt=""/>`
+          : `<div class="nm-disc-cover nm-disc-blank"><i data-lucide="music"></i></div>`}
+        <div class="nm-disc-hole"></div>
       </div>
-      ${state.musicLyric?`<div class="lyric-box">${esc(state.musicLyric)}</div>`:""}
+      <div class="nm-meta">
+        <div class="nm-title">${esc(now.name)}</div>
+        <div class="nm-artist">${esc(artists)}</div>
+        ${qLen>1?`<div class="nm-queue">${(state.musicQueueIndex>=0?state.musicQueueIndex+1:1)} / ${qLen}${state.musicBrowseTitle?" · "+esc(state.musicBrowseTitle):""}</div>`:""}
+        ${lyricLine?`<div class="nm-lyric">${esc(lyricLine)}</div>`:""}
+      </div>
+      <div class="nm-ctrl">
+        <button type="button" class="nm-btn" id="music-now-prev" ${qLen>1?"":"disabled"} aria-label="上一首"><i data-lucide="skip-back"></i></button>
+        <button type="button" class="nm-btn nm-play" id="music-now-toggle" aria-label="${playing?"暂停":"播放"}"><i data-lucide="${playing?"pause":"play"}"></i></button>
+        <button type="button" class="nm-btn" id="music-now-next" ${qLen>1?"":"disabled"} aria-label="下一首"><i data-lucide="skip-forward"></i></button>
+        <button type="button" class="nm-btn nm-side" id="music-now-mem" aria-label="听后感写进记忆"><i data-lucide="bookmark"></i></button>
+        <button type="button" class="nm-btn nm-side" id="music-share-chat" aria-label="分享到聊天"><i data-lucide="send"></i></button>
+      </div>
     </div>`;
   }
 
@@ -6846,14 +7016,14 @@ function renderMusic(){
       ? `<div class="empty-state">还没有登录网易云 · 先在上方扫码登录</div>`
       : (state.musicPlaylists.length===0
           ? `<div class="empty-state">${state.musicLoading?"加载中…":"还没有歌单"}</div>`
-          : `<div class="song-list">${state.musicPlaylists.map((p,i)=>`
-            <button type="button" class="song-row" data-music-playlist="${i}">
-              ${p.cover?`<img class="sc" src="${escAttr(p.cover)}" alt=""/>`:`<div class="sc"></div>`}
-              <div class="si">
-                <div class="sn">${esc(p.name)}</div>
-                <div class="sa">${p.count} 首${p.mine?" · 我创建的":""}</div>
-              </div>
-              <div class="sa" style="color:var(--accent)"><i data-lucide="play"></i></div>
+          : `<div class="nm-list">${state.musicPlaylists.map((p,i)=>`
+            <button type="button" class="nm-row nm-row-pl" data-music-playlist="${i}">
+              ${p.cover?`<img class="nm-pl-cover" src="${escAttr(p.cover)}" alt=""/>`:`<span class="nm-pl-cover nm-disc-blank"><i data-lucide="list-music"></i></span>`}
+              <span class="nm-info">
+                <span class="nm-name">${esc(p.name)}</span>
+                <span class="nm-by">${p.count} 首${p.mine?" · 我创建的":""}</span>
+              </span>
+              <span class="nm-go"><i data-lucide="play"></i></span>
             </button>`).join("")}
           </div>`);
   } else if(state.musicBrowse !== "search"){
@@ -6864,59 +7034,69 @@ function renderMusic(){
       </div>
       ${results.length===0
         ? `<div class="empty-state">${state.musicLoading?"加载中…":"空列表"}</div>`
-        : `<div class="song-list">${results.map((s,i)=>`
-          <button type="button" class="song-row${isCur(s)?" row-active":""}" data-music-play="${i}">
-            <div class="row-idx">${isCur(s)?"▶":(i+1)}</div>
-            ${s.cover?`<img class="sc" src="${escAttr(s.cover)}" alt=""/>`:`<div class="sc"></div>`}
-            <div class="si">
-              <div class="sn">${esc(s.name)}</div>
-              <div class="sa">${esc(Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||""))}</div>
-            </div>
-            ${isCur(s)?`<div class="playing-dot"></div>`:""}
+        : `<div class="nm-list">${results.map((s,i)=>`
+          <button type="button" class="nm-row${isCur(s)?" on":""}" data-music-play="${i}">
+            <span class="nm-idx">${isCur(s)?`<span class="nm-bars"><i></i><i></i><i></i></span>`:(i+1)}</span>
+            <span class="nm-info">
+              <span class="nm-name">${esc(s.name)}</span>
+              <span class="nm-by">${esc(Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||""))}</span>
+            </span>
+            <span class="nm-go"><i data-lucide="play"></i></span>
           </button>`).join("")}
         </div>`}
     `;
   } else {
     contentHtml = `
-      <div class="music-search-row">
-        <input id="music-q" placeholder="搜歌名 / 歌手…" value="${escAttr(state.musicQuery)}"/>
-        <button id="music-search" class="btn-accent">${state.musicSearching?"…":"搜索"}</button>
+      <div class="nm-search">
+        <i data-lucide="search"></i>
+        <input id="music-q" placeholder="歌名 / 歌手" value="${escAttr(state.musicQuery)}"/>
+        <button id="music-search">${state.musicSearching?"…":"搜索"}</button>
       </div>
       ${results.length===0
         ? `<div class="empty-state">${musicBase()?"搜一下，挑一首一起听":"先在 VPS / 一起听 里填 API 地址"}</div>`
-        : `<div class="song-list">${results.map((s,i)=>`
-          <button type="button" class="song-row${isCur(s)?" row-active":""}" data-music-play="${i}">
-            <div class="row-idx">${isCur(s)?"▶":(i+1)}</div>
-            ${s.cover?`<img class="sc" src="${escAttr(s.cover)}" alt=""/>`:`<div class="sc"></div>`}
-            <div class="si">
-              <div class="sn">${esc(s.name)}</div>
-              <div class="sa">${esc(Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||""))}</div>
-            </div>
-            ${isCur(s)?`<div class="playing-dot"></div>`:""}
+        : `<div class="nm-list">${results.map((s,i)=>`
+          <button type="button" class="nm-row${isCur(s)?" on":""}" data-music-play="${i}">
+            <span class="nm-idx">${isCur(s)?`<span class="nm-bars"><i></i><i></i><i></i></span>`:(i+1)}</span>
+            <span class="nm-info">
+              <span class="nm-name">${esc(s.name)}</span>
+              <span class="nm-by">${esc(Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||""))}</span>
+            </span>
+            <span class="nm-go"><i data-lucide="play"></i></span>
           </button>`).join("")}
         </div>`}
     `;
   }
 
-  return `<div class="page">
+  // 顶部只留浏览分区；音源/后端/登录收进齿轮，不再糊在脸上
+  const navs = (be==="duetto" && src==="netease")
+    ? [["search","搜索"],["playlists","歌单"],["recommend","推荐"],["fm","私人FM"],["toplist","排行榜"]]
+    : [["search","搜索"]];
+  const settingsOpen = !!state.musicSettingsOpen;
+
+  return `<div class="page nm">
     ${subHeader('<i data-lucide="music"></i> 一起听')}
-    <p class="page-sub">搜歌挑歌 · 播放中聊天页顶部有浮窗 · 放完自动切下一首</p>
 
-    <div class="game-tabs" style="margin-bottom:10px">
-      <button class="game-tab${src==="netease"?" active":""}" data-music-src="netease">网易云</button>
-      <button class="game-tab${src==="spotify"?" active":""}" data-music-src="spotify">Spotify</button>
+    <div class="nm-nav">
+      ${navs.map(([k,label])=>`<button type="button" class="nm-tab${state.musicBrowse===k?" on":""}" data-music-browse="${k}">${label}</button>`).join("")}
+      <button type="button" class="nm-gear${settingsOpen?" on":""}" id="music-settings-toggle" aria-label="音源与登录"><i data-lucide="settings-2"></i></button>
     </div>
-    <div class="chip-row" style="margin-bottom:14px">
-      <button type="button" class="filter-chip${(cfg.backend||"auto")==="auto"?" active":""}" data-music-backend="auto">自动</button>
-      <button type="button" class="filter-chip${(cfg.backend||"")==="duetto"?" active":""}" data-music-backend="duetto">Duetto</button>
-      <button type="button" class="filter-chip${(cfg.backend||"")==="gateway"?" active":""}" data-music-backend="gateway">自建网关</button>
-    </div>
-    ${browseChips}
 
-    ${authBlock}
+    ${settingsOpen ? `<div class="nm-settings">
+      <div class="nm-seg">
+        <button type="button" class="${src==="netease"?"on":""}" data-music-src="netease">网易云</button>
+        <button type="button" class="${src==="spotify"?"on":""}" data-music-src="spotify">Spotify</button>
+      </div>
+      <div class="nm-seg">
+        <button type="button" class="${(cfg.backend||"auto")==="auto"?"on":""}" data-music-backend="auto">自动</button>
+        <button type="button" class="${(cfg.backend||"")==="duetto"?"on":""}" data-music-backend="duetto">Duetto</button>
+        <button type="button" class="${(cfg.backend||"")==="gateway"?"on":""}" data-music-backend="gateway">自建网关</button>
+      </div>
+      ${authBlock}
+    </div>` : ""}
+
     ${nowBlock}
 
-    ${state.musicError && !state.musicQr.img?`<p style="font-size:11px;color:#c66;margin-bottom:8px">${esc(state.musicError)}</p>`:""}
+    ${state.musicError && !state.musicQr.img?`<p class="nm-err">${esc(state.musicError)}</p>`:""}
     ${contentHtml}
   </div>`;
 }
@@ -7452,12 +7632,10 @@ function renderUsage(){
 
   return `<div class="page">
     ${subHeader('<i data-lucide="smartphone"></i> 屏幕时间')}
-    <p class="page-sub">来自手机 Companion · 各 App 今日使用时长</p>
 
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${feedOn ? "已写入聊天提示" : "不注入聊天"}</div>
-        <div class="body-switch-hint">${feedOn ? "AI 能看到今日摘要，可自然关心你" : "只在本页查看，不进入系统提示"}</div>
       </div>
       <div id="usage-feed-toggle" class="toggle-switch" style="background:${feedOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${feedOn?18:2}px"></div>
@@ -7543,12 +7721,10 @@ ${parts.join("\n")}
 function renderDream(){
   return `<div class="page">
     ${subHeader('<i data-lucide="moon"></i> 梦境')}
-    <p class="page-sub">夜间做梦 · 梦痕（参考 dream-system）</p>
     <div class="feat-section-label">夜间做梦 · REM</div>
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${(state.dreamConfig&&state.dreamConfig.enabled!==false)?"做梦：开":"做梦：关"}</div>
-        <div class="body-switch-hint">窗内掷骰，梦与记忆隔离，早晨一句梦痕</div>
       </div>
       <div id="dream-on-toggle" class="toggle-switch" style="background:${(state.dreamConfig&&state.dreamConfig.enabled!==false)?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${(state.dreamConfig&&state.dreamConfig.enabled!==false)?18:2}px"></div>
@@ -8230,16 +8406,137 @@ function fmtSec(s){
   const m = Math.floor(s/60), r = s%60;
   return `${m}:${String(r).padStart(2,"0")}`;
 }
+// ─── 一起读 · 本地批注 ────────────────────────────────────────────────────────
+// 原来划线必须先把整本书传到 VPS（依赖 book.remoteId），本地书一条批注都存不下，
+// 所以「一起读」实际上是个只读页面。改成本地先存，有 remoteId 再顺手同步一份。
+function ensureReadMarks(){
+  if(!state.readMarks || typeof state.readMarks !== "object") state.readMarks = {};
+  return state.readMarks;
+}
+function readMarkKey(bookId, idx){ return String(bookId)+"#"+(idx|0); }
+function readMarksOf(bookId, idx){
+  const all = ensureReadMarks();
+  const arr = all[readMarkKey(bookId, idx)];
+  return Array.isArray(arr) ? arr : [];
+}
+function readAddMark(quote, note, by){
+  const now = state.readingNow;
+  if(!now) return null;
+  const q = String(quote||"").trim();
+  if(!q) return null;
+  const book = (state.books||[]).find(b=>b.id===now.bookId);
+  const chs = (book && book.chapters) || [];
+  const idx = Math.min(Math.max(0, now.chapterIdx||0), Math.max(0, chs.length-1));
+  const content = (chs[idx] && chs[idx].content) || "";
+  const all = ensureReadMarks();
+  const key = readMarkKey(now.bookId, idx);
+  if(!Array.isArray(all[key])) all[key] = [];
+  // 同一句同一人不重复记
+  if(all[key].some(m=>m.quote===q && m.by===(by||"me"))) return null;
+  const mark = {
+    id: "rm"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+    quote: q.slice(0, 200),
+    note: String(note||"").trim().slice(0, 200),
+    by: by || "me",
+    time: new Date().toISOString(),
+  };
+  all[key].push(mark);
+  if(all[key].length > 60) all[key] = all[key].slice(-60);
+  persist("readMarks");
+  // 书已同步 VPS 就补一份到云端，失败不影响本地
+  try{
+    if(book && book.remoteId && typeof annoApi === "function"){
+      let start = content.indexOf(q); if(start < 0) start = 0;
+      annoApi("/api/v1/anno/marks", { method:"POST", body: JSON.stringify({
+        book_id: book.remoteId, start_offset:start, end_offset:start+q.length,
+        quote: mark.quote, note: mark.note, by: mark.by==="ai"?"ai":"user",
+      })});
+    }
+  }catch(e){}
+  return mark;
+}
+function readDeleteMark(id){
+  const all = ensureReadMarks();
+  for(const k of Object.keys(all)){
+    if(Array.isArray(all[k])) all[k] = all[k].filter(m=>m.id !== id);
+  }
+  persist("readMarks");
+}
+/** 他的批注暗号：⟪批注:摘句|想法⟫，摘句在本页里搜，不用他算字符下标 */
+function handleReadMarkMarkers(body){
+  const text = String(body||"");
+  if(text.indexOf("批注") < 0) return text;
+  return text.replace(/[⟪《【]\s*批注\s*[:：]\s*([^⟫》】]*?)\s*[|｜]\s*([^⟫》】]*?)\s*[⟫》】]/g, (_, q, n)=>{
+    readAddMark(q, n, "ai");
+    return "";
+  }).replace(/[⟪《【]\s*批注\s*[:：]\s*([^⟫》】|｜]+?)\s*[⟫》】]/g, (_, q)=>{
+    readAddMark(q, "", "ai");
+    return "";
+  }).replace(/\n{3,}/g,"\n\n").trim();
+}
+
+/** 正文 + 划线：把每条批注的摘句在正文里高亮出来 */
+function readContentHtml(content, marks){
+  const raw = String(content||"");
+  if(!raw) return "";
+  if(!marks || !marks.length) return esc(raw);
+  // 先把每条摘句定位成区间，重叠的丢掉后面那条
+  const spans = [];
+  for(const m of marks){
+    const q = String(m.quote||"");
+    if(!q) continue;
+    const i = raw.indexOf(q);
+    if(i < 0) continue;
+    spans.push({ s:i, e:i+q.length, by:m.by, note:m.note||"" });
+  }
+  spans.sort((a,b)=>a.s-b.s);
+  let html = "", pos = 0;
+  for(const sp of spans){
+    if(sp.s < pos) continue;
+    html += esc(raw.slice(pos, sp.s));
+    html += `<mark class="read-hl ${sp.by==="ai"?"ai":"me"}"${sp.note?` title="${escAttr(sp.note)}"`:""}>${esc(raw.slice(sp.s, sp.e))}</mark>`;
+    pos = sp.e;
+  }
+  html += esc(raw.slice(pos));
+  return html;
+}
+/** 本页批注清单 */
+function readMarksListHtml(bookId, idx){
+  const marks = readMarksOf(bookId, idx);
+  if(!marks.length) return "";
+  return `<div class="read-mark-list">${marks.map(m=>`
+    <div class="read-mark-item ${m.by==="ai"?"ai":"me"}">
+      <div class="read-mark-q">“${esc((m.quote||"").slice(0,60))}”</div>
+      ${m.note?`<div class="read-mark-n">${esc(m.note)}</div>`:""}
+      <button type="button" class="read-mark-del" data-read-mark-del="${escAttr(m.id)}" aria-label="删除批注">×</button>
+    </div>`).join("")}</div>`;
+}
+
 function readStatusPromptBlock(){
   if(!state.readFeedChat || !state.readingNow) return "";
   const r = state.readingNow;
   const book = (state.books||[]).find(b=>b.id===r.bookId);
   const chs = book && book.chapters ? book.chapters : [];
-  const ch = chs[r.chapterIdx] || null;
-  const snippet = ch && ch.content ? String(ch.content).slice(0, 450) : "";
-  const page = (r.chapterIdx||0)+1;
+  const idx = Math.min(Math.max(0, r.chapterIdx||0), Math.max(0, chs.length-1));
+  const ch = chs[idx] || null;
+  // 以前只给 450 字，等于没让他看书，自然「不会特意去看」。给整页（上限 2400 字）。
+  const full = ch && ch.content ? String(ch.content) : "";
+  const snippet = full.length > 2400 ? full.slice(0, 2400) + "\n……（本页后面还有）" : full;
+  const page = idx + 1;
+  const marks = readMarksOf(r.bookId, idx);
+  const markLines = marks.slice(-8).map(m=>`- [${m.by==="ai"?"你":"她"}] “${(m.quote||"").slice(0,30)}”${m.note?" → "+m.note.slice(0,40):""}`).join("\n");
   return `【正在一起读】《${r.title||"未命名"}》· ${ch?ch.title:r.chapterTitle||""}（第 ${page}/${chs.length||"?"} 页）
-${snippet?`本页摘录：\n${snippet}\n`:""}可讨论本页内容，勿剧透后面页，不要每句都提。`;
+${snippet?`本页正文：\n${snippet}\n`:""}${markLines?`\n这一页已有的批注：\n${markLines}\n`:""}
+你是在陪她一起读这一页，正文就在上面，直接读，不要说「我看不到」「你发给我」。
+
+想在某句旁边留批注时，在回复里写一行暗号：
+⟪批注:原文里的一句话|你的想法⟫
+- 摘句必须是本页正文里**一字不差**的一小段（8～30 字最好），系统靠它定位划线。
+- 想法一句话就够，写你读到这里真实的反应，不要复述剧情。
+- 一次回复最多 2 条；不是每次都要留，戳到你了再留。
+- 暗号会被擦掉，她只会看到正文里那句被划了线。
+
+别剧透后面的页，也不要每句话都提这本书。`;
 }
 function splitBookText(raw){
   let text = String(raw||"").replace(/\r\n/g,"\n").trim();
@@ -8532,16 +8829,17 @@ function renderRead(){
       </div>
       <div style="font-size:12px;color:var(--sub);margin-bottom:6px">${esc(ch.title||"")}</div>
       <div class="read-progress"><i style="width:${pagePct}%"></i></div>
-      <div id="read-scroll-box" class="status-card" style="max-height:42vh;overflow-y:auto;white-space:pre-wrap;font-size:14px;line-height:1.75;color:var(--text)">${esc(ch.content||"")}</div>
+      <div id="read-scroll-box" class="status-card" style="max-height:42vh;overflow-y:auto;white-space:pre-wrap;font-size:14px;line-height:1.75;color:var(--text)">${readContentHtml(ch.content||"", readMarksOf(now.bookId, idx))}</div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button id="read-prev-ch" class="btn-ghost" style="flex:1;padding:10px" ${idx<=0?"disabled":""}>‹ 上一页</button>
         <button id="read-next-ch" class="btn-accent" style="flex:1;padding:10px" ${idx>=chs.length-1?"disabled":""}>下一页 ›</button>
       </div>
+      <button id="read-with-ai" class="btn-accent" style="width:100%;margin-top:10px;padding:11px"><i data-lucide="book-open"></i> 叫他读这一页</button>
       <div class="status-card" style="padding:12px;margin-top:10px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px">共读批注${book&&book.remoteId?"":"（上传同步后可云端保存）"}</div>
         <input id="read-mark-quote" placeholder="摘句（粘贴本页句子）" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);outline:none"/>
         <input id="read-mark-note" placeholder="想法（可选）" style="width:100%;margin-top:8px;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);outline:none"/>
         <button type="button" class="btn-accent" id="read-mark-save" style="width:100%;margin-top:8px;padding:10px">划线保存</button>
+        ${readMarksListHtml(now.bookId, idx)}
         <div id="read-marks-list" style="margin-top:10px;font-size:12px;color:var(--sub)"></div>
       </div>
       <button id="read-to-chat" class="btn-accent2" style="width:100%;margin-top:8px;padding:10px">带着这一页去聊天</button>
@@ -8568,11 +8866,9 @@ function renderRead(){
   }
   return `<div class="page">
     ${subHeader('<i data-lucide="book-open"></i> 一起读')}
-    <p class="page-sub">整本导入 · 分页翻阅 · 进度写入聊天</p>
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${feedOn?"已写入聊天提示":"不注入聊天"}</div>
-        <div class="body-switch-hint">${feedOn?"当前页摘录会喂给 AI":"只在本页阅读"}</div>
       </div>
       <div id="read-feed-toggle" class="toggle-switch" style="background:${feedOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${feedOn?18:2}px"></div>
@@ -8626,7 +8922,6 @@ function shufangRenderShelf(){
   }).join("");
   return `<div class="page">
     ${subHeader('<i data-lucide="pen-nib"></i> 书房')}
-    <p class="page-sub">连载写作 · 写完直接进「一起读」</p>
     ${state.shufangShowNewBook?`
     <div class="add-form">
       <input id="shufang-new-title" placeholder="书名" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px;background:var(--bg);color:var(--text);outline:none"/>
@@ -8736,11 +9031,9 @@ function renderWatch(){
   if(!w || !w.url){
     return `<div class="page">
       ${subHeader('<i data-lucide="film"></i> 一起看')}
-      <p class="page-sub">本地/直链 · 进度写入聊天 · 聊天页顶浮层</p>
       <div class="body-switch-row">
         <div>
           <div class="body-switch-label">${feedOn?"已写入聊天提示":"不注入聊天"}</div>
-          <div class="body-switch-hint">发消息时带上当前分秒 + 备注</div>
         </div>
         <div id="watch-feed-toggle" class="toggle-switch" style="background:${feedOn?"var(--accent)":"var(--border)"}">
           <div class="toggle-knob" style="left:${feedOn?18:2}px"></div>
@@ -9241,7 +9534,6 @@ function renderBaby(){
   if(!b){
     return `<div class="page">
       ${subHeader('<i data-lucide="baby"></i> 摇篮房')}
-      <p class="page-sub">把一个小语言模型当孩子养</p>
       <div style="font-size:12px;color:var(--sub);margin-bottom:16px;line-height:1.7;background:var(--card);border-radius:12px;padding:12px 14px;border:1px solid var(--border)">
         他出生时只会哭。你喂他的不是奶，是<strong style="color:var(--text)">语料</strong>——你对他说的每一句话都真的被拿去训练他脑子里那个小小的字符级语言模型。<br>
         婴儿期叠词乱语 · 幼儿期两三词拼接 · 童年能成句 · 青春期顶嘴已读不回 · 成年告别，共五种结局。
@@ -9386,7 +9678,6 @@ function renderBaby(){
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${feedOn?"状态写入聊天":"不注入聊天"}</div>
-        <div class="body-switch-hint">TA 知道孩子进度与旁听摘要</div>
       </div>
       <div id="baby-feed-toggle" class="toggle-switch" style="background:${feedOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${feedOn?18:2}px"></div>
@@ -9395,7 +9686,6 @@ function renderBaby(){
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${state.babyOverhear!==false?"偷听聊天 · 开":"偷听聊天 · 关"}</div>
-        <div class="body-switch-hint">你和 AI 说的话会悄悄成为他的语料</div>
       </div>
       <div id="baby-overhear-toggle" class="toggle-switch" style="background:${state.babyOverhear!==false?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${state.babyOverhear!==false?18:2}px"></div>
@@ -9516,7 +9806,6 @@ function renderRoleplay(){
   const adding = state.rpAdding;
   return `<div class="page">
     ${subHeader('<i data-lucide="theater"></i> 角色扮演')}
-    <p class="page-sub">选一套设定应用 · 亲密时按此扮演</p>
     ${active?`<div class="status-card" style="margin-bottom:12px">
       <div class="status-label">当前应用中</div>
       <div style="font-size:14px;font-weight:700;color:var(--text)">${esc((list.find(x=>x.id===active)||{}).name||"")}</div>
@@ -9586,7 +9875,6 @@ function renderFlightChess(){
     <div class="fc-cell ${cell.type}"><span class="fc-num">${i}</span>${esc(cell.text)}${st.playerPos===i?'<span class="fc-piece fc-piece-player"></span>':""}${st.aiPos===i?'<span class="fc-piece fc-piece-ai"></span>':""}</div>`).join("");
   return `<div class="page">
     ${subHeader('<i data-lucide="dices"></i> 飞行棋')}
-    <p class="page-sub">选版本 · 总览棋盘 · 进度在聊天弹窗里玩</p>
 
     <div class="fc-toolbar">
       <div class="fc-version-scroll">${verBar}</div>
@@ -9693,7 +9981,6 @@ function renderQuestPage(){
     <div class="body-switch-row" style="margin-bottom:14px">
       <div>
         <div class="body-switch-label">${qOn ? "小机自动布置任务 · 开" : "小机自动布置任务 · 关"}</div>
-        <div class="body-switch-hint">${qOn ? "TA 会在聊天里弹任务卡并写入今日任务" : "关了 TA 就不会主动发任务（手动发的仍会收）"}</div>
       </div>
       <div id="quest-enable-toggle" class="toggle-switch" style="background:${qOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${qOn?18:2}px"></div>
@@ -9895,12 +10182,10 @@ function renderDuty(){
 
   return `<div class="page">
     ${subHeader('<i data-lucide="heart-handshake"></i> 记录')}
-    <p class="page-sub">夫妻义务 · 每周三、六 · 按月查看</p>
 
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${remindOn?"周三六晚提醒已开":"聊天提醒已关"}</div>
-        <div class="body-switch-hint">${remindOn?"18:00 后发消息会带一句义务提醒给 AI":"不向聊天注入提醒"}</div>
       </div>
       <div id="duty-remind-toggle" class="toggle-switch" style="background:${remindOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${remindOn?18:2}px"></div>
@@ -10034,12 +10319,10 @@ function renderWardrobe(){
 
   return `<div class="page">
     ${subHeader('<i data-lucide="shirt"></i> 衣柜')}
-    <p class="page-sub">首页只显示名称 · 详细描述喂给 AI · 配饰最多 3 件</p>
 
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${feedOn?"已写入聊天提示":"不注入聊天"}</div>
-        <div class="body-switch-hint">${feedOn?"AI 能看到今日穿搭并自然提及":"只在本页记录，不进入系统提示"}</div>
       </div>
       <div id="ward-feed-toggle" class="toggle-switch" style="background:${feedOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${feedOn?18:2}px"></div>
@@ -10087,7 +10370,6 @@ function renderBody(){
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${driveOn?"欲望开车中":"只看不动"}</div>
-        <div class="body-switch-hint">${driveOn?"驱动会写入系统提示，影响回复倾向":"你能看见他心里想什么，但欲望不支配行为"}</div>
       </div>
       <div id="desire-drive-toggle" class="toggle-switch" style="background:${driveOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${driveOn?18:2}px"></div>
@@ -10097,7 +10379,6 @@ function renderBody(){
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">${state.divinationSkillOn?"占卜技能已开":"占卜技能关闭"}</div>
-        <div class="body-switch-hint">${state.divinationSkillOn?"AI 会小六壬掐指断卦·解问心处的卦":"开启后 AI 拥有占卜断卦能力（占 token，按需开）"}</div>
       </div>
       <div id="divination-skill-toggle" class="toggle-switch" style="background:${state.divinationSkillOn?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${state.divinationSkillOn?18:2}px"></div>
@@ -10323,7 +10604,6 @@ function renderHtmlGame(){
 
   return `<div class="page">
     ${subHeader('<i data-lucide="gamepad-2"></i> HTML 游戏')}
-    <p class="page-sub">上传 .html 文件，或粘贴完整 HTML 代码加载你的游戏</p>
 
     <!-- 合集面板 -->
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:14px">
@@ -11241,6 +11521,99 @@ TA 手里有一些你写好的小券，存在「券夹」里。想送一张给 T
 - 一次回复最多送一张；只在氛围合适时用，别频繁送。
 - 暗号会被系统识别并擦除，TA 只看到券面卡片，点一下就能兑现。`;
 }
+// ═══════════════ Aries 的钱包 ═══════════════════════════════════════════════
+// Jasmine 往里转钱，Aries 用这笔钱在「兑换处」买东西。余额、流水、货架都存本地，
+// 并且接进聊天：他能在回复里用暗号要钱 / 兑换，卡片直接长在气泡里。
+function ensureWallet(){
+  const w = state.wallet;
+  if(!w || typeof w !== "object" || !Array.isArray(w.ledger)){
+    state.wallet = {
+      name: "小鱼干", symbol: "🐟",
+      balance: 0,
+      ledger: [],
+      shop: [
+        { id: wUid(), emoji:"🍖", name:"加餐一次",   price: 20, desc:"想吃什么点什么" },
+        { id: wUid(), emoji:"🎮", name:"陪玩一小时", price: 50, desc:"你挑游戏" },
+        { id: wUid(), emoji:"💤", name:"赖床券",     price: 30, desc:"早上不许叫我" },
+        { id: wUid(), emoji:"🎁", name:"许一个愿",   price: 120, desc:"不过分就行" },
+      ],
+      draft: null,
+    };
+  }
+  if(!Array.isArray(state.wallet.shop)) state.wallet.shop = [];
+  if(typeof state.wallet.balance !== "number" || !isFinite(state.wallet.balance)) state.wallet.balance = 0;
+  return state.wallet;
+}
+function wUid(){ return "w"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function walletSave(){ persist("wallet"); }
+function walletUnit(){ const w = ensureWallet(); return (w.symbol||"") + (w.name||"币"); }
+
+/** 记一笔。amount 正数=进账，负数=出账 */
+function walletEntry(amount, note, by){
+  const w = ensureWallet();
+  const amt = Math.round(Number(amount)||0);
+  if(!amt) return null;
+  w.balance = Math.max(0, w.balance + amt);
+  const e = { id: wUid(), amount: amt, note: String(note||"").slice(0,60), by: by||"me", time: new Date().toISOString() };
+  w.ledger = [e].concat(w.ledger).slice(0, 200);
+  walletSave();
+  return e;
+}
+
+/** 转钱给他 */
+function walletTransfer(amount, note){
+  const amt = Math.round(Number(amount)||0);
+  if(amt <= 0){ if(typeof showToast==="function") showToast("金额要大于 0"); return false; }
+  walletEntry(amt, note || "转账", "me");
+  if(typeof showToast==="function") showToast(`已转 ${amt} ${walletUnit()}`);
+  if(typeof postAppEvent==="function") try{ postAppEvent("wallet_transfer",{ amount:amt }); }catch(e){}
+  return true;
+}
+
+/** 他兑换一件东西：够钱就扣，不够返回 false */
+function walletRedeem(itemId, by){
+  const w = ensureWallet();
+  const it = (w.shop||[]).find(x=>x.id===itemId);
+  if(!it) return { ok:false, reason:"没有这件东西" };
+  const price = Math.round(Number(it.price)||0);
+  if(w.balance < price) return { ok:false, reason:`余额不够，还差 ${price - w.balance} ${walletUnit()}` };
+  walletEntry(-price, `兑换 ${it.emoji||""}${it.name}`, by||"aries");
+  return { ok:true, item:it, price };
+}
+
+/** 按名字兑换（聊天暗号 [buy:xxx] 用） */
+function walletRedeemByName(name){
+  const w = ensureWallet();
+  const key = String(name||"").trim();
+  const it = (w.shop||[]).find(x=>x.name === key)
+          || (w.shop||[]).find(x=>String(x.name).indexOf(key) >= 0);
+  if(!it) return { ok:false, reason:`货架上没有「${key}」` };
+  return walletRedeem(it.id, "aries");
+}
+
+/** 给系统提示词：让他知道自己有多少钱、货架上有什么、怎么用暗号 */
+function walletPromptBlock(){
+  const w = ensureWallet();
+  const unit = walletUnit();
+  const shelf = (w.shop||[]).length
+    ? (w.shop||[]).map(i=>`${i.name}（${i.price} ${unit}）`).join("、")
+    : "（货架是空的）";
+  return `\n\n【钱包 · 你自己的钱】
+你有一个钱包，里面的钱是 Jasmine 转给你的。
+- 当前余额：${w.balance} ${unit}
+- 兑换处货架：${shelf}
+
+两个暗号（写在正式回复里，单独一行）：
+[pay:金额|想要的理由]   → 向她要钱，她那边会出现一张可以一键转账的卡片
+[buy:货架上的东西]      → 直接花自己的钱兑换，系统会扣款并出一张凭据
+
+规则：
+- 余额不够就别写 [buy:]，可以先用 [pay:] 要。
+- 别每句都要钱；这是情趣不是索取，氛围合适再用，一次回复最多一个暗号。
+- 货架上没有的东西不要用 [buy:]，可以直接说想要什么，让她加进货架。
+- 暗号会被前端擦掉，她只看到卡片。`;
+}
+
 function couponCardHtml(c, opts){
   opts = opts || {};
   if(!c) return "";
@@ -11333,6 +11706,79 @@ function redeemCoupon(id){
   state.tab="chat"; state.subPage=null; state.needChatScroll=true;
   render();
 }
+/** 点歌暗号 ⟪点歌:歌名 - 歌手⟫ → 统一成 [song:...]，交给 renderInline 出卡片 */
+function handleSongMarkers(body){
+  const text = String(body||"");
+  if(text.indexOf("点歌") < 0) return text;
+  return text.replace(/[⟪《【]\s*点歌\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, q)=>{
+    const name = String(q).trim().slice(0, 80);
+    return name ? `[song:${name}]` : "";
+  });
+}
+
+/** 点卡片：拿卡片上的文字去搜，搜到第一首直接播 */
+async function songChipPlay(query){
+  const q = String(query||"").trim();
+  if(!q) return;
+  if(typeof musicBase === "function" && !musicBase()){
+    if(typeof showToast==="function") showToast("先在「一起听」里配好音源地址");
+    return;
+  }
+  if(typeof showToast==="function") showToast("在找这首歌…");
+  state.musicQuery = q;
+  state.musicBrowse = "search";
+  try{
+    if(typeof musicSearch === "function") await musicSearch();
+    const list = state.musicResults || [];
+    if(!list.length){ if(typeof showToast==="function") showToast("没搜到这首"); return; }
+    if(typeof musicPlaySong === "function") await musicPlaySong(list[0]);
+    else if(typeof playSong === "function") await playSong(list[0]);
+    else { state.subPage = "music"; state.tab = "home"; render(); }
+  }catch(e){
+    if(typeof showToast==="function") showToast("播放失败："+(e && e.message || e));
+  }
+}
+
+/** Project 文件协议的说明书。
+ *  解析器（sbIngestFilesFromText）、项目页、信封卡片本来就都在，唯独从来没有
+ *  哪一处把这个协议告诉过模型 —— 所以走 API 时它只会把代码整段贴进聊天气泡。
+ *  这一段就是补上那份说明书。 */
+function projectFilePromptBlock(){
+  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
+  const recent = files.slice(0, 8).map(f=>f.name).join("、");
+  return `\n\n【Project 文件协议 —— 写完整文件时必须用】
+Jasmine 的侧边栏有一个「项目」区。你写出来的完整文件应该进那里，而不是整段贴在聊天气泡里。
+
+格式（严格照抄，注意是 ⟪⟫ 不是括号）：
+⟪file:文件名.后缀⟫
+文件的完整内容
+⟪/file⟫
+
+规则：
+- 只要产出的是一个**完整文件**（.html / .txt / .md / .json / .js / .css / .py 等），就必须用这个协议包起来，不要再用 \`\`\` 代码块贴进聊天。
+- 文件名要带后缀，一个文件一个块；同一条回复可以有多个块。
+- 块里放纯内容，不要再套 \`\`\`，不要加「以下是代码」这类话。
+- 块外只写一两句短话（比如「写好了，放进项目里了」），正文会照常显示，文件块会被系统吃掉并变成一张可点开的卡片。
+- 零碎片段、几行示例、边解释边写的代码，不要用这个协议，正常聊天写就行。
+- 改已有文件时用同样的文件名，会存成新的一版。${recent?`\n- 项目里现有：${recent}` : ""}`;
+}
+
+/** 结算他这条回复里的钱包暗号。只在收到消息时跑一次，所以不会重复扣款。
+ *  [buy:x] 成功就原样留着（渲染成凭据），失败改写成 [buyx:原因] 渲染成一张灰卡。
+ *  [pay:金额|理由] 不动，留给 renderInline 渲染成可点的转账卡。 */
+function handleWalletMarkers(body){
+  const text = String(body||"");
+  if(text.indexOf("[buy") < 0) return text;
+  return text.replace(/\[buy\s*[:：]\s*([^\]]+)\]/g, (whole, name)=>{
+    const r = walletRedeemByName(String(name).trim());
+    if(r && r.ok){
+      if(typeof showToast==="function") showToast(`他兑换了 ${r.item.emoji||""}${r.item.name}，扣 ${r.price} ${walletUnit()}`);
+      return whole;
+    }
+    return `[buyx:${(r && r.reason) || "兑换失败"}]`;
+  });
+}
+
 function handleCouponMarkers(body){
   const text = String(body||"");
   const RE = /[⟪《【\[]\s*使用券\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/;
@@ -11364,7 +11810,6 @@ function renderCoupons(){
   const editing = state.couponEditingId ? couponEditorHtml() : "";
   return `<div class="page">
     ${subHeader('<i data-lucide="ticket"></i> 券夹')}
-    <p class="page-sub">写好的小券 · AI 在聊天里送 · 点一下兑现</p>
     ${editing}
     <button type="button" id="coupon-add" class="btn-accent2" style="width:100%;padding:11px;border-radius:14px">＋ 写一张新券</button>
     ${section("他的券夹 · 未用", kept, "空的，去写一张吧")}
@@ -12322,7 +12767,6 @@ function renderPuzzleRoom(){
   const activeLock = p.phase === "playing" && p.activeId;
   return `<div class="page">
     ${subHeader("解谜房间")}
-    <p class="page-sub">文字多日剧情 · 恐怖 / 烧脑 / 剧本杀 / 社会意义。选定后请玩完。</p>
     ${activeLock ? `<div class="heat-summary">你有进行中的主题，请点「进行中」卡片继续。</div>` : ""}
     ${PUZZLE_BANK.map(theme=>{
       const done = (p.completedIds||[]).includes(theme.id);
@@ -12423,11 +12867,9 @@ function renderCabinets(){
   }
   return `<div class="page">
     ${subHeader('<i data-lucide="archive"></i> 柜子')}
-    <p class="page-sub">床头柜 / 冰箱 / 储物… 文字物品。AI 也可以往里放东西。</p>
     <div class="body-switch-row" style="margin-bottom:14px">
       <div>
         <div class="body-switch-label">${state.cabinetFeedChat===true?"柜子已写入聊天上下文":"柜子未写入聊天"}</div>
-        <div class="body-switch-hint">${state.cabinetFeedChat===true?"TA 知道柜子里有什么（占 token）":"关闭后系统提示不带柜子，省 token"}</div>
       </div>
       <div class="toggle-switch" id="cab-feed-toggle" style="background:${state.cabinetFeedChat===true?"var(--accent)":"var(--border)"}" role="switch" aria-checked="${state.cabinetFeedChat===true}">
         <div class="toggle-knob" style="left:${state.cabinetFeedChat===true?"18px":"2px"}"></div>
@@ -12737,12 +13179,10 @@ function renderNtfy(){
   const logs = state.ntfyLog || [];
   return `<div class="page">
     ${subHeader('<i data-lucide="bell"></i> 上推通知 · ntfy')}
-    <p class="page-sub">手机装 ntfy App 订阅同一个 topic；聊天里说「你去推看看」时，TA 可写暗号把通知推到你手机。</p>
 
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">启用上推</div>
-        <div class="body-switch-hint">总开关 · 关则什么都不推</div>
       </div>
       <div id="ntfy-enabled-toggle" class="toggle-switch" style="background:${cfg.enabled?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${cfg.enabled?"18px":"2px"}"></div>
@@ -12751,7 +13191,6 @@ function renderNtfy(){
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">主动消息自动上推</div>
-        <div class="body-switch-hint">本地关心 / VPS 拉取写入聊天时，同步推到手机</div>
       </div>
       <div id="ntfy-auto-proactive" class="toggle-switch" style="background:${cfg.autoProactive!==false?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${cfg.autoProactive!==false?"18px":"2px"}"></div>
@@ -12760,7 +13199,6 @@ function renderNtfy(){
     <div class="body-switch-row">
       <div>
         <div class="body-switch-label">后台聊天也上推</div>
-        <div class="body-switch-hint">页面在后台时，TA 的新回复推到通知栏</div>
       </div>
       <div id="ntfy-auto-hidden" class="toggle-switch" style="background:${cfg.autoWhenHidden!==false?"var(--accent)":"var(--border)"}">
         <div class="toggle-knob" style="left:${cfg.autoWhenHidden!==false?"18px":"2px"}"></div>
@@ -12950,27 +13388,44 @@ function handleAlbumMarkers(body){
   return text;
 }
 
+let __sttPath = ""; // 本次会话里探到的可用识别路径："/transcribe" 或 "/stt"
 async function callSttUpload(blob){
   const cfg = state.callConfig || {};
   const explicit = (cfg.sttUrl || "").trim();
   const base = callGatewayBase();
   if(!explicit && !base) throw new Error("请先填写 STT 地址（电话页或 VPS 网关 /stt）");
   const headers = {};
-  const tok = cfg.sttToken || cfg.token || "";
+  const tok = (cfg.sttToken && String(cfg.sttToken).trim()) || callAuthToken();
   if(tok) headers["X-Auth-Token"] = tok;
+  let lastStatus = 0;
   const attempt = async (url)=>{
     const fd = new FormData();
     fd.append("file", blob, "utterance.webm");
     fd.append("audio", blob, "utterance.webm");
     try{
       const res = await fetch(url, { method:"POST", headers, body: fd });
-      if(!res.ok) return null;
+      if(!res.ok){ lastStatus = res.status; return null; }
       return await res.json();
     }catch(e){ return null; }
   };
-  // 优先 /transcribe（SenseVoice：text+emotion+tone），失败回退 /stt
-  let data = explicit ? await attempt(explicit) : (await attempt(base + "/transcribe")) || (await attempt(base + "/stt"));
-  if(!data) throw new Error("STT 识别失败");
+  // 优先 /transcribe（SenseVoice：text+emotion+tone），没有就回退 /stt。
+  // 网关没部署 /transcribe 时它会一直 404，以前每次说话都白跑一趟；记住一次结果就不再试。
+  let data;
+  if(explicit){
+    data = await attempt(explicit);
+  } else if(__sttPath){
+    data = await attempt(base + __sttPath);
+    if(!data && __sttPath === "/transcribe"){ __sttPath = "/stt"; data = await attempt(base + "/stt"); }
+  } else {
+    data = await attempt(base + "/transcribe");
+    if(data){ __sttPath = "/transcribe"; }
+    else { __sttPath = "/stt"; data = await attempt(base + "/stt"); }
+  }
+  if(!data){
+    if(lastStatus === 401 || lastStatus === 403)
+      throw new Error("网关拒绝（401）：设置 → 主动消息 里的 Token 没填或不对。");
+    throw new Error("STT 识别失败" + (lastStatus ? "（HTTP "+lastStatus+"）" : "（网关连不上）"));
+  }
   const text = (data.text || data.transcript || data.result || "").trim();
   if(!text) throw new Error("没有识别到内容");
   // 情绪/语气 → 给模型做前缀，轻声模式据此降音量
@@ -12996,19 +13451,30 @@ async function callHoldStart(){
     __callMediaRecorder.start(100);
     s.recording = true;
     s.sttError = "";
-    const btn = document.getElementById("call-hold");
-    if(btn){ btn.classList.add("rec"); btn.textContent = "松开结束 · 识别中将发送"; }
+    callHoldPaint();
   }catch(e){
     s.sttError = "麦克风失败："+e.message;
     render();
   }
 }
 
-async function callHoldEnd(){
+/** 录音按钮的三种样子：空闲 / 按住中 / 已锁定（松手也继续录） */
+function callHoldPaint(){
   const s = ensureCallSession();
   const btn = document.getElementById("call-hold");
-  if(btn){ btn.classList.remove("rec"); btn.textContent = "按住说话"; }
+  if(!btn) return;
+  btn.classList.toggle("rec", !!s.recording);
+  btn.classList.toggle("locked", !!s.holdLocked);
+  if(!s.recording) btn.textContent = "按住说话 · 点一下免提";
+  else if(s.holdLocked) btn.textContent = "录音中 · 点一下结束并发送";
+  else btn.textContent = "松开结束 · 松手前抬起可免提";
+}
+
+async function callHoldEnd(){
+  const s = ensureCallSession();
   s.recording = false;
+  s.holdLocked = false;
+  callHoldPaint();
   if(!__callMediaRecorder) return;
   const rec = __callMediaRecorder;
   __callMediaRecorder = null;
@@ -13120,6 +13586,13 @@ function ensureCallAudio(){
   }
   return a;
 }
+/** 网关鉴权 token：电话页填了就用电话页的，否则复用「主动消息」里那把（同一台 VPS，同一个 X-Auth-Token）。
+ *  以前只读 callConfig.token，而这一格默认是空的 —— 结果 /tts/minimax 与 /stt 一律 401，电话不出声。 */
+function callAuthToken(){
+  const c = state.callConfig || {};
+  if(c.token && String(c.token).trim()) return String(c.token).trim();
+  return (typeof wakeToken === "function" ? (wakeToken()||"") : "");
+}
 async function minimaxSynthesize(text){
   const cfg = state.callConfig || {};
   if(!cfg.ttsEnabled || cfg.ttsProvider === "none") return null;
@@ -13156,7 +13629,8 @@ async function minimaxSynthesize(text){
   if(proxy){
     url = proxy + "/tts/minimax";
     headers = { "Content-Type": "application/json" };
-    if(cfg.token) headers["X-Auth-Token"] = cfg.token;
+    const tok = callAuthToken();
+    if(tok) headers["X-Auth-Token"] = tok;
     payload = { ...body, api_key: key, group_id: cfg.minimaxGroupId||"", endpoint: cfg.minimaxEndpoint||"" };
   } else {
     let endpoint = (cfg.minimaxEndpoint || "https://api.minimax.chat/v1/t2a_v2").replace(/\/$/,"");
@@ -13172,6 +13646,11 @@ async function minimaxSynthesize(text){
   const res = await fetch(url, { method:"POST", headers, body: JSON.stringify(payload) });
   if(!res.ok){
     const errText = await res.text().catch(()=>"");
+    if(res.status === 401 || res.status === 403){
+      throw new Error(proxy
+        ? "网关拒绝（401）：设置 → 主动消息 里的 Token 没填或不对，电话的 TTS/STT 用的是同一把。"
+        : "MiniMax 拒绝（401）：API Key 不对。");
+    }
     throw new Error("TTS HTTP "+res.status+" "+errText.slice(0,120));
   }
   const data = await res.json();
@@ -13216,6 +13695,32 @@ async function callSpeak(text){
     s.ttsError = String(e.message||e).slice(0,160);
     // 不打断通话，仅在界面提示
   }
+}
+
+/** 「试听一句」：callSpeak 自己吞掉异常（不打断通话），所以这里靠 session.ttsError 判断成败，
+ *  否则不管 401 还是没网，界面都只会写「已播放」，等于没有提示。 */
+let __ttsTesting = false;
+async function callTtsTest(){
+  if(__ttsTesting) return;
+  __ttsTesting = true;
+  const cfg = state.callConfig = state.callConfig || {};
+  const s = ensureCallSession();
+  s.ttsError = "";
+  cfg._ttsTestMsg = "合成中…";
+  render();
+  try{
+    if(cfg.ttsEnabled === false){
+      cfg._ttsTestMsg = "TTS 开关是关的，先打开上面那个开关。";
+    } else {
+      await callSpeak("喂，是我。听到了吗？我想你了。");
+      cfg._ttsTestMsg = s.ttsError ? ("失败：" + s.ttsError) : "已播放 ✓";
+    }
+  }catch(e){
+    cfg._ttsTestMsg = "失败：" + (e && e.message || e);
+  }finally{
+    __ttsTesting = false;
+  }
+  persist("callConfig"); render();
 }
 
 // ─── 电话（Callhome 风格 UI · 文字通话）──────────────────────────────────────
@@ -13485,8 +13990,9 @@ function renderPhone(){
       <div class="call-caps" id="call-caps">${caps || `<div class="empty-state" style="padding:20px">接通了。说点什么吧。</div>`}</div>
       ${s.linger?`<div style="text-align:center;font-size:11px;color:var(--sub);padding:2px 16px">说完晚安了…… 15 秒内说话就能留住 Ta。</div>`:""}
       <div style="padding:0 16px 8px">
-        ${s.sttError?`<div style="font-size:11px;color:#c45;margin-bottom:6px">${esc(s.sttError)}</div>`:""}
-        <button type="button" class="call-hold" id="call-hold" ${s.muted||s.loading?"disabled":""}>按住说话</button>
+        ${s.sttError?`<div style="font-size:11px;color:#c45;margin-bottom:6px">🎤 ${esc(s.sttError)}</div>`:""}
+        ${s.ttsError?`<div style="font-size:11px;color:#c45;margin-bottom:6px">🔊 ${esc(s.ttsError)}</div>`:""}
+        <button type="button" class="call-hold${s.recording?" rec":""}${s.holdLocked?" locked":""}" id="call-hold" ${s.muted||s.loading?"disabled":""}>${s.recording?(s.holdLocked?"录音中 · 点一下结束并发送":"松开结束 · 松手前抬起可免提"):"按住说话 · 点一下免提"}</button>
         <div class="chat-input-row">
           <textarea id="call-input" placeholder="${s.muted?"已静音（仍可打字）":"打字说话…"}" style="flex:1;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:13px;outline:none;background:var(--bg);color:var(--text);max-height:80px">${esc(s.draft||"")}</textarea>
           <button class="send-btn active" id="call-send"><i data-lucide="send"></i></button>
@@ -13513,7 +14019,6 @@ function renderPhone(){
         <div class="body-switch-row" style="margin:12px 0">
           <div>
             <div class="body-switch-label">勿扰</div>
-            <div class="body-switch-hint">开启后来电不弹卡（仍可主动拨出）</div>
           </div>
           <div class="toggle-switch" id="call-dnd-toggle" style="background:${cfg.dnd?"var(--accent)":"var(--border)"}">
             <div class="toggle-knob" style="left:${cfg.dnd?"18px":"2px"}"></div>
@@ -13555,7 +14060,10 @@ function renderPhone(){
           </select>
           <span class="setting-label" style="margin-top:8px">TTS 代理（走后端，默认已指向 VPS）</span>
           <input id="call-tts-proxy" value="${escAttr(cfg.ttsProxy||"")}" placeholder="如 http://115.29.237.172:9090 → 请求 /tts/minimax"/>
-          <div style="font-size:11px;color:var(--sub);margin-top:4px;line-height:1.6">默认走你的 VPS 网关（消除浏览器 CORS）。Key 可填 app 里，也可填到服务器 .env 的 MINIMAX_API_KEY，app 留空即可。</div>
+          
+          <div style="font-size:11px;margin-top:6px;color:${callAuthToken()?"var(--sub)":"#c45"}">
+            当前网关 Token：${callAuthToken()?"已就绪 ✓":"空 —— TTS / 按住说话都会 401"}
+          </div>
           <button type="button" class="btn-ghost" id="call-tts-test" style="margin-top:10px;align-self:flex-start">试听一句</button>
           ${cfg._ttsTestMsg?`<p style="font-size:11px;color:var(--sub);margin-top:6px">${esc(cfg._ttsTestMsg)}</p>`:""}
         </div>
@@ -13574,7 +14082,6 @@ function renderPhone(){
           <div class="body-switch-row" style="margin-bottom:10px;padding:0;border:none">
             <div>
               <div class="body-switch-label">${cfg.aicallEnabled===false?"AIcall：关":"AIcall：开"}</div>
-              <div class="body-switch-hint">连接后实时同步电话/前端消息</div>
             </div>
             <div id="aicall-enabled-toggle" class="toggle-switch" style="background:${cfg.aicallEnabled===false?"var(--border)":"var(--accent)"}">
               <div class="toggle-knob" style="left:${cfg.aicallEnabled===false?2:18}px"></div>
@@ -13783,7 +14290,6 @@ function renderVps(){
   const c = state.callConfig || {};
   return `<div class="page">
     ${subHeader("VPS")}
-    <p class="page-sub">把所有需要自建服务的地址集中在这里</p>
     <button type="button" id="vps-quickfill" class="btn-accent" style="width:100%;padding:12px;margin-bottom:14px"><i data-lucide="zap"></i> 一键填入我的 VPS（统一网关）</button>
     <div class="section">
       <div class="section-title"><i data-lucide="music"></i> 一起听</div>
@@ -13846,7 +14352,7 @@ function renderVps(){
           <input type="password" id="cfg-callToken" value="${escAttr(c.token||"")}" placeholder="可选"/></div>
       </div>
     </div>
-    <div class="settings-footer">配置只存在本机浏览器 · 不会上传</div>
+    
   </div>`;
 }
 
@@ -14511,7 +15017,6 @@ function renderSoupGame(){
   if(g.phase === "setup"){
     return `<div class="page">
       ${subHeader('<i data-lucide="turtle"></i> 海龟汤')}
-      <p class="page-sub">TA 出汤面 · 你用是/否问题逼近汤底</p>
       <div class="status-card" style="margin-bottom:14px;line-height:1.65;font-size:13px;color:var(--text)">
         <div style="font-size:11px;color:var(--sub);margin-bottom:8px">规则</div>
         对方只回答：<strong>是 / 否 / 无关 / 是也不是</strong>。<br/>
@@ -14563,7 +15068,6 @@ function renderGuessGame(){
   if(g.phase === "setup"){
     return `<div class="page">
       ${subHeader('<i data-lucide="target"></i> 猜词游戏')}
-      <p class="page-sub">选对手与谁来描述，开始后随机抽词</p>
       <div class="section-body" style="margin-bottom:14px;padding:14px">
         <div class="setting-label" style="margin-bottom:8px">和谁玩</div>
         <div class="channel-btns" style="flex-wrap:wrap">
@@ -14940,7 +15444,6 @@ function renderMenuGame(){
       <div class="body-switch-row" style="margin-top:14px">
         <div>
           <div class="body-switch-label">${state._menuShareOn?"菜单已写入聊天上下文":"菜单未写入聊天"}</div>
-          <div class="body-switch-hint">${state._menuShareOn?"TA 聊天时能看到菜单并自然点菜（占 token）":"关闭后系统提示不带菜单，省 token"}</div>
         </div>
         <div id="menu-share-toggle" class="toggle-switch" style="background:${state._menuShareOn?"var(--accent)":"var(--border)"}">
           <div class="toggle-knob" style="left:${state._menuShareOn?18:2}px"></div>
@@ -14956,7 +15459,6 @@ function renderMenuGame(){
       <div class="body-switch-row" style="margin-bottom:14px">
         <div>
           <div class="body-switch-label">${state._menuOrderShareOn?"点单已写入聊天上下文":"点单未写入聊天"}</div>
-          <div class="body-switch-hint">${state._menuOrderShareOn?"TA（含 NSFW）可按已点的菜发挥":"关闭后不把点单塞进系统提示"}</div>
         </div>
         <div id="menu-order-share-toggle" class="toggle-switch" style="background:${state._menuOrderShareOn?"var(--accent)":"var(--border)"}">
           <div class="toggle-knob" style="left:${state._menuOrderShareOn?18:2}px"></div>
@@ -14983,7 +15485,6 @@ function renderMenuGame(){
   }
   return `<div class="page">
     ${subHeader('<i data-lucide="clipboard-list"></i> 菜单')}
-    <p class="page-sub">自建菜单 · 开关控制是否让 TA 看见 · 点单自己记</p>
     <div class="game-tabs" style="margin-bottom:12px">
       <button type="button" class="game-tab${tab==="list"?" active":""}" data-menu-tab="list">菜单</button>
       <button type="button" class="game-tab${tab==="order"?" active":""}" data-menu-tab="order">点菜</button>
@@ -15302,7 +15803,6 @@ function renderMcpHall(){
   const info = state.mcpServerInfo || {};
   return `<div class="page">
     ${subHeader('<i data-lucide="plug"></i> MCP 游戏大厅')}
-    <p class="page-sub">通用连接器 · 填任意 MCP Server · 动态生成操作</p>
     <div class="heat-summary">
       <strong>相对 DS 方案的落地调整</strong><br/>
       ① 浏览器<strong>不能</strong>跑 stdio（Claude Desktop 本机用）。<br/>
@@ -15375,11 +15875,101 @@ function renderMcpHall(){
 }
 
 
+function renderWallet(){
+  const w = ensureWallet();
+  const unit = walletUnit();
+  const d = w.draft;
+  const ledger = w.ledger || [];
+  const shelfEdit = state.walletShopEdit;
+
+  const shopCards = (w.shop||[]).map(i=>{
+    const afford = w.balance >= (Number(i.price)||0);
+    const editing = shelfEdit === i.id;
+    if(editing){
+      return `<div class="wal-item">
+        <input class="wal-in" id="wal-e-emoji" value="${escAttr(i.emoji||"")}" maxlength="4" placeholder="🎁" style="width:56px;text-align:center"/>
+        <input class="wal-in" id="wal-e-name" value="${escAttr(i.name||"")}" placeholder="名称"/>
+        <input class="wal-in" id="wal-e-price" value="${escAttr(String(i.price||0))}" inputmode="numeric" placeholder="价格" style="width:76px"/>
+        <input class="wal-in" id="wal-e-desc" value="${escAttr(i.desc||"")}" placeholder="说明" style="flex:1 1 100%"/>
+        <div class="wal-item-acts">
+          <button type="button" class="btn-accent" data-wal-item-save="${escAttr(i.id)}" style="padding:6px 12px">保存</button>
+          <button type="button" class="btn-ghost" data-wal-item-cancel style="padding:6px 12px">取消</button>
+          <button type="button" class="btn-ghost" data-wal-item-del="${escAttr(i.id)}" style="padding:6px 12px;color:#c45;margin-left:auto">删除</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="wal-item">
+      <span class="wal-item-emoji">${esc(i.emoji||"🎁")}</span>
+      <span class="wal-item-meta">
+        <span class="wal-item-name">${esc(i.name||"")}</span>
+        ${i.desc?`<span class="wal-item-desc">${esc(i.desc)}</span>`:""}
+      </span>
+      <span class="wal-item-price${afford?"":" poor"}">${esc(String(i.price||0))} ${esc(unit)}</span>
+      <span class="wal-item-acts">
+        <button type="button" class="btn-ghost" data-wal-item-edit="${escAttr(i.id)}" style="padding:5px 10px;font-size:11px">改</button>
+        <button type="button" class="${afford?"btn-accent":"btn-ghost"}" data-wal-redeem="${escAttr(i.id)}" style="padding:5px 12px;font-size:11px"${afford?"":" disabled"}>替他兑换</button>
+      </span>
+    </div>`;
+  }).join("") || `<div class="empty-state" style="padding:18px">货架空着，加点东西给他换</div>`;
+
+  return `<div class="page">
+    ${subHeader('<i data-lucide="wallet"></i> Aries 的钱包')}
+
+    <div class="wal-balance">
+      <div class="wal-bal-lab">他的余额</div>
+      <div class="wal-bal-num">${esc(String(w.balance))}<span class="wal-bal-unit">${esc(unit)}</span></div>
+    </div>
+
+    <div class="wal-send">
+      <div class="wal-send-row">
+        ${[10,20,50,100].map(n=>`<button type="button" class="wal-quick" data-wal-quick="${n}">+${n}</button>`).join("")}
+      </div>
+      <div class="wal-send-row">
+        <input class="wal-in" id="wal-amt" inputmode="numeric" placeholder="金额" value="${escAttr(state.walletAmt||"")}" style="width:92px"/>
+        <input class="wal-in" id="wal-note" placeholder="附言（可空）" value="${escAttr(state.walletNote||"")}" style="flex:1"/>
+        <button type="button" class="btn-accent" id="wal-send" style="padding:9px 16px;border-radius:12px">转钱</button>
+      </div>
+      
+    </div>
+
+    <div class="feat-section-label" style="margin-top:18px">兑换处（${(w.shop||[]).length}）</div>
+    <div class="wal-shop">${shopCards}</div>
+    ${d ? `<div class="wal-item wal-item-new">
+      <input class="wal-in" id="wal-n-emoji" value="${escAttr(d.emoji||"")}" maxlength="4" placeholder="🎁" style="width:56px;text-align:center"/>
+      <input class="wal-in" id="wal-n-name" value="${escAttr(d.name||"")}" placeholder="名称"/>
+      <input class="wal-in" id="wal-n-price" value="${escAttr(String(d.price||""))}" inputmode="numeric" placeholder="价格" style="width:76px"/>
+      <input class="wal-in" id="wal-n-desc" value="${escAttr(d.desc||"")}" placeholder="说明（可空）" style="flex:1 1 100%"/>
+      <div class="wal-item-acts">
+        <button type="button" class="btn-accent" id="wal-new-save" style="padding:6px 14px">加进货架</button>
+        <button type="button" class="btn-ghost" id="wal-new-cancel" style="padding:6px 14px">取消</button>
+      </div>
+    </div>`
+    : `<button type="button" class="btn-ghost" id="wal-new-open" style="width:100%;padding:10px;margin-top:8px">＋ 加一件可兑换的东西</button>`}
+
+    <div class="feat-section-label" style="margin-top:20px">流水</div>
+    ${ledger.length ? `<div class="wal-ledger">${ledger.slice(0,40).map(e=>`
+      <div class="wal-row">
+        <span class="wal-row-amt ${e.amount>0?"in":"out"}">${e.amount>0?"+":""}${esc(String(e.amount))}</span>
+        <span class="wal-row-note">${esc(e.note||"")}</span>
+        <span class="wal-row-time">${e.time?esc(formatTime(e.time)):""}</span>
+      </div>`).join("")}</div>`
+      : `<div class="empty-state" style="padding:18px">还没有流水</div>`}
+
+    <div class="feat-section-label" style="margin-top:20px">货币</div>
+    <div class="wal-send">
+      <div class="wal-send-row">
+        <input class="wal-in" id="wal-cur-symbol" value="${escAttr(w.symbol||"")}" maxlength="4" placeholder="🐟" style="width:56px;text-align:center"/>
+        <input class="wal-in" id="wal-cur-name" value="${escAttr(w.name||"")}" placeholder="货币名，比如 小鱼干" style="flex:1"/>
+        <button type="button" class="btn-ghost" id="wal-cur-save" style="padding:9px 14px;border-radius:12px">改名</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderGame(){
   const list=state.gameMode==="warm"?PUPPY_WARM:PUPPY_NSFW;
   return `<div class="page">
     ${subHeader('<i data-lucide="paw-print"></i> 小狗游戏')}
-    <p class="page-sub">点一个按钮，TA 会以小狗的身份回应你</p>
     <div class="game-tabs">
       <button class="game-tab${state.gameMode==="warm"?" active":""}" data-gmode="warm"><i data-lucide="flower"></i> 温馨</button>
       <button class="game-tab${state.gameMode==="nsfw"?" active":""}" data-gmode="nsfw"><i data-lucide="flame"></i> NSFW</button>
@@ -15391,6 +15981,7 @@ function renderGame(){
         </button>
       `).join("")}
     </div>
+    ${puppyCustomBlockHtml("game")}
     ${(state.gameReply||state.gameLoading)?`
       <div class="game-reply">
         <div class="label">TA 的回应</div>
@@ -15480,19 +16071,58 @@ function renderNsfwInline(text){
 function renderInline(content, clickable, nsfwMode){
   const raw = String(content||"");
   if(!raw) return "";
-  const re = /\[action\s*[:：]\s*([^\]]+)\]/g;
+  // [action:摸摸头] 爪印 / [pay:20|想买杯咖啡] 要钱 / [buy:加餐一次] 兑换凭据
+  const re = /\[(action|pay|buy|buyx|song)\s*[:：]\s*([^\]]+)\]/g;
   const out = [];
   let last = 0, m;
   const pushText = (t)=> out.push(nsfwMode ? renderNsfwInline(t) : esc(t));
   while((m = re.exec(raw)) !== null){
     pushText(raw.slice(last, m.index));
-    const lbl = m[1].trim();
-    const click = clickable ? ` data-action-send="${escAttr(lbl)}"` : "";
-    out.push(`<span class="paw-chip"${click}><i data-lucide="paw-print"></i>${esc(lbl)}</span>`);
+    const kind = m[1];
+    const body = m[2].trim();
+    if(kind === "action"){
+      const click = clickable ? ` data-action-send="${escAttr(body)}"` : "";
+      out.push(`<span class="paw-chip"${click}><i data-lucide="paw-print"></i>${esc(body)}</span>`);
+    } else if(kind === "pay"){
+      const parts = body.split(/[|｜]/);
+      const amt = Math.round(Number(String(parts[0]||"").replace(/[^\d.]/g,""))||0);
+      const why = (parts.slice(1).join("|")||"").trim();
+      out.push(walletAskCardHtml(amt, why, clickable));
+    } else if(kind === "song"){
+      out.push(`<span class="song-chip"${clickable?` data-song-play="${escAttr(body)}"`:""}>
+        <i data-lucide="music"></i>
+        <span class="song-chip-main">${esc(body)}</span>
+        ${clickable?`<span class="song-chip-go">播放</span>`:""}
+      </span>`);
+    } else if(kind === "buyx"){
+      out.push(`<span class="wal-chip fail"><i data-lucide="receipt"></i><span class="wal-chip-main">${esc(body)}</span></span>`);
+    } else {
+      out.push(walletBuyCardHtml(body));
+    }
     last = m.index + m[0].length;
   }
   pushText(raw.slice(last));
   return out.join("");
+}
+
+/** 他向你要钱：一张可一键转账的卡 */
+function walletAskCardHtml(amount, why, clickable){
+  const unit = walletUnit();
+  if(!amount) return "";
+  const click = clickable ? ` data-wal-pay="${escAttr(String(amount))}" data-wal-why="${escAttr(why||"")}"` : "";
+  return `<span class="wal-chip ask"${click}>
+    <i data-lucide="hand-coins"></i>
+    <span class="wal-chip-main">想要 ${esc(String(amount))} ${esc(unit)}</span>
+    ${why?`<span class="wal-chip-sub">${esc(why)}</span>`:""}
+    ${clickable?`<span class="wal-chip-go">转给他</span>`:""}
+  </span>`;
+}
+/** 他花钱换了东西：一张凭据（扣款在收到消息时已完成） */
+function walletBuyCardHtml(name){
+  return `<span class="wal-chip buy">
+    <i data-lucide="receipt"></i>
+    <span class="wal-chip-main">兑换了 ${esc(String(name||""))}</span>
+  </span>`;
 }
 function sendPuppyAction(label){
   if(!label || state.chatLoading) return;
@@ -15500,6 +16130,50 @@ function sendPuppyAction(label){
   if(typeof sendUserMsg==="function") sendUserMsg();
   if(state.pendingUser && state.pendingUser.length && typeof triggerAIReply==="function") triggerAIReply();
 }
+/** 自定义按钮区：一个「＋ 自己写一个」，展开成输入框；已存的按钮带 × 可删。
+ *  mode="chat"：按下去当成一条消息发进聊天（聊天扩展栏）
+ *  mode="game"：按下去在本页出 TA 的回应（功能页小狗游戏，跟这页原本的按钮一致） */
+function puppyCustomBlockHtml(mode){
+  mode = (mode === "game") ? "game" : "chat";
+  const mine = puppyCustomList();
+  const composing = state.puppyComposing === mode;
+  const sendAttr = t => mode === "game"
+    ? `data-puppy-play="${escAttr(t)}"`
+    : `data-puppy-send="${escAttr(t)}"`;
+  const chips = mine.map(t=>`
+    <span class="puppy-custom-chip">
+      <button type="button" class="puppy-custom-send" ${sendAttr(t)}>${esc(t)}</button>
+      <button type="button" class="puppy-custom-del" data-puppy-del="${escAttr(t)}" title="删掉这个按钮" aria-label="删掉按钮 ${escAttr(t)}">×</button>
+    </span>`).join("");
+  return `<div class="puppy-custom">
+    <div class="puppy-custom-lab">自定义</div>
+    <div class="puppy-custom-row">
+      ${chips}
+      ${composing ? `
+        <span class="puppy-custom-form">
+          <input id="puppy-custom-input" type="text" maxlength="40" placeholder="想按什么？比如 蹭蹭你的手"
+                 value="${escAttr(state.puppyDraft||"")}" autocomplete="off"/>
+          <button type="button" class="puppy-custom-ok" data-puppy-custom-send="${mode}">发送</button>
+          <button type="button" class="puppy-custom-cancel" data-puppy-custom-cancel>取消</button>
+        </span>`
+        : `<button type="button" class="puppy-custom-add" data-puppy-custom-open="${mode}"><i data-lucide="plus"></i> 自己写一个</button>`}
+    </div>
+    
+  </div>`;
+}
+
+/** 自定义按钮：存下来再按它 */
+function puppyCustomSubmit(mode){
+  const el = document.getElementById("puppy-custom-input");
+  const text = String((el && el.value) || state.puppyDraft || "").trim();
+  if(!text){ if(el) el.focus(); return; }
+  puppyCustomAdd(text);
+  state.puppyComposing = false;
+  state.puppyDraft = "";
+  if(mode === "game") playPuppyText(text);
+  else sendPuppyAction(text);
+}
+
 function renderPuppyPageOverlay(){
   const list = state.gameMode==="warm"?PUPPY_WARM:PUPPY_NSFW;
   return `<div class="puppy-overlay" data-puppy-close-backdrop>
@@ -15517,6 +16191,7 @@ function renderPuppyPageOverlay(){
           <button type="button" class="puppy-chip" data-puppy-send="${escAttr(b.text)}"><i data-lucide="${escAttr(b.icon||"paw-print")}"></i><span>${esc(b.text)}</span></button>
         `).join("")}
       </div>
+      ${puppyCustomBlockHtml("chat")}
     </div>
   </div>`;
 }
@@ -15692,7 +16367,6 @@ function renderLove(){
   }).join("");
   return `<div class="page">
     ${subHeader('<i data-lucide="heart"></i> 计分器')}
-    <p class="page-sub">现实情侣打分 · 满分 100 · 起始 50</p>
     <div class="love-meter">
       <div class="love-big">${v}<span class="love-total"> / 100</span></div>
       <div class="love-bar"><div class="love-bar-fill" style="width:${v}%"></div></div>
@@ -15769,7 +16443,7 @@ function __stripMarkersForLive(t){
     .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关)\s*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:真心话|大冒险|混合|抽卡|抽张|翻牌|机抽|我抽|机来抽)\s*[⟫》】]/g,"")
-    .replace(/\[(?:sticker|action):[^\]]*\]/g,"");
+    .replace(/\[(?:sticker|action|pay|buy|buyx)\s*[:：][^\]]*\]/g,"");
 }
 function renderStreamLiveMsg(){
   const sl = state.streamLive;
@@ -16152,7 +16826,7 @@ function renderProject(){
   const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
   let list = "";
   if(!files.length){
-    list = `<div class="empty-state" style="padding:36px 16px">还没有文件<br><span style="font-size:12px;opacity:.75">聊天里模型用 ⟪file:名字⟫ … ⟪/file⟫ 写出的内容会出现在这里</span></div>`;
+    list = `<div class="empty-state" style="padding:36px 16px">还没有文件</div>`;
   } else {
     list = `<div class="sb-file-list" style="gap:10px">${files.map(f => {
       const ico = f.dataUrl ? "image" : (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f) ? "globe" : "file-text");
@@ -16173,7 +16847,6 @@ function renderProject(){
   }
   return `<div class="page">
     ${subHeader('<i data-lucide="folder-open"></i> Project')}
-    <p class="page-sub">模型产出的文件 · 预览 / 页内运行 HTML / 下载</p>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button type="button" class="btn-ghost" id="proj-clear" ${files.length?"":"disabled"} style="padding:8px 14px;font-size:12px">清空全部</button>
       <span style="font-size:12px;color:var(--sub);align-self:center">${files.length} 个文件</span>
@@ -16260,7 +16933,7 @@ function renderChatSidebar(){
 
   let fileHtml = "";
   if(!files.length){
-    fileHtml = `<div class="sb-empty">还没有文件<br>模型用 ⟪file:名字⟫ … ⟪/file⟫ 写出的内容会出现在这里</div>`;
+    fileHtml = `<div class="sb-empty">还没有文件</div>`;
   } else {
     fileHtml = `<div class="sb-file-list">${files.slice(0, 40).map(f => {
       const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
@@ -17802,7 +18475,6 @@ function renderBranding(){
   const ic = brandingActiveIcon();
   return `<div class="page">
     ${subHeader('<i data-lucide="tag"></i> 品牌形象')}
-    <p class="page-sub">改名 · 切换开屏 · 切换 App 头像（APK 桌面图标需打包时再换一套）</p>
 
     <div class="section">
       <div class="section-title">名字</div>
@@ -18081,6 +18753,9 @@ function renderTheme(){
   const meCol = (state.bubbleMeColor && state.bubbleMeColor.trim()) || t.bubble_me;
   const themCol = (state.bubbleThemColor && state.bubbleThemColor.trim()) || t.bubble_them;
   const glassCls = bStyle==="fog" ? " glass-fog" : (bStyle==="water" ? " glass-water" : "");
+  // 图片气泡皮肤（水色/轻松熊/鱼饼熊/彩虹熊）：预览直接用真气泡 DOM，让皮肤 CSS 生效
+  const imgSkin = (typeof isBubbleImageSkin==="function") && isBubbleImageSkin(bStyle);
+  const skinCls = imgSkin ? ((typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "") : "";
   const grad = (typeof bubbleGrad==="function") ? bubbleGrad() : null;
   const meBg = grad ? `linear-gradient(135deg, ${grad.c1}, ${grad.c2}, ${grad.c3})`
     : (bStyle==="solid" ? meCol : (typeof hexToRgba==="function" ? hexToRgba(meCol, (Number(state.bubbleOpacity)||0.72)) : meCol));
@@ -18090,7 +18765,6 @@ function renderTheme(){
   const themFg = grad ? "#3d342c" : (typeof contrastFg==="function" ? contrastFg(themCol) : t.text);
   return `<div class="page">
     ${subHeader('<i data-lucide="palette"></i> 外观')}
-    <p class="page-sub">主题衣柜 · 壁纸 · 界面材质（气泡/日历/卡片）</p>
     ${groups.map(g=>`
       <div class="theme-group">
         <div class="theme-group-label">${g.label}</div>
@@ -18161,8 +18835,14 @@ function renderTheme(){
         <button type="button" id="bubble-color-reset" class="btn-ghost" style="margin-top:10px;width:100%">恢复主题默认色</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px solid var(--border);background:${t.bg};background-image:${state.customWallpaper?`url(${state.customWallpaper})`:(PATTERNS[state.pattern]||"none")};background-size:${state.customWallpaper?"cover":(PATTERN_SIZES[state.pattern]||"auto")};background-position:center">
+        ${imgSkin ? `
+        <div class="bubble-row them"><div class="bubble them${skinCls}">好看就留下，不喜欢再调。</div></div>
+        <div class="bubble-row me"><div class="bubble me${skinCls}">嗯，试试新气泡～</div></div>
+        <div class="bubble-row me"><div class="bubble me${skinCls} cont">连着说的第二句长这样。</div></div>
+        ` : `
         <div style="align-self:flex-end;max-width:78%;padding:9px 14px;border-radius:16px 4px 16px 16px;font-size:13px;line-height:1.5;color:${meFg};background:${meBg};${bStyle!=="solid"?`backdrop-filter:blur(${bStyle==="water"?22:14}px);-webkit-backdrop-filter:blur(${bStyle==="water"?22:14}px);border:1px solid rgba(255,255,255,0.4);box-shadow:0 4px 16px rgba(0,0,0,0.08)`:""}">嗯，试试新气泡～</div>
         <div style="align-self:flex-start;max-width:78%;padding:9px 14px;border-radius:4px 16px 16px 16px;font-size:13px;line-height:1.5;color:${themFg};background:${themBg};${bStyle!=="solid"?`backdrop-filter:blur(${bStyle==="water"?22:14}px);-webkit-backdrop-filter:blur(${bStyle==="water"?22:14}px);border:1px solid rgba(255,255,255,0.45);box-shadow:0 4px 16px rgba(0,0,0,0.08)`:"border:1px solid "+t.border}">好看就留下，不喜欢再调。</div>
+        `}
       </div>
     </div>
     <div class="theme-group" style="margin-top:16px">
@@ -18174,7 +18854,7 @@ function renderTheme(){
         <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
         <button type="button" class="font-chip${state.uiShell==="korean"?" active":""}" data-ui-shell="korean">韩系</button>
       </div>
-      <div style="font-size:11px;color:var(--sub);margin-top:6px">像素壳：星露谷向木牌/田园风，纯 CSS，可随时切回经典</div>
+      
     </div>
     <div class="theme-group" style="margin-top:16px">
       <div class="theme-group-label">字体</div>
@@ -18327,7 +19007,6 @@ function renderBackup(){
   const last = br.lastBackupAt ? new Date(br.lastBackupAt).toLocaleString("zh") : "从未备份";
   return `<div class="page">
     ${subHeader('<i data-lucide="save"></i> 数据备份')}
-    <p class="page-sub">把当前账号的聊天、记忆、配置、角色等所有数据导出为一个 JSON 文件。默认不含 API Key，恢复后需重填。</p>
     <div class="add-form" style="margin-bottom:12px">
       <div class="setting-label">导出</div>
       <button type="button" id="backup-export" class="btn-accent" style="width:100%;padding:11px"><i data-lucide="download"></i> 导出备份文件（memorypalace-backup-*.json）</button>
@@ -18660,7 +19339,6 @@ function renderSettings(){
           <div class="body-switch-row" style="margin:0">
             <div>
               <div class="body-switch-label">${state.petOn?"浮窗像素宠物":"已隐藏"}</div>
-              <div class="body-switch-hint">会随聊天变表情（打字/开心/睡觉）</div>
             </div>
             <div id="pet-toggle" class="toggle-switch" style="background:${state.petOn?"var(--accent)":"var(--border)"}">
               <div class="toggle-knob" style="left:${state.petOn?18:2}px"></div>
@@ -18960,6 +19638,7 @@ if(!window.__mpDelegated){
       }
       if(id==="chat-send" || raw.closest("#chat-send")){
         e.preventDefault(); e.stopImmediatePropagation();
+        state.__refocusChat = true; // 发完键盘别收回去
         if(typeof sendUserMsg==="function") sendUserMsg();
         return;
       }
@@ -19130,7 +19809,7 @@ if(!window.__mpDelegated){
       if(id==="call-mute"){ e.preventDefault(); e.stopImmediatePropagation(); const s=ensureCallSession(); s.muted=!s.muted; render(); return; }
       if(id==="call-sim-in"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callSimulateIncoming==="function") callSimulateIncoming(); return; }
       if(id==="call-dnd" || id==="call-dnd-toggle"){ e.preventDefault(); e.stopImmediatePropagation(); state.callConfig=state.callConfig||{}; state.callConfig.dnd=!state.callConfig.dnd; persist("callConfig"); render(); return; }
-      if(id==="call-tts-test"){ e.preventDefault(); (async()=>{ try{ await callSpeak("喂，是我。听到了吗？"); }catch(err){} })(); return; }
+      if(id==="call-tts-test"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callTtsTest==="function") callTtsTest(); return; }
       if(id==="call-tts-toggle"){ e.preventDefault(); state.callConfig=state.callConfig||{}; state.callConfig.ttsEnabled=state.callConfig.ttsEnabled===false?true:false; persist("callConfig"); render(); return; }
 
       // —— 碎星 ——
@@ -19473,6 +20152,159 @@ function bindEvents(){
       state.puppyPageOpen=false; render();
     };
   });
+  // ─── 一起听 ─────────────────────────────────────────────
+  const musicGear = document.getElementById("music-settings-toggle");
+  if(musicGear) musicGear.onclick = ()=>{ state.musicSettingsOpen = !state.musicSettingsOpen; render(); };
+  const musicShare = document.getElementById("music-share-chat");
+  if(musicShare) musicShare.onclick = ()=>{
+    const n = state.musicNow;
+    if(!n) return;
+    const ar = Array.isArray(n.artists)?n.artists.join(" / "):(n.artists||"");
+    state.chatInput = `我在听《${n.name}》${ar?" - "+ar:""}，你也听听。`;
+    state.subPage = null; state.tab = "chat";
+    render();
+    if(typeof sendUserMsg==="function") sendUserMsg();
+    if(state.pendingUser && state.pendingUser.length && typeof triggerAIReply==="function") triggerAIReply();
+  };
+  // 聊天里他发的点歌卡
+  document.querySelectorAll("[data-song-play]").forEach(el=>{
+    el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); songChipPlay(el.dataset.songPlay); };
+  });
+
+  // ─── 钱包 ───────────────────────────────────────────────
+  const walAmt = document.getElementById("wal-amt");
+  if(walAmt) walAmt.oninput = ()=>{ state.walletAmt = walAmt.value; };
+  const walNote = document.getElementById("wal-note");
+  if(walNote) walNote.oninput = ()=>{ state.walletNote = walNote.value; };
+  const walSend = document.getElementById("wal-send");
+  if(walSend) walSend.onclick = ()=>{
+    const amt = Number(String((walAmt&&walAmt.value)||state.walletAmt||"").replace(/[^\d.]/g,""));
+    if(walletTransfer(amt, (walNote&&walNote.value)||state.walletNote||"")){
+      state.walletAmt = ""; state.walletNote = "";
+    }
+    render();
+  };
+  document.querySelectorAll("[data-wal-quick]").forEach(btn=>{
+    btn.onclick = ()=>{ walletTransfer(+btn.dataset.walQuick, "转给你"); render(); };
+  });
+  // 聊天气泡里那张「他想要 N」卡片，点一下直接转
+  document.querySelectorAll("[data-wal-pay]").forEach(el=>{
+    el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation();
+      walletTransfer(+el.dataset.walPay, el.dataset.walWhy || "他要的"); render();
+    };
+  });
+  document.querySelectorAll("[data-wal-redeem]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const r = walletRedeem(btn.dataset.walRedeem, "me");
+      if(typeof showToast==="function") showToast(r.ok ? `已替他兑换 ${r.item.name}` : r.reason);
+      render();
+    };
+  });
+  document.querySelectorAll("[data-wal-item-edit]").forEach(btn=>{
+    btn.onclick = ()=>{ state.walletShopEdit = btn.dataset.walItemEdit; render(); };
+  });
+  document.querySelectorAll("[data-wal-item-cancel]").forEach(btn=>{
+    btn.onclick = ()=>{ state.walletShopEdit = null; render(); };
+  });
+  document.querySelectorAll("[data-wal-item-save]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const w = ensureWallet();
+      const it = (w.shop||[]).find(x=>x.id===btn.dataset.walItemSave);
+      if(!it) return;
+      const g = id => (document.getElementById(id)||{}).value;
+      it.emoji = String(g("wal-e-emoji")||"").trim() || "🎁";
+      it.name  = String(g("wal-e-name")||"").trim() || it.name;
+      it.price = Math.max(0, Math.round(Number(String(g("wal-e-price")||"").replace(/[^\d.]/g,""))||0));
+      it.desc  = String(g("wal-e-desc")||"").trim();
+      walletSave(); state.walletShopEdit = null; render();
+    };
+  });
+  document.querySelectorAll("[data-wal-item-del]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const w = ensureWallet();
+      const it = (w.shop||[]).find(x=>x.id===btn.dataset.walItemDel);
+      if(!it || !confirm(`把「${it.name}」从货架上撤掉？`)) return;
+      w.shop = (w.shop||[]).filter(x=>x.id!==it.id);
+      walletSave(); state.walletShopEdit = null; render();
+    };
+  });
+  const walNewOpen = document.getElementById("wal-new-open");
+  if(walNewOpen) walNewOpen.onclick = ()=>{ ensureWallet().draft = { emoji:"🎁", name:"", price:"", desc:"" }; render(); };
+  const walNewCancel = document.getElementById("wal-new-cancel");
+  if(walNewCancel) walNewCancel.onclick = ()=>{ ensureWallet().draft = null; render(); };
+  const walNewSave = document.getElementById("wal-new-save");
+  if(walNewSave) walNewSave.onclick = ()=>{
+    const w = ensureWallet();
+    const g = id => (document.getElementById(id)||{}).value;
+    const name = String(g("wal-n-name")||"").trim();
+    if(!name){ if(typeof showToast==="function") showToast("先给它起个名字"); return; }
+    w.shop = (w.shop||[]).concat([{
+      id: wUid(),
+      emoji: String(g("wal-n-emoji")||"").trim() || "🎁",
+      name,
+      price: Math.max(0, Math.round(Number(String(g("wal-n-price")||"").replace(/[^\d.]/g,""))||0)),
+      desc: String(g("wal-n-desc")||"").trim(),
+    }]);
+    w.draft = null;
+    walletSave(); render();
+  };
+  const walCurSave = document.getElementById("wal-cur-save");
+  if(walCurSave) walCurSave.onclick = ()=>{
+    const w = ensureWallet();
+    const g = id => (document.getElementById(id)||{}).value;
+    w.symbol = String(g("wal-cur-symbol")||"").trim();
+    w.name = String(g("wal-cur-name")||"").trim() || "币";
+    walletSave();
+    if(typeof showToast==="function") showToast("货币已改名");
+    render();
+  };
+
+  // ─── 自定义小狗按钮 ─────────────────────────────────────
+  document.querySelectorAll("[data-puppy-play]").forEach(btn=>{
+    btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); playPuppyText(btn.dataset.puppyPlay); };
+  });
+  document.querySelectorAll("[data-puppy-custom-open]").forEach(btn=>{
+    btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
+      state.puppyComposing = btn.dataset.puppyCustomOpen || "chat";
+      state.puppyDraft = "";
+      render();
+      const el = document.getElementById("puppy-custom-input");
+      if(el) el.focus();
+    };
+  });
+  document.querySelectorAll("[data-puppy-custom-cancel]").forEach(btn=>{
+    btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
+      state.puppyComposing=false; state.puppyDraft=""; render();
+    };
+  });
+  document.querySelectorAll("[data-puppy-custom-send]").forEach(btn=>{
+    btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
+      const mode = btn.dataset.puppyCustomSend || "chat";
+      puppyCustomSubmit(mode);
+      if(mode !== "game") state.puppyPageOpen=false;
+      render();
+    };
+  });
+  document.querySelectorAll("[data-puppy-del]").forEach(btn=>{
+    btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
+      puppyCustomRemove(btn.dataset.puppyDel); render();
+    };
+  });
+  const puppyInput = document.getElementById("puppy-custom-input");
+  if(puppyInput){
+    puppyInput.oninput = ()=>{ state.puppyDraft = puppyInput.value; };
+    puppyInput.onkeydown = (ev)=>{
+      if(ev.key === "Enter"){
+        ev.preventDefault();
+        const mode = state.puppyComposing === "game" ? "game" : "chat";
+        puppyCustomSubmit(mode);
+        if(mode !== "game") state.puppyPageOpen=false;
+        render();
+      } else if(ev.key === "Escape"){
+        ev.preventDefault(); state.puppyComposing=false; state.puppyDraft=""; render();
+      }
+    };
+  }
   // ─── 表情包 ─────────────────────────────────────────────
   const stickerBtn=document.getElementById("sticker-btn");
   if(stickerBtn) stickerBtn.onclick=(e)=>{ e.stopPropagation(); state.stickerOpen=true; state.chatMoreOpen=false; render(); };
@@ -19787,7 +20619,7 @@ function bindEvents(){
       if(send) send.classList.toggle("active",!!chatInput.value.trim());
     };
     chatInput.onkeydown=e=>{
-      if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendUserMsg(); }
+      if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); state.__refocusChat = true; sendUserMsg(); }
     };
     // 多模态：粘贴图片
     chatInput.addEventListener("paste", e=>{
@@ -20127,7 +20959,13 @@ function bindEvents(){
     render();
   };
   const chatSend=document.getElementById("chat-send");
-  if(chatSend) chatSend.onclick=sendUserMsg;
+  if(chatSend){
+    // 桌面端按下就拦掉默认行为，输入框不会 blur。
+    // 移动端不能拦 touchstart —— 拦了连 click 都不会派发，按钮直接失灵；
+    // 手机那边靠 __refocusChat 在重绘后把焦点收回来。
+    chatSend.onmousedown = e=>e.preventDefault();
+    chatSend.onclick=()=>{ state.__refocusChat = true; sendUserMsg(); };
+  }
   const trigger=document.getElementById("trigger-reply");
   if(trigger) trigger.onclick=triggerAIReply;
 
@@ -21518,33 +22356,43 @@ reader.readAsArrayBuffer(f);
   };
 
   // 共读：划线保存到 VPS
+  // 划线：本地就能存；书传过 VPS 的话 readAddMark 里会顺手同步一份
   const readMarkSave = document.getElementById("read-mark-save");
-  if(readMarkSave) readMarkSave.onclick = async ()=>{
+  if(readMarkSave) readMarkSave.onclick = ()=>{
     const quote = (document.getElementById("read-mark-quote")||{}).value||"";
     const note = (document.getElementById("read-mark-note")||{}).value||"";
-    const now = state.readingNow;
-    const books = state.books||[];
-    const b = now ? books.find(x=>x.id===now.bookId) : null;
     if(!quote.trim()){ if(typeof showToast==="function") showToast("先写摘句"); return; }
-    if(!b || !b.remoteId){
-      if(typeof showToast==="function") showToast("请先导入并等同步到 VPS（书架显示已同步VPS）");
-      return;
+    const now = state.readingNow;
+    const b = now ? (state.books||[]).find(x=>x.id===now.bookId) : null;
+    const chs = (b && b.chapters) || [];
+    const idx = now ? Math.min(Math.max(0, now.chapterIdx||0), Math.max(0,chs.length-1)) : 0;
+    const content = (chs[idx] && chs[idx].content) || "";
+    if(content && content.indexOf(quote.trim()) < 0){
+      if(typeof showToast==="function") showToast("这句不在本页里，划线会存但不高亮");
     }
-    const chs = b.chapters||[];
-    const idx = Math.min(Math.max(0, now.chapterIdx||0), Math.max(0,chs.length-1));
-    const content = (chs[idx]&&chs[idx].content)||"";
-    let start = content.indexOf(quote.trim());
-    if(start<0) start = 0;
-    const end = start + quote.trim().length;
-    if(typeof annoApi!=="function"){ alert("共读接口未加载"); return; }
-    const res = await annoApi("/api/v1/anno/marks", {
-      method:"POST",
-      body: JSON.stringify({ book_id: b.remoteId, start_offset:start, end_offset:end, quote:quote.trim(), note:note.trim(), by:"user" })
-    });
-    if(res&&res.ok){
-      if(typeof showToast==="function") showToast("批注已保存到 VPS");
-      readLoadMarks(b.remoteId);
-    } else if(typeof showToast==="function") showToast("保存失败");
+    const m = readAddMark(quote, note, "me");
+    if(typeof showToast==="function") showToast(m ? "已划线" : "这句已经划过了");
+    render();
+  };
+  document.querySelectorAll("[data-read-mark-del]").forEach(el=>{
+    el.onclick = ()=>{ readDeleteMark(el.dataset.readMarkDel); render(); };
+  });
+  // 叫他读这一页：把整页推进聊天，让他读完直接留批注
+  const readWithAi = document.getElementById("read-with-ai");
+  if(readWithAi) readWithAi.onclick = ()=>{
+    const now = state.readingNow;
+    if(!now){ if(typeof showToast==="function") showToast("先打开一本书"); return; }
+    const b = (state.books||[]).find(x=>x.id===now.bookId);
+    const chs = (b && b.chapters) || [];
+    const idx = Math.min(Math.max(0, now.chapterIdx||0), Math.max(0, chs.length-1));
+    const ch = chs[idx];
+    if(!ch || !ch.content){ if(typeof showToast==="function") showToast("这一页是空的"); return; }
+    state.readFeedChat = true; persist("readFeedChat");
+    state.chatInput = `我在读《${now.title||""}》第 ${idx+1} 页，你也读一下这一页，读完在戳到你的句子上留批注（⟪批注:摘句|想法⟫），然后跟我说说你的感觉。`;
+    state.subPage = null; state.tab = "chat";
+    render();
+    if(typeof sendUserMsg==="function") sendUserMsg();
+    if(state.pendingUser && state.pendingUser.length && typeof triggerAIReply==="function") triggerAIReply();
   };
   // 打开阅读页时拉批注
   if(state.readTab==="read" && state.readingNow){
@@ -22203,17 +23051,39 @@ reader.readAsArrayBuffer(f);
 
 
 
-  // 按住说话 STT
+  // 说话按钮：按住 = 对讲机（松手就发）；快点一下 = 免提锁定（再点一下才结束）。
+  // 以前只有「按住」，长句子要一直摁着手，很难受。
   const holdBtn = document.getElementById("call-hold");
   if(holdBtn){
-    const start = e=>{ e.preventDefault(); callHoldStart(); };
-    const end = e=>{ e.preventDefault(); callHoldEnd(); };
+    const TAP_MS = 350; // 低于这个时长算「点一下」
+    let downAt = 0;
+    const start = e=>{
+      e.preventDefault();
+      const s = ensureCallSession();
+      if(s.holdLocked){ callHoldEnd(); return; }  // 锁定中，这一下是「结束并发送」
+      downAt = Date.now();
+      callHoldStart();
+    };
+    const end = e=>{
+      e.preventDefault();
+      const s = ensureCallSession();
+      if(!s.recording) return;
+      if(Date.now() - downAt < TAP_MS){
+        // 快点一下：留在录音状态，松手也继续录
+        s.holdLocked = true;
+        callHoldPaint();
+        return;
+      }
+      callHoldEnd();
+    };
     holdBtn.ontouchstart = start;
     holdBtn.ontouchend = end;
-    holdBtn.ontouchcancel = end;
+    holdBtn.ontouchcancel = e=>{ e.preventDefault(); const s=ensureCallSession(); if(s.recording && !s.holdLocked) callHoldEnd(); };
     holdBtn.onmousedown = start;
     holdBtn.onmouseup = end;
-    holdBtn.onmouseleave = ()=>{ if(ensureCallSession().recording) callHoldEnd(); };
+    // 免提锁定时把指针移开不该中断录音
+    holdBtn.onmouseleave = ()=>{ const s=ensureCallSession(); if(s.recording && !s.holdLocked) callHoldEnd(); };
+    callHoldPaint();
   }
   
   const callWsUrl = document.getElementById("call-ws-url");
@@ -22265,19 +23135,7 @@ const sttUrl = document.getElementById("call-stt-url");
   bindCallCfg("call-minimax-model", "minimaxModel");
   bindCallCfg("call-minimax-endpoint", "minimaxEndpoint");
   bindCallCfg("call-tts-proxy", "ttsProxy");
-  const ttsTest = document.getElementById("call-tts-test");
-  if(ttsTest) ttsTest.onclick = async ()=>{
-    state.callConfig = state.callConfig || {};
-    state.callConfig._ttsTestMsg = "合成中…";
-    render();
-    try{
-      await callSpeak("喂，是我。听到了吗？我想你了。");
-      state.callConfig._ttsTestMsg = "已播放（若没声音请看控制台 CORS / Key）";
-    }catch(e){
-      state.callConfig._ttsTestMsg = "失败："+e.message;
-    }
-    persist("callConfig"); render();
-  };
+  // 「试听一句」只由全局委托处理（见 call-tts-test），这里不再重复绑定，否则一次点击会合成两遍
   const cfgMk = document.getElementById("cfg-minimaxKey");
   if(cfgMk) cfgMk.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.minimaxKey=cfgMk.value.trim(); persist("callConfig"); };
   const cfgMg = document.getElementById("cfg-minimaxGroup");
@@ -23063,6 +23921,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   const { thinking, body } = parseThinking(reply);
   let cleanBody = handleCallMarkers(body); // callhome 暗号：拨号/挂断/勿扰
   cleanBody = handleAlbumMarkers(cleanBody);   // 相册收藏：⟪收藏:感想⟫ / ⟪收藏第N张:感想⟫
+  cleanBody = handleWalletMarkers(cleanBody);  // 钱包：[buy:东西] 立即扣款，[pay:金额|理由] 留给她点
   const couponRes = handleCouponMarkers(cleanBody); // 券夹：⟪使用券:券名⟫
   cleanBody = couponRes.text;
   cleanBody = handleProfileCommand(cleanBody, "them"); // 主页资料卡：改签名/简介/背景
@@ -23086,7 +23945,9 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
   cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
-  cleanBody = handleAnnoMarkers(cleanBody); // 共读批注
+  cleanBody = handleAnnoMarkers(cleanBody); // 共读批注（VPS 书）
+  cleanBody = handleReadMarkMarkers(cleanBody); // 一起读划线：⟪批注:摘句|想法⟫
+  cleanBody = handleSongMarkers(cleanBody);     // 点歌：⟪点歌:歌名 - 歌手⟫ → 聊天里的可播卡片
   cleanBody = handleTruthDareMarkers(cleanBody);   // 真心话大冒险：⟪真心话⟫/⟪大冒险⟫/⟪抽卡⟫
   // Project 文件：先拆块入库，正文擦除，后面再推信封卡片
   let projectFilesFromReply = [];
@@ -23559,6 +24420,13 @@ async function playPuppy(idx){
   const list=state.gameMode==="warm"?PUPPY_WARM:PUPPY_NSFW;
   const btn=list[idx];
   if(!btn) return;
+  return playPuppyText(btn.text);
+}
+
+/** 按一个按钮（内置的或自己写的），让 TA 在本页回应 */
+async function playPuppyText(text){
+  const label=String(text||"").trim();
+  if(!label) return;
   if(!state.apiConfig.claudeKey && !state.apiConfig.openaiKey && !state.apiConfig.auxOpenaiKey){
     alert("请先在设置页配置 API Key"); return;
   }
@@ -23569,7 +24437,8 @@ async function playPuppy(idx){
   const modeHint=state.gameMode==="warm"
     ? "请用温馨、可爱、撒娇的小狗口吻回应。"
     : "请用暧昧、色气、亲密的小狗口吻回应（NSFW 允许）。";
-  const prompt=`你现在是用户的小狗伴侣（可以拟人化说话）。用户点了按钮：「${btn.emoji} ${btn.text}」。
+  // 这里以前拼的是 btn.emoji，可按钮表里只有 icon，没有 emoji —— prompt 里一直是「undefined 亲亲我」。
+  const prompt=`你现在是用户的小狗伴侣（可以拟人化说话）。用户点了按钮：「${label}」。
 ${modeHint}
 用 2-4 句短消息回应，每句换行，像真实聊天一样自然可爱。不要加引号或旁白标记。`;
 
