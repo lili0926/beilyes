@@ -6651,6 +6651,13 @@ function __ccBuildContent(messages, systemPrompt){
   if(sys && sys.length > 2200){
     sys = sys.slice(0, 1600) + "\n…（设定中段已省略，完整人设见 VPS CLAUDE.md）…\n" + sys.slice(-500);
   }
+  // 回复格式规则紧跟在「身份锚定 + 用户自己的提示词」后面，用户提示词一长（>约1480字）
+  // 它就整个落进上面被省略的中段 —— CC 通道于是从来没收到过「要写 <thinking>」这条要求，
+  // 思考链自然一直是空的。CC 又没有原生思考字段可用，所以这条必须保证送到。
+  try{
+    const fmt = (typeof replyFormatRules === "function") ? replyFormatRules() : "";
+    if(fmt && sys.indexOf("【回复格式") < 0) sys = (sys ? sys + "\n\n" : "") + fmt;
+  }catch(e){}
   const recent = (Array.isArray(messages)? messages.slice(-12):[]).map(m=>{
     const c = m.image? "[图片] "+(m.content||"") : (m.content||"");
     return (m.role==="user"?"用户: ":"助手: ")+c;
@@ -8511,6 +8518,19 @@ function __featHot(){
   return kws.some(k=> recent.indexOf(k) !== -1);
 }
 
+/** 回复格式规则（含思考链要求）。单独抽出来是因为 CC 通道要在截断后把它补回去。 */
+function replyFormatRules(){
+  return (state.thoughtOn!==false) ? `【回复格式——必须严格遵守】
+1. 若你的通道没有「原生思考字段」，请务必先在 <thinking> 与 </thinking> 标签内写出思考过程（情绪判断、意图、要怎么回、注意事项等）。有原生思考时也可再写，但不要省略。
+2. </thinking> 之后才是正式回复正文。不要只回正文却留空思考。
+3. 正式回复请拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句），不要写成一整段长文。
+4. 思考只写在 <thinking> 标签里；标签外不要写旁白、不要用括号心里话代替思考块。`
+: `【回复格式——思考链已关闭】
+1. 不要写 <thinking> 标签，不要输出内心独白块。
+2. 直接写正式回复正文：拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句）。
+3. 不要用括号写心里话代替思考。`;
+}
+
 function systemPrompt(ag){
   const g=state.prompts.filter(p=>p.category==="global"&&p.enabled);
   const n=state.nsfwOn?state.prompts.filter(p=>p.category==="nsfw"&&p.enabled):[];
@@ -8528,15 +8548,7 @@ function systemPrompt(ag){
 规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。`
     : `Jasmine 的每条消息都附带了发送时间（格式如 [时间: 2026/08/12 14:32]），请根据时间感知对话节奏，可自然地提及时间感，但不必每次都复述时间。
 
-${(state.thoughtOn!==false) ? `【回复格式——必须严格遵守】
-1. 若你的通道没有「原生思考字段」，请务必先在 <thinking> 与 </thinking> 标签内写出思考过程（情绪判断、意图、要怎么回、注意事项等）。有原生思考时也可再写，但不要省略。
-2. </thinking> 之后才是正式回复正文。不要只回正文却留空思考。
-3. 正式回复请拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句），不要写成一整段长文。
-4. 思考只写在 <thinking> 标签里；标签外不要写旁白、不要用括号心里话代替思考块。`
-: `【回复格式——思考链已关闭】
-1. 不要写 <thinking> 标签，不要输出内心独白块。
-2. 直接写正式回复正文：拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句）。
-3. 不要用括号写心里话代替思考。`}`;
+${replyFormatRules()}`;
   const guideText = (ag && typeof ag.thoughtGuide === "string" && ag.thoughtGuide.trim())
     ? ag.thoughtGuide.trim()
     : ((state.thoughtGuide && state.thoughtGuide.trim()) || "");
