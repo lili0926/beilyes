@@ -3140,9 +3140,14 @@ function applyThemeVars(){
     app.classList.remove("ui-glass-fog", "ui-glass-water", "ui-bubble-soft");
     if((state.bubbleStyle||"solid")==="fog") app.classList.add("ui-glass-fog");
     else if((state.bubbleStyle||"solid")==="water") app.classList.add("ui-glass-water");
-    else if((state.bubbleStyle||"solid")==="soft") app.classList.add("ui-bubble-soft");
+    else if(typeof isBubbleImageSkin==="function" && isBubbleImageSkin()) app.classList.add("ui-bubble-soft");
     try{
-      document.body.classList.toggle("bubble-skin-soft", (state.bubbleStyle||"solid")==="soft");
+      const bs = state.bubbleStyle || "solid";
+      document.body.classList.remove("bubble-skin-soft","bubble-skin-suisei","bubble-skin-cool","bubble-skin-fish","bubble-skin-rainbow");
+      if(bs==="soft"||bs==="suisei") document.body.classList.add("bubble-skin-suisei");
+      else if(bs==="cool") document.body.classList.add("bubble-skin-cool");
+      else if(bs==="fish") document.body.classList.add("bubble-skin-fish");
+      else if(bs==="rainbow") document.body.classList.add("bubble-skin-rainbow");
     }catch(e){}
     app.style.backgroundColor=t.bg;
     if(state.customWallpaper){
@@ -3184,8 +3189,15 @@ function bubbleGlassClass(){
   const s = state.bubbleStyle || "solid";
   if(s === "fog") return " glass-fog";
   if(s === "water") return " glass-water";
-  if(s === "soft") return " skin-soft";
+  if(s === "soft" || s === "suisei") return " skin-suisei";
+  if(s === "cool") return " skin-cool";
+  if(s === "fish") return " skin-fish";
+  if(s === "rainbow") return " skin-rainbow";
   return "";
+}
+function isBubbleImageSkin(s){
+  s = s || state.bubbleStyle || "solid";
+  return s==="soft"||s==="suisei"||s==="cool"||s==="fish"||s==="rainbow";
 }
 
 function daysSince(){ return Math.floor((Date.now()-new Date(state.coupleInfo.startDate))/86400000); }
@@ -18119,7 +18131,10 @@ function renderTheme(){
         <button type="button" class="theme-chip${bStyle==="solid"?" active":""}" data-bubble-style="solid">实色</button>
         <button type="button" class="theme-chip${bStyle==="fog"?" active":""}" data-bubble-style="fog">雾玻璃</button>
         <button type="button" class="theme-chip${bStyle==="water"?" active":""}" data-bubble-style="water">水玻璃</button>
-        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">水色气泡</button>
+        <button type="button" class="theme-chip${bStyle==="soft"||bStyle==="suisei"?" active":""}" data-bubble-style="soft">水色</button>
+        <button type="button" class="theme-chip${bStyle==="cool"?" active":""}" data-bubble-style="cool">轻松熊</button>
+        <button type="button" class="theme-chip${bStyle==="fish"?" active":""}" data-bubble-style="fish">鱼饼熊</button>
+        <button type="button" class="theme-chip${bStyle==="rainbow"?" active":""}" data-bubble-style="rainbow">彩虹熊</button>
       </div>
       <div style="margin-bottom:10px">
         <div style="font-size:12px;color:var(--sub);margin-bottom:6px">气泡渐变（浅色色卡）</div>

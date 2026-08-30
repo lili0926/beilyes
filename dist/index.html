@@ -4599,40 +4599,75 @@
       background: #3a3a3c;
     }
 
-    /* 水色系 Kakao 气泡（하늘모지）border-image + fill */
-    body.bubble-skin-soft .chat-messages .bubble.them.skin-soft,
-    body.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
+    
+    /* ========== Kakao 图气泡皮肤（border-image + fill）========== */
+    body[class*="bubble-skin-"] .chat-messages .bubble.them[class*="skin-"],
+    body[class*="bubble-skin-"] .chat-messages .bubble.me[class*="skin-"] {
       background: transparent !important;
       background-image: none !important;
       border-style: solid !important;
       border-color: transparent !important;
-      /* 主题 16px 20px（左/上）×2 → 宽/高边距；slice=上右下左 */
-      border-width: 12px 14px !important;
       border-radius: 0 !important;
       box-shadow: none !important;
-      border-image-slice: 40 32 40 32 fill !important;
-      border-image-width: 12px 14px !important;
       border-image-repeat: stretch !important;
-      color: #627075 !important;
       padding: 2px 4px !important;
     }
-    body.bubble-skin-soft .chat-messages .bubble.them.skin-soft {
-      border-image-source: url("bubbles/them-01.png") !important;
+    /* 水色 하늘모지：主题 16px 20px ×2 */
+    body.bubble-skin-suisei .chat-messages .bubble.them.skin-suisei,
+    body.bubble-skin-suisei .chat-messages .bubble.me.skin-suisei {
+      border-width: 12px 14px !important;
+      border-image-slice: 40 32 40 32 fill !important;
+      border-image-width: 12px 14px !important;
+      color: #627075 !important;
     }
-    body.bubble-skin-soft .chat-messages .bubble.them.skin-soft.cont {
-      border-image-source: url("bubbles/them-02.png") !important;
+    body.bubble-skin-suisei .chat-messages .bubble.them.skin-suisei { border-image-source: url("bubbles/suisei/them-01.png") !important; }
+    body.bubble-skin-suisei .chat-messages .bubble.them.skin-suisei.cont { border-image-source: url("bubbles/suisei/them-02.png") !important; }
+    body.bubble-skin-suisei .chat-messages .bubble.me.skin-suisei { border-image-source: url("bubbles/suisei/me-01.png") !important; }
+    body.bubble-skin-suisei .chat-messages .bubble.me.skin-suisei.cont { border-image-source: url("bubbles/suisei/me-02.png") !important; }
+
+    /* 轻松熊 쿨쿨：01 装饰大（顶边距大），02 素泡 */
+    body.bubble-skin-cool .chat-messages .bubble.them.skin-cool,
+    body.bubble-skin-cool .chat-messages .bubble.me.skin-cool {
+      border-width: 14px 16px !important;
+      border-image-slice: 50 30 28 30 fill !important;
+      border-image-width: 14px 16px !important;
+      color: #5a5048 !important;
     }
-    body.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
-      border-image-source: url("bubbles/me-01.png") !important;
+    body.bubble-skin-cool .chat-messages .bubble.them.skin-cool { border-image-source: url("bubbles/cool/them-01.png") !important; }
+    body.bubble-skin-cool .chat-messages .bubble.them.skin-cool.cont { border-image-source: url("bubbles/cool/them-02.png") !important; border-image-slice: 28 30 28 30 fill !important; }
+    body.bubble-skin-cool .chat-messages .bubble.me.skin-cool { border-image-source: url("bubbles/cool/me-01.png") !important; }
+    body.bubble-skin-cool .chat-messages .bubble.me.skin-cool.cont { border-image-source: url("bubbles/cool/me-02.png") !important; border-image-slice: 28 30 28 30 fill !important; }
+
+    /* 鱼饼熊 붕어빵 */
+    body.bubble-skin-fish .chat-messages .bubble.them.skin-fish,
+    body.bubble-skin-fish .chat-messages .bubble.me.skin-fish {
+      border-width: 12px 14px !important;
+      border-image-slice: 42 28 28 28 fill !important;
+      border-image-width: 12px 14px !important;
+      color: #5c5348 !important;
     }
-    body.bubble-skin-soft .chat-messages .bubble.me.skin-soft.cont {
-      border-image-source: url("bubbles/me-02.png") !important;
+    body.bubble-skin-fish .chat-messages .bubble.them.skin-fish { border-image-source: url("bubbles/fish/them-01.png") !important; }
+    body.bubble-skin-fish .chat-messages .bubble.them.skin-fish.cont { border-image-source: url("bubbles/fish/them-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
+    body.bubble-skin-fish .chat-messages .bubble.me.skin-fish { border-image-source: url("bubbles/fish/me-01.png") !important; }
+    body.bubble-skin-fish .chat-messages .bubble.me.skin-fish.cont { border-image-source: url("bubbles/fish/me-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
+
+    /* 彩虹熊：从 APK .9.png 去边得到 */
+    body.bubble-skin-rainbow .chat-messages .bubble.them.skin-rainbow,
+    body.bubble-skin-rainbow .chat-messages .bubble.me.skin-rainbow {
+      border-width: 14px 16px !important;
+      border-image-slice: 48 28 28 28 fill !important;
+      border-image-width: 14px 16px !important;
+      color: #4a4450 !important;
     }
-    body.shell-korean.bubble-skin-soft .chat-messages .bubble.them.skin-soft,
-    body.shell-korean.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
+    body.bubble-skin-rainbow .chat-messages .bubble.them.skin-rainbow { border-image-source: url("bubbles/rainbow/them-01.png") !important; }
+    body.bubble-skin-rainbow .chat-messages .bubble.them.skin-rainbow.cont { border-image-source: url("bubbles/rainbow/them-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
+    body.bubble-skin-rainbow .chat-messages .bubble.me.skin-rainbow { border-image-source: url("bubbles/rainbow/me-01.png") !important; }
+    body.bubble-skin-rainbow .chat-messages .bubble.me.skin-rainbow.cont { border-image-source: url("bubbles/rainbow/me-02.png") !important; border-image-slice: 28 28 28 28 fill !important; }
+
+    body[class*="bubble-skin-"] .chat-messages .bubble[class*="skin-"] {
       max-width: 92% !important;
-      box-shadow: none !important;
     }
+
   </style>
 
   <div id="app"></div>
@@ -7780,9 +7815,14 @@ function applyThemeVars(){
     app.classList.remove("ui-glass-fog", "ui-glass-water", "ui-bubble-soft");
     if((state.bubbleStyle||"solid")==="fog") app.classList.add("ui-glass-fog");
     else if((state.bubbleStyle||"solid")==="water") app.classList.add("ui-glass-water");
-    else if((state.bubbleStyle||"solid")==="soft") app.classList.add("ui-bubble-soft");
+    else if(typeof isBubbleImageSkin==="function" && isBubbleImageSkin()) app.classList.add("ui-bubble-soft");
     try{
-      document.body.classList.toggle("bubble-skin-soft", (state.bubbleStyle||"solid")==="soft");
+      const bs = state.bubbleStyle || "solid";
+      document.body.classList.remove("bubble-skin-soft","bubble-skin-suisei","bubble-skin-cool","bubble-skin-fish","bubble-skin-rainbow");
+      if(bs==="soft"||bs==="suisei") document.body.classList.add("bubble-skin-suisei");
+      else if(bs==="cool") document.body.classList.add("bubble-skin-cool");
+      else if(bs==="fish") document.body.classList.add("bubble-skin-fish");
+      else if(bs==="rainbow") document.body.classList.add("bubble-skin-rainbow");
     }catch(e){}
     app.style.backgroundColor=t.bg;
     if(state.customWallpaper){
@@ -7824,8 +7864,15 @@ function bubbleGlassClass(){
   const s = state.bubbleStyle || "solid";
   if(s === "fog") return " glass-fog";
   if(s === "water") return " glass-water";
-  if(s === "soft") return " skin-soft";
+  if(s === "soft" || s === "suisei") return " skin-suisei";
+  if(s === "cool") return " skin-cool";
+  if(s === "fish") return " skin-fish";
+  if(s === "rainbow") return " skin-rainbow";
   return "";
+}
+function isBubbleImageSkin(s){
+  s = s || state.bubbleStyle || "solid";
+  return s==="soft"||s==="suisei"||s==="cool"||s==="fish"||s==="rainbow";
 }
 
 function daysSince(){ return Math.floor((Date.now()-new Date(state.coupleInfo.startDate))/86400000); }
@@ -22759,7 +22806,10 @@ function renderTheme(){
         <button type="button" class="theme-chip${bStyle==="solid"?" active":""}" data-bubble-style="solid">实色</button>
         <button type="button" class="theme-chip${bStyle==="fog"?" active":""}" data-bubble-style="fog">雾玻璃</button>
         <button type="button" class="theme-chip${bStyle==="water"?" active":""}" data-bubble-style="water">水玻璃</button>
-        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">水色气泡</button>
+        <button type="button" class="theme-chip${bStyle==="soft"||bStyle==="suisei"?" active":""}" data-bubble-style="soft">水色</button>
+        <button type="button" class="theme-chip${bStyle==="cool"?" active":""}" data-bubble-style="cool">轻松熊</button>
+        <button type="button" class="theme-chip${bStyle==="fish"?" active":""}" data-bubble-style="fish">鱼饼熊</button>
+        <button type="button" class="theme-chip${bStyle==="rainbow"?" active":""}" data-bubble-style="rainbow">彩虹熊</button>
       </div>
       <div style="margin-bottom:10px">
         <div style="font-size:12px;color:var(--sub);margin-bottom:6px">气泡渐变（浅色色卡）</div>
