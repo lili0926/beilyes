@@ -2152,7 +2152,7 @@ const state = {
   theme: LS.get("theme","桃气浅春"),
   pattern: LS.get("pattern","素色"),
   customWallpaper: LS.get("customWallpaper", ""), // dataURL 自定义壁纸
-  // 气泡材质：solid | fog | water | soft（白瓷圆气泡图）；透明度与自定义色
+  // 气泡材质：solid | fog | water | soft（水色系 Kakao 九宫格）；透明度与自定义色
   bubbleStyle: LS.get("bubbleStyle", "solid"),
   bubbleGrad: LS.get("bubbleGrad", 0),   // 0=无渐变，1-4=渐变色卡组
   bubbleOpacity: LS.get("bubbleOpacity", 0.72),
@@ -18119,7 +18119,7 @@ function renderTheme(){
         <button type="button" class="theme-chip${bStyle==="solid"?" active":""}" data-bubble-style="solid">实色</button>
         <button type="button" class="theme-chip${bStyle==="fog"?" active":""}" data-bubble-style="fog">雾玻璃</button>
         <button type="button" class="theme-chip${bStyle==="water"?" active":""}" data-bubble-style="water">水玻璃</button>
-        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">白瓷气泡</button>
+        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">水色气泡</button>
       </div>
       <div style="margin-bottom:10px">
         <div style="font-size:12px;color:var(--sub);margin-bottom:6px">气泡渐变（浅色色卡）</div>

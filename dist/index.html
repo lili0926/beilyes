@@ -4599,21 +4599,22 @@
       background: #3a3a3c;
     }
 
-    /* 白瓷圆气泡皮肤（border-image + fill，按 Kakao 九宫格思路） */
+    /* 水色系 Kakao 气泡（하늘모지）border-image + fill */
     body.bubble-skin-soft .chat-messages .bubble.them.skin-soft,
     body.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
       background: transparent !important;
       background-image: none !important;
       border-style: solid !important;
       border-color: transparent !important;
-      border-width: 18px 20px !important;
+      /* 主题 16px 20px（左/上）×2 → 宽/高边距；slice=上右下左 */
+      border-width: 12px 14px !important;
       border-radius: 0 !important;
       box-shadow: none !important;
-      border-image-slice: 30 fill !important;
-      border-image-width: 18px 20px !important;
+      border-image-slice: 40 32 40 32 fill !important;
+      border-image-width: 12px 14px !important;
       border-image-repeat: stretch !important;
-      color: #2c2c2e !important;
-      padding: 2px 6px !important;
+      color: #627075 !important;
+      padding: 2px 4px !important;
     }
     body.bubble-skin-soft .chat-messages .bubble.them.skin-soft {
       border-image-source: url("bubbles/them-01.png") !important;
@@ -4627,7 +4628,6 @@
     body.bubble-skin-soft .chat-messages .bubble.me.skin-soft.cont {
       border-image-source: url("bubbles/me-02.png") !important;
     }
-    /* 韩系细气泡覆盖时也保留图 */
     body.shell-korean.bubble-skin-soft .chat-messages .bubble.them.skin-soft,
     body.shell-korean.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
       max-width: 92% !important;
@@ -6792,7 +6792,7 @@ const state = {
   theme: LS.get("theme","桃气浅春"),
   pattern: LS.get("pattern","素色"),
   customWallpaper: LS.get("customWallpaper", ""), // dataURL 自定义壁纸
-  // 气泡材质：solid | fog | water | soft（白瓷圆气泡图）；透明度与自定义色
+  // 气泡材质：solid | fog | water | soft（水色系 Kakao 九宫格）；透明度与自定义色
   bubbleStyle: LS.get("bubbleStyle", "solid"),
   bubbleGrad: LS.get("bubbleGrad", 0),   // 0=无渐变，1-4=渐变色卡组
   bubbleOpacity: LS.get("bubbleOpacity", 0.72),
@@ -22759,7 +22759,7 @@ function renderTheme(){
         <button type="button" class="theme-chip${bStyle==="solid"?" active":""}" data-bubble-style="solid">实色</button>
         <button type="button" class="theme-chip${bStyle==="fog"?" active":""}" data-bubble-style="fog">雾玻璃</button>
         <button type="button" class="theme-chip${bStyle==="water"?" active":""}" data-bubble-style="water">水玻璃</button>
-        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">白瓷气泡</button>
+        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">水色气泡</button>
       </div>
       <div style="margin-bottom:10px">
         <div style="font-size:12px;color:var(--sub);margin-bottom:6px">气泡渐变（浅色色卡）</div>
