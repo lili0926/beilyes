@@ -4598,6 +4598,41 @@
       color: #fff; font-size: 18px; font-weight: 600;
       background: #3a3a3c;
     }
+
+    /* 白瓷圆气泡皮肤（border-image + fill，按 Kakao 九宫格思路） */
+    body.bubble-skin-soft .chat-messages .bubble.them.skin-soft,
+    body.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
+      background: transparent !important;
+      background-image: none !important;
+      border-style: solid !important;
+      border-color: transparent !important;
+      border-width: 18px 20px !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      border-image-slice: 30 fill !important;
+      border-image-width: 18px 20px !important;
+      border-image-repeat: stretch !important;
+      color: #2c2c2e !important;
+      padding: 2px 6px !important;
+    }
+    body.bubble-skin-soft .chat-messages .bubble.them.skin-soft {
+      border-image-source: url("bubbles/them-01.png") !important;
+    }
+    body.bubble-skin-soft .chat-messages .bubble.them.skin-soft.cont {
+      border-image-source: url("bubbles/them-02.png") !important;
+    }
+    body.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
+      border-image-source: url("bubbles/me-01.png") !important;
+    }
+    body.bubble-skin-soft .chat-messages .bubble.me.skin-soft.cont {
+      border-image-source: url("bubbles/me-02.png") !important;
+    }
+    /* 韩系细气泡覆盖时也保留图 */
+    body.shell-korean.bubble-skin-soft .chat-messages .bubble.them.skin-soft,
+    body.shell-korean.bubble-skin-soft .chat-messages .bubble.me.skin-soft {
+      max-width: 92% !important;
+      box-shadow: none !important;
+    }
   </style>
 
   <div id="app"></div>

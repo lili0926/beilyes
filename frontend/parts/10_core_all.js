@@ -2152,7 +2152,7 @@ const state = {
   theme: LS.get("theme","桃气浅春"),
   pattern: LS.get("pattern","素色"),
   customWallpaper: LS.get("customWallpaper", ""), // dataURL 自定义壁纸
-  // 气泡材质：solid | fog | water；透明度与自定义色
+  // 气泡材质：solid | fog | water | soft（白瓷圆气泡图）；透明度与自定义色
   bubbleStyle: LS.get("bubbleStyle", "solid"),
   bubbleGrad: LS.get("bubbleGrad", 0),   // 0=无渐变，1-4=渐变色卡组
   bubbleOpacity: LS.get("bubbleOpacity", 0.72),
@@ -3137,9 +3137,13 @@ function applyThemeVars(){
   }
   const app=document.getElementById("app");
   if(app){
-    app.classList.remove("ui-glass-fog", "ui-glass-water");
+    app.classList.remove("ui-glass-fog", "ui-glass-water", "ui-bubble-soft");
     if((state.bubbleStyle||"solid")==="fog") app.classList.add("ui-glass-fog");
     else if((state.bubbleStyle||"solid")==="water") app.classList.add("ui-glass-water");
+    else if((state.bubbleStyle||"solid")==="soft") app.classList.add("ui-bubble-soft");
+    try{
+      document.body.classList.toggle("bubble-skin-soft", (state.bubbleStyle||"solid")==="soft");
+    }catch(e){}
     app.style.backgroundColor=t.bg;
     if(state.customWallpaper){
       app.style.backgroundImage=`url(${state.customWallpaper})`;
@@ -3180,6 +3184,7 @@ function bubbleGlassClass(){
   const s = state.bubbleStyle || "solid";
   if(s === "fog") return " glass-fog";
   if(s === "water") return " glass-water";
+  if(s === "soft") return " skin-soft";
   return "";
 }
 
@@ -16930,7 +16935,7 @@ function renderChat(){
       const runKey = isMe ? "me" : (m.speakerId || "them");
       const firstInRun = runKey !== prevKey;
       prevKey = runKey;
-      const glassCls = (typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "";
+      const glassCls = ((typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "") + (firstInRun ? "" : " cont");
       // 头像 + 名字 + 爱心 + 时间 的 meta 条（AI 靠左 / 我靠右，各轮只配第一条）
       const myName = (state.coupleInfo && state.coupleInfo.myName) || "我";
       const speakerName = isMe ? myName : (m.speakerName || (activeAg && activeAg.name) || "");
@@ -18114,6 +18119,7 @@ function renderTheme(){
         <button type="button" class="theme-chip${bStyle==="solid"?" active":""}" data-bubble-style="solid">实色</button>
         <button type="button" class="theme-chip${bStyle==="fog"?" active":""}" data-bubble-style="fog">雾玻璃</button>
         <button type="button" class="theme-chip${bStyle==="water"?" active":""}" data-bubble-style="water">水玻璃</button>
+        <button type="button" class="theme-chip${bStyle==="soft"?" active":""}" data-bubble-style="soft">白瓷气泡</button>
       </div>
       <div style="margin-bottom:10px">
         <div style="font-size:12px;color:var(--sub);margin-bottom:6px">气泡渐变（浅色色卡）</div>
