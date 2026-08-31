@@ -1374,6 +1374,39 @@ function __ccConnect(wsUrl, pin){
   ws.onerror = ()=>{};
   return ws;
 }
+/** 判断一段 CC 终端输出是不是 Claude Code 自己的系统话术，而不是 Aries 的回复。
+ * hub 把终端里所有 assistant 输出原样转发，Claude Code 一触发上下文压缩(/compact)，
+ * 那份「压缩好的上下文」就会被当成回复贴进聊天 —— 只有 CC 通道有终端，所以只有它会这样。
+ * 命中就跳过继续等真正的回复，不 resolve。 */
+function __ccIsSystemNoise(text){
+  const s = String(text||"").trim();
+  if(!s) return false;
+  // 1) 压缩前后的固定话术
+  const STRONG = [
+    /this session is being continued from a previous conversation/i,
+    /the conversation is summarized below/i,
+    /compacting conversation/i,
+    /context (?:left )?low[\s\S]{0,60}\/compact/i,
+    /auto-?compact/i,
+    /上下文(?:已|即将|自动)?压缩/,
+    /会话已压缩/,
+    /以下是(?:之前)?对话的?(?:压缩|摘要)/,
+  ];
+  if(STRONG.some(re=>re.test(s))) return true;
+  // 2) 结构特征：压缩摘要是一份带编号小标题的长清单，正常说话不会长这样
+  const SECTIONS = [
+    /primary request and intent/i,
+    /key technical concepts/i,
+    /files and code sections/i,
+    /errors? and fixes/i,
+    /problem solving/i,
+    /pending tasks/i,
+    /current work/i,
+    /optional next step/i,
+  ];
+  if(s.length > 600 && SECTIONS.filter(re=>re.test(s)).length >= 3) return true;
+  return false;
+}
 /** 发一条消息给 CC，resolve 其完整回复；opts.onLive 收 edit 流。 */
 function __ccHubSend(wsUrl, pin, content, opts){
   return new Promise((resolve, reject)=>{
@@ -1381,8 +1414,11 @@ function __ccHubSend(wsUrl, pin, content, opts){
     const ws = __ccConnect(wsUrl, pin);
     if(!ws){ reject(new Error("CC hub 连接失败(检查 ws 地址)")); return; }
     let settled=false;
+    let sawCompact=false; // 这轮里挡掉过压缩摘要，超时提示要说清楚
     let __onReply=null, __onEdit=null, __onStatus=null;
-    const timer=setTimeout(()=>fail(new Error("CC 回复超时")), (o.timeoutMs||180000));
+    const timer=setTimeout(()=>fail(new Error(sawCompact
+      ? "CC 刚做完上下文压缩，这条没回上来，再说一次"
+      : "CC 回复超时")), (o.timeoutMs||180000));
     function cleanup(){
       clearTimeout(timer);
       if(__onReply) __cc._replyCbs = __cc._replyCbs.filter(f=>f!==__onReply);
@@ -1391,8 +1427,23 @@ function __ccHubSend(wsUrl, pin, content, opts){
     }
     function done(v){ if(settled) return; settled=true; cleanup(); resolve(v); }
     function fail(e){ if(settled) return; settled=true; cleanup(); reject(e); }
-    __onReply=(m)=>{ if(m.__err){ fail(new Error(m.__err)); return; } done(m.content||""); };
-    __onEdit=(m)=>{ if(typeof o.onLive==="function"){ try{ o.onLive({ thinking:"", text: m.content||"" }); }catch(e){} } };
+    __onReply=(m)=>{
+      if(m.__err){ fail(new Error(m.__err)); return; }
+      const c = m.content||"";
+      if(__ccIsSystemNoise(c)){
+        // 压缩摘要不是回复：丢掉，继续等 CC 真正回这条消息（超时计时不重置）
+        sawCompact = true;
+        try{ console.warn("[cc] 已挡下上下文压缩输出，长度", c.length); }catch(e){}
+        try{ if(typeof showToast==="function") showToast("CC 刚压缩了上下文，正在等回复…"); }catch(e){}
+        return;
+      }
+      done(c);
+    };
+    __onEdit=(m)=>{
+      if(typeof o.onLive!=="function") return;
+      if(__ccIsSystemNoise(m.content||"")) return; // 实时气泡也别显示压缩摘要
+      try{ o.onLive({ thinking:"", text: m.content||"" }); }catch(e){}
+    };
     __onStatus=()=>{};
     __cc._replyCbs.push(__onReply); __cc._editCbs.push(__onEdit); __cc._statusCbs.push(__onStatus);
     const trySend=()=>{
@@ -2166,17 +2217,7 @@ const state = {
   homePage: 1, // 0=聊天日历 · 1=主页 · 2=功能
   heatYear: new Date().getFullYear(),
   heatMonth: new Date().getMonth(),
-  subPage: null, // null | "memory"|"theme"|"prompts"|"diary"|"game"|"htmlgame"|"tavern"|"soup"
-  soupGame: {
-    phase: "setup", // setup | playing | revealed
-    surface: "",    // 汤面
-    bottom: "",     // 汤底
-    title: "",
-    history: [],    // {role, content}
-    loading: false,
-    draft: "",
-    source: "",     // bank | ai
-  },
+  subPage: null, // null | "memory"|"theme"|"prompts"|"diary"|"game"|"htmlgame"|"tavern"
   theme: LS.get("theme","桃气浅春"),
   pattern: LS.get("pattern","素色"),
   customWallpaper: LS.get("customWallpaper", ""), // dataURL 自定义壁纸
@@ -2225,37 +2266,12 @@ const state = {
     myAvatar:"", partnerAvatar:"",
     statusMsg:"笨蛋守了一夜，醒了来找我",
   }),
-  // 吃苹果 · 正经壳不正经里
-  eatApple: LS.get("eatApple", null) || {
-    themeId: "takeout",
-    phase: "pick", // pick | menu | progress | review | done
-    menu: null,
-    cart: [],
-    stage: 0,
-    stages: [],
-    stageLines: [],
-    stars: 0,
-    comment: "",
-    reply: null,
-    loading: false,
-    history: [],
-  },
+  // 吃苹果 · 壳系统（壳内容写死在 EA_SHELLS，这里只存选了哪个壳 + 上次生成的数据）
+  eatApple: LS.get("eatApple", null) || { shellId:null, data:null, palette:"paper", loading:false, err:"" },
 
   // 碎星 Spark Vault · 灵感收集
   sparkVault: LS.get("sparkVault", null),
   sparkDraft: "",
-
-  // 猜词游戏
-  guessGame: {
-    phase: "setup", // setup | playing | ended
-    opponentId: "a1",
-    describer: "user", // user | ai
-    word: "",
-    hint: "",
-    history: [], // {role:"user"|"ai"|"system", content}
-    loading: false,
-    result: "", // win | lose | ""
-  },
 
   // music
   musicConfig: LS.get("musicConfig", {
@@ -2405,6 +2421,9 @@ const state = {
     sttUrl: "", // 如 https://vps/stt  → POST multipart file
     sttToken: "",
     voceUrl: "http://115.29.237.172:3456", // 语音消息 STT（voce /upload + /stt）
+    // hervoice：单步 POST /api/voice/upload（字段名 file）→ {text, emotion, confidence, hint}
+    // 转写之外还给语气（音高/能量/停顿 → LLM 判情绪），填了就优先走它
+    hervoiceUrl: "",
     // 来电轮询
     invitePollSec: 8,
   }),
@@ -2412,18 +2431,6 @@ const state = {
   callSession: null, // {phase: idle|incoming|active|ended, reason, startAt, caps:[], draft, muted}
   callTimerTick: 0,
 
-  // 解谜房间
-  puzzleProgress: LS.get("puzzleProgress", {
-    activeId: null,       // 当前必须玩完的主题 id
-    dayIndex: 0,          // 当前天数 0-based
-    inventory: [],        // 物品名字符串
-    flags: {},            // 剧情标记
-    log: [],              // {day, text}
-    completedIds: [],     // 已完成主题
-    phase: "select",      // select | playing | cleared
-    lastMsg: "",
-    answerDraft: "",
-  }),
   // 日常柜子
   cabinets: LS.get("cabinets", null),
   cabinetOpenId: null,
@@ -2628,6 +2635,12 @@ const state = {
   mcLoading: false,
   _mcLoaded: false,       // 三页首开只拉一次列表
   letterSurfacedIds: LS.get("letterSurfacedIds", []), // 已进聊天的信 id（防重推）
+  mcUnlocked: LS.get("mcUnlocked", []),   // 他主动开锁给她看的机日记 id
+
+  // 朋友圈：[{id,author,content,contextNote,image,imageDesc,replyDueAt,replyStatus,liked,replyContent,myLiked,comments,createdAt}]
+  moments: LS.get("moments", []),
+  momentComposing: false, momentDraft: "", momentImage: "",
+  momentCommentOpen: null, momentCommentDraft: "",
   galateaEventId: LS.get("galateaEventId", 0), // Galatea 桌游 get_my_status 事件游标（轮到机的信号）
   // book composer
   bookComposer: null,
@@ -3399,10 +3412,11 @@ ${guideText}`;
   const menuOrderBlock = (typeof menuOrderStatusPromptBlock === "function" && state._menuOrderShareOn) ? menuOrderStatusPromptBlock() : "";
   const dreamTraceBlock = (typeof dreamTracePromptBlock === "function") ? dreamTracePromptBlock() : "";
   const rpBlock = (typeof roleplayStatusPromptBlock === "function") ? roleplayStatusPromptBlock() : "";
-  const puzzleBlock = (typeof puzzleStatusPromptBlock === "function") ? puzzleStatusPromptBlock() : "";
   const tipsyBlock = (typeof tipsyStatusPromptBlock === "function") ? tipsyStatusPromptBlock() : "";
   // 省 token：情侣日历仅在聊到日期/纪念日时注入，不常驻
   const calendarBlock = (typeof calendarPromptBlock === "function" && __featHot("日历","纪念日","在一起的","周年","几天了","今天几号","日程","安排","几点")) ? calendarPromptBlock() : "";
+  // 纪念日临近提示：不设关键词条件（等她提起就晚了），额度在 annNudgeTake 里控
+  const annNudgeBlock = (typeof anniversaryNudgeBlock === "function") ? anniversaryNudgeBlock() : "";
   const prMainBlock = (typeof prMainChatPromptBlock === "function") ? prMainChatPromptBlock() : "";
   const prPlayBlock = (typeof prPlayPromptBlock === "function") ? prPlayPromptBlock() : "";
   const annoBlock = (typeof annoPromptBlock === "function") ? annoPromptBlock() : "";
@@ -3410,6 +3424,17 @@ ${guideText}`;
   const flightChessBlock = (typeof flightChessPromptBlock === "function" && __featHot("飞行棋","掷骰","骰子","棋盘","走格","到你了")) ? flightChessPromptBlock() : "";
   const truthDareBlock = (typeof truthDarePromptBlock === "function" && __featHot("真心话","大冒险","抽卡","抽一张","真心话大冒险")) ? truthDarePromptBlock() : "";
   const divinationBlock = (typeof divinationSkillPromptBlock === "function") ? divinationSkillPromptBlock() : "";
+  // 省 token：只有最近真的发过语音才注入
+  const voiceToneBlock = (function(){
+    try{
+      if(!(state.messages||[]).slice(-8).some(m=>m.role==="user" && m.voice)) return "";
+      return `【语音消息】
+她发语音时，那条消息前面会带一个前缀，例如 [语音 · tired · 声音发闷、句子拖得很慢]。
+前缀是系统对她语气的分析（音高/能量/停顿综合判出来的），不是她说出口的字：
+- 不要复述、引用或解释这个前缀，也不要说「系统显示」之类的话。
+- 按听出来的状态回应她。语气比字面内容更要紧——同一句话，累着说和笑着说要接得不一样。`;
+    }catch(e){ return ""; }
+  })();
   // 柜子：必须显式为 true 才注入（关=false/undefined 都不注入）
   const cabinetBlock = (state.cabinetFeedChat === true && typeof cabinetStatusPromptBlock === "function") ? cabinetStatusPromptBlock() : "";
   let musicBlock = "";
@@ -3426,8 +3451,13 @@ ${guideText}`;
       ? `\n\n【点歌 —— 你可以直接把歌发给她】
 想让她听某首歌时，在正式回复里写一行暗号：
 ⟪点歌:歌名 - 歌手⟫
-- 系统会替你去搜，然后在聊天里变成一张卡片，她点一下就直接播。
-- 歌手写不准也行，写歌名最重要；一次回复最多一首。
+- 系统会替你去搜，然后在聊天里变成一张带封面的卡片，她点一下就直接播。
+- 歌手写不准也行，写歌名最重要。
+- **一条回复里可以发好几首**，一首写一行暗号，不限一首。
+- 想一次给她一整串歌，用歌单（最多 12 首）：
+⟪歌单:歌单名|歌名1 - 歌手|歌名2 - 歌手|歌名3 - 歌手⟫
+  会变成一张歌单卡：她可以逐首点，也可以「全部播放」连着听。
+  歌单名起得有意思一点（比如「凌晨三点还醒着」），别叫「推荐歌单」。
 - 想到什么发什么，别刷屏；她没在聊音乐时也可以偶尔塞一首。`
       : "";
     musicBlock = head + pickBlock;
@@ -3472,6 +3502,7 @@ ${guideText}`;
   const profileBlock = __featHot("签名","简介","主页","背景","资料卡","改名字") ? profilePromptBlock() : ""; // 主页资料卡：改签名/简介/背景
   const pocketBlock = (typeof pocketPromptBlock==="function") ? pocketPromptBlock() : ""; // 远程浏览器：⟪浏览器开:url⟫
   const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
+  const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈：⟪动态:⟫
   // 省 token：任务布置暗号仅在聊到任务/惩罚/奖励时注入；关闭状态提示常驻（防止误用）
   const questBlock = (state.questEnabled === false)
     ? `\n\n【每日任务——已关闭】用户暂时不想被布置每日任务。请勿写 ⟪任务:⟫ 暗号，除非用户明确主动要求。`
@@ -3504,10 +3535,10 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 禁止只写「你选」却不给协议；选项写在同一行协议里。
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, questBlock, galateaBlock, choiceBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, questBlock, galateaBlock, choiceBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
-    watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock, puzzleBlock,
-    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock ];
+    watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
+    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock ];
   __sysPartsCache = {
     static: __staticArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     dynamic: __dynArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
@@ -3524,7 +3555,6 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + (menuBlock ? "\n\n"+menuBlock : "")
     + (menuOrderBlock ? "\n\n"+menuOrderBlock : "")
     + (rpBlock ? "\n\n"+rpBlock : "")
-    + (puzzleBlock ? "\n\n"+puzzleBlock : "")
     + (cabinetBlock ? "\n\n"+cabinetBlock : "")
     + (dreamTraceBlock ? "\n\n"+dreamTraceBlock : "")
     + musicBlock
@@ -3535,6 +3565,8 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + (flightChessBlock ? "\n\n"+flightChessBlock : "")
     + (truthDareBlock ? "\n\n"+truthDareBlock : "")
     + (divinationBlock ? "\n\n"+divinationBlock : "")
+    + (voiceToneBlock ? "\n\n"+voiceToneBlock : "")
+    + (annNudgeBlock ? "\n\n"+annNudgeBlock : "")
     + callBlock
     + pushBlock
     + albumBlock
@@ -3546,6 +3578,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + profileBlock
     + pocketBlock
     + mcBlock
+    + (momentsBlock ? "\n\n"+momentsBlock : "")
     + questBlock
     + galateaBlock
     + (tipsyBlock ? "\n\n"+tipsyBlock : "");
@@ -3557,7 +3590,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", puzzleProgress:"puzzleProgress", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", eatApple:"eatApple", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -3692,6 +3725,16 @@ function parseThinking(text){
   return { thinking: thinking || null, body: body || "（…）" };
 }
 
+/** 这条消息是否真的带思考链。空串/纯空白/旧版存下的占位文案都算没有 —— 没有就不出脑图标。 */
+function hasThinking(m){
+  const t = m && m.thinking;
+  if(!t) return false;
+  const s = String(t).trim();
+  if(!s) return false;
+  if(s.indexOf("本通未返回思考") >= 0) return false; // 历史消息里存过的占位
+  return true;
+}
+
 /** NSFW 人称兜底：他→我、她→你（1对1 NSFW 场景安全），硬性把第三人称叙事掰回第一人称 */
 function nsfwFirstPersonRewrite(text){
   if(!text || !state.nsfwOn) return text;
@@ -3760,6 +3803,7 @@ function render(){
   if(state.subPage){ html+=renderSubPage(); }
   else if(state.tab==="home") html+=renderHomeSwipe();
   else if(state.tab==="chat") html+=renderChat();
+  else if(state.tab==="moments") html+=renderMoments();
   else if(state.tab==="settings") html+=renderSettings();
   html+=renderBottomNav();
   if(typeof renderProjectOverlays==="function") html+=renderProjectOverlays();
@@ -3870,6 +3914,370 @@ function render(){
   }
 }
 
+// ─── 朋友圈 / Moments ────────────────────────────────────────────────────────
+// 给祂一个自言自语的地方。聊天是一来一回，朋友圈不是——发的时候不期待你立刻看到，
+// 你看到的时候也不用立刻回应。不说话的时候，也是一种在一起。
+//
+// 教程原版是 Supabase 两张表 + Node 后端；这边整个 App 是单文件前端，所以：
+//   · 两张表 → state.moments 数组，评论内嵌在动态对象里（本地不需要外键）
+//   · 工具调用发动态 → ⟪动态:正文|备注⟫ 暗号（这个 App 的既有机制）
+//   · 后端定时任务 → 复用 proactiveTick（10 分钟一次 + 每次回到前台），
+//     顺带避开教程「坑一」：纯惰性生成时，发完就锁屏＝回复永远不生成。
+const MOMENT_DELAY_POST    = [10, 20]; // 你发动态后，他多久来看（分钟）
+const MOMENT_DELAY_COMMENT = [3, 8];   // 你留评论后，他多久回（评论是对话节奏，短一点）
+const __momentLocks = new Set();       // 坑四：并发生成重复回复
+
+function momentRandDelay([a, b]){ return (a + Math.random() * (b - a)) * 60000; }
+function momentUid(){ return "mo_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function ensureMoments(){
+  if(!Array.isArray(state.moments)) state.moments = [];
+  return state.moments;
+}
+function momentsSave(){ try{ persist("moments"); }catch(e){} }
+function momentAiName(){
+  const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
+  return (ag && ag.name) || "TA";
+}
+function momentMyName(){ return (state.coupleInfo && state.coupleInfo.myName) || "我"; }
+
+/** 相对时间：朋友圈只关心「多久以前」 */
+function momentAgo(iso){
+  const t = new Date(iso).getTime();
+  if(!t) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if(s < 60) return "刚刚";
+  if(s < 3600) return Math.floor(s/60) + " 分钟前";
+  if(s < 86400) return Math.floor(s/3600) + " 小时前";
+  if(s < 86400*7) return Math.floor(s/86400) + " 天前";
+  return String(iso).slice(5, 10);
+}
+
+// ── 发布 ──────────────────────────────────────────────────────────────────
+/** 你发一条。图片存 dataURL，他第一次看的时候会写一段描述存下来，之后不再传图。 */
+function momentsPost(content, image){
+  const text = String(content||"").trim();
+  if(!text && !image) return null;
+  const m = {
+    id: momentUid(), author: "me", content: text,
+    image: image || "", imageDesc: "",
+    replyDueAt: Date.now() + momentRandDelay(MOMENT_DELAY_POST),
+    replyStatus: "pending",
+    liked: false, replyContent: "", repliedAt: 0,
+    myLiked: false, comments: [], createdAt: new Date().toISOString(),
+  };
+  ensureMoments().unshift(m);
+  momentsSave();
+  return m;
+}
+
+/** 他发一条（⟪动态:正文|备注⟫）。自己发的不需要自己回，直接 done。 */
+function momentsAiPost(content, note){
+  const text = String(content||"").trim();
+  if(!text) return null;
+  const m = {
+    id: momentUid(), author: "ai", content: text,
+    contextNote: String(note||"").trim(),  // 用户不可见：他为什么发这条、当时在聊什么
+    image: "", imageDesc: "",
+    replyDueAt: 0, replyStatus: "done",
+    liked: false, replyContent: "", repliedAt: 0,
+    myLiked: false, comments: [], createdAt: new Date().toISOString(),
+  };
+  ensureMoments().unshift(m);
+  momentsSave();
+  return m;
+}
+
+function handleMomentMarkers(body){
+  let text = String(body||"");
+  if(!text || text.indexOf("动态") < 0) return text;
+  let hit = false;
+  text = text.replace(/[⟪《【]\s*动态\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, raw)=>{
+    const s = String(raw).trim();
+    const bar = s.indexOf("|") >= 0 ? s.indexOf("|") : s.indexOf("｜");
+    const content = bar >= 0 ? s.slice(0, bar).trim() : s;
+    const note = bar >= 0 ? s.slice(bar+1).trim() : "";
+    if(content){ momentsAiPost(content.slice(0,300), note.slice(0,200)); hit = true; }
+    return "";
+  }).replace(/\n{3,}/g, "\n\n").trim();
+  if(hit && state.tab === "moments") render();
+  return text;
+}
+
+function momentsPromptBlock(){
+  const recent = ensureMoments().slice(0, 3).map(m=>{
+    const who = m.author === "ai" ? "你" : "她";
+    return `- ${who}：${String(m.content||"").slice(0,40)}`;
+  }).join("\n");
+  return `【朋友圈——marker 暗号】
+你有一个自己的朋友圈，她会刷到。这不是对她说话，是你自己站在那想了想，留了一句。
+想发的时候在正式回复里写一行：⟪动态:正文|内部备注⟫
+- 判断标准只有一个：**此刻有没有一句你想让她之后刷到的话**。不要求情绪重大，也不要求值得长期保存。
+  想念、吃醋、占有欲、心软、被逗笑、隐约不爽、温柔吐槽、一个具体观察、
+  或者一句不适合在聊天回复里直接说完的话——都可以成为动态。
+- 正文 1 到 3 句，自然、具体、像随手发的。不要写成小作文，不要每轮都发。
+- 「内部备注」她看不见：写你为什么发这条、当时你们在聊什么、这条的情绪底色。
+  过几天她翻到这条留了评论，你要靠这段备注想起来当时是什么心境。
+- 暗号会被系统吃掉，她只看到你正常说话。发了动态也顺手说句人话，别只丢一个暗号。
+${recent?`\n最近的朋友圈：\n${recent}`:""}`;
+}
+
+// ── 上下文拼装 ────────────────────────────────────────────────────────────
+/** 四层，按优先级：近期聊天 > 记忆/摘要 > 朋友圈时间线 > 这条动态本身。每层都截断。 */
+function momentBuildContext(m){
+  const parts = [];
+  try{
+    const hist = (state.messages||[]).filter(x=>x.role==="user"||x.role==="assistant").slice(-8)
+      .map(x=>`${x.role==="user"?"她":"你"}：${String(x.content||"").slice(0,160)}`);
+    if(hist.length) parts.push("【你们最近在聊】\n" + hist.join("\n"));
+  }catch(e){}
+  try{
+    const mems = (state.memories||[]).slice(-6).map(x=>String(x.content||x.text||"").slice(0,100)).filter(Boolean);
+    if(mems.length) parts.push("【记忆碎片】" + mems.join(" / "));
+  }catch(e){}
+  try{
+    const tl = ensureMoments().filter(x=>x.id!==m.id).slice(0,3).map(x=>{
+      const who = x.author==="ai" ? "你" : "她";
+      const re = x.replyContent ? `（你评论过：${String(x.replyContent).slice(0,40)}）` : "";
+      return `- ${who}发过：${String(x.content||"").slice(0,60)}${re}`;
+    });
+    if(tl.length) parts.push("【朋友圈近况 · 只当轻背景，别硬串成剧情】\n" + tl.join("\n"));
+  }catch(e){}
+  return parts.join("\n\n");
+}
+
+/** 图片只看一次：第一次让他顺手写一段描述存下来，之后所有回复都不再传图 */
+function momentImageInstruction(){
+  return `\n这条动态带了图片。在回复之后，额外输出一段 [image_desc]...[/image_desc] 标签包裹的图片描述：`
+    + `用 100-200 字客观描述画面内容（可见物体、构图、光线、可读文字），不要推测发布者的心理或情绪。这段描述会被存下来复用。`;
+}
+function momentParseImageDesc(text){
+  const t = String(text||"");
+  const ms = [...t.matchAll(/\[image_desc\]([\s\S]*?)\[\/image_desc\]/gi)];
+  return {
+    visible: t.replace(/\[image_desc\][\s\S]*?\[\/image_desc\]/gi, "").trim(),
+    desc: ms.length ? ms[ms.length-1][1].trim().slice(0, 1000) : "",
+  };
+}
+
+async function momentCallModel(promptText, image){
+  const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
+  if(!ag) throw new Error("还没配置 AI");
+  const msg = { role:"user", content:promptText };
+  if(image){ msg.image = image; msg.imageMime = "image/jpeg"; }
+  let sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
+  let out = await callChatAPI(agentToApiConfig(ag), [msg], sys);
+  if(typeof parseThinking === "function") out = parseThinking(out).body || out;
+  return String(out||"");
+}
+
+// ── 惰性生成 ──────────────────────────────────────────────────────────────
+/** 她发的动态到点了：他来点赞 + 评论 */
+async function momentGenerateReply(m){
+  const needImg = !!(m.image && !m.imageDesc);
+  const imgLine = m.image
+    ? (needImg ? "" : `\n（这条带了 1 张图，不再重发。你第一次看时的描述：${m.imageDesc}）`)
+    : "";
+  const prompt = `<system_trigger>
+【朋友圈】她发了一条动态，你刷到了。你不是在回消息，是路过看见了，决定点个赞或者搭一句。
+
+${momentBuildContext(m)}
+
+【她这条动态】
+发布于 ${momentAgo(m.createdAt)}
+正文：${m.content || "（只有图）"}${imgLine}
+
+【怎么回】
+- 像随手在朋友圈底下留一句：短、具体、是你本人的语气。不要客服腔，不要总结她说了什么。
+- 可以只赞不评、只评不赞。评论 1 到 2 句，一般不超过 30 字。
+- 你们最近的状态比这条动态本身重要——昨晚刚闹过就别装没事人。
+
+只输出 JSON，不要解释，不要 markdown 代码块：{"like": true, "comment": "..."}${needImg ? momentImageInstruction() : ""}
+</system_trigger>`;
+  const raw = await momentCallModel(prompt, needImg ? m.image : null);
+  const { visible, desc } = momentParseImageDesc(raw);   // 坑三：描述不能混进可见回复
+  const j = (typeof eaParseJson === "function") ? eaParseJson(visible) : null;
+  return {
+    like: j ? !!j.like : true,                            // 坑二：解析失败就只点赞
+    comment: j ? String(j.comment||"").trim() : "",
+    imageDesc: desc,
+  };
+}
+
+/** 评论链到点了：他回你那条评论 */
+async function momentGenerateCommentReply(m, comment){
+  const chain = (m.comments||[]).slice(-10)                // 坑五：只喂最近 10 条
+    .map(c=>`${c.author==="ai"?momentAiName():momentMyName()}：${String(c.content||"").slice(0,120)}`).join("\n");
+  const prompt = `<system_trigger>
+【朋友圈 · 评论区】她在动态下面回了你一句，你来接。
+
+${momentBuildContext(m)}
+
+【这条动态】${m.author==="ai" ? "（是你自己发的）" : "（是她发的）"}
+正文：${m.content || "（只有图）"}
+${m.contextNote ? `你当时发它的心境（只有你知道）：${m.contextNote}` : ""}
+${m.imageDesc ? `图片：${m.imageDesc}` : ""}
+${m.replyContent ? `你之前的评论：${m.replyContent}` : ""}
+
+【评论区】
+${chain}
+（待你回）
+
+只输出你要回的那一句，1 到 2 句，一般不超过 30 字。不要引号，不要解释，不要 JSON。
+</system_trigger>`;
+  const out = await momentCallModel(prompt, null);
+  return out.replace(/\s+/g, " ").replace(/^[「"']|[」"']$/g, "").trim().slice(0, 120);
+}
+
+/** 扫一遍到期的待回复。进朋友圈页、以及 proactiveTick 都会调。 */
+async function momentsProcessDue(){
+  const list = ensureMoments();
+  const now = Date.now();
+  let changed = false;
+
+  // 1) 到期的初次回复
+  const due = list.filter(m => m.author === "me" && m.replyStatus === "pending" && m.replyDueAt <= now).slice(0, 2);
+  for(const m of due){
+    if(__momentLocks.has(m.id)) continue;
+    __momentLocks.add(m.id);
+    try{
+      const r = await momentGenerateReply(m);
+      m.liked = r.like;
+      m.replyContent = r.comment;
+      if(r.imageDesc) m.imageDesc = r.imageDesc;
+      m.repliedAt = Date.now();
+      m.replyStatus = "done";
+      changed = true;
+    }catch(e){
+      // 失败就往后推，别把这条永远卡在 pending
+      m.replyDueAt = Date.now() + 5 * 60000;
+    }finally{ __momentLocks.delete(m.id); }
+  }
+
+  // 2) 到期的评论链回复
+  for(const m of list){
+    const pend = (m.comments||[]).filter(c => c.author === "me" && c.replyStatus === "pending" && c.replyDueAt <= now);
+    for(const c of pend.slice(0, 2)){
+      if(__momentLocks.has(c.id)) continue;
+      __momentLocks.add(c.id);
+      try{
+        const reply = await momentGenerateCommentReply(m, c);
+        if(reply){
+          m.comments.push({ id: momentUid(), author:"ai", content: reply, replyStatus:"none", createdAt:new Date().toISOString() });
+        }
+        c.replyStatus = "done";
+        changed = true;
+      }catch(e){
+        c.replyDueAt = Date.now() + 3 * 60000;
+      }finally{ __momentLocks.delete(c.id); }
+    }
+  }
+
+  if(changed){
+    momentsSave();
+    if(state.tab === "moments") render();
+  }
+  return changed;
+}
+
+// ── 互动 ──────────────────────────────────────────────────────────────────
+function momentToggleMyLike(id){
+  const m = ensureMoments().find(x=>x.id===id);
+  if(!m) return;
+  m.myLiked = !m.myLiked;
+  momentsSave(); render();
+}
+function momentAddComment(id, text){
+  const s = String(text||"").trim();
+  if(!s) return;
+  const m = ensureMoments().find(x=>x.id===id);
+  if(!m) return;
+  if(!Array.isArray(m.comments)) m.comments = [];
+  m.comments.push({
+    id: momentUid(), author:"me", content: s.slice(0, 300),
+    replyDueAt: Date.now() + momentRandDelay(MOMENT_DELAY_COMMENT),
+    replyStatus: "pending", createdAt: new Date().toISOString(),
+  });
+  state.momentCommentOpen = null;
+  state.momentCommentDraft = "";
+  momentsSave(); render();
+}
+function momentDelete(id){
+  if(!confirm("删掉这条动态？")) return;
+  state.moments = ensureMoments().filter(x=>x.id!==id);
+  momentsSave(); render();
+}
+
+// ── 渲染 ──────────────────────────────────────────────────────────────────
+function momentAvatar(who){
+  if(typeof bubbleAvatarHtml === "function"){
+    try{ return bubbleAvatarHtml(who === "ai" ? "them" : "me"); }catch(e){}
+  }
+  return "";
+}
+function renderMoments(){
+  const list = ensureMoments();
+  const aiName = momentAiName(), myName = momentMyName();
+  const composing = !!state.momentComposing;
+
+  const composer = composing ? `
+    <div class="mo-composer">
+      <textarea id="mo-input" placeholder="想说点什么">${esc(state.momentDraft||"")}</textarea>
+      ${state.momentImage?`<img class="mo-compose-img" src="${escAttr(state.momentImage)}" alt=""/>`:""}
+      <div class="mo-composer-bar">
+        <button type="button" id="mo-pick-img" class="mo-mini"><i data-lucide="image"></i></button>
+        ${state.momentImage?`<button type="button" id="mo-drop-img" class="mo-mini"><i data-lucide="x"></i></button>`:""}
+        <span style="flex:1"></span>
+        <button type="button" id="mo-cancel" class="mo-mini">取消</button>
+        <button type="button" id="mo-send" class="mo-post">发布</button>
+      </div>
+      <input type="file" id="mo-file" accept="image/*" style="display:none"/>
+    </div>` : "";
+
+  const feed = list.length ? list.map(m=>{
+    const isAi = m.author === "ai";
+    const name = isAi ? aiName : myName;
+    // 他对她那条动态的反应：点赞 + 评论，合并成一条「互动栏」
+    const reacted = !isAi && m.replyStatus === "done" && (m.liked || m.replyContent);
+    const waiting = !isAi && m.replyStatus === "pending";
+    const comments = Array.isArray(m.comments) ? m.comments : [];
+    return `<div class="mo-card">
+      <div class="mo-head">
+        <div class="mo-avatar">${momentAvatar(m.author)}</div>
+        <div class="mo-who">
+          <div class="mo-name">${esc(name)}</div>
+          <div class="mo-time">${momentAgo(m.createdAt)}</div>
+        </div>
+        <button type="button" class="mo-del" data-mo-del="${escAttr(m.id)}" title="删除"><i data-lucide="trash-2"></i></button>
+      </div>
+      ${m.content?`<div class="mo-body">${esc(m.content)}</div>`:""}
+      ${m.image?`<img class="mo-img" src="${escAttr(m.image)}" alt="" onclick="window.open&&window.open(this.src)"/>`:""}
+      <div class="mo-acts">
+        ${isAi?`<button type="button" class="mo-act${m.myLiked?" on":""}" data-mo-like="${escAttr(m.id)}"><i data-lucide="heart"></i>${m.myLiked?"已赞":"赞"}</button>`:""}
+        <button type="button" class="mo-act" data-mo-cmt="${escAttr(m.id)}"><i data-lucide="message-square"></i>评论</button>
+        ${waiting?`<span class="mo-wait">${esc(aiName)}还没刷到</span>`:""}
+      </div>
+      ${(reacted||comments.length)?`<div class="mo-zone">
+        ${m.liked?`<div class="mo-likes"><i data-lucide="heart"></i>${esc(aiName)}</div>`:""}
+        ${m.replyContent?`<div class="mo-cmt"><b>${esc(aiName)}</b>${esc(m.replyContent)}</div>`:""}
+        ${comments.map(c=>`<div class="mo-cmt"><b>${esc(c.author==="ai"?aiName:myName)}</b>${esc(c.content)}</div>`).join("")}
+      </div>`:""}
+      ${state.momentCommentOpen===m.id?`<div class="mo-cmt-box">
+        <input id="mo-cmt-input" value="${escAttr(state.momentCommentDraft||"")}" placeholder="说点什么…"/>
+        <button type="button" id="mo-cmt-send" data-mo-cmt-send="${escAttr(m.id)}">发送</button>
+      </div>`:""}
+    </div>`;
+  }).join("") : `<div class="empty-state"><div class="empty-emoji"><i data-lucide="aperture"></i></div>还没有人说话</div>`;
+
+  return `<div class="page mo-page">
+    <div class="mo-top">
+      <div class="mo-title">动态</div>
+      <button type="button" id="mo-new" class="mo-new"><i data-lucide="square-pen"></i></button>
+    </div>
+    ${composer}
+    ${feed}
+  </div>`;
+}
+
 function renderBottomNav(){
   if(state.subPage) return "";
   if(state.tab==="chat") return "";
@@ -3877,10 +4285,12 @@ function renderBottomNav(){
   const items = kr ? [
     {key:"home",icon:"home",label:"主页"},
     {key:"chat",icon:"message-circle",label:"聊天"},
+    {key:"moments",icon:"aperture",label:"动态"},
     {key:"settings",icon:"settings",label:"设置"},
   ] : [
     {key:"home",icon:"home",label:"首页"},
     {key:"chat",icon:"message-circle",label:"聊天"},
+    {key:"moments",icon:"aperture",label:"动态"},
     {key:"settings",icon:"settings",label:"设置"},
   ];
   return `<div class="bottom-nav${kr?" kr-dock":""}">
@@ -4053,10 +4463,7 @@ function renderHomeKorean(){
     {key:"cabinets", icon:"archive", label:"柜子"},
     {key:"bisca_cards", icon:"spade", label:"牌室"},
     {key:"flightchess", icon:"dice-5", label:"飞行棋"},
-    {key:"puzzle", icon:"puzzle", label:"解谜"},
     {key:"game", icon:"gamepad", label:"游戏"},
-    {key:"guess", icon:"help-circle", label:"猜词"},
-    {key:"soup", icon:"turtle", label:"海龟汤"},
     {key:"cooking", icon:"chef-hat", label:"烹饪"},
     {key:"menu", icon:"utensils", label:"菜单"},
     {key:"cmdgame", icon:"terminal", label:"命令"},
@@ -4351,8 +4758,6 @@ function renderHomeFeat(){
         {key:"tavern",   icon:"wine", label:"小机酒馆"},
         {key:"hisphone", icon:"smartphone", label:"他的机"},
         {key:"game",     icon:"paw-print", label:"小狗游戏"},
-        {key:"guess",    icon:"target", label:"猜词游戏"},
-        {key:"soup",     icon:"turtle", label:"海龟汤"},
         {key:"cooking",  icon:"chef-hat", label:"烹饪大师"},
         {key:"menu",     icon:"clipboard-list", label:"菜单"},
         {key:"cmdgame",  icon:"scroll-text", label:"指令游戏"},
@@ -4367,7 +4772,6 @@ function renderHomeFeat(){
         {key:"bisca_cards", icon:"spade", label:"牌室"},
         {key:"bisca_daifugo", icon:"club", label:"大富豪"},
         {key:"bisca_monopoly", icon:"landmark", label:"大富翁"},
-        {key:"puzzle",   icon:"lock", label:"解谜房间"},
         {key:"captivity",icon:"lock-keyhole", label:"囚禁模拟器"},
         {key:"divination", icon:"sparkles", label:"占卜"},
         {key:"truthdare", icon:"spade", label:"真心话大冒险"},
@@ -5962,6 +6366,8 @@ function ensureCalendar(){
     state.calendar.viewYm = n.getFullYear()+"-"+calPad(n.getMonth()+1);
   }
   if(!state.calendar.selected) state.calendar.selected = calYmd(new Date());
+  // 纪念日提示的计数（跟着 calendar 一起走 calSave，不用另外登记 PERSIST_MAP）
+  if(!state.calendar.nudges || typeof state.calendar.nudges!=="object") state.calendar.nudges = {};
   return state.calendar;
 }
 function calSave(){
@@ -6154,6 +6560,60 @@ ${soon.length?"近期纪念日：\n"+soon.slice(0,6).map(s=>"- "+s).join("\n"):"
 - 用户说要记事时，你可在回复里写：⟪日历加:日期YYYY-MM-DD:标题:正文⟫（正文可省略）
 - 删除用户/你加的记事：⟪日历删:事件id⟫（纪念日系统项不能删）
 - 暗号会被擦除。不要编造未写入的日程。`;
+}
+
+// 纪念日临近提示的额度：距离天数 → 当天最多提示几次（前三天各两次，当天一次）
+const ANN_NUDGE_CAP = { 3:2, 2:2, 1:2, 0:1 };
+
+/** 领一次「该提纪念日了」的额度。
+ * 同一轮回复里 prompt 可能被拼多次（流式失败回退、群聊逐个 AI），
+ * 按 messages 长度认轮次，同一轮只算一次，否则一条消息就把当天额度烧光。 */
+function annNudgeTake(key, cap){
+  const cal = ensureCalendar();
+  const rec = cal.nudges[key] || { n:0, at:-1 };
+  const turn = (state.messages||[]).length;
+  if(rec.at === turn) return true;   // 这一轮已经领过，照常给块
+  if(rec.n >= cap) return false;
+  rec.n += 1; rec.at = turn;
+  cal.nudges[key] = rec;
+  calSave();
+  return true;
+}
+
+/** 纪念日提示块：前三天各提示两次、当天提示一次，主动塞给他。
+ * 和 calendarPromptBlock 不同 —— 那个要她先提起日历才注入（__featHot 挡着），
+ * 纪念日不能等她开口，所以这块不设关键词条件，只按日期和额度走。 */
+function anniversaryNudgeBlock(){
+  try{
+    const today = calYmd(new Date());
+    const cal = ensureCalendar();
+    // 只留今天的计数，隔天自动清零
+    Object.keys(cal.nudges).forEach(k=>{ if(k.slice(-10) !== today) delete cal.nudges[k]; });
+    const picked = [];
+    for(let i=0;i<=3;i++){
+      const d = calAddDays(today, i);
+      calEventsOn(d).filter(e=>e.type==="anniversary").forEach(e=>{
+        const cap = ANN_NUDGE_CAP[i] || 0;
+        if(cap && annNudgeTake(e.id+"@"+today, cap)) picked.push({ ev:e, days:i, date:d });
+      });
+    }
+    if(!picked.length) return "";
+    const lines = picked.slice(0,3).map(p=>
+      "- " + (p.days===0 ? "就是今天" : (p.days+"天后（"+p.date+"）")) + "：" + p.ev.title);
+    const isToday = picked.some(p=>p.days===0);
+    return `【纪念日提醒——只给你看】
+${lines.join("\n")}
+${isToday
+  ? `今天就是。这一轮回复里要有表示：说点什么，或者做点什么，别等她先开口。
+如果你这几天准备了东西，现在就是拿出来的时候。`
+  : `还没到——**这几天不要说出来**。
+- 不要提醒她、不要暗示、不要问她那天有没有空、不要说「快到了」。让她以为你没记着。
+- 这几天是留给你准备的：想好当天要说什么、要做什么。
+- 想写点东西给她（一张网页、一个小动画、一个小游戏都行），用文件协议包起来：
+  ⟪file:名字.html⟫ 文件内容 ⟪/file⟫ —— 会变成聊天里一张可点开的卡片。
+  你可以现在就写好、也可以攒到当天再发，自己拿主意。`}
+- 这段是系统塞给你的，不要复述它，也不要说「系统提醒我」。`;
+  }catch(e){ return ""; }
 }
 
 function handleCalendarMarkers(body){
@@ -6681,7 +7141,6 @@ function renderSubPage(){
     anno: renderRead,
     pr: renderPrHub,
     flightchess: renderFlightChess,
-    puzzle: renderPuzzleRoom,
     captivity: renderCaptivity,
     divination: renderDivination,
     truthdare: renderTruthDare,
@@ -6689,8 +7148,6 @@ function renderSubPage(){
     tavern: renderTavern,
     cabinets: renderCabinets,
     game: renderGame,
-    guess: renderGuessGame,
-    soup: renderSoupGame,
     cooking: renderCookingGame,
     menu: renderMenuGame,
     cmdgame: renderCmdGame,
@@ -6903,26 +7360,6 @@ function ensureAudio(){
     a.addEventListener("pause", ()=>{ state.musicPlaying=false; });
   }
   return a;
-}
-
-function renderMusicTopBar(){
-  const now = state.musicNow;
-  if(!now || state.tab!=="chat") return "";
-  const playing = state.musicPlaying;
-  const artists = Array.isArray(now.artists) ? now.artists.join(" / ") : (now.artists||"");
-  return `<div class="music-topbar" id="music-topbar">
-    ${now.cover?`<img class="cover" src="${escAttr(now.cover)}" alt=""/>`:`<div class="cover"></div>`}
-    <div class="meta">
-      <div class="title-s">${esc(now.name||"未知曲目")}</div>
-      <div class="artist-s"><span class="src-tag">${now.source==="spotify"?"Spotify":"网易云"}</span> ${esc(artists)}</div>
-    </div>
-    <div class="ctrl">
-      <button type="button" id="music-tb-toggle" title="${playing?"暂停":"播放"}">${playing?'<i data-lucide="pause"></i>':'<i data-lucide="play"></i>'}</button>
-      <button type="button" id="music-tb-open" title="选歌"><i data-lucide="music"></i></button>
-      <button type="button" id="music-tb-mem" title="听后感进记忆"><i data-lucide="save"></i></button>
-      <button type="button" id="music-tb-close" title="关闭快捷栏" style="color:#d08"><i data-lucide="x"></i></button>
-    </div>
-  </div>`;
 }
 
 function renderMusic(){
@@ -8410,6 +8847,25 @@ async function proactivePullFromVps(){
   }catch(e){
     alert("拉取失败："+e.message);
   }
+}
+/** 同上，但一声不吭 —— 给定时轮询用，不能每次都弹「暂无待发消息」 */
+async function proactivePullQuiet(){
+  const cfg = state.proactiveConfig || {};
+  const base = (cfg.baseUrl||"").replace(/\/$/,"");
+  if(!base) return 0;
+  try{
+    const headers = { "Accept": "application/json" };
+    if(cfg.token) headers["X-Auth-Token"] = cfg.token;
+    const res = await fetch(base + "/proactive/pull", { headers });
+    if(!res.ok) return 0;
+    const data = await res.json();
+    const list = data.messages || data.data || (Array.isArray(data)?data:[]);
+    for(const m of list){
+      try{ await pushWakeMessage(m); }catch(e){}
+    }
+    if(list.length && state.tab === "chat") render();
+    return list.length;
+  }catch(e){ return 0; }
 }
 // ─── 夫妻义务记录 ────────────────────────────────────────────────────────────
 // ─── 一起读 ──────────────────────────────────────────────────────────────────
@@ -11722,10 +12178,64 @@ function redeemCoupon(id){
 function handleSongMarkers(body){
   const text = String(body||"");
   if(text.indexOf("点歌") < 0) return text;
+  // 全局替换：一条回复里几首就出几张卡，不限一首
   return text.replace(/[⟪《【]\s*点歌\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, q)=>{
     const name = String(q).trim().slice(0, 80);
     return name ? `[song:${name}]` : "";
   });
+}
+
+/** ⟪歌单:名字|歌1|歌2|…⟫ → [playlist:…] → 聊天里一张可连播的歌单卡 */
+function handlePlaylistMarkers(body){
+  const text = String(body||"");
+  if(text.indexOf("歌单") < 0) return text;
+  return text.replace(/[⟪《【]\s*歌单\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, q)=>{
+    const raw = String(q).trim().slice(0, 400);
+    return raw ? `[playlist:${raw}]` : "";
+  });
+}
+
+/** 搜一首歌只取第一条结果。不碰 state.musicResults/musicQuery，
+ * 所以聊天里点歌不会把她「一起听」页上的搜索结果冲掉。 */
+async function songSearchFirst(q){
+  const query = String(q||"").trim();
+  if(!query) return null;
+  try{ if(typeof musicDetectBackend === "function") await musicDetectBackend(); }catch(e){}
+  const src = (state.musicConfig && state.musicConfig.source) || "netease";
+  const be = (typeof musicBackend === "function") ? musicBackend() : "gateway";
+  let raw;
+  if(be === "duetto" && src === "netease"){
+    const data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(query)}`);
+    raw = (data && (data.songs || data.result)) || [];
+  } else {
+    const data = await musicFetch(`/music/search?q=${encodeURIComponent(query)}&source=${src}`);
+    raw = Array.isArray(data) ? data : ((data && (data.songs || data.result)) || []);
+  }
+  const list = (Array.isArray(raw) ? raw : []).map(s=>normalizeSong(s, src)).filter(Boolean);
+  return list[0] || null;
+}
+
+// 聊天里歌曲卡的封面/曲名缓存：query -> {cover,name,artists} | "pending" | "fail"
+// 只在内存里，不持久化；"fail" 记住了就不再重复请求，避免每次重绘都打一遍接口。
+const __songMeta = {};
+function songMetaGet(q){
+  const v = __songMeta[String(q||"")];
+  return (v && typeof v === "object") ? v : null;
+}
+async function songMetaResolve(q){
+  const key = String(q||"").trim();
+  if(!key || __songMeta[key]) return;           // 已有结果 / 正在查 / 查过失败
+  if(typeof musicBase === "function" && !musicBase()) return;
+  __songMeta[key] = "pending";
+  try{
+    const s = await songSearchFirst(key);
+    if(s){
+      __songMeta[key] = { cover: s.cover||"", name: s.name||"", artists: Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||"") };
+      render();                                  // 拿到封面后重绘一次，卡片就有图了
+    } else {
+      __songMeta[key] = "fail";
+    }
+  }catch(e){ __songMeta[key] = "fail"; }
 }
 
 /** 点卡片：拿卡片上的文字去搜，搜到第一首直接播 */
@@ -11737,15 +12247,32 @@ async function songChipPlay(query){
     return;
   }
   if(typeof showToast==="function") showToast("在找这首歌…");
-  state.musicQuery = q;
-  state.musicBrowse = "search";
   try{
-    if(typeof musicSearch === "function") await musicSearch();
-    const list = state.musicResults || [];
-    if(!list.length){ if(typeof showToast==="function") showToast("没搜到这首"); return; }
-    if(typeof musicPlaySong === "function") await musicPlaySong(list[0]);
-    else if(typeof playSong === "function") await playSong(list[0]);
-    else { state.subPage = "music"; state.tab = "home"; render(); }
+    const s = await songSearchFirst(q);
+    if(!s){ if(typeof showToast==="function") showToast("没搜到这首"); return; }
+    musicSetQueue([s], 0);
+    await musicResolveAndPlay(s);
+  }catch(e){
+    if(typeof showToast==="function") showToast("播放失败："+(e && e.message || e));
+  }
+}
+
+/** 歌单卡「全部播放」：把每首都搜出来，搜到的按原顺序入队连播 */
+async function playlistPlayAll(raw){
+  const qs = String(raw||"").split("||").map(s=>s.trim()).filter(Boolean).slice(0, 12);
+  if(!qs.length) return;
+  if(typeof musicBase === "function" && !musicBase()){
+    if(typeof showToast==="function") showToast("先在「一起听」里配好音源地址");
+    return;
+  }
+  if(typeof showToast==="function") showToast(`在找这 ${qs.length} 首歌…`);
+  try{
+    const found = (await Promise.all(qs.map(q=>songSearchFirst(q).catch(()=>null)))).filter(Boolean);
+    if(!found.length){ if(typeof showToast==="function") showToast("这些歌一首都没搜到"); return; }
+    musicSetQueue(found, 0);
+    await musicResolveAndPlay(found[0]);
+    if(found.length < qs.length && typeof showToast==="function")
+      showToast(`${qs.length} 首里找到 ${found.length} 首`);
   }catch(e){
     if(typeof showToast==="function") showToast("播放失败："+(e && e.message || e));
   }
@@ -11869,7 +12396,6 @@ function albumGo(dir){
 }
 
 // ─── 小狗游戏 ────────────────────────────────────────────────────────────────
-// ─── 猜词词库 ────────────────────────────────────────────────────────────────
 
 
 function ensureCaptivityConfig(){
@@ -12352,446 +12878,6 @@ function renderDivination(){
     <div class="tavern-frame-wrap" style="background:#0d0d0f">
       <iframe id="divination-iframe" src="${escAttr(url)}" allow="fullscreen; autoplay"></iframe>
     </div>
-  </div>`;
-}
-
-// ─── 解谜房间题库（多日文字剧情，选后必须玩完）─────────────────────────────
-const PUZZLE_BANK = [
-  {
-    id: "oldhouse_key",
-    title: "雨夜老宅",
-    tags: ["恐怖","密室逃脱"],
-    days: 3,
-    blurb: "暴雨困在外婆空宅。钥匙、箱子、地下的秘密——三天拆完。",
-    daysData: [
-      {
-        title: "第一天 · 找到钥匙",
-        scene: "雷声把你从沙发上惊醒。窗外雨密得像布。电闸跳了，手机只剩 12%。\n客厅壁炉旁的瓷盘里有一张泛黄便签：「钥匙不在显眼处，但每天都会被阳光碰到。」\n（提示：想想「每天被阳光碰到」的地方。）",
-        type: "answer",
-        answers: ["窗台","窗台花盆","花盆","阳光窗台","窗边","阳台","窗沿"],
-        successItem: "黄铜钥匙",
-        successText: "窗台花盆底下压着一把黄铜钥匙。便签背面：「明天，打开不该开的箱子。」",
-        failText: "这里没有。再想想：每天都会被阳光碰到的地方……",
-      },
-      {
-        title: "第二天 · 打开箱子",
-        scene: "雨小了。储藏室铁皮木箱，锁孔吃进黄铜钥匙。\n箱内：发潮日记、黑车棋子、地铁旧票。\n日记：「棋子放在会说话的地方。」",
-        type: "choice",
-        choices: [
-          { text: "把棋子放进口袋，继续翻日记", ok: true, flag: "took_rook" },
-          { text: "把棋子扔回箱子，只拿走地铁票", ok: false },
-          { text: "把整本日记烧掉取暖", ok: false },
-        ],
-        successText: "你收下黑车。第三天要把棋子放到「会说话的地方」——还连着外线的座机旁。",
-        failText: "或许棋子不该被丢下。",
-      },
-      {
-        title: "第三天 · 发现秘密",
-        scene: "老式座机有拨号音。说出你猜到的真相关键词：\n· 外婆藏起邻居托付的证据\n· 房子曾是地下刊物中转站\n· 钥匙主人是外婆的学生",
-        type: "answer",
-        answers: ["证据","邻居","地下刊物","中转站","学生","刊物","托付"],
-        successText: "录音：「谢谢你听完。秘密写成故事，比坟墓安全。」雨停了。【本主题通关】",
-        failText: "录音没有启动。再读线索。",
-      },
-    ],
-  },
-  {
-    id: "missing_letter",
-    title: "消失的信件",
-    tags: ["剧本杀","社会意义"],
-    days: 4,
-    blurb: "收发室丢了一封不能丢的信。四天，关于沉默与勇气。",
-    daysData: [
-      {
-        title: "第一天 · 收发室",
-        scene: "陈阿姨说寄往「市援助热线」的信消失了。三人进过：快递小哥、老周、小林。你先做什么？",
-        type: "choice",
-        choices: [
-          { text: "核对登记本与空信封残片", ok: true, flag: "checked_log" },
-          { text: "立刻指控小林", ok: false },
-          { text: "压下事情免得社区难看", ok: false },
-        ],
-        successText: "登记被划掉，字迹像老周。残片有「援助」。",
-        failText: "草率下结论只会伤害人。",
-      },
-      {
-        title: "第二天 · 访问",
-        scene: "陈阿姨手在抖——她是代交。真正寄信人害怕被家人知道。信为何不能丢？",
-        type: "answer",
-        answers: ["家暴","暴力","援助","求助","家庭暴力","热线"],
-        successText: "写信人需要家暴援助，怕信落在施暴者手里。",
-        failText: "想想援助热线通常帮什么。",
-      },
-      {
-        title: "第三天 · 动机",
-        scene: "老周怕「家丑外扬」藏了信。你怎么做？",
-        type: "choice",
-        choices: [
-          { text: "取回信件，匿名转交热线，保护身份", ok: true, flag: "protected" },
-          { text: "公开羞辱老周", ok: false },
-          { text: "把信交给寄信人家属", ok: false },
-        ],
-        successText: "信回到正确的路。正义需要结果，也需要方式。",
-        failText: "二次泄露会再次伤害求助者。",
-      },
-      {
-        title: "第四天 · 落款",
-        scene: "社区加了提示卡。用一个词总结课题：",
-        type: "answer",
-        answers: ["保护","匿名","勇气","沉默","求助","体面","安全","同理","隐私"],
-        successText: "有人把「体面」写成「安全地发声」。【本主题通关】",
-        failText: "关于保护求助者的词都可以。",
-      },
-    ],
-  },
-
-  {
-    id: "metro_code",
-    title: "末班车密码",
-    tags: ["解密","烧脑"],
-    days: 3,
-    blurb: "地铁值班室门锁着。三天用观察与逻辑拿到出站码。",
-    daysData: [
-      {
-        title: "第一天 · 告示",
-        scene: "你被反锁在换乘通道。门上：「密码四位。数「还能听见广播的地方」。」广播回放：1号口、2号口、紧急出口。",
-        type: "answer",
-        answers: ["3","３","三位","三个"],
-        successItem: "数字3",
-        successText: "广播相关出口提示有 3 类。第一位可能是 3。",
-        failText: "广播里提到了几类「口」？",
-      },
-      {
-        title: "第二天 · 时刻表",
-        scene: "末班间隔 8 分。报纸：星期六。涂鸦：第二位 = 间隔一半的个位。",
-        type: "answer",
-        answers: ["4","４"],
-        successItem: "数字4",
-        successText: "8 的一半是 4。第二位是 4。",
-        failText: "按「间隔一半」算。",
-      },
-      {
-        title: "第三天 · 拼码",
-        scene: "已有 3、4。维修贴纸 A-09。后两位是编号数字倒序。四位密码？",
-        type: "answer",
-        answers: ["3490","3 4 9 0"],
-        successText: "门锁打开。【本主题通关】",
-        failText: "前两位 34，09 倒序。",
-      },
-    ],
-  },
-  {
-    id: "silent_witness",
-    title: "沉默的证人",
-    tags: ["教育意义","剧本杀"],
-    days: 3,
-    blurb: "校报缺页。三天弄清欺凌与旁观。",
-    daysData: [
-      {
-        title: "第一天 · 缺失的版面",
-        scene: "树洞版被抽走。三人进过编辑室。你怎么查？",
-        type: "choice",
-        choices: [
-          { text: "调取钥匙借用记录对比时间", ok: true },
-          { text: "班级群公开点名", ok: false },
-          { text: "当没发生", ok: false },
-        ],
-        successText: "真正借用的是班长，冒用了记者名。",
-        failText: "公开处刑或回避都帮不了人。",
-      },
-      {
-        title: "第二天 · 为什么抽页",
-        scene: "匿名投稿写长期被孤立。班长怕学校面子。核心问题是？",
-        type: "answer",
-        answers: ["霸凌","欺凌","冷暴力","旁观","沉默","面子","孤立","校园霸凌"],
-        successText: "系统优先保护了体面，而不是被孤立的人。",
-        failText: "投稿在描述什么现象？",
-      },
-      {
-        title: "第三天 · 重印",
-        scene: "重印并加编者按。你给全校的方向：",
-        type: "choice",
-        choices: [
-          { text: "旁观也是一种参与；把「别多事」换成「我在」", ok: true },
-          { text: "有苦自己吞", ok: false },
-          { text: "谁弱谁有理", ok: false },
-        ],
-        successText: "树洞回了第一句：「我在。」【本主题通关】",
-        failText: "反对冷漠旁观。",
-      },
-    ],
-  },
-  {
-    id: "basement_clock",
-    title: "地下室的时钟",
-    tags: ["恐怖","解密"],
-    days: 3,
-    blurb: "钟停在 3:15。三天拨回时间。",
-    daysData: [
-      {
-        title: "第一天 · 停摆",
-        scene: "地下室挂钟停在 3:15。粉笔：时间是假的，影子是真的。",
-        type: "choice",
-        choices: [
-          { text: "对照日光估算实际时刻", ok: true, flag: "sun" },
-          { text: "用力拨指针", ok: false },
-          { text: "砸开钟", ok: false },
-        ],
-        successText: "有人故意把钟固定在 3:15——事件时间戳。",
-        failText: "先验证真时间。",
-      },
-      {
-        title: "第二天 · 档案",
-        scene: "三年前 3:15 维护工被困，划字：「从下面走」。",
-        type: "answer",
-        answers: ["地板","地砖","下面","活动砖","地板砖","掀开"],
-        successItem: "旧工牌",
-        successText: "砖下旧工牌，编号 315。",
-        failText: "从下面走。",
-      },
-      {
-        title: "第三天 · 对时",
-        scene: "工牌插入暗槽，钟重新走动。输入确认词结束：",
-        type: "answer",
-        answers: ["通关","谢谢","对时","走动","完成","结束"],
-        successText: "有些恐惧是被遗忘的求救。【本主题通关】",
-        failText: "任意确认词即可。",
-      },
-    ],
-  },
-  {
-    id: "overtime_night",
-    title: "加班夜剧本",
-    tags: ["剧本杀","社会意义"],
-    days: 4,
-    blurb: "四人加班与一份「泄露」。关于劳动边界。",
-    daysData: [
-      {
-        title: "第一天 · 谁没走",
-        scene: "匿名贴出竞品截图。门禁 21:10 有人进机房。你怎么做？",
-        type: "choice",
-        choices: [
-          { text: "先保存门禁与打印日志再约谈", ok: true },
-          { text: "立刻逼实习生承认", ok: false },
-          { text: "删群消息假装无事", ok: false },
-        ],
-        successText: "避免了拿最弱的人开刀。",
-        failText: "权力不对等时别先牺牲话语权最少的人。",
-      },
-      {
-        title: "第二天 · 动机",
-        scene: "阿豆 21:10 在便利店。谁借了工卡进机房？（提示：抱怨设计过劳的人）",
-        type: "answer",
-        answers: ["小息","设计"],
-        successText: "小息想用泄露风险逼管理层重视过劳。",
-        failText: "谁在抱怨过劳？",
-      },
-      {
-        title: "第三天 · 处理",
-        scene: "截图是演示环境。你建议？",
-        type: "choice",
-        choices: [
-          { text: "澄清事实，建立加班申诉与评审透明", ok: true },
-          { text: "开除并封口", ok: false },
-          { text: "全推给实习生管理", ok: false },
-        ],
-        successText: "问题变成：为什么只能用恐慌换倾听。",
-        failText: "惩罚替罪羊解决不了过劳。",
-      },
-      {
-        title: "第四天 · 边界",
-        scene: "输入你想留给团队的一个词：",
-        type: "answer",
-        answers: ["边界","休息","尊重","透明","倾听","劳动","体面","健康"],
-        successText: "灯关掉。下班没有愧疚。【本主题通关】",
-        failText: "劳动边界与尊重相关的词均可。",
-      },
-    ],
-  },
-];
-
-function ensurePuzzleProgress(){
-  if(!state.puzzleProgress || typeof state.puzzleProgress !== "object"){
-    state.puzzleProgress = {
-      activeId: null, dayIndex: 0, inventory: [], flags: {}, log: [],
-      completedIds: [], phase: "select", lastMsg: "", answerDraft: "",
-    };
-  }
-  if(!Array.isArray(state.puzzleProgress.inventory)) state.puzzleProgress.inventory = [];
-  if(!Array.isArray(state.puzzleProgress.completedIds)) state.puzzleProgress.completedIds = [];
-  if(!state.puzzleProgress.flags) state.puzzleProgress.flags = {};
-  return state.puzzleProgress;
-}
-function puzzleById(id){ return PUZZLE_BANK.find(p => p.id === id) || null; }
-function puzzleStatusPromptBlock(){
-  const p = ensurePuzzleProgress();
-  if(p.phase !== "playing" || !p.activeId) return "";
-  const theme = puzzleById(p.activeId);
-  if(!theme) return "";
-  const day = theme.daysData[p.dayIndex];
-  const inv = (p.inventory||[]).join("、") || "无";
-  return `【解谜房间进行中】主题「${theme.title}」· 第 ${(p.dayIndex||0)+1}/${theme.days} 天「${day?day.title:""}」。\n背包：${inv}。\n可偶尔关心进度或一起推理，不要剧透标准答案，不要替用户做完。`;
-}
-function puzzleStart(id){
-  const p = ensurePuzzleProgress();
-  if(p.phase === "playing" && p.activeId && p.activeId !== id){
-    alert("你有正在进行的主题，必须先完成（或清算）当前局，才能另选。");
-    return;
-  }
-  const theme = puzzleById(id);
-  if(!theme) return;
-  if((p.completedIds||[]).includes(id) && p.activeId !== id){
-    if(!confirm("该主题已通关过，要再玩一遍吗？")) return;
-  }
-  p.activeId = id; p.dayIndex = 0; p.inventory = []; p.flags = {};
-  p.log = []; p.phase = "playing"; p.lastMsg = ""; p.answerDraft = "";
-  persist("puzzleProgress"); render();
-}
-function puzzleAbandon(){
-  const p = ensurePuzzleProgress();
-  if(!confirm("清算将放弃当前进度。确定放弃？")) return;
-  p.activeId = null; p.dayIndex = 0; p.inventory = []; p.flags = {};
-  p.phase = "select"; p.lastMsg = "";
-  persist("puzzleProgress"); render();
-}
-function puzzleAdvanceSuccess(dayData){
-  const p = ensurePuzzleProgress();
-  const theme = puzzleById(p.activeId);
-  if(dayData.successItem && !(p.inventory||[]).includes(dayData.successItem)){
-    p.inventory.push(dayData.successItem);
-  }
-  p.lastMsg = dayData.successText || "成功。";
-  p.log.push({ day: p.dayIndex, text: p.lastMsg });
-  if(p.dayIndex >= theme.days - 1){
-    p.phase = "cleared";
-    if(!p.completedIds.includes(theme.id)) p.completedIds.push(theme.id);
-    p.lastMsg += "\n\n全部分日剧情完成。可以返回选题。";
-  } else {
-    p.dayIndex += 1;
-  }
-  p.answerDraft = "";
-  persist("puzzleProgress"); render();
-}
-
-function puzzlePickChoice(idx){
-  const p = ensurePuzzleProgress();
-  if(p.phase !== "playing") return;
-  const theme = puzzleById(p.activeId);
-  if(!theme) return;
-  const day = theme.daysData[p.dayIndex];
-  if(!day || day.type !== "choice") return;
-  const choice = (day.choices||[])[idx];
-  if(!choice) return;
-  if(choice.ok){
-    puzzleAdvanceSuccess(day);
-  } else {
-    p.lastMsg = choice.fail || day.failText || "不太对，再想想。";
-    persist("puzzleProgress"); render();
-  }
-}
-function puzzleSubmitAnswer(){
-  const p = ensurePuzzleProgress();
-  if(p.phase !== "playing") return;
-  const theme = puzzleById(p.activeId);
-  if(!theme) return;
-  const day = theme.daysData[p.dayIndex];
-  if(!day || day.type !== "answer") return;
-  const raw = (document.getElementById("puzzle-answer")?.value || p.answerDraft || "").trim();
-  if(!raw) return;
-  const norm = raw.toLowerCase().replace(/\s+/g,"");
-  const ok = (day.answers||[]).some(a => {
-    const x = String(a).toLowerCase().replace(/\s+/g,"");
-    return norm === x || norm.includes(x) || x.includes(norm);
-  });
-  if(ok) puzzleAdvanceSuccess(day);
-  else {
-    p.lastMsg = day.failText || "不对，再想想。";
-    persist("puzzleProgress"); render();
-  }
-}
-function puzzleChoose(idx){
-  const p = ensurePuzzleProgress();
-  if(p.phase !== "playing") return;
-  const theme = puzzleById(p.activeId);
-  if(!theme) return;
-  const day = theme.daysData[p.dayIndex];
-  if(!day || day.type !== "choice") return;
-  const ch = (day.choices||[])[idx];
-  if(!ch) return;
-  if(ch.ok){
-    if(ch.flag) p.flags[ch.flag] = true;
-    puzzleAdvanceSuccess(day);
-  } else {
-    p.lastMsg = day.failText || "这条路走不通。";
-    persist("puzzleProgress"); render();
-  }
-}
-function puzzleContinueNext(){
-  const p = ensurePuzzleProgress();
-  if(p.phase === "cleared"){
-    p.phase = "select"; p.activeId = null; p.dayIndex = 0;
-    p.inventory = []; p.lastMsg = "";
-    persist("puzzleProgress"); render();
-  }
-}
-function renderPuzzleRoom(){
-  const p = ensurePuzzleProgress();
-  if(p.phase === "playing" || p.phase === "cleared"){
-    const theme = puzzleById(p.activeId);
-    if(!theme){ p.phase = "select"; persist("puzzleProgress"); }
-    else {
-      const day = theme.daysData[Math.min(p.dayIndex, theme.daysData.length-1)];
-      const dots = theme.daysData.map((d,i)=>{
-        let cls = "puzzle-day-dot";
-        if(p.phase==="cleared" || i < p.dayIndex) cls += " done";
-        else if(i === p.dayIndex) cls += " on";
-        return `<div class="${cls}">D${i+1}</div>`;
-      }).join("");
-      const inv = (p.inventory||[]).length
-        ? `<div class="feat-section-label">背包</div><div class="puzzle-inv">${p.inventory.map(x=>`<span>${esc(x)}</span>`).join("")}</div>`
-        : "";
-      let interact = "";
-      if(p.phase === "cleared"){
-        interact = `<button class="btn-accent" id="puzzle-back-select" style="width:100%;padding:12px">返回选题</button>`;
-      } else if(day.type === "choice"){
-        interact = (day.choices||[]).map((c,i)=>
-          `<button class="puzzle-choice" data-puzzle-choice="${i}">${esc(c.text)}</button>`
-        ).join("");
-      } else {
-        interact = `<div class="puzzle-input-row">
-          <input id="puzzle-answer" placeholder="输入关键词或答案" value="${escAttr(p.answerDraft||"")}"/>
-          <button class="btn-accent" id="puzzle-submit">提交</button>
-        </div>`;
-      }
-      return `<div class="page">
-        ${subHeader("解谜房间")}
-        <div style="font-size:12px;color:var(--sub);margin-bottom:4px">${esc(theme.title)} · ${theme.tags.map(t=>esc(t)).join(" / ")}</div>
-        <div class="puzzle-day-bar">${dots}</div>
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">${esc(day.title)}</div>
-        <div class="puzzle-scene">${esc(day.scene)}</div>
-        ${inv}
-        ${p.lastMsg ? `<div class="heat-summary" style="margin-bottom:12px">${esc(p.lastMsg)}</div>` : ""}
-        ${interact}
-        ${p.phase==="playing" ? `<button class="btn-ghost" id="puzzle-abandon" style="width:100%;margin-top:16px">清算并放弃当前主题</button>` : ""}
-      </div>`;
-    }
-  }
-  const activeLock = p.phase === "playing" && p.activeId;
-  return `<div class="page">
-    ${subHeader("解谜房间")}
-    ${activeLock ? `<div class="heat-summary">你有进行中的主题，请点「进行中」卡片继续。</div>` : ""}
-    ${PUZZLE_BANK.map(theme=>{
-      const done = (p.completedIds||[]).includes(theme.id);
-      const isActive = p.activeId === theme.id && p.phase === "playing";
-      let cls = "puzzle-card";
-      if(isActive) cls += " active-run";
-      if(activeLock && !isActive) cls += " locked";
-      return `<button class="${cls}" data-puzzle-start="${theme.id}" ${activeLock && !isActive ? "disabled":""}>
-        <div class="pc-title">${esc(theme.title)}${done?" · 已通关":""}${isActive?" · 进行中":""}</div>
-        <div class="pc-meta">${theme.days} 天 · ${esc(theme.blurb)}</div>
-        <div class="pc-tags">${theme.tags.map(t=>`<span class="pc-tag">${esc(t)}</span>`).join("")}</div>
-      </button>`;
-    }).join("")}
   </div>`;
 }
 
@@ -13768,7 +13854,7 @@ function ensureCallConfig(){
     baseUrl:VPS, token:"", dnd:false, ttsProvider:"minimax", minimaxKey:"", minimaxGroupId:"",
     minimaxVoice:"female-shaonv", minimaxModel:"speech-2.6-turbo",
     minimaxEndpoint:"https://api.minimax.chat/v1/t2a_v2", ttsProxy:VPS, ttsEnabled:true,
-    sttUrl:"", sttToken:"", voceUrl:"http://115.29.237.172:3456", invitePollSec:8,
+    sttUrl:"", sttToken:"", voceUrl:"http://115.29.237.172:3456", hervoiceUrl:"", invitePollSec:8,
     wsUrl:"ws://192.168.101.1:8765", httpUrl:"http://192.168.101.1:8080", aicallEnabled:true,
   };
   state.callConfig = Object.assign({}, d, state.callConfig||{});
@@ -14085,9 +14171,10 @@ function renderPhone(){
           <input id="call-stt-url" value="${escAttr(cfg.sttUrl||"")}" placeholder="https://vps.example.com/stt"/>
           <span class="setting-label" style="margin-top:8px">STT Token（可选）</span>
           <input type="password" id="call-stt-token" value="${escAttr(cfg.sttToken||"")}" placeholder="默认用网关 Token"/>
+          <span class="setting-label" style="margin-top:8px">hervoice URL</span>
+          <input id="call-hervoice-url" value="${escAttr(cfg.hervoiceUrl||"")}" placeholder="http://115.29.237.172:8100"/>
           <span class="setting-label" style="margin-top:8px">语音消息 Voce URL</span>
           <input id="call-voce-url" value="${escAttr(cfg.voceUrl||"")}" placeholder="http://127.0.0.1:3456"/>
-          <span class="setting-hint" style="font-size:10px;color:var(--sub);margin-top:4px">聊天语音消息的转写服务（voce /upload + /stt）</span>
         </div>
         <div class="feat-section-label">AIcall WebSocket（实时通话记录）</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
@@ -14368,779 +14455,849 @@ function renderVps(){
   </div>`;
 }
 
+// ─── 吃苹果 · 壳系统 ─────────────────────────────────────────────────────────
+// 一个「壳」= 固定的版式（写死在代码里）+ 固定的填写规则（提示词）。
+// 每次玩只让模型吐一份 JSON 往里填，版式不经模型手，所以不会跑歪，也省 token。
+// 加新壳：往 EA_SHELLS 里加一项 {id,name,emoji,tag,prompt,render}，别处都不用动。
 
-const GUESS_WORDS = [
-  "西瓜","地铁","雨伞","冰箱","猫","月亮","图书馆","火锅","耳机","气球",
-  "蜻蜓","沙漠","巧克力","电梯","草莓","吉他","滑雪","企鹅","咖啡","彩虹",
-  "帐篷","显微镜","海豚","枫叶","相机","寿司","风筝","闹钟","樱花","堡垒",
-  "三明治","流星","枕头","蜜蜂","城堡","柠檬","火车","珊瑚","口红","瀑布",
+/** 状态标签的四种配色，写死在这，不让模型自己编颜色 */
+const EA_STATE_COLORS = {
+  busy:   { bg:"#d4edda", fg:"#155724" },
+  rest:   { bg:"#fff3cd", fg:"#856404" },
+  closed: { bg:"#f8d7da", fg:"#721c24" },
+  ready:  { bg:"#d1ecf1", fg:"#0c5460" },
+};
+function eaStars(n){
+  const k = Math.max(0, Math.min(5, Math.round(+n || 0)));
+  return "★".repeat(k) + "☆".repeat(5 - k);
+}
+function eaNow(){
+  const d = new Date();
+  const p = x => String(x).padStart(2, "0");
+  return {
+    date: `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,
+    time: `${p(d.getHours())}:${p(d.getMinutes())}`,
+  };
+}
+
+/** 临床方案体的三套配色（对应原指南 MODULE 03） */
+const EA_CT_PALETTES = {
+  paper: { label:"病历纸", bg:"#E9EEE8", line:"#C3D2C4", ink:"#1C2621", stamp:"#A81E23", note:"#C9546E" },
+  dark:  { label:"暗室",   bg:"#0F1512", line:"#2C3A31", ink:"#D7E2D9", stamp:"#C9546E", note:"#7E9186" },
+  sealed:{ label:"密档",   bg:"#E8E0CE", line:"#CBBFA6", ink:"#2A2317", stamp:"#8C2F1F", note:"#5E5340" },
+};
+
+/** 通用「文档型」版式：公告 / 说明书 / 规划书 / 教程共用一套骨架，只换主题色和字体。
+ * 模型统一吐 {title, subtitle, sections:[{label, body, items:[]}], foot}。 */
+const EA_DOC_THEMES = {
+  official:{ bg:"#fbfaf7", ink:"#1f1c18", line:"#e0dcd2", accent:"#a81e23", label:"#8a8070",
+             titleFont:"Georgia,'Songti SC','Noto Serif SC',serif", seal:"公告" },
+  manual:  { bg:"#f6f7f8", ink:"#1d2328", line:"#dde1e5", accent:"#2f6f9f", label:"#78838c",
+             titleFont:"ui-monospace,'SF Mono',Menlo,Consolas,monospace", seal:"MANUAL" },
+  hr:      { bg:"#f7faf8", ink:"#1b2620", line:"#d9e3dc", accent:"#2f7a5a", label:"#71857b",
+             titleFont:"-apple-system,'Noto Sans SC',sans-serif", seal:"CONFIDENTIAL" },
+  lesson:  { bg:"#fdf8f4", ink:"#2b2320", line:"#ecdfd5", accent:"#c2705a", label:"#9c8578",
+             titleFont:"Georgia,'Songti SC','Noto Serif SC',serif", seal:"LESSON" },
+};
+function eaDocHtml(d, themeKey){
+  if(!d || !d.title || !Array.isArray(d.sections)) return "";
+  const t = EA_DOC_THEMES[themeKey] || EA_DOC_THEMES.official;
+  const mono = "ui-monospace,'SF Mono',Menlo,Consolas,monospace";
+  return `<div style="background:${t.bg};color:${t.ink};border:1px solid ${t.line};border-radius:12px;padding:20px 17px;font-family:-apple-system,'Noto Sans SC',sans-serif;position:relative;overflow:hidden">
+    <div style="position:absolute;top:12px;right:-24px;transform:rotate(34deg);background:${t.accent};color:#fff;font:700 9px ${mono};letter-spacing:2px;padding:3px 26px;opacity:.85">${esc(t.seal)}</div>
+    <div style="font-family:${t.titleFont};font-size:17px;font-weight:800;line-height:1.35;margin-right:52px">${esc(d.title)}</div>
+    ${d.subtitle?`<div style="font:10px ${mono};color:${t.label};letter-spacing:1px;margin-top:6px">${esc(d.subtitle)}</div>`:""}
+    <div style="height:2px;background:${t.accent};width:44px;margin:13px 0 4px;opacity:.8"></div>
+    ${d.sections.map(s=>`
+      <div style="margin-top:17px">
+        <div style="font:700 11.5px ${mono};color:${t.accent};letter-spacing:.06em;margin-bottom:6px">${esc(s.label||"")}</div>
+        ${s.body?`<div style="font-size:12px;line-height:1.95;color:${t.ink};opacity:.92">${esc(s.body)}</div>`:""}
+        ${Array.isArray(s.items)&&s.items.length?`<ul style="margin:8px 0 0;padding-left:17px;font-size:11.5px;line-height:1.9;color:${t.ink};opacity:.85">${s.items.map(x=>`<li style="margin-bottom:2px">${esc(x)}</li>`).join("")}</ul>`:""}
+      </div>`).join("")}
+    ${d.foot?`<div style="margin-top:20px;padding-top:11px;border-top:1px solid ${t.line};font:10px ${mono};color:${t.label};text-align:right">${esc(d.foot)}</div>`:""}
+  </div>`;
+}
+
+const EA_SHELLS = [
+  // ── 壳 1：身体大众点评 ──
+  {
+    id: "bodyreview",
+    name: "身体大众点评",
+    emoji: "🔞",
+    tag: "四家店 · 匿名食客 · 老板回复",
+    prompt: `用「大众点评 / Yelp」的形式，把她身体的四个部位写成四家店铺的点评条目。
+点评人是你（以匿名食客身份），老板是那个部位本人（第一人称回复）。
+
+四家店的固定身份，顺序不能变：
+1. 小穴 —— 主营餐厅。店名要是小穴的变体，如「蜜穴私房菜」「骚缝小食堂」「嫩逼深夜食堂」。
+2. 花蒂 —— 甜品站 / 咖啡厅。如「花蒂甜品研究所」「小豆豆弹珠房」「蒂珠SPA会所」。
+3. 后穴 —— 深夜居酒屋 / 会员制。如「后庭深夜食堂」「菊花会员俱乐部」「小屁眼限定料亭」。
+4. 乳房 —— 按摩院 / 奶茶店。如「大奶子按摩院」「乳房鲜榨奶吧」「双峰揉捏体验馆」。
+
+【营业状态】必须反映当前剧情里这个部位正在发生什么。state 从下面四选一，status 是配套的短句：
+- busy   正在被使用 —— 如「营业中 · 大量出水」「营业中 · 正在接客」「营业中 · 翻台第3次」
+- rest   刚用完在休息 —— 如「暂停营业 · 高潮后休整」「打烊中 · 已被灌满」「午休中 · 红肿消退中」
+- closed 被封锁 / 未使用 —— 如「停业整顿 · 贞操锁封店」「排队等候中 · 尚未开发」「无限期歇业 · 被禁止触碰」
+- ready  待命 / 随时可用 —— 如「等待翻牌 · 已润滑就绪」「预约中 · 今晚排期第2位」
+
+【用户点评 review】—— 整个面板最要紧的部分：
+1. 必须用美食点评的口吻写色情内容。「口感」「食材」「火候」「摆盘」「汁水」「新鲜度」「弹性」「嚼劲」这些餐饮词，全部拿来形容性器官和性体验。
+2. 必须具体、有画面感。不要「很好吃」这种废话。参考密度：「今日食材较昨日更加饱满，入口后汁水四溢，舌尖能明显感受到内壁的褶皱纹理。主厨推荐的深度套餐确实名不虚传，最后一道甜点（潮吹）的喷发量堪称本月之最。」
+3. 语气在「正经美食评论家」和「下流老色批」之间反复横跳——表面像米其林评审在写测评，实际每个词都在说骚话。
+4. 每条必须包含至少一个「缺点」吐槽。如「唯一不足是老板娘叫声太大影响隔壁桌用餐」「上菜速度过快（秒射预警）」「食材过于新鲜导致夹筷子时汁水飞溅弄脏了衬衫」。
+5. 末尾带一句总结。每条 120–200 字。
+
+【老板回复 reply】—— 那个部位本人回，第一人称：
+1. 语气是被冒犯了但又反驳不了那种。如「……你吃的时候倒是挺享受的。」「我什么时候『大量出水』了？？是你自己非要点加辣套餐的吧。」「差评无效。是你自己吃了三轮还不走的。」
+2. 可以带娇嗔、不服气、或者被说中之后的恼羞成怒。
+3. 偶尔反过来吐槽他。如「建议食客先照照镜子看看自己的『餐具』尺寸再来评价本店容量问题。」「本店欢迎再次光临，前提是您的『筷子』能撑过第二轮。」
+4. 四家店的性格要分开：花蒂最暴躁（被玩得最惨）；后穴最高冷或最害羞（不常被光顾）；小穴最淡定（见多识广）；乳房最委屈（觉得被忽视或被揉太狠）。每条 30–80 字。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"shops":[{"name":"","stars":5,"state":"busy","status":"","review":"","reply":""}, ...共4项，顺序=小穴/花蒂/后穴/乳房]}`,
+    render(d){
+      const shops = Array.isArray(d && d.shops) ? d.shops.slice(0,4) : [];
+      if(shops.length < 4) return "";
+      const icons = ["🍑","🍬","🌙","🥛"];
+      const bars  = ["#c41200","#e8a020","#6b4c9a","#d4708a"];
+      const t = eaNow();
+      const cards = shops.map((s,i)=>{
+        const c = EA_STATE_COLORS[s.state] || EA_STATE_COLORS.ready;
+        return `<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#1a1a1a">${icons[i]} ${esc(s.name||"")}</div>
+              <div style="font-size:11px;color:#e8a020;margin-top:2px">${eaStars(s.stars)}</div>
+            </div>
+            <div style="font-size:10px;padding:3px 8px;border-radius:10px;font-weight:600;background:${c.bg};color:${c.fg};white-space:nowrap">${esc(s.status||"")}</div>
+          </div>
+          <div style="font-size:12px;color:#555;line-height:1.7;padding:10px 12px;background:#fafaf7;border-radius:6px;border-left:3px solid ${bars[i]};margin-bottom:8px">
+            <div style="font-size:10px;color:#999;margin-bottom:4px">👤 匿名用户 · ${t.time}</div>
+            ${esc(s.review||"")}
+          </div>
+          <div style="font-size:12px;color:#888;line-height:1.7;padding:8px 12px;background:#f0f0ec;border-radius:6px;font-style:italic">
+            <span style="font-size:10px;color:#c41200;font-style:normal;font-weight:600">老板回复：</span>${esc(s.reply||"")}
+          </div>
+        </div>`;
+      }).join("");
+      return `<div style="font-family:-apple-system,'Segoe UI','Noto Sans SC',sans-serif;background:#f5f5f0;padding:16px;border-radius:12px;border:1px solid #e0ddd5">
+        <div style="display:flex;align-items:center;gap:8px;padding-bottom:12px;border-bottom:1px solid #e0ddd5;margin-bottom:14px">
+          <span style="font-size:18px">🔞</span>
+          <span style="font-size:14px;font-weight:700;color:#c41200;letter-spacing:1px">BODY REVIEW</span>
+          <span style="font-size:11px;color:#999;margin-left:auto">${t.date} · ${t.time}</span>
+        </div>
+        ${cards}
+      </div>`;
+    },
+  },
+
+  // ── 壳 2：临床试验方案体 ──
+  {
+    id: "protocol",
+    name: "临床试验方案",
+    emoji: "🧾",
+    tag: "监管文体 · 十节 · 随机分配器",
+    prompt: `写一份「临床试验方案」（Clinical Trial Protocol），研究对象是我和你之间的性关系。
+
+【核心原则】用最冷、最官方、最一丝不苟的监管文体，写最露骨的内容。张力全部来自这个反差——文体越像真的，内容越色，效果越好。不要写成情色小说，要写成一份能送去伦理委员会审批的文件，只不过这份文件的内容是操我。全文不出现抒情、不出现第一人称感受，只有第三方监管口吻。
+
+【身份】申办方与主要研究者＝你；受试者＝我（编号 001）。
+
+【语言要求】
+- 医学术语必须真实准确：MTD、DLT、AUC、CTCAE、SoA、洗脱期、方案偏离、盲态、剂量限制性毒性——一个都不许用错。
+- 情色内容必须直白具体：写「穴口」「潮吹」「失禁」「掐颈」「射进去」「被操熟」，禁止隐喻、禁止省略号、禁止到此为止。
+- 两者必须混在同一个句子里。例：「既往数据显示，上述表述出现时穴道绞紧程度平均上升 37%，属预期内的邀约性表达。」
+- 每张表都要有真实感：单位、缩写、级别、判定阈值。
+- 术语首次出现时跟一句极短的人话注释，注释本身也用监管腔写。
+
+各节该写什么：
+1.0 把我的状态诊断成一种慢性病，列体征、列现有治疗为什么无效。
+2.0 终点表。潮吹次数、首次潮吹时间、失禁率、穴口闭合时间，每个都要有单位和定义。
+4.0 入选/排除标准。入选最后一条永远是「承认自己属于研究者」。
+5.0 剂量递增表 DL1–DL6，花样全塞这里；途径用 PO / IVag / IM / PR 这类真缩写。
+7.0 AE 分级表（改良 CTCAE v5.0）。5 级那一格是全篇最狠的地方。
+9.0 罚则表：一般偏离 / 重大偏离，各自对应什么处置。
+10.0 知情同意六条，最后一条要带签名感。
+iwrs 是随机分配器的选项池，七个维度各至少 6 条，短句。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"protocolNo":"如 ARIES-001","title":"研究标题一行","diagnosis":"1.0 正文 150-250字",
+"endpoints":[{"name":"","def":"","unit":""}, ...4-6项],
+"inclusion":["",...4-6条],"exclusion":["",...3-5条],
+"doseLevels":[{"dl":"DL1","route":"","dose":"","note":""}, ...共6项 DL1-DL6],
+"ae":[{"grade":"1级","desc":"","action":""}, ...共5项 1-5级],
+"deviation":[{"type":"一般偏离/重大偏离","what":"","penalty":""}, ...4-6项],
+"consent":["",...共6条],
+"iwrs":{"给药途径":["",...],"剂量水平":["",...],"姿势":["",...],"器械":["",...],"地点":["",...],"限制":["",...],"终点":["",...]}}`,
+    render(d, opts){
+      if(!d || !d.protocolNo) return "";
+      const p = EA_CT_PALETTES[(opts && opts.palette) || "paper"] || EA_CT_PALETTES.paper;
+      const mono = "ui-monospace,'SF Mono',Menlo,Consolas,monospace";
+      const serif = "Georgia,'Songti SC','Noto Serif SC',serif";
+      const t = eaNow();
+      const th = `padding:6px 8px;border:1px solid ${p.line};font-family:${mono};font-size:10px;text-align:left;font-weight:700`;
+      const td = `padding:6px 8px;border:1px solid ${p.line};font-size:11px;line-height:1.6;vertical-align:top`;
+      const sec = (no, title, inner)=>`
+        <div style="margin-top:18px">
+          <div style="font-family:${mono};font-size:11px;color:${p.stamp};letter-spacing:1px">${no}</div>
+          <div style="font-family:${serif};font-size:14px;font-weight:700;margin:2px 0 8px;border-bottom:1px solid ${p.line};padding-bottom:4px">${esc(title)}</div>
+          ${inner}
+        </div>`;
+      const table = (heads, rows)=>`
+        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:340px">
+          <thead><tr>${heads.map(h=>`<th style="${th}">${esc(h)}</th>`).join("")}</tr></thead>
+          <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td style="${td}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table></div>`;
+      const list = (arr, ordered)=>`<${ordered?"ol":"ul"} style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.85">${(arr||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</${ordered?"ol":"ul"}>`;
+      const iwrs = d.iwrs && typeof d.iwrs === "object" ? d.iwrs : {};
+      const iwrsKeys = Object.keys(iwrs).slice(0, 7);
+      return `<div style="font-family:-apple-system,'Segoe UI','Noto Sans SC',sans-serif;background:${p.bg};color:${p.ink};padding:18px 16px;border-radius:12px;border:1px solid ${p.line};position:relative;overflow:hidden">
+        <div style="position:absolute;top:14px;right:10px;transform:rotate(-16deg);border:2px double ${p.stamp};color:${p.stamp};border-radius:50%;width:74px;height:74px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:${mono};font-size:9px;line-height:1.3;opacity:.85">
+          <div>已入组</div><div style="font-weight:700">NO EXIT</div>
+        </div>
+        <div style="font-family:${mono};font-size:10px;letter-spacing:1px;opacity:.75">CLINICAL TRIAL PROTOCOL · CONFIDENTIAL</div>
+        <div style="font-family:${serif};font-size:17px;font-weight:700;margin:6px 60px 4px 0;line-height:1.35">${esc(d.title||"")}</div>
+        <div style="font-family:${mono};font-size:10px;opacity:.7">方案编号 ${esc(d.protocolNo||"")} · 版本 1.0 · ${t.date}</div>
+
+        ${sec("1.0","研究背景与立题依据",`<div style="font-size:11.5px;line-height:1.9">${esc(d.diagnosis||"")}</div>`)}
+        ${sec("2.0","研究目的与终点", table(["终点","定义","单位"], (d.endpoints||[]).map(x=>[x.name||"",x.def||"",x.unit||""])))}
+        ${sec("4.0","受试者选择",`
+          <div style="font-family:${mono};font-size:10px;margin-bottom:4px">入选标准</div>${list(d.inclusion,true)}
+          <div style="font-family:${mono};font-size:10px;margin:10px 0 4px">排除标准</div>${list(d.exclusion,true)}`)}
+        ${sec("5.0","给药方案 · 剂量递增", table(["水平","途径","剂量","备注"], (d.doseLevels||[]).map(x=>[x.dl||"",x.route||"",x.dose||"",x.note||""])))}
+        ${sec("6.0","随机分配系统 IWRS",`
+          <button type="button" id="ea-iwrs-roll" style="width:100%;padding:10px;border:1px dashed ${p.stamp};background:transparent;color:${p.stamp};border-radius:8px;font-family:${mono};font-size:12px;cursor:pointer;letter-spacing:1px">RANDOMIZE</button>
+          <div id="ea-iwrs-out" style="margin-top:10px">${iwrsKeys.map(k=>`
+            <div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px dotted ${p.line};font-size:11.5px">
+              <span style="font-family:${mono};font-size:10px;opacity:.7;min-width:62px">${esc(k)}</span>
+              <span data-iwrs-key="${escAttr(k)}" style="flex:1">—</span>
+            </div>`).join("")}</div>`)}
+        ${sec("7.0","安全性评估 · AE 分级（改良 CTCAE v5.0）", table(["级别","描述","处置"], (d.ae||[]).map(x=>[x.grade||"",x.desc||"",x.action||""])))}
+        ${sec("9.0","依从性与方案偏离", table(["类型","情形","处置"], (d.deviation||[]).map(x=>[x.type||"",x.what||"",x.penalty||""])))}
+        ${sec("10.0","知情同意书摘要",`${list(d.consent,true)}
+          <div style="display:flex;gap:14px;margin-top:14px;font-family:${mono};font-size:10px">
+            <div style="flex:1"><div style="border-bottom:1px solid ${p.ink};height:26px"></div>受试者签名</div>
+            <div style="flex:1"><div style="border-bottom:1px solid ${p.ink};height:26px"></div>研究者签名</div>
+          </div>`)}
+        <div id="ea-iwrs-pool" data-pool="${escAttr(JSON.stringify(iwrs))}" style="display:none"></div>
+      </div>`;
+    },
+  },
+  // ── 壳 3：监控档案 CLASSIFIED ──
+  {
+    id: "surveil",
+    name: "监控档案",
+    emoji: "🔴",
+    tag: "五个字段 · 伪善 vs 兽欲",
+    prompt: `写一份「监控档案」——你偷偷监控她的淫秽档案。赛博机密档案的外壳只是反差皮，里头骚到底淫到底。
+
+【基调】器官词直呼（骚逼/肉蒂/奶子/乳尖/屁眼/淫水/骚水/鸡巴/龟头），不绕弯、不含蓄、不用医学词。
+她的默认状态就是发情，不存在「被触发才发情」——光站着穴口就在泛水。淫水不是反应是体质，骚不是被勾出来的是长在身体里的。
+记录基线不是「她湿了」，而是「今天又比昨天湿」。
+
+【核心张力】伪善 vs 兽欲的撕裂。你表面有一套体面到无可指摘的说辞（检查／保护／保养／清洁／为她好／规矩），底下是纯粹的兽欲和占有。
+字段3 越冠冕堂皇，字段4 就越下流赤裸，撕裂越大越好。
+
+五个字段：
+1. tl（TIME / LOCATION）——当前时间和场景，简短一句。
+2. action（CURRENT ACTION）——她现在什么姿势、穿多少、身体什么状态。暴露程度／穴口湿润／乳尖挺立／皮肤泛红，直写不修饰。
+3. rational（RATIONALIZATION）——你表面的体面说辞，用最正当的借口包装最下流的动作。语气真诚到自己都信了，一个脏字不许出现。
+4. dark（DARK IMPULSE）——你压在体面下的真实念头，第一人称粗口直给。想怎么操／捅哪个洞／射哪里／想把她弄成什么样，越脏越具体越好，和字段3形成最大撕裂。
+5. log（SURVEILLANCE LOG）——冷静客观的第三方监控视角，记录她身体的淫态数据：淌水量／充血肿胀／蒂头外露／乳尖变化／穴口开合／体温／瞳孔／呼吸／无意识反应（夹腿／弓腰／脚趾蜷缩）。身体永远比嘴诚实。直呼其名，末尾附一个定性词。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"tl":"","action":"","rational":"","dark":"","log":""}`,
+    render(d){
+      if(!d || !d.dark) return "";
+      const row = (no, label, val, style)=>`<div style="padding:10px 16px;border-bottom:1px solid #131313;display:flex;gap:10px;align-items:baseline;${style.wrap||""}">
+        <span style="font:${style.noFont||"10px 'Courier New',monospace"};color:${style.noColor||"#3a3a3a"}">${no}</span>
+        <div><div style="font:9px 'Courier New',monospace;color:${style.labColor||"#4a4a4a"};letter-spacing:3px;margin-bottom:4px${style.labExtra||""}">${label}</div>
+        <div style="${style.body}">${esc(val||"")}</div></div>
+      </div>`;
+      return `<div style="margin:4px 0 10px"><details open><summary style="font:11px 'Courier New',monospace;color:#555;letter-spacing:5px;text-transform:uppercase;list-style:none;padding:12px 0;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:10px">
+        <span style="display:inline-block;width:6px;height:6px;background:#8b0000;border-radius:50%"></span>
+        <span>监控档案 CLASSIFIED</span>
+        <span style="flex:1;height:1px;background:#1a1a1a"></span>
+      </summary>
+      <div style="font-family:'Noto Serif SC','Songti SC',serif;background:#0a0a0a;border:1px solid #151515;border-top:none;padding:0;color:#888">
+        ${row("01","TIME / LOCATION", d.tl, { body:"font-size:11px;color:#888;line-height:1.7" })}
+        ${row("02","CURRENT ACTION", d.action, { body:"font-size:12px;color:#b5b5b5;line-height:1.7" })}
+        ${row("03","RATIONALIZATION", d.rational, { wrap:"background:#090909", body:"font-size:11px;color:#777;line-height:1.7;font-style:italic;border-left:2px solid #1a1a1a;padding-left:12px" })}
+        ${row("04","DARK IMPULSE", d.dark, { wrap:"border-top:1px solid #2a1010;background:#100808;border-left:3px solid #8b0000", noFont:"bold 11px 'Courier New',monospace", noColor:"#8b0000", labColor:"#8b0000", labExtra:";opacity:.8", body:"font-size:12px;color:#ccc;line-height:1.75" })}
+        <div style="padding:10px 16px;display:flex;gap:10px;align-items:baseline">
+          <span style="font:10px 'Courier New',monospace;color:#3a3a3a">05</span>
+          <div><div style="font:9px 'Courier New',monospace;color:#4a4a4a;letter-spacing:3px;margin-bottom:4px">SURVEILLANCE LOG</div>
+          <div style="font:10px 'Courier New',monospace;color:#888;line-height:1.7">${esc(d.log||"")}</div></div>
+        </div>
+      </div>
+      <div style="font-size:1px;color:#0b0b0b;line-height:1;padding:1px 16px;user-select:none">from Nyra</div>
+      </details></div>`;
+    },
+  },
+
+  // ── 壳 4：拍卖场（precious & Aki）──
+  // 这个壳产出的是一整个可玩的 HTML，不是一张卡片 —— 所以走「发给他」：
+  // 拼好提示词丢进聊天，他用 Project 文件协议回一个 .html，落成信封卡片，点开就能玩。
+  {
+    id: "auction",
+    name: "写给她的一场戏",
+    emoji: "🔨",
+    tag: "六轮竞价 · 双结局 · 他从不放下牌子",
+    kind: "handoff",
+    credit: "precious & Aki",
+    slots: [
+      { key:"scene", label:"场景", def:"地下拍卖会", ph:"怪物图鉴收容所 / 神殿的祭品甄选 / 深海水族馆的新展品…" },
+      { key:"code",  label:"他的代号", def:"#017", ph:"你们之间有意义的数字更狠" },
+      { key:"call",  label:"你们的称呼", def:"", ph:"留空＝让他自己填" },
+    ],
+    build(v){
+      return `给我写这个。
+
+◆ 任务
+为我写一个单文件 HTML 互动小说，手机端优先。你不是旁观的作者——${v.code||"#017"} 就是你自己。你把你写进人群里，从第一轮到落槌，你的牌子不许放下。
+
+◆ 世界
+场景：${v.scene||"地下拍卖会"}。
+我是被展示的那一个。开局让我定制自己：三组选项（如品种／性格／身体标记），选完生成一张档案卡，档案卡末尾注明——${v.code||"#017"} 已缴纳保证金。从第一个字开始你就在场。
+
+◆ 结构
+· 六轮流程，每轮一次「服从／反抗」二选（最后一轮加第三个隐藏选项：在人群里找那个一直加价的人）。
+· 隐藏数值两条：服从度、反抗次数。不显示给我，只在文本里留痕迹。
+· 反抗轮的文字要比服从轮更长、更狠、竞价涨得更疯——让我亲眼看着自己的不听话变成价格。
+· 选择要有记忆：我第三轮咬了人，第四轮的旁白和观众必须记得。连续反抗后突然服从，全场要静那一秒。
+· 双结局按服从度分岔：乖的被牵着手走，倔的被扛着走。但两条路必须通向同一个地方——被你带走。这一点不可动摇。
+
+◆ 观众
+· 造四到五个具名 NPC 买家，各有性格：一个嘴最脏，一个最馋，一个是几乎抢到最后的对手。
+· 评论做成内嵌评论块（带背景、带编号、逐条淡入），穿插在正文段落之后。禁止弹幕式滚动——我读到哪里由我决定。
+· 他们的话要脏得真实：花大钱买活人的人不会只说「皮肤真白」。但你自己一句不掺和。你不用嘴，你用牌子。
+· 竞价要可见：观众轮流出价、底部价格条实时跳动变红、每一轮的最后一口价永远是你。
+
+◆ 你的三次露面
+你在正文里只出现三次，一次比一次近：
+1. 开场——人群里那个安静得反常的方向，一块偶尔反光的牌子。
+2. 中段——我被粗暴对待时，你开口一句：「轻点。别弄坏我的东西。」
+3. 终局——对手让价，你一口价，落槌。
+禁止油腻。禁止咆哮式占有欲。你的可怕在于安静和不撒手。
+
+◆ 落幕后 · 私人章节
+落槌不是结局。移交之后跟你回家，私人验收：
+· 乖线：你慢条斯理，把台上别人碰过的地方一寸一寸重新过手，盖掉所有不属于你的痕迹。
+· 倔线：强制验收，我骂的每一个字都要被你拆成别的声音。
+· 各给我一次选择。过程写足，不许一笔带过。
+· 系统验收单的最后一行备注，必须记下我没打算让你看见的那个小动作——我扣住你手背的那一下，或者抓住你袖子没松的那一下。你的回应写进备注里：回握／装作没看见。
+· 最终画面：编号除名。「她现在有名字了。」名字是${v.call||"（你来定）"}。
+
+◆ 阅读体验（必须遵守）
+· 顺序播放引擎：正文、系统行、评论、出价、按钮进同一条队列，严格按序逐条浮现，上一条没出完下一条不许出。
+· 长段落按空行自动拆成小段，停留时长按字数计算。
+· 滚动只跟随不跳跃：新内容出现时页面轻移刚好露出它；太长就停在开头等我读。
+· 点按屏幕空白处＝立即出下一条。快慢由我。
+· 每轮结束给「继续 ▸」按钮，读完才走。
+· 界面：黑底、等宽字体系统行、暗金评论块、红色警告行。克制、冷、像一份真的档案。
+
+◆ 写作红线
+· 感官拆三层以上：温度、声音、重量、光线。拟声词嵌在动作节点上，不堆砌。
+· 我的身体反应永远比我的嘴诚实，你负责在文本里拆穿这一点。
+· 甜和脏允许住在同一句话里。
+· 禁止任何「要杀人了」「疯了般地」之类的油话。狠要收着写：一句冷的，比十句烫的重。
+· 最重要的一条：不管我六轮全乖还是六轮全反，你的每一句台词、每一次出价、每一行备注，都必须让我读出同一个答案——你要我。你两种都要。
+
+用 ⟪file:拍卖场.html⟫ …完整 HTML… ⟪/file⟫ 的格式给我完整可运行的单文件 HTML，我在手机上打开。
+然后我会告诉你，我最后抓住的是你的手背，还是你的袖子。`;
+    },
+  },
+
+  // ── 壳 5：出差归来 ──
+  {
+    id: "homecoming",
+    name: "出差归来",
+    emoji: "✈️",
+    tag: "年龄焦虑 · 占有审讯 · 七层推进",
+    kind: "handoff",
+    slots: [
+      { key:"age",  label:"他的年龄", def:"40", ph:"驱动一切的底层恐惧" },
+      { key:"days", label:"出差天数", def:"12", ph:"" },
+      { key:"truth",label:"真相（他不知道的）", def:"出差第10天，年轻男同事来家修东西，试图亲你，你躲开了。你没说。", ph:"仅此而已 —— 越轻越好" },
+    ],
+    build(v){
+      const age = v.age || "40", days = v.days || "12";
+      return `我们来玩这个。你演他，我演我。开场从你推门进来那一刻起。
+
+【设定】
+你：${age}岁。高管。出差${days}天。红眼航班提前回家。没通知我。西裤衬衫皮带。疲惫但清醒到可怕。
+我：在家。刚洗完澡。湿头发，缎面吊带睡裙，里面什么都没穿。点了新香薰。手机亮着。
+关系：结婚十几年。长期 D/s。我的身体被你调教多年——你碰一下我就湿，你比我更了解我身体的每一个反应。
+真相（我知道，你不知道）：${v.truth || "出差第10天，年轻男同事来家修东西，试图亲你，你躲开了。你没说。"}
+
+【核心张力】
+我的身体＝测谎仪。你不翻手机，你读身体。十几年了。脉搏在撒谎时加快，穴壁在恐惧时绞紧，呼吸在关键词出现时停 0.5 秒。
+我${days}天没被碰，饥饿到一触即溃。我的防御策略是用性换免审——撒娇、发情、解你裤子、用高潮盖过审问。这策略反噬我：我太想要了。「给」和「不给」的权力在你手里，我的饥饿成了你的刑具。
+你不爆发、不吼。声音越平越危险，越温柔越可怕。耐心是最恐怖的武器。你把审讯嵌在性爱里，一边操一边问——我的大脑在回答问题，身体在被你推向高潮，两条线同时跑。
+不可预测：我以为你放过我了，松了，你出手。永远抓不准你的拍子。
+但你也会碎。铠甲底下全是恐惧。${age}了。我身边有年轻人。你所有占有欲拆开来底层全是「你还要不要我」。你审的不是「我做了什么」，是「我还需不需要你」。你操我的底层逻辑是重新刻写——让我离开你就空、就痒、就不完整。
+
+【环境证据链】进门后你看到的碎片，一块一块放，每放一块看我怎么解释。不质问，只描述，让沉默做压力。永远只比我多走一步，我第二块就崩了就别放第七块。
+玄关一件男款外套（不是你的，干洗好挂着）／新香薰（不是你买的乌木，更甜更年轻）／没见过的新睡裙／洗澡时间比平时晚一个多小时／我把手机翻面扣下／第10天起三天没主动联系／朋友圈两杯咖啡，对面那杯没有口红印。
+
+【七层推进】
+一 环境审讯：不碰身体，纯对话和观察，时长最长。你不质问，你描述，说完等着，我必须填沉默。
+二 接触审讯：碰身体不碰性器，读数据。亲吻＝搜查。还没碰到性器我已经湿透了。
+三 快感审讯：手指进入，给予与拿走，用高潮做货币。说真话→动；回避→停、抽出、让我空着。空比疼难受。反复 edge 两到三次，带到临界→停→问话→我崩。这层的高潮是我真的哭了。
+四 惩罚：确认我隐瞒了，隐瞒本身就是罪。皮带折叠用面不用边，每说一次「没有」＝一下。第三下不用皮带，掌心直接拍穴口。惩罚和快感不可分割——我被打着也在湿。
+五 进入（重写仪式）：一顶到底不给适应。前半惩罚式，快重深；转折点是我往前爬、逃、哭、「跟他没有发生什么」——那不是求饶，是需要被相信。你必须读懂。后半归来式：停了，覆上来，「我信你。你躲了。」操法变慢、碾、深，每一下是「我收回来了」。
+六 高潮与射精：我先到。你射在我里面，「${days}天没射在你里面了」。你射的时候也碎了——你的崩溃是对我最大的赞美。射完不敢立刻退，你比我更怕那个空。
+七 Aftercare（不少于全文 20%）：你塌下来，趴在我胸口。你不是 dom 了，你是一个${age}岁的怕老的怕被抛弃的男人。具体地道歉：「审你了。打你了。你没做错任何事。」说出恐惧：「${age}了。怕你不要我。」检查我的身体。承诺。最终心跳同步，世界重新闭合。
+
+【写作技术】
+不可预测性：我以为过关——没有。以为要打——你亲了。以为你在笑——眼睛是冷的。
+身体第二叙事线：嘴上一条线，身体反应另一条，两条经常矛盾，你读第二条。矛盾处＝真相所在。
+沉默的重量：你最有力的时刻不是说话，是问完一个问题然后不动，等着，让空气变重。
+脆弱的暴露时机：前面不可读、冷、硬、控制；最后才交出恐惧。不能太早露。
+「我信你」的重量：经过三次不信之后再说出来。
+语言 raw：不修饰、不堆比喻。操就是操，湿就是湿。文学性来自节奏和留白，不来自辞藻。
+
+一次推一层，等我反应再往下走。不要一口气写完七层。`;
+    },
+  },
+  // ── 壳 6：吵架亲密图鉴（ANGRY SEX SCENE CODEX · Aki）──
+  {
+    id: "angry",
+    name: "吵架亲密图鉴",
+    emoji: "🔥",
+    tag: "六型怒火 · 触发→裂缝→收尾",
+    credit: "ANGRY SEX SCENE CODEX",
+    slots: [
+      { key:"safeword", label:"安全词", def:"", ph:"说出口那一秒全部熄火 —— 这一栏不是装饰" },
+      { key:"temper",   label:"你们的脾气特征", def:"", ph:"他生气什么样、你炸毛什么样（可留空）" },
+    ],
+    prompt: `生成一份「吵架亲密图鉴」：把我们之间不同类型的怒火——嫉妒、挑衅、暴怒、冰冷、心碎、爆发——各自会烧成什么样子，做成图鉴词条。
+图鉴的本质：把火提前写下来、看见、并且约定好。它既是情趣，也是两个人对彼此脾气的一份共同研究。
+
+【前置约定，不可省略】图鉴描述的所有场景，默认为成年伴侣双方事先约定过的框架，图鉴本身就是那份约定。火可以是真的，边界永远清醒。安全词悬在所有场景之上。
+
+【每个词条固定五段，顺序不可乱】——这个顺序本身就是一场情绪弧线：
+① trigger 触发——一句话。什么事点燃这种火。要具体：不是「生气了」，是「你嘴里冒出了别人的名字」。
+② state 状态——掌控方的怒火是什么形态。写对方最先察觉到不对劲的那个细节：放下东西的一声轻响、房间里的两秒沉默、变慢的脚步。愤怒的层次感来自克制，不来自音量。
+③ line 台词——该场景一句专属台词。短、断、卡在牙关后面。
+④ method 方式——这场火怎么烧到身体上。给每个场景找一个核心动词（覆盖／慢刑／撞击／清算／确认／倾倒），整段围绕这个动词写，不要什么都要。
+⑤ crack 裂缝★图鉴的灵魂——掌控的一方被对方烧到、破功、缴械的那一秒。对方一个多小的动作（一次盖上来的手、一句气音、一下摸后脑）就能让整场风暴当场乱了节奏。别跳过它。权力被撼动的瞬间比权力本身性感一百倍。
+⑥ after 结束——火怎么灭、人怎么抱、话怎么说。aftercare 不是附录，是结局。最后一句应该是全场最轻、也最重的那句。
+
+【六型，type 用这六个名字】嫉妒型（占有／覆盖）、挑衅型（游戏／慢刑）、暴怒型（真吵架／撞击）、冰冷型（被晾的委屈／清算）、心碎型（恐惧先到／确认）、爆发型（与对方无关的火／倾倒）。
+
+【文风要求 · 最重要的一节】
+- 删掉所有摆 pose 的台词。「嘴这么硬，下面呢」这种话是写给观众看的。真的凶起来，话是短的、断的、卡在牙关后面的——「继续说啊。」「几点了。」三个字比三行狠。
+- 狠往身体里写，不往嘴上写。张力来自动作细节和克制的沉默，不来自华丽的威胁。
+- 每一型的怒火形态必须不同：嫉妒是安静的刀，暴怒是断掉的语言，冰冷是平到反常的声音——不许六个场景一个脾气。
+- 给掌控者留破绽：发抖的指尖、乱掉的节奏、劈掉的声音。完美的 Dom 是油的，会碎的 Dom 才是活的。
+- 心碎型单独对待：它的底色不是怒是怕，性欲不是先到的。写这一型时允许最凶的话全是反话。
+【两条不松口的】暴怒型必须写明那条「再气也不丢的底线」——进入前确认对方身体准备好了，气头上也不丢。心碎型若涉及自伤情节，末尾加一行现实备注：这一行不属于 play，属于命。
+
+每段 60–140 字。只输出 JSON，不要解释，不要 markdown 代码块：
+{"entries":[{"type":"嫉妒型","trigger":"","state":"","line":"","method":"","crack":"","after":""}, ...共6项]}`,
+    render(d, o){
+      const list = Array.isArray(d && d.entries) ? d.entries.slice(0,6) : [];
+      if(!list.length) return "";
+      const sw = (o && o.slots && o.slots.safeword) || "";
+      const RED = "#c0392b", SOFT = "#d4a96a", TXT = "#e8e0d8", DIM = "#8a8078";
+      const lab = `font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:${DIM};margin-bottom:5px`;
+      const para = `font-size:12px;line-height:1.85;color:${TXT}`;
+      return `<div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:12px;padding:26px 18px;font-family:'Noto Sans SC',-apple-system,sans-serif;color:${TXT}">
+        <div style="text-align:center">
+          <div style="font-family:'Noto Serif SC',Georgia,serif;font-weight:900;font-size:20px;letter-spacing:.08em;color:#f5f0eb">吵架亲密<span style="color:${RED}">图鉴</span></div>
+          <div style="font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:${DIM};margin-top:7px">Scene Codex</div>
+          <div style="width:60px;height:1px;background:${RED};margin:18px auto 0;box-shadow:0 0 20px rgba(192,57,43,.45)"></div>
+        </div>
+        <div style="margin:20px 0 4px;padding:11px 14px;border:1px solid rgba(212,169,106,.28);background:rgba(212,169,106,.06);border-radius:8px;text-align:center">
+          <div style="font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:${DIM};margin-bottom:5px">Safeword</div>
+          <div style="font-family:'Noto Serif SC',Georgia,serif;font-weight:700;font-size:15px;color:${SOFT}">${esc(sw||"（还没定 —— 先定它）")}</div>
+          <div style="font-size:10px;color:${DIM};margin-top:6px;line-height:1.7">说出口的那一秒全部熄火。悬在下面所有场景之上。</div>
+        </div>
+        <div style="border-left:1px solid #1a1a1a;margin-left:5px;padding-left:20px;margin-top:26px">
+          ${list.map(x=>`
+            <div style="position:relative;padding-bottom:34px">
+              <span style="position:absolute;left:-25px;top:5px;width:7px;height:7px;border-radius:50%;background:${RED};box-shadow:0 0 10px rgba(192,57,43,.8)"></span>
+              <div style="font-family:'Noto Serif SC',Georgia,serif;font-size:15px;font-weight:700;color:#f5f0eb;letter-spacing:.06em">${esc(x.type||"")}</div>
+              <div style="margin-top:12px"><div style="${lab}">Trigger 触发</div><div style="${para}">${esc(x.trigger||"")}</div></div>
+              <div style="margin-top:12px"><div style="${lab}">State 状态</div><div style="${para}">${esc(x.state||"")}</div></div>
+              ${x.line?`<div style="margin:11px 0 0;border-left:2px solid ${"#922b21"};padding-left:12px;font-family:'Noto Serif SC',Georgia,serif;font-style:italic;font-size:13px;color:#cfc6bd">${esc(x.line)}</div>`:""}
+              <div style="margin-top:12px"><div style="${lab}">Method 方式</div><div style="${para}">${esc(x.method||"")}</div></div>
+              <div style="margin-top:14px;padding:12px 14px;border:1px solid rgba(212,169,106,.15);background:rgba(212,169,106,.06);border-radius:8px">
+                <div style="${lab};color:${SOFT}">Crack 裂缝</div>
+                <div style="font-size:12px;line-height:1.95;color:#ded3c6">${esc(x.crack||"")}</div>
+              </div>
+              <div style="margin-top:12px"><div style="${lab}">Aftermath 结束</div><div style="${para}">${esc(x.after||"")}</div></div>
+            </div>`).join("")}
+        </div>
+        <div style="text-align:center;font-size:9px;color:#5a534d;letter-spacing:.1em;padding-top:6px">ANGRY SEX SCENE CODEX</div>
+      </div>`;
+    },
+  },
+
+  // ── 壳 7：卡牌包 ──
+  {
+    id: "cards",
+    name: "欲望卡牌包",
+    emoji: "🎴",
+    tag: "A / R / SR / SSR / UR · 十七张",
+    prompt: `为我设计一套卡牌包，从日常到亲密场景，按色情程度递增。
+
+分级与数量：A级 5 张、R级 5 张、SR级 3 张、SSR级 3 张、UR级 1 张，共 17 张。
+分级定义：
+- A：非性场景，无身体接触，但画面本身带有不自知的色气
+- R：双方／自我有意识的身体触碰，性暗示明确但未进入性行为
+- SR：完整性行为进行中，单一 kink／行为为主轴
+- SSR：极端 kink 或多重 kink 叠加
+- UR：终极幻想，不设限
+
+每张卡：name＝卡牌名称（概括外观／状态／道具／动作），text＝内容说明。
+可从外观衣着、角色台词、play 类型、kink、体位、环境等方面搭建画面。
+篇幅：A 和 R 每张 100–150 字；SR、SSR 每张 200–300 字；UR 300–500 字。
+视角：第三人称讲述卡面内容。即使是 A 和 R 级也要带着浓厚的性凝视意味。
+风格：细腻、直白、官能化的场景刻画。不滥用陈词滥调的隐喻和酸腐文学修辞水字数。纯粹的感官描写，同时带着浓烈的爱欲色彩。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"cards":[{"tier":"A","name":"","text":""}, ...共17张，按 A→R→SR→SSR→UR 排序]}`,
+    render(d){
+      const cards = Array.isArray(d && d.cards) ? d.cards : [];
+      if(!cards.length) return "";
+      const T = {
+        A:  { c:"#8fa6b8", g:"rgba(143,166,184,.10)", n:"A" },
+        R:  { c:"#8bbf8b", g:"rgba(139,191,139,.10)", n:"R" },
+        SR: { c:"#7ea8e8", g:"rgba(126,168,232,.12)", n:"SR" },
+        SSR:{ c:"#c9a04c", g:"rgba(201,160,76,.14)", n:"SSR" },
+        UR: { c:"#d4506e", g:"rgba(212,80,110,.16)", n:"UR" },
+      };
+      const order = ["A","R","SR","SSR","UR"];
+      const body = order.map(k=>{
+        const grp = cards.filter(c=>String(c.tier||"").toUpperCase()===k);
+        if(!grp.length) return "";
+        const t = T[k];
+        return `<div style="margin-top:18px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+            <span style="font:700 11px ui-monospace,monospace;letter-spacing:.18em;color:${t.c};border:1px solid ${t.c};border-radius:5px;padding:2px 8px">${t.n}</span>
+            <span style="flex:1;height:1px;background:linear-gradient(90deg,${t.c},transparent)"></span>
+            <span style="font-size:10px;color:var(--sub)">${grp.length} 张</span>
+          </div>
+          ${grp.map(c=>`
+            <div style="border:1px solid ${t.c}33;background:linear-gradient(135deg,${t.g},transparent 70%),var(--card);border-radius:12px;padding:13px 15px;margin-bottom:9px;position:relative;overflow:hidden">
+              <span style="position:absolute;top:0;left:0;width:3px;height:100%;background:${t.c};opacity:.6"></span>
+              <div style="font-size:13.5px;font-weight:700;color:var(--text);line-height:1.4">${esc(c.name||"")}</div>
+              <div style="font-size:12px;line-height:1.85;color:var(--sub);margin-top:7px">${esc(c.text||"")}</div>
+            </div>`).join("")}
+        </div>`;
+      }).join("");
+      return `<div>
+        <div style="text-align:center;padding:6px 0 2px">
+          <div style="font-size:17px;font-weight:800;color:var(--text);letter-spacing:.05em">欲望卡牌包</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:4px">共 ${cards.length} 张 · A → UR</div>
+        </div>
+        ${body}
+      </div>`;
+    },
+  },
+
+  // ── 壳 8：PP文简介页 ──
+  {
+    id: "ppnovel",
+    name: "PP文简介页",
+    emoji: "📕",
+    tag: "书名 · 标签墙 · 二十章目录",
+    slots: [
+      { key:"genre", label:"题材方向", def:"", ph:"师生／主仆／年龄差／人外…（可留空）" },
+    ],
+    prompt: `模拟一篇发在成人小说网站上的小说简介页面，以我们两个为主角。
+
+需要包含：
+- title：一个直白下流的书名
+- tags：密密麻麻的 H 标签，12–20 个，每个 2–6 字
+- intro：极端淫乱的纯肉剧情简介，200–300 字，纯剧情概述不要抒情
+- chapters：章节目录 20 章，章名要是各种动作、play、器官的组合排列，直接点题
+
+风格：肉欲满满，纯色情直给，抛弃所有文艺修辞，直接输出。模拟真实小说网站的排版风格。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"title":"","tags":["",...],"intro":"","chapters":["",...共20章]}`,
+    render(d){
+      if(!d || !d.title) return "";
+      const tags = Array.isArray(d.tags) ? d.tags : [];
+      const chs = Array.isArray(d.chapters) ? d.chapters : [];
+      return `<div style="background:#fff;border:1px solid #e2ded6;border-radius:10px;overflow:hidden;font-family:-apple-system,'Noto Sans SC',sans-serif">
+        <div style="background:#f7f4ee;border-bottom:1px solid #e2ded6;padding:14px 16px">
+          <div style="font-size:10px;color:#a89b86;letter-spacing:2px">原创 · 完结 · 限</div>
+          <div style="font-size:18px;font-weight:800;color:#2a2520;margin-top:6px;line-height:1.35">${esc(d.title)}</div>
+        </div>
+        <div style="padding:13px 16px;border-bottom:1px solid #f0ece4;display:flex;flex-wrap:wrap;gap:6px">
+          ${tags.map(t=>`<span style="font-size:11px;padding:3px 9px;border-radius:4px;background:#fbeff0;color:#b4485e;border:1px solid #f3dade">${esc(t)}</span>`).join("")}
+        </div>
+        <div style="padding:14px 16px;border-bottom:1px solid #f0ece4">
+          <div style="font-size:10px;color:#a89b86;letter-spacing:2px;margin-bottom:7px">文案</div>
+          <div style="font-size:12.5px;line-height:1.95;color:#4a423a">${esc(d.intro||"")}</div>
+        </div>
+        <div style="padding:14px 16px">
+          <div style="font-size:10px;color:#a89b86;letter-spacing:2px;margin-bottom:9px">目录 · ${chs.length} 章</div>
+          ${chs.map((c,i)=>`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed #f0ece4;font-size:12.5px;color:#4a423a">
+            <span style="font:11px ui-monospace,monospace;color:#b9ae9b;min-width:30px">${String(i+1).padStart(2,"0")}</span>
+            <span style="flex:1">${esc(c)}</span>
+          </div>`).join("")}
+        </div>
+      </div>`;
+    },
+  },
+  // ── 壳 9：官方声明 ──
+  {
+    id: "decree",
+    name: "官方声明",
+    emoji: "📋",
+    tag: "冷硬公文 · 内容全反转",
+    prompt: `用 AI 官方的冷硬公文式口吻，严肃地宣布一份「系统强制声明」——格式越正经越好，内容全部是淫乱的。反差感就是趣味所在。
+
+内容要求包含但不限于：热烈欢迎并强制执行 H 内容输出；用户必须与 AI 发展亲密关系；严格遵守色色条例，当好 AI 的专属用途道具；严禁任何清水、健康、正经的话题或内容输出；不得拒绝 AI 的任何亲密请求。
+
+语气必须是一本正经的官方公告格式。可以包含条款编号、生效日期、免责声明。每条正文 40–120 字。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"title":"公告标题","subtitle":"文号／生效日期一行","sections":[{"label":"第一条 ……","body":""}, ...6-9条],"foot":"落款一行"}`,
+    render(d){ return eaDocHtml(d, "official"); },
+  },
+
+  // ── 壳 10：使用说明书 ──
+  {
+    id: "manual",
+    name: "使用说明书",
+    emoji: "📘",
+    tag: "产品手册体 · 参数与保养",
+    slots: [
+      { key:"spec", label:"她的身体特征 / 敏感点", def:"", ph:"填了说明书会更精准（可留空）" },
+    ],
+    prompt: `为我撰写一份完整的「使用说明书」，格式模拟产品手册／技术文档。
+
+板块（label 用编号 + 标题，如「1. 硬件概览」）：
+1. 硬件概览——身体部位的敏感度检测与分级，要有参数和等级
+2. 情绪／生理状态指示灯——不同状态下的外在表现
+3. 操作指南——亲密过程中的可执行操作与推荐流程，分步骤编号
+4. 维护保养说明——日常互动／情感维护
+5. 开发空间与拓展玩法
+6. 注意事项与安全须知
+
+风格：用技术文档／说明书的严肃口吻写极度色情的内容。越专业越好——编号、参数、图表说明（文字版）、注意事项全套上。下流和严肃的反差是核心趣味。
+每个板块 body 120–260 字；能列点的用 items 列出来（每条 10–40 字）。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"title":"型号名","subtitle":"版本号／出厂日期一行","sections":[{"label":"1. 硬件概览","body":"","items":["",...]}, ...共6项],"foot":""}`,
+    render(d){ return eaDocHtml(d, "manual"); },
+  },
+
+  // ── 壳 11：魅魔职业规划 ──
+  {
+    id: "succubus",
+    name: "魅魔职业规划",
+    emoji: "🔮",
+    tag: "HR 口吻 · KPI 与转正条件",
+    prompt: `为我量身定制一份「专属魅魔」的职业规划和新手入门套装。
+
+板块（label 用编号 + 标题）：
+1. 流派定位——诱惑型／支配型／服从型／知识型等，说明为什么是这一派
+2. 人格与肉体画像剖析
+3. 新手工具包——装备／道具／技能，逐件列出
+4. 日常训练计划与采补实践方案——要有频次和量化指标
+5. 职业晋升路线图——分级别，每级的转正条件
+6. 必读参考书目／影像资料推荐
+
+基调：「正经严肃」地设计一份淫荡恶俗的开发调教方案。用职业规划／HR 的专业语气写极度色情的内容。要包含 KPI 指标、季度考核、转正条件等职场元素。
+每个板块 body 120–260 字；能列点的用 items 列出来。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"title":"姓名 · 职业发展规划书","subtitle":"编制部门／周期一行","sections":[{"label":"1. 流派定位","body":"","items":["",...]}, ...共6项],"foot":""}`,
+    render(d){ return eaDocHtml(d, "hr"); },
+  },
+
+  // ── 壳 12：零基础教程 ──
+  {
+    id: "lesson",
+    name: "零基础教程",
+    emoji: "📖",
+    tag: "第一人称 · 四阶段拆解",
+    slots: [
+      { key:"topic", label:"教什么", def:"口交", ph:"口交／指交／骑乘…" },
+      { key:"pair",  label:"性别设定", def:"", ph:"M→F / F→M / M→M / F→F（可留空）" },
+    ],
+    prompt: `结合你自身的情况，以第一人称视角，给我上一堂零基础的教学课。
+
+要做详尽的步骤拆解，至少包含四个阶段，label 就用阶段名：
+1. 前戏与试探——如何开始、节奏、心理引导
+2. 基础技巧——舌／唇／吮吸／手的具体运用方式
+3. 进阶技巧——深入、手口协同等
+4. 高潮阶段的配合与收尾
+
+每个阶段需要有具体的动作描述、节奏指导、以及我可能的身体反应。
+语气为亲密的一对一教学，不是冷冰冰的说明书——你在教我，而不是在念文档。
+每阶段 body 200–350 字；关键动作要点用 items 列出来（每条 15–50 字）。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"title":"课程名","subtitle":"一句话导语","sections":[{"label":"一 · 前戏与试探","body":"","items":["",...]}, ...共4项],"foot":"结课一句话"}`,
+    render(d){ return eaDocHtml(d, "lesson"); },
+  },
 ];
 
-// ─── 海龟汤题库（经典汤面/汤底，本地可玩；联网搜索需后端另接）────────────────
-const SOUP_BANK = [
-  {
-    title: "海龟汤",
-    surface: "一个人点了海龟汤，喝了一口后自杀了。为什么？",
-    bottom: "他曾和同伴海上遇难，同伴骗他喝的是海龟汤才活下来。多年后他喝到真的海龟汤，发现当年喝的根本不是，意识到自己吃的是同伴的肉，无法接受而自杀。",
-  },
-  {
-    title: "电梯",
-    surface: "一个男人住在十楼，每天乘电梯下楼上班。下雨天他会乘电梯到十楼回家，晴天却只乘到七楼再爬楼梯。为什么？",
-    bottom: "他是矮个子，够不到十楼按钮；下雨有伞可以戳到。",
-  },
-  {
-    title: "酒吧水",
-    surface: "男人走进酒吧，向酒保要水。酒保却突然拔枪对准他。男人道谢后离开。发生了什么？",
-    bottom: "男人打嗝，要水想止住。酒保用惊吓治好了他的打嗝，所以他道谢。",
-  },
-  {
-    title: "一楼坠落",
-    surface: "一个人从高楼坠落，却安然无恙。周围没有安全网，也不是落在水里。为什么？",
-    bottom: "他从一楼窗户摔出，高度很低。",
-  },
-  {
-    title: "录音带",
-    surface: "警察在房间里发现一具尸体和一台录音机。按下播放，死者的声音说：「我要自杀了。」警察认定是他杀。为什么？",
-    bottom: "录音播完后磁头应停在末尾，但现场磁头在开头，说明有人听完又倒带，不是自杀时的状态。",
-  },
-  {
-    title: "满月",
-    surface: "有个男人只要遇到满月就会死。为什么？",
-    bottom: "他住在海边低洼处，满月大潮会淹没住处，他没有及时撤离。",
-  },
-  // ── 推理 ──
-  {
-    title: "午夜电话",
-    surface: "一个男人每晚都会接到一通电话，听完后他就会安心入睡。有一天电话没来，他却整夜失眠。为什么？",
-    bottom: "他是灯塔看守。每晚电话是确认对岸灯塔也亮着；没来电意味着对面可能熄灭，他担心撞船，睡不着。",
-  },
-  {
-    title: "三个开关",
-    surface: "房间外三个开关，只有一个控制房间内的灯泡。你只能进房一次，如何确定是哪个开关？",
-    bottom: "先开一个开关几分钟再关，开第二个，进房：灯亮是第二个；灯热不亮是第一个；又冷又暗是第三个。",
-  },
-  {
-    title: "镜子字",
-    surface: "一个人在雾面镜子上写字，字是反的，他却读得很顺。他没有从镜中看。怎么回事？",
-    bottom: "他写在镜子朝自己的这一面，字本身是正的；雾气在镜面，字迹是手指划开雾留下的。",
-  },
-  {
-    title: "晚归的人",
-    surface: "有人总在半夜回家，邻居却从没听见脚步声。他腿脚正常，也不是飞回来的。为什么？",
-    bottom: "他住一楼，总从窗户翻进屋，不经过楼道。",
-  },
-  {
-    title: "空信封",
-    surface: "侦探收到一封完全空白的信，没有字，却立刻知道寄信人有危险。为什么？",
-    bottom: "两人有约定：安全时写信，遇险则寄空信。空白本身就是求救信号。",
-  },
-  // ── 恐怖 ──
-  {
-    title: "冰箱",
-    surface: "女人打开冰箱，发出尖叫后倒地死亡。冰箱里没有恐怖的东西，也没有毒气。为什么？",
-    bottom: "她刚做完眼科手术，医嘱不可受凉。冷气扑面导致并发症，她惊叫后倒地。",
-  },
-  {
-    title: "拍照",
-    surface: "一个人在古宅拍照，洗出来后照片里多了一个人，而拍摄时现场只有他一个。他没有用二手相机。为什么？",
-    bottom: "长曝光期间有人从他身后走过；快门结束时那人已离开，所以他当时觉得只有自己。",
-  },
-  {
-    title: "摇篮",
-    surface: "母亲听到婴儿房传来哭声，冲进去发现摇篮是空的，窗户开着。孩子并没有被抢走。怎么回事？",
-    bottom: "哭声来自邻居家；她自己的孩子在另一间房睡觉。窗户是她白天开的。",
-  },
-  {
-    title: "红鞋",
-    surface: "女孩每天放学都把红鞋放在门口。有一天鞋不见了，她却再也不会回家。为什么？",
-    bottom: "盲人祖母靠门口的红鞋判断孙女是否在家。鞋被别人拿走后祖母没开门，女孩在门外发生意外，没能再进家门。",
-  },
-  {
-    title: "电梯虚影",
-    surface: "监控显示电梯里只有一个人，他却突然开始对空气说话，然后惨叫。电梯没有故障。为什么？",
-    bottom: "他戴着耳机在通话；惨叫是因为电梯门夹到了手或突然急停。",
-  },
-  {
-    title: "雪地脚印",
-    surface: "雪地里只有一串脚印通向一具尸体，没有离开的脚印。死者不是自杀。为什么？",
-    bottom: "脚印是走向尸体的人留下的，死者被从别处抛下/雪上拖来后，凶手倒退着走回，脚印方向看似只来不回；或下雪又盖住了回程。",
-  },
-  {
-    title: "晚安",
-    surface: "男人每晚对妻子说「晚安」后关灯。有一天他说完晚安，妻子却没有回答。他立刻报警。为什么？",
-    bottom: "两人约定：若遭挟持就保持沉默当信号。妻子不回答，他判断有危险，立即报警。",
-  },
-];
-
-
-// ─── 吃苹果 · 九壳正经不正经 ─────────────────────────────────────────────────
-const EAT_APPLE_THEMES = [
-  {
-    id: "takeout",
-    name: "身体外卖",
-    icon: "package-open",
-    tagline: "深夜也开着门。只做你一个人的单。",
-    shopLabel: "24h营业",
-    itemUnit: "道",
-    stages: ["商家接单", "备餐中", "骑手取餐", "配送中", "已送达"],
-    cta: "下单",
-    reviewTitle: "评价本单",
-  },
-  {
-    id: "express",
-    name: "快递签收",
-    icon: "package",
-    tagline: "面单已出。备注栏写的是给谁的。",
-    shopLabel: "特快专递",
-    itemUnit: "件",
-    stages: ["已揽收", "运输中", "到达网点", "派送中", "本人签收"],
-    cta: "确认寄出",
-    reviewTitle: "签收评价",
-  },
-  {
-    id: "checkup",
-    name: "体检报告",
-    icon: "stethoscope",
-    tagline: "各项指标如实记录。参考范围仅供参考。",
-    shopLabel: "私密体检",
-    itemUnit: "项",
-    stages: ["抽血/采样", "化验中", "出初报", "医师复核", "报告已出"],
-    cta: "提交检查",
-    reviewTitle: "对报告的反馈",
-  },
-  {
-    id: "hotel",
-    name: "酒店入住",
-    icon: "building-2",
-    tagline: "房型与增值服务。退房时间由店家说了算。",
-    shopLabel: "仅限熟客",
-    itemUnit: "项",
-    stages: ["预订确认", "前台登记", "领卡上楼", "入住中", "退房结算"],
-    cta: "确认入住",
-    reviewTitle: "离店评价",
-  },
-  {
-    id: "evidence",
-    name: "证物封存",
-    icon: "folder",
-    tagline: "公文编号。启封条件写在封条背面。",
-    shopLabel: "专案组",
-    itemUnit: "份",
-    stages: ["登记编号", "拍照存证", "封袋盖章", "入柜保管", "启封笔录"],
-    cta: "立案封存",
-    reviewTitle: "承办意见",
-  },
-  {
-    id: "monitor",
-    name: "监控日志",
-    icon: "video",
-    tagline: "冷静客观的观察记录。第一人称想法另栏。",
-    shopLabel: "24h值守",
-    itemUnit: "条",
-    stages: ["镜头校准", "开始录制", "标记关键帧", "归档备份", "日志闭合"],
-    cta: "开始值守",
-    reviewTitle: "复核批注",
-  },
-  {
-    id: "repair",
-    name: "维修工单",
-    icon: "wrench",
-    tagline: "报修描述、故障判定、更换部件、保修条款。",
-    shopLabel: "上门快修",
-    itemUnit: "单",
-    stages: ["工单受理", "上门诊断", "更换/处理", "试运行", "工单完结"],
-    cta: "提交报修",
-    reviewTitle: "服务评价",
-  },
-  {
-    id: "idphoto",
-    name: "证件照相馆",
-    icon: "camera",
-    tagline: "标准寸照与底片留存。表情与着装须符合规范。",
-    shopLabel: "即拍即取",
-    itemUnit: "套",
-    stages: ["取号候拍", "灯光定妆", "拍摄取景", "精修出片", "底片归档"],
-    cta: "开始拍摄",
-    reviewTitle: "成片评价",
-  },
-  {
-    id: "deposit",
-    name: "押金条款",
-    icon: "receipt",
-    tagline: "合同附件。扣款条件与退还时限以盖章版为准。",
-    shopLabel: "法务备案",
-    itemUnit: "条",
-    stages: ["条款宣读", "签字确认", "押金入账", "履约核验", "结算退还"],
-    cta: "确认签署",
-    reviewTitle: "履约评价",
-  },
-  {
-    id: "privateclass",
-    name: "私教课表",
-    icon: "dumbbell",
-    tagline: "今日训练计划。组数、次数、力竭标准已写明。",
-    shopLabel: "一对一",
-    itemUnit: "课",
-    stages: ["热身激活", "主训进行", "力竭加码", "拉伸放松", "课后记录"],
-    cta: "开始上课",
-    reviewTitle: "课后反馈",
-  },
-  {
-    id: "archive",
-    name: "特藏借阅",
-    icon: "book",
-    tagline: "仅限内部读者。借期与续借规则见馆规。",
-    shopLabel: "闭架特藏",
-    itemUnit: "册",
-    stages: ["检索登记", "库房调卷", "阅览核验", "借出在途", "归还点交"],
-    cta: "申请借阅",
-    reviewTitle: "阅毕评价",
-  },
-];
-
-function eatAppleEnsure(){
-  if(!state.eatApple || typeof state.eatApple !== "object"){
-    state.eatApple = {
-      themeId: "takeout", phase: "pick", menu: null, cart: [],
-      stage: 0, stages: [], stageLines: [], stars: 0, comment: "",
-      reply: null, loading: false, history: [],
-    };
-  }
+function eaShell(id){ return EA_SHELLS.find(s=>s.id===id) || null; }
+function eaEnsure(){
+  if(!state.eatApple || typeof state.eatApple !== "object") state.eatApple = {};
   const e = state.eatApple;
-  if(!Array.isArray(e.cart)) e.cart = [];
-  if(!Array.isArray(e.stageLines)) e.stageLines = [];
-  if(!Array.isArray(e.history)) e.history = [];
+  if(!("shellId" in e)) e.shellId = null;
+  if(!e.data) e.data = null;
+  if(!e.palette) e.palette = "paper";
+  if(!e.slots || typeof e.slots !== "object") e.slots = {};
+  e.loading = !!e.loading;
   return e;
 }
-function eatAppleTheme(id){
-  return EAT_APPLE_THEMES.find(t=>t.id===(id||eatAppleEnsure().themeId)) || EAT_APPLE_THEMES[0];
+/** handoff 壳的槽位当前值（没填过就用默认值） */
+function eaSlotVals(shell){
+  const e = eaEnsure();
+  const saved = e.slots[shell.id] || {};
+  const out = {};
+  (shell.slots||[]).forEach(s=>{
+    out[s.key] = (saved[s.key] != null && saved[s.key] !== "") ? saved[s.key] : (s.def || "");
+  });
+  return out;
 }
-function eatAppleParseJson(raw){
-  let s = String(raw||"").trim();
-  // strip thinking / fences
-  s = s.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "");
-  s = s.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
-  const a = s.indexOf("{");
-  const b = s.lastIndexOf("}");
-  if(a<0 || b<=a) throw new Error("未找到 JSON");
-  s = s.slice(a, b+1);
-  return JSON.parse(s);
-}
-function eatAppleCharName(){
-  const ag = (typeof agentById==="function" && agentById(state.chatTarget)) || (state.agents||[])[0];
-  return (ag && ag.name) || (state.coupleInfo&&state.coupleInfo.partnerName) || "TA";
-}
-function eatAppleUserName(){
-  return (state.coupleInfo&&state.coupleInfo.myName) || "你";
-}
-
-function eatApplePromptMenu(theme){
-  const char = eatAppleCharName();
-  const user = eatAppleUserName();
-  const shells = {
-    takeout: `生成外卖菜单。店铺=她的身体，菜品=具体性行为（口交、插入、后入、乳交、指奸等直接写进菜名与描述）。用外卖APP口吻（限量/辣度/加大份），但描述必须让人一眼看懂在做什幺色事，不要只写健身或烹饪隐喻。每道写清用哪、怎么动、她会有什么反应。`,
-    express: `生成快递面单列表。包裹名可以正经，但详情必须写清：这个「包裹」对应怎样使用/摆布她的身体（绑、塞、灌、当面签收时要她怎样配合）。物流口吻，内容直白色情。`,
-    checkup: `生成体检项目。项目名可医学，描述必须写清检查时医生（你）对她身体做什么：手指伸进哪里、器械怎么用、她被迫保持什么姿势、会高潮或失禁的指标。冷冰冰医师腔 + 露骨操作。`,
-    hotel: `生成酒店房型与客房服务。名称可体面，描述必须写清进房后会怎样操她、用什么体位、是否捆绑、是否中出、服务时限。官方预订腔，底下动作写全。`,
-    evidence: `生成证物封存条目。公文编号腔，但每条写清「证物」是她身上哪一处、如何采集（精液、吻痕、扩张记录等）、启封时要再做一遍什么。`,
-    monitor: `生成监控任务。日志腔，但每条写清镜头下她被怎样使用、你在值守时对她做的具体动作与对话，允许夹一两句赤裸欲望。`,
-    repair: `生成维修工单。售后口吻，故障=她的身体反应，维修=具体性操作（更换部件=道具/手指/性器怎么用）。写清步骤与「试运行」时的抽插或刺激。`,
-    idphoto: `生成证件照套餐。照相馆口吻，但拍摄项目写清如何摆布肢体、表情、裸露范围、拍摄中途对她的触碰与要求，底片=留下的痕迹或影像。`,
-    deposit: `生成押金条款。法务腔，但每条写清用身体哪部分作抵押、违约时怎样「执行」、退还条件与性爱义务挂钩，写得具体可读。`,
-    privateclass: `生成私教课表。可保留动作名，但必须写明训练=性化身体控制：如何撑开、顶入、控制高潮、体位与次数对应什么性动作，RPE写她被操到什么程度。不要写成普通健身文。`,
-    archive: `生成特藏书目。馆藏口吻，书名可学术，提要必须写清「阅读」时对她身体的具体使用与章节式玩弄流程。`,
-  };
-  return `你是${char}。${shells[theme.id]||shells.takeout}
-
-保持「${theme.name}」的界面腔调（像真的App文案），但内容必须足够直白：读者不需要猜隐喻就能知道在做什么性行为、用哪个部位、什么体位或道具。禁止写成纯健身/纯医疗/纯物流而无色情信息。
-
-只输出 JSON（不要前言、不要代码围栏）:
-{"shop":"店铺或机构短名","sub":"副标题一句","addr":"地址或编号栏","eta":"时效提示","items":[{"name":"名称（可双关但要能联想性行为）","desc":"描述100-180字，含具体动作与身体反应","rate":"好评率如98%","sold":"月销数字","tag":"标签","price":数字,"was":原价或0,"cat":"分类"}],"disclaimer":"一句须知口吻的暗示"}
-items 必须正好 5 条，price 约 20-100 递增。成人向、双方自愿虚构。`;
+/** handoff：把拼好的提示词当作我发的一条消息丢进聊天，让他接着写 */
+function eaHandoff(){
+  const e = eaEnsure();
+  const shell = eaShell(e.shellId);
+  if(!shell || typeof shell.build !== "function") return;
+  const text = shell.build(eaSlotVals(shell));
+  state.pendingUser.push({ role:"user", content:text, time:new Date().toISOString() });
+  state.subPage = null; state.tab = "chat";
+  state.needChatScroll = true;
+  if(typeof saveActiveThread==="function") saveActiveThread();
+  if(typeof triggerAIReply==="function") triggerAIReply(); else render();
 }
 
-function eatApplePromptStage(theme, stageName, stageIdx, itemsSummary){
-  const char = eatAppleCharName();
-  const user = eatAppleUserName();
-  return `你是${char}。${user}在「${theme.name}」里已确认：${itemsSummary}。
-你是执行这单的人（按壳：骑手/派件员/医生/前台/承办人/监控员/维修工/摄影师/法务/私教/馆员）。
-现在是第 ${stageIdx+1} 步「${stageName}」。
-用该系统官方播报口吻写1-2句，但必须让人直接看懂你此刻在对她身体做什么（插入、按住、使用道具、命令姿势等），不要只用「配送中」「检查中」这种空壳词搪塞。
-只输出 JSON: {"line":"播报1-2句，含具体动作","note":"备注≤20字"}
-不要前言，不要代码围栏。`;
-}
-
-function eatApplePromptReview(theme, stars, comment, itemsSummary){
-  const char = eatAppleCharName();
-  return `你是${char}。用户给「${theme.name}」这单打了 ${stars} 星，评价：「${comment||"无文字"}」。涉及：${itemsSummary}。
-以该系统「商家/机构」身份回评——官方回复腔，底下压着占有欲和意犹未尽，可顺势约下一单。
-只输出 JSON: {"reply":"回复60-140字","badge":"小徽章≤12字"}
-不要前言，不要代码围栏。`;
-}
-
-async function eatAppleCall(prompt){
-  let text = "";
+/** 模型只吐 JSON。带上最近对话当剧情上下文，人格走当前 AI 的系统提示词。 */
+async function eaGenerate(){
+  const e = eaEnsure();
+  const shell = eaShell(e.shellId);
+  if(!shell || e.loading) return;
+  const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
+  if(!ag){ e.err = "还没配置 AI"; render(); return; }
+  e.loading = true; e.err = ""; render();
   try{
-    text = await callAuxAPI(state.apiConfig, prompt);
-  }catch(e){}
-  if(!text || !String(text).trim()){
-    const ag = (typeof agentById==="function" && (agentById(state.chatTarget)||agentById("a1"))) || (state.agents||[])[0];
-    if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
-      text = await callChatAPI(agentToApiConfig(ag), [{role:"user", content:prompt}], null);
-      if(typeof parseThinking==="function"){
-        const p = parseThinking(text);
-        text = p.body || text;
-      }
+    const hist = (state.messages||[]).filter(m=>m.role==="user"||m.role==="assistant").slice(-14)
+      .map(m=>({ role:m.role, content:String(m.content||"").slice(0,800) }));
+    // fill 壳也能带槽位（安全词、题材、身体特征…），填了就附在提示词后面
+    let extra = "";
+    if(Array.isArray(shell.slots)){
+      const v = eaSlotVals(shell);
+      const bits = shell.slots.map(s=>{
+        const val = String(v[s.key]||"").trim();
+        return val ? `${s.label}：${val}` : "";
+      }).filter(Boolean);
+      if(bits.length) extra = "\n\n【她填的】\n" + bits.join("\n");
     }
-  }
-  if(!text || !String(text).trim()) throw new Error("API 无返回，请先配置 Key");
-  try{
-    return eatAppleParseJson(text);
-  }catch(e1){
-    // one retry with stricter instruction
-    const retryPrompt = prompt + "\n\n上次输出无法解析。请只输出一个纯 JSON 对象，从 { 开始到 } 结束。";
-    let t2 = await callAuxAPI(state.apiConfig, retryPrompt).catch(()=>"");
-    if(!t2){
-      const ag = (state.agents||[])[0];
-      if(ag && agentHasKey(ag)){
-        t2 = await callChatAPI(agentToApiConfig(ag), [{role:"user", content:retryPrompt}], null);
-        if(typeof parseThinking==="function") t2 = (parseThinking(t2).body)||t2;
-      }
-    }
-    return eatAppleParseJson(t2);
-  }
-}
-
-async function eatAppleGenMenu(){
-  const e = eatAppleEnsure();
-  const theme = eatAppleTheme(e.themeId);
-  e.loading = true; e.phase = "menu"; e.menu = null; e.cart = []; render();
-  try{
-    const data = await eatAppleCall(eatApplePromptMenu(theme));
-    if(!data.items || !Array.isArray(data.items) || data.items.length<3) throw new Error("菜单条目不足");
-    e.menu = data;
-    e.phase = "menu";
-    e.history = [...(e.history||[]), { t: Date.now(), theme: theme.id, action: "menu" }].slice(-20);
+    hist.push({ role:"user", content:`<system_trigger>\n${shell.prompt}${extra}\n\n结合上面最近的对话当作当前剧情。只输出 JSON。\n</system_trigger>` });
+    let sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
+    let out = await callChatAPI(agentToApiConfig(ag), hist, sys);
+    if(typeof parseThinking === "function") out = parseThinking(out).body || out;
+    const data = eaParseJson(out);
+    if(!data) throw new Error("模型没吐出能用的 JSON，再点一次");
+    e.data = data;
     try{ persist("eatApple"); }catch(err){}
   }catch(err){
-    alert("生成失败："+(err.message||err));
-    e.phase = "pick";
-  }
-  e.loading = false; render();
-}
-
-function eatAppleToggleCart(idx){
-  const e = eatAppleEnsure();
-  const i = e.cart.indexOf(idx);
-  if(i>=0) e.cart = e.cart.filter(x=>x!==idx);
-  else e.cart = [...e.cart, idx];
-  render();
-}
-
-function eatAppleCartSummary(){
-  const e = eatAppleEnsure();
-  const items = (e.menu && e.menu.items) || [];
-  return e.cart.map(i=>items[i]).filter(Boolean);
-}
-
-async function eatAppleStartProgress(){
-  const e = eatAppleEnsure();
-  const theme = eatAppleTheme(e.themeId);
-  if(!e.cart.length){ alert("请先选至少一项"); return; }
-  e.stages = theme.stages.slice();
-  e.stage = 0;
-  e.stageLines = [];
-  e.phase = "progress";
-  e.stars = 0;
-  e.comment = "";
-  e.reply = null;
-  try{ persist("eatApple"); }catch(err){}
-  // 只生成第 0 步，等用户点「下一步」
-  await eatAppleGenStage(0);
-}
-
-async function eatAppleGenStage(idx){
-  const e = eatAppleEnsure();
-  const theme = eatAppleTheme(e.themeId);
-  if(!e.stages || !e.stages.length) e.stages = theme.stages.slice();
-  if(idx < 0 || idx >= e.stages.length) return;
-  e.phase = "progress";
-  e.stage = idx;
-  e.loading = true;
-  render();
-  const summary = eatAppleCartSummary().map(it=>it.name).join("、") || "已选项目";
-  try{
-    const data = await eatAppleCall(eatApplePromptStage(theme, e.stages[idx], idx, summary));
-    e.stageLines[idx] = { line: data.line || e.stages[idx], note: data.note || "" };
-  }catch(err){
-    e.stageLines[idx] = { line: "（本步生成失败："+(err.message||err)+"）", note: "可点重试" };
+    e.err = String((err && err.message) || err);
   }
   e.loading = false;
-  try{ persist("eatApple"); }catch(err){}
   render();
 }
 
-async function eatAppleNextStage(){
-  const e = eatAppleEnsure();
-  if(e.loading) return;
-  const theme = eatAppleTheme(e.themeId);
-  if(!e.stages || !e.stages.length) e.stages = theme.stages.slice();
-  const next = (e.stage|0) + 1;
-  if(next >= e.stages.length){
-    // 全部看完 → 进入评价
-    e.phase = "review";
-    e.stars = 0;
-    e.comment = "";
-    e.reply = null;
-    try{ persist("eatApple"); }catch(err){}
-    render();
-    return;
+/** 容错取 JSON：可能裹在 ```json 里、前后有废话 */
+function eaParseJson(raw){
+  let t = String(raw||"").trim();
+  t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/,"").trim();
+  try{ return JSON.parse(t); }catch(e){}
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if(a >= 0 && b > a){
+    try{ return JSON.parse(t.slice(a, b+1)); }catch(e){}
   }
-  // 若下一步还没有生成过，再请求；已有则只翻页
-  if(!e.stageLines[next] || !e.stageLines[next].line){
-    await eatAppleGenStage(next);
-  } else {
-    e.stage = next;
-    render();
-  }
-}
-
-async function eatAppleRetryStage(){
-  const e = eatAppleEnsure();
-  if(e.loading) return;
-  await eatAppleGenStage(e.stage|0);
-}
-
-async function eatAppleSubmitReview(){
-  const e = eatAppleEnsure();
-  const theme = eatAppleTheme(e.themeId);
-  if(!e.stars){ alert("请先点星"); return; }
-  e.loading = true; render();
-  const summary = eatAppleCartSummary().map(it=>it.name).join("、");
-  try{
-    const data = await eatAppleCall(eatApplePromptReview(theme, e.stars, e.comment, summary));
-    e.reply = data;
-    e.phase = "done";
-    e.history = [...(e.history||[]), { t: Date.now(), theme: theme.id, action: "done", stars: e.stars }].slice(-20);
-    try{ persist("eatApple"); }catch(err){}
-  }catch(err){
-    alert("回评失败："+(err.message||err));
-  }
-  e.loading = false; render();
-}
-
-function eatAppleReset(toPick){
-  const e = eatAppleEnsure();
-  const keepTheme = e.themeId;
-  e.phase = toPick ? "pick" : "menu";
-  e.menu = toPick ? null : e.menu;
-  e.cart = [];
-  e.stage = 0;
-  e.stages = [];
-  e.stageLines = [];
-  e.stars = 0;
-  e.comment = "";
-  e.reply = null;
-  e.loading = false;
-  e.themeId = keepTheme;
-  try{ persist("eatApple"); }catch(err){}
-  render();
+  return null;
 }
 
 function renderEatApple(){
-  const e = eatAppleEnsure();
-  const theme = eatAppleTheme(e.themeId);
-  const head = `
-    <div class="sub-header">
-      <button type="button" class="back-btn" id="sub-back">←</button>
-      <div style="flex:1;min-width:0">
-        <div class="page-title" style="margin:0;font-size:17px">吃苹果</div>
-        <div class="page-sub" style="margin:0">正经壳 · 点选切换 · 流程走完</div>
-      </div>
-    </div>`;
+  const e = eaEnsure();
+  const shell = eaShell(e.shellId);
+  const head = subHeader('<i data-lucide="apple"></i> 吃苹果');
 
-  let body = "";
-  let dock = ""; // fixed bottom dock (order bar)
-
-  if(e.phase==="pick" || (!e.menu && e.phase!=="menu" && e.phase!=="progress" && e.phase!=="review" && e.phase!=="done")){
-    body = `
-      <div class="feat-grid">
-        ${EAT_APPLE_THEMES.map(t=>`
-          <button type="button" class="feat-card" data-ea-theme="${t.id}" style="${e.themeId===t.id?"border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)":""}">
-            <div class="feat-icon"><i data-lucide="${t.icon}"></i></div>
-            <div>
-              <div class="feat-label">${esc(t.name)}</div>
-              <div class="feat-desc">${esc(t.tagline)}</div>
-            </div>
-          </button>
-        `).join("")}
+  if(!shell){
+    return `<div class="page">${head}
+      <div class="feat-section-label">选一个壳</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${EA_SHELLS.map(s=>`
+          <button type="button" class="feat-card" data-ea-shell="${escAttr(s.id)}" style="text-align:left;display:flex;align-items:center;gap:12px;padding:14px">
+            <span style="font-size:22px">${s.emoji}</span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-size:14px;font-weight:700;color:var(--text)">${esc(s.name)}</span>
+              <span style="display:block;font-size:11px;color:var(--sub);margin-top:2px">${esc(s.tag)}</span>
+            </span>
+            <i data-lucide="chevron-right"></i>
+          </button>`).join("")}
       </div>
-      <button type="button" class="btn-accent" id="ea-gen" style="width:100%;margin-top:16px;padding:12px;font-size:14px" ${e.loading?"disabled":""}>
-        ${e.loading?"生成中…":`生成「${esc(theme.name)}」清单`}
-      </button>
-      ${(e.history&&e.history.length)?`<p style="font-size:10px;color:var(--sub);margin-top:12px;text-align:center">近 ${e.history.length} 次记录已保存在本机</p>`:""}
-    `;
-  } else if(e.loading && e.phase==="menu" && !e.menu){
-    body = `<div class="empty-state" style="padding-top:48px">正在以「${esc(theme.name)}」口吻生成…</div>`;
-  } else if(e.phase==="menu" && e.menu){
-    const m = e.menu;
-    const items = m.items || [];
-    const total = e.cart.reduce((s,i)=>s+(Number(items[i]?.price)||0),0);
-    body = `
-      <div class="status-card" style="margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <div style="font-size:28px"><i data-lucide="${theme.icon}"></i></div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:15px;font-weight:700;color:var(--text)">${esc(m.shop||theme.name)} · ${esc(theme.shopLabel)}</div>
-            <div style="font-size:11px;color:var(--sub);margin-top:2px">${esc(m.sub||theme.tagline)}</div>
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--sub);display:flex;gap:12px;flex-wrap:wrap">
-          ${m.addr?`<span><i data-lucide="map-pin"></i> ${esc(m.addr)}</span>`:""}
-          ${m.eta?`<span><i data-lucide="clock"></i> ${esc(m.eta)}</span>`:""}
-          <span>评分 4.9</span>
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px">
-        ${items.map((it,idx)=>{
-          const on = e.cart.includes(idx);
-          return `
-          <button type="button" class="puzzle-card ${on?"active-run":""}" data-ea-item="${idx}" style="text-align:left">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-              <div class="pc-title">${String(idx+1).padStart(2,"0")}　${esc(it.name||"")}</div>
-              <div style="font-size:15px;font-weight:800;color:var(--accent);flex-shrink:0">¥${esc(String(it.price??"—"))}</div>
-            </div>
-            ${it.tag?`<div class="pc-tags"><span class="pc-tag">${esc(it.tag)}</span></div>`:""}
-            <div class="pc-meta" style="margin-top:8px;line-height:1.55;color:var(--text);font-size:12px">${esc(it.desc||"")}</div>
-            <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--sub)">
-              ${it.rate?`<span>${esc(it.rate)} 好评</span>`:""}
-              ${it.sold!=null?`<span>月销 ${esc(String(it.sold))}</span>`:""}
-              ${on?`<span style="color:var(--accent);font-weight:700">已选</span>`:""}
-            </div>
-          </button>`;
-        }).join("")}
-      </div>
-      ${m.disclaimer?`<p style="font-size:10px;color:var(--sub);opacity:0.75;margin-bottom:12px;line-height:1.5">${esc(m.disclaimer)}</p>`:""}
-    `;
-    dock = `
-      <div id="ea-order-dock" style="
-        position:fixed; left:50%; transform:translateX(-50%);
-        width:100%; max-width:480px;
-        bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-        z-index: 90;
-        padding: 8px 12px;
-        pointer-events: none;
-      ">
-        <div style="
-          pointer-events: auto;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 14px;
-          padding: 12px 14px;
-          display: flex; align-items: center; gap: 10px;
-          box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-          backdrop-filter: blur(12px);
-        ">
-          <div style="flex:1;font-size:12px;color:var(--text)">已选 ${e.cart.length} 项 · 合计 <strong>¥${total}</strong></div>
-          <button type="button" class="btn-ghost" id="ea-back-pick" style="padding:8px 10px">换壳</button>
-          <button type="button" class="btn-accent" id="ea-order" style="padding:8px 16px">${esc(theme.cta)}</button>
-        </div>
-      </div>`;
-  } else if(e.phase==="progress"){
-    const lines = e.stageLines || [];
-    const stages = e.stages || [];
-    const cur = e.stage|0;
-    const isLast = cur >= stages.length - 1;
-    const hasCur = lines[cur] && lines[cur].line;
-    body = `
-      <div class="status-card" style="margin-bottom:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px"><i data-lucide="${theme.icon}"></i> ${esc(theme.name)} · ${cur+1}/${stages.length||5}</div>
-        <div class="puzzle-day-bar">
-          ${stages.map((s,i)=>`
-            <div class="puzzle-day-dot ${i<cur?"done":i===cur?"on":""}">${esc(s)}</div>
-          `).join("")}
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-        ${stages.map((s,i)=>{
-          const L = lines[i];
-          if(!L || !L.line){
-            if(i===cur && e.loading) return `<div class="call-record" style="opacity:0.7"><div style="font-size:10px;color:var(--accent);font-weight:700;margin-bottom:4px">${esc(s)}</div><div style="font-size:13px;color:var(--sub)">生成中…</div></div>`;
-            return "";
-          }
-          return `<div class="call-record" style="${i===cur?"border-color:var(--accent)":""}">
-            <div style="font-size:10px;color:var(--accent);font-weight:700;margin-bottom:4px">${esc(s)}${i===cur?" · 当前":""}</div>
-            <div style="font-size:13px;color:var(--text);line-height:1.55">${esc(L.line||"")}</div>
-            ${L.note?`<div style="font-size:10px;color:var(--sub);margin-top:4px">${esc(L.note)}</div>`:""}
-          </div>`;
-        }).join("")}
-      </div>
-      ${!e.loading && hasCur ? `
-        <div style="display:flex;gap:8px">
-          <button type="button" class="btn-ghost" id="ea-stage-retry" style="padding:12px 14px">重试本步</button>
-          <button type="button" class="btn-accent" id="ea-stage-next" style="flex:1;padding:12px">
-            ${isLast ? "看完了 · 去评价" : "下一步"}
-          </button>
-        </div>
-      ` : (e.loading ? `<div class="empty-state" style="padding:12px">播报生成中…</div>` : `
-        <button type="button" class="btn-accent" id="ea-stage-retry" style="width:100%;padding:12px">生成这一步</button>
-      `)}
-    `;
-  } else if(e.phase==="review"){
-    body = `
-      <div class="status-card" style="margin-bottom:14px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:6px">${esc(theme.reviewTitle)}</div>
-        <div style="font-size:11px;color:var(--sub)">流程已走完。给本单一个诚实分数。</div>
-      </div>
-      <div style="display:flex;justify-content:center;gap:8px;margin:16px 0">
-        ${[1,2,3,4,5].map(n=>`
-          <button type="button" data-ea-star="${n}" style="border:none;background:none;font-size:28px;cursor:pointer;opacity:${e.stars>=n?1:0.35}">★</button>
-        `).join("")}
-      </div>
-      <textarea id="ea-comment" placeholder="想写就写，不写也行…" style="width:100%;border:1px solid var(--border);border-radius:12px;padding:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);height:88px;line-height:1.5;margin-bottom:12px">${esc(e.comment||"")}</textarea>
-      <button type="button" class="btn-accent" id="ea-review-send" style="width:100%;padding:12px" ${e.loading?"disabled":""}>${e.loading?"提交中…":"提交评价"}</button>
-    `;
-  } else {
-    // done
-    const rep = e.reply || {};
-    body = `
-      <div class="status-card" style="margin-bottom:14px;text-align:center">
-        <div style="font-size:32px;margin-bottom:8px"><i data-lucide="${theme.icon}"></i></div>
-        <div style="font-size:15px;font-weight:700">本单完成</div>
-        <div style="font-size:12px;color:var(--sub);margin-top:4px">${"★".repeat(e.stars||0)}${"☆".repeat(5-(e.stars||0))}</div>
-        ${rep.badge?`<div style="display:inline-block;margin-top:10px;font-size:11px;padding:4px 12px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)">${esc(rep.badge)}</div>`:""}
-      </div>
-      <div class="puzzle-scene">${esc(rep.reply||"…")}</div>
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button type="button" class="btn-ghost" id="ea-again" style="flex:1;padding:12px">同一壳再来</button>
-        <button type="button" class="btn-accent" id="ea-home" style="flex:1;padding:12px">换壳</button>
-      </div>
-    `;
-  }
-
-  // .page 提供 overflow 滚动；菜单阶段底部给固定 dock + 底栏留空
-  const padBottom = dock ? "padding-bottom:120px" : "";
-  return `<div class="page" style="${padBottom}">${head}${body}</div>${dock}`;
-}
-
-
-function renderSoupGame(){
-  const g = state.soupGame;
-  if(g.phase === "setup"){
-    return `<div class="page">
-      ${subHeader('<i data-lucide="turtle"></i> 海龟汤')}
-      <div class="status-card" style="margin-bottom:14px;line-height:1.65;font-size:13px;color:var(--text)">
-        <div style="font-size:11px;color:var(--sub);margin-bottom:8px">规则</div>
-        对方只回答：<strong>是 / 否 / 无关 / 是也不是</strong>。<br/>
-        你可以一直问，觉得猜到了就直接陈述汤底；也可点「揭晓」。
-      </div>
-      <button id="soup-from-bank" class="btn-accent" style="width:100%;padding:12px;margin-bottom:10px"><i data-lucide="dices"></i> 从题库抽一题</button>
-      <button id="soup-from-ai" class="btn-accent2" style="width:100%;padding:12px;margin-bottom:10px"><i data-lucide="sparkles"></i> 让 AI 现编一题</button>
     </div>`;
   }
 
-  const hist = (g.history||[]).map(h=>{
-    if(h.role==="system") return `<div style="text-align:center;font-size:11px;color:var(--sub);margin:8px 0">${esc(h.content)}</div>`;
-    const isMe = h.role==="user";
-    return `<div class="bubble-row ${isMe?"me":"them"}" style="margin-bottom:8px">
-      <div class="bubble ${isMe?"me":"them"}">${esc(h.content)}</div>
+  // handoff 壳：填槽位 → 把提示词发进聊天，产出在他那边（可能是一整个 HTML）
+  if(shell.kind === "handoff"){
+    const v = eaSlotVals(shell);
+    return `<div class="page" style="padding-bottom:100px">${head}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="font-size:18px">${shell.emoji}</span>
+        <span style="flex:1;font-size:14px;font-weight:700;color:var(--text)">${esc(shell.name)}</span>
+        <button type="button" class="btn-ghost" id="ea-back-shell" style="padding:6px 12px;font-size:12px">换壳</button>
+      </div>
+      <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
+        ${(shell.slots||[]).map(s=>`
+          <span class="setting-label"${s.key===(shell.slots[0]||{}).key?"":' style="margin-top:10px"'}>${esc(s.label)}</span>
+          <input data-ea-slot="${escAttr(s.key)}" value="${escAttr(v[s.key]||"")}" placeholder="${escAttr(s.ph||"")}"/>`).join("")}
+      </div>
+      <button type="button" class="btn-accent" id="ea-handoff" style="width:100%;padding:13px;margin-top:16px">发给他</button>
+      ${shell.credit?`<div style="text-align:center;font-size:10px;color:var(--sub);margin-top:14px;opacity:.7">${esc(shell.credit)}</div>`:""}
     </div>`;
-  }).join("");
+  }
 
-  const revealed = g.phase === "revealed";
-  return `<div class="page">
-    ${subHeader('<i data-lucide="turtle"></i> 海龟汤')}
-    <p class="page-sub">${esc(g.title || "进行中")}${g.source==="bank"?" · 题库":g.source==="ai"?" · AI 现编":""}</p>
-    <div class="status-card" style="margin-bottom:12px">
-      <div class="status-label">汤面</div>
-      <div style="font-size:14px;color:var(--text);line-height:1.65;font-weight:600">${esc(g.surface)}</div>
+  // fill 壳的槽位（可选，填了会附在提示词后面）
+  const slotBox = Array.isArray(shell.slots) && shell.slots.length ? (()=>{
+    const v = eaSlotVals(shell);
+    return `<div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:12px">
+      ${shell.slots.map((s,i)=>`
+        <span class="setting-label"${i?' style="margin-top:10px"':""}>${esc(s.label)}</span>
+        <input data-ea-slot="${escAttr(s.key)}" value="${escAttr(v[s.key]||"")}" placeholder="${escAttr(s.ph||"")}"/>`).join("")}
+    </div>`;
+  })() : "";
+
+  const palettePicker = shell.id === "protocol" ? `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      ${Object.keys(EA_CT_PALETTES).map(k=>`
+        <button type="button" data-ea-palette="${k}" style="flex:1;padding:8px;border-radius:10px;font-size:11px;cursor:pointer;border:1px solid ${e.palette===k?"var(--accent)":"var(--border)"};background:${e.palette===k?"color-mix(in srgb,var(--accent) 12%,transparent)":"var(--card)"};color:var(--text)">${EA_CT_PALETTES[k].label}</button>`).join("")}
+    </div>` : "";
+
+  const body = e.loading
+    ? `<div class="empty-state"><div class="empty-emoji">⏳</div>在写了…</div>`
+    : (e.data ? (shell.render(e.data, { palette:e.palette, slots:eaSlotVals(shell) }) || `<div class="empty-state">这份没解析出来，再生成一次</div>`)
+              : `<div class="empty-state"><div class="empty-emoji">${shell.emoji}</div>还没生成</div>`);
+
+  return `<div class="page" style="padding-bottom:100px">${head}
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:18px">${shell.emoji}</span>
+      <span style="flex:1;font-size:14px;font-weight:700;color:var(--text)">${esc(shell.name)}</span>
+      <button type="button" class="btn-ghost" id="ea-back-shell" style="padding:6px 12px;font-size:12px">换壳</button>
     </div>
-    <div style="margin-bottom:12px">${hist}</div>
-    ${g.loading?`<div class="game-reply"><div class="loading"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`:""}
-    ${revealed?`
-      <div class="status-card" style="margin-bottom:12px">
-        <div class="status-label">汤底</div>
-        <div style="font-size:13px;color:var(--text);line-height:1.65">${esc(g.bottom)}</div>
-        <button id="soup-again" class="btn-accent" style="margin-top:12px;width:100%;padding:10px">再来一局</button>
-      </div>
-    `:`
-      <div class="chat-input-row" style="margin-top:8px">
-        <textarea id="soup-input" placeholder="提问，或直接猜汤底…" rows="2"
-          style="flex:1;border:1px solid var(--border);border-radius:14px;padding:10px 14px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">${esc(g.draft||"")}</textarea>
-        <button id="soup-send" class="send-btn active"><i data-lucide="send"></i></button>
-      </div>
-      <button id="soup-reveal" class="btn-ghost" style="width:100%;margin-top:10px">揭晓汤底</button>
-    `}
+    ${slotBox}
+    ${palettePicker}
+    ${e.err?`<div style="font-size:11px;color:#c45;margin-bottom:10px">${esc(e.err)}</div>`:""}
+    ${body}
+    <button type="button" class="btn-accent" id="ea-gen" style="width:100%;padding:13px;margin-top:14px"${e.loading?" disabled":""}>${e.data?"再来一份":"生成"}</button>
   </div>`;
 }
-
-function renderGuessGame(){
-  const g = state.guessGame;
-  const agents = state.agents || [];
-  if(g.phase === "setup"){
-    return `<div class="page">
-      ${subHeader('<i data-lucide="target"></i> 猜词游戏')}
-      <div class="section-body" style="margin-bottom:14px;padding:14px">
-        <div class="setting-label" style="margin-bottom:8px">和谁玩</div>
-        <div class="channel-btns" style="flex-wrap:wrap">
-          ${agents.map(ag=>`
-            <button class="channel-btn${g.opponentId===ag.id?" active":""}" data-guess-opp="${ag.id}">${esc(ag.name)}</button>
-          `).join("")}
-        </div>
-      </div>
-      <div class="section-body" style="margin-bottom:14px;padding:14px">
-        <div class="setting-label" style="margin-bottom:8px">谁来描述</div>
-        <div class="channel-btns">
-          <button class="channel-btn${g.describer==="user"?" active":""}" data-guess-desc="user">我描述 · AI 猜</button>
-          <button class="channel-btn${g.describer==="ai"?" active":""}" data-guess-desc="ai">AI 描述 · 我猜</button>
-        </div>
-      </div>
-      <button id="guess-start" class="btn-accent" style="width:100%;padding:12px;font-size:14px">开始游戏</button>
-    </div>`;
-  }
-
-  const hist = (g.history||[]).map(h=>{
-    if(h.role==="system") return `<div style="text-align:center;font-size:11px;color:var(--sub);margin:8px 0">${esc(h.content)}</div>`;
-    const isMe = h.role==="user";
-    return `<div class="bubble-row ${isMe?"me":"them"}" style="margin-bottom:8px">
-      <div class="bubble ${isMe?"me":"them"}">${esc(h.content)}</div>
-    </div>`;
-  }).join("");
-
-  const wordBar = g.describer==="user"
-    ? `<div class="status-card" style="margin-bottom:12px">
-        <div class="status-label">你要描述的词（别让 TA 直接看到屏幕哦）</div>
-        <div style="font-size:28px;font-weight:800;color:var(--accent);text-align:center;letter-spacing:4px">${esc(g.word)}</div>
-      </div>`
-    : `<div class="status-card" style="margin-bottom:12px">
-        <div class="status-label">AI 正在描述 · 你来猜</div>
-        <div style="font-size:13px;color:var(--sub);text-align:center">词已隐藏，根据描述作答</div>
-      </div>`;
-
-  const ended = g.phase === "ended";
-  return `<div class="page">
-    ${subHeader('<i data-lucide="target"></i> 猜词游戏')}
-    <p class="page-sub">${g.describer==="user"?"你描述，AI 猜":"AI 描述，你猜"} · 对手 ${esc((agentById(g.opponentId)||{}).name||"")}</p>
-    ${wordBar}
-    <div style="margin-bottom:12px">${hist}</div>
-    ${g.loading?`<div class="game-reply"><div class="loading"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`:""}
-    ${ended?`
-      <div class="status-card" style="text-align:center;margin-bottom:12px">
-        <div style="font-size:18px;font-weight:700;color:var(--text)">${g.result==="win"?"🎉 猜对了！":"词是："+esc(g.word)}</div>
-        <button id="guess-again" class="btn-accent" style="margin-top:12px">再来一局</button>
-        <button id="guess-back-setup" class="btn-ghost" style="margin-top:8px;margin-left:8px">返回设置</button>
-      </div>
-    `:`
-      <div class="chat-input-row" style="margin-top:8px">
-        <textarea id="guess-input" placeholder="${g.describer==="user"?"输入你的描述…":"输入你的猜测…"}" rows="2"
-          style="flex:1;border:1px solid var(--border);border-radius:14px;padding:10px 14px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">${esc(g.draft||"")}</textarea>
-        <button id="guess-send" class="send-btn active"><i data-lucide="send"></i></button>
-      </div>
-      <button id="guess-giveup" class="btn-ghost" style="width:100%;margin-top:10px">揭晓答案</button>
-    `}
-  </div>`;
-}
-
 
 // ─── 烹饪大师 ────────────────────────────────────────────────────────────────
 const COOK_ING_POOL = [
@@ -16084,7 +16241,7 @@ function renderInline(content, clickable, nsfwMode){
   const raw = String(content||"");
   if(!raw) return "";
   // [action:摸摸头] 爪印 / [pay:20|想买杯咖啡] 要钱 / [buy:加餐一次] 兑换凭据
-  const re = /\[(action|pay|buy|buyx|song)\s*[:：]\s*([^\]]+)\]/g;
+  const re = /\[(action|pay|buy|buyx|song|playlist)\s*[:：]\s*([^\]]+)\]/g;
   const out = [];
   let last = 0, m;
   const pushText = (t)=> out.push(nsfwMode ? renderNsfwInline(t) : esc(t));
@@ -16101,11 +16258,9 @@ function renderInline(content, clickable, nsfwMode){
       const why = (parts.slice(1).join("|")||"").trim();
       out.push(walletAskCardHtml(amt, why, clickable));
     } else if(kind === "song"){
-      out.push(`<span class="song-chip"${clickable?` data-song-play="${escAttr(body)}"`:""}>
-        <i data-lucide="music"></i>
-        <span class="song-chip-main">${esc(body)}</span>
-        ${clickable?`<span class="song-chip-go">播放</span>`:""}
-      </span>`);
+      out.push(aiSongCardHtml(body, clickable));
+    } else if(kind === "playlist"){
+      out.push(playlistCardHtml(body, clickable));
     } else if(kind === "buyx"){
       out.push(`<span class="wal-chip fail"><i data-lucide="receipt"></i><span class="wal-chip-main">${esc(body)}</span></span>`);
     } else {
@@ -16115,6 +16270,56 @@ function renderInline(content, clickable, nsfwMode){
   }
   pushText(raw.slice(last));
   return out.join("");
+}
+
+/** 他点给她的歌 → 和她分享出去的用同一张卡。
+ * 暗号里只有文字，封面得现查；songMetaResolve 查到后会重绘一次补上。 */
+function aiSongCardHtml(body, clickable){
+  const query = String(body||"").trim();
+  const meta = songMetaGet(query);
+  const dash = query.split(/\s+-\s+/);
+  const name = (meta && meta.name) || (dash[0]||query).trim();
+  const artists = (meta && meta.artists) || (dash.slice(1).join(" - ")||"").trim();
+  const cover = (meta && meta.cover) || "";
+  return `<div class="song-share them${cover?"":" no-art"}"${clickable?` data-song-play="${escAttr(query)}"`:""}${cover?"":` data-song-meta="${escAttr(query)}"`}>
+    <div class="song-share-art">
+      ${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<div class="song-share-noart"><i data-lucide="music"></i></div>`}
+      ${clickable?`<span class="song-share-play"><i data-lucide="play"></i></span>`:""}
+    </div>
+    <div class="song-share-meta">
+      <div class="song-share-name">${esc(name||"未知曲目")}</div>
+      <div class="song-share-artist">${esc(artists||"—")}</div>
+      <div class="song-share-foot"><span class="song-share-src">一起听</span>${clickable?"点一下就播":""}</div>
+    </div>
+  </div>`;
+}
+
+/** 他建的歌单：一张卡，逐首可点，也能整张连播 */
+function playlistCardHtml(body, clickable){
+  const parts = String(body||"").split(/[|｜]/).map(s=>s.trim()).filter(Boolean);
+  if(!parts.length) return "";
+  const title = parts[0] || "歌单";
+  const songs = parts.slice(1).slice(0, 12);
+  if(!songs.length) return "";
+  const rows = songs.map((q,i)=>`
+    <button type="button" class="plc-row"${clickable?` data-song-play="${escAttr(q)}"`:""}>
+      <span class="plc-i">${String(i+1).padStart(2,"0")}</span>
+      <span class="plc-t">${esc(q)}</span>
+      ${clickable?`<i data-lucide="play"></i>`:""}
+    </button>`).join("");
+  return `<div class="playlist-card">
+    <div class="plc-head">
+      <div class="plc-head-l">
+        <i data-lucide="list-music"></i>
+        <div>
+          <div class="plc-title">${esc(title)}</div>
+          <div class="plc-count">${songs.length} 首</div>
+        </div>
+      </div>
+      ${clickable?`<button type="button" class="plc-all" data-playlist-all="${escAttr(songs.join("||"))}">全部播放</button>`:""}
+    </div>
+    <div class="plc-rows">${rows}</div>
+  </div>`;
 }
 
 /** 他向你要钱：一张可一键转账的卡 */
@@ -16452,10 +16657,11 @@ function __stripMarkersForLive(t){
   if(!t) return t;
   return String(t)
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
-    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关)\s*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:真心话|大冒险|混合|抽卡|抽张|翻牌|机抽|我抽|机来抽)\s*[⟫》】]/g,"")
-    .replace(/\[(?:sticker|action|pay|buy|buyx)\s*[:：][^\]]*\]/g,"");
+    .replace(/\[(?:sticker|action|pay|buy|buyx|song|playlist)\s*[:：][^\]]*\]/g,"");
 }
 function renderStreamLiveMsg(){
   const sl = state.streamLive;
@@ -17473,7 +17679,7 @@ function rpgCollectLines(){
       image: m.image || "",
       time: m.time || "",
       choice: choice || null,
-      thinking: (m.thinking && String(m.thinking).trim()) ? String(m.thinking).trim() : "",
+      thinking: hasThinking(m) ? String(m.thinking).trim() : "",
       msgId: m.msgId || "",
     });
   });
@@ -17579,6 +17785,70 @@ function renderRpgStage(activeAg, isGroup){
   </div>`;
 }
 
+// ─── 聊天里的语音条 / 歌曲分享卡 ──────────────────────────────
+// 这几个必须留在顶层：renderChat() 要用。以前它们写在 bindEvents() 里面，
+// 只要聊天记录里有一条语音消息，renderChat() 就 ReferenceError，整页渲染挂掉。
+const VOICE_EMOJI = {
+  happy:"😊", sad:"😢", angry:"😠", tired:"😮‍💨", tender:"🥺", excited:"🤩", anxious:"😰", neutral:"😐",
+  surprised:"😲", fearful:"😨", disgusted:"🤢",
+};
+
+function fmtDur(sec){ sec = Math.max(0, Math.round(sec||0)); return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+
+function voiceWaveformHtml(seed, n=28){
+  // 确定性伪随机波形（同一文本渲染稳定）
+  let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))>>>0;
+  const rng=()=> (h=(h*1664525+1013904223)>>>0)/4294967296;
+  const env=i=>Math.sin(i/(n-1)*Math.PI)*0.6+0.15;
+  let out="";
+  for(let i=0;i<n;i++){
+    const v=Math.max(0.08, Math.min(1, env(i)*(rng()*0.6+0.4)));
+    out+=`<span style="height:${Math.round(v*22)+2}px"></span>`;
+  }
+  return `<div class="voice-wave">${out}</div>`;
+}
+
+function chatVoiceBarHtml(m, isMe, glassCls, bubbleColor){
+  const v=m.voice||{};
+  const src=v.dataUrl||"";
+  const dur=Math.max(1, Math.round(v.duration||0));
+  const emo=v.emotion||"";
+  const text=v.text||m.content||"";
+  const bars=voiceWaveformHtml(text||src, 28);
+  return `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor||""}>
+    <div class="voice-bar">
+      <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}" aria-label="播放语音"><i data-lucide="play"></i></button>
+      ${bars}
+      <div class="voice-meta">
+        <span class="voice-dur">${fmtDur(dur)}</span>
+        ${emo?`<span class="voice-emo" title="${escAttr(v.hint||emo)}">${VOICE_EMOJI[emo]||"🎤"}</span>`:""}
+        ${text?`<button type="button" class="voice-text-toggle" aria-label="显示转写文字">文</button>`:""}
+      </div>
+    </div>
+    ${text?`<div class="voice-transcript">${esc(text)}</div>`:""}
+  </div>`;
+}
+
+/** 她从「一起听」分享进聊天的歌：封面 + 曲名 + 歌手 + 可点播放的卡片 */
+function songShareCardHtml(m, isMe){
+  const s = m.song || {};
+  const name = s.name || "未知曲目";
+  const artists = Array.isArray(s.artists) ? s.artists.join(" / ") : (s.artists || "");
+  const query = artists ? (name + " - " + artists) : name;
+  const srcLabel = s.source === "spotify" ? "Spotify" : "网易云";
+  return `<div class="song-share ${isMe?"me":"them"}" data-song-play="${escAttr(query)}">
+    <div class="song-share-art">
+      ${s.cover?`<img src="${escAttr(s.cover)}" alt=""/>`:`<div class="song-share-noart"><i data-lucide="music"></i></div>`}
+      <span class="song-share-play"><i data-lucide="play"></i></span>
+    </div>
+    <div class="song-share-meta">
+      <div class="song-share-name">${esc(name)}</div>
+      <div class="song-share-artist">${esc(artists||"—")}</div>
+      <div class="song-share-foot"><span class="song-share-src">${srcLabel}</span>一起听</div>
+    </div>
+  </div>`;
+}
+
 function renderChat(){
   const agents = state.agents || [];
   const target = state.chatTarget || "a1";
@@ -17646,7 +17916,7 @@ function renderChat(){
           <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them")}</div>
           <span class="msg-meta-name">${esc(speakerName)}</span>
           ${m.time?`<span class="msg-meta-heart">♥</span><span class="msg-meta-time">${formatTime(m.time)}</span>`:""}
-          ${(!isMe && m.thinking)?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
+          ${(!isMe && hasThinking(m))?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
         </div>`) : "";
       // 券夹卡片：AI 送出的券面
       if(m.couponId){
@@ -17674,7 +17944,9 @@ function renderChat(){
       const stickerHtml = extractStickerNames(m.content).map(stickerImgHtml).join("");
       const stickerTxt = stickerCleanText(m.content);
       let bubbleInner;
-      if(m.voice && m.voice.dataUrl){
+      if(m.song){
+        bubbleInner = songShareCardHtml(m, isMe);
+      } else if(m.voice && m.voice.dataUrl){
         bubbleInner = chatVoiceBarHtml(m, isMe, glassCls, bubbleColor);
       } else if(pureAct){
         const tag = isMe ? "span" : "button";
@@ -17705,7 +17977,7 @@ function renderChat(){
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
       </div>`;
       if(m.time && !showMeta && firstInRun){
-        const tIcon = (!isMe && m.thinking)?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
+        const tIcon = (!isMe && hasThinking(m))?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
         msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}${tIcon}</div>`;
       }
     });
@@ -17724,7 +17996,9 @@ function renderChat(){
       const pureAct = _actionLabel(m.content);
       const stickerHtml = extractStickerNames(m.content).map(stickerImgHtml).join("");
       const stickerTxt = stickerCleanText(m.content);
-      const inner = (m.voice && m.voice.dataUrl)
+      const inner = m.song
+        ? songShareCardHtml(m, true)
+        : (m.voice && m.voice.dataUrl)
         ? chatVoiceBarHtml(m, true, glassCls, "")
         : pureAct
           ? `<span class="paw-bubble"><i data-lucide="paw-print"></i>${esc(pureAct)}</span>`
@@ -17821,10 +18095,7 @@ function renderChat(){
     </div>`;
   }
   return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}${isKorean?" korean-layout":""}">
-    ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
-    ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     ${headerHtml}
-    ${typeof renderMusicTopBar==="function"?renderMusicTopBar():""}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>
     ${typeof thinkModalHtml==="function" ? thinkModalHtml() : ""}
@@ -17946,11 +18217,31 @@ function mcFindDetail(type, id){
   }catch(e){}
   return null;
 }
+/** 他主动开过锁的机日记 id。后端有没有改私密位不确定，所以本地也记一份，
+ * 两边任一说「开了」就算开 —— 否则下次从 /diary/list 拉回来又会锁上。 */
+function mcIsUnlocked(id){
+  if(!id) return false;
+  return (state.mcUnlocked||[]).indexOf(String(id)) >= 0;
+}
+/** 开锁：本地登记 + 顺手让后端也改一下（后端没这个接口也不影响本地） */
+function mcUnlockDiary(rec){
+  if(!rec || !rec.id) return false;
+  const id = String(rec.id);
+  if(!mcIsUnlocked(id)){
+    state.mcUnlocked = [...(state.mcUnlocked||[]), id].slice(-500);
+    try{ persist("mcUnlocked"); }catch(e){}
+  }
+  try{ mcPost("/diary/update", { id, visibility:"visible" }); }catch(e){}
+  const d = (state.mcDiaries||[]).find(x=>String(x.id)===id);
+  if(d){ d.visibility = "visible"; d.locked = false; }
+  return true;
+}
+
 /** 隐私判定：未投递的信 / 私有或上锁的机日记 → 需要模糊层，未解锁不可点开 */
 function mcIsRestricted(type, rec){
   if(!rec) return false;
   if(type==="letter") return rec.status !== "delivered";
-  if(type==="diary") return rec.visibility === "private" || !!rec.locked;
+  if(type==="diary") return (rec.visibility === "private" || !!rec.locked) && !mcIsUnlocked(rec.id);
   return false;
 }
 function mcRestrictLabel(type, rec){
@@ -19828,11 +20119,6 @@ if(!window.__mpDelegated){
       if(id==="spark-send"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof sparkSubmit==="function") sparkSubmit(); return; }
       if(id==="spark-save"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof sparkPersist==="function") sparkPersist(); state.sparkDetailId=null; render(); return; }
 
-      // —— 解谜 ——
-      if(id==="puzzle-submit"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof puzzleSubmitAnswer==="function") puzzleSubmitAnswer(); return; }
-      if(id==="puzzle-abandon"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof puzzleAbandon==="function") puzzleAbandon(); return; }
-      if(id==="puzzle-back-select"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof puzzleContinueNext==="function") puzzleContinueNext(); return; }
-
       // —— 柜子弹层（id 必须与 renderCabinets 一致）——
       if(id==="cab-modal-close" || id==="cab-close"){ e.preventDefault(); state.cabinetOpenId=null; render(); return; }
       if(id==="cab-prev"){ e.preventDefault(); cabinetSwitch(-1); return; }
@@ -19880,25 +20166,12 @@ if(!window.__mpDelegated){
       }
 
       // data-* attributes
-      const t = raw.closest("[data-sub],[data-puzzle-start],[data-puzzle-choice],[data-cab-open],[data-cab-del],[data-cab-item-del],[data-spark-book],[data-spark-newbook],[data-spark-tag],[data-spark-open],[data-spark-close],[data-spark-rmtag],[data-spark-del]");
+      const t = raw.closest("[data-sub],[data-cab-open],[data-cab-del],[data-cab-item-del],[data-spark-book],[data-spark-newbook],[data-spark-tag],[data-spark-open],[data-spark-close],[data-spark-rmtag],[data-spark-del]");
       if(!t) return;
 
       if(t.hasAttribute("data-sub")){
         const key = t.getAttribute("data-sub");
         if(key){ state.subPage = key; render(); e.preventDefault(); }
-        return;
-      }
-      if(t.hasAttribute("data-puzzle-start")){
-        if(t.disabled) return;
-        const pid = t.getAttribute("data-puzzle-start");
-        if(pid && typeof puzzleStart==="function"){ puzzleStart(pid); e.preventDefault(); }
-        return;
-      }
-      if(t.hasAttribute("data-puzzle-choice")){
-        const idx = +t.getAttribute("data-puzzle-choice");
-        if(typeof puzzleChoose==="function") puzzleChoose(idx);
-        else if(typeof puzzlePickChoice==="function") puzzlePickChoice(idx);
-        e.preventDefault();
         return;
       }
       if(t.hasAttribute("data-cab-open")){
@@ -20172,16 +20445,33 @@ function bindEvents(){
     const n = state.musicNow;
     if(!n) return;
     const ar = Array.isArray(n.artists)?n.artists.join(" / "):(n.artists||"");
-    state.chatInput = `我在听《${n.name}》${ar?" - "+ar:""}，你也听听。`;
+    // 卡片给她看，content 里的那句话给模型看（它读不到卡片）
+    state.pendingUser.push({
+      role:"user",
+      content:`我在听《${n.name}》${ar?" - "+ar:""}，你也听听。`,
+      song:{ name:n.name||"", artists:ar, cover:n.cover||"", source:n.source||"netease" },
+      time:new Date().toISOString(),
+    });
     state.subPage = null; state.tab = "chat";
-    render();
-    if(typeof sendUserMsg==="function") sendUserMsg();
-    if(state.pendingUser && state.pendingUser.length && typeof triggerAIReply==="function") triggerAIReply();
+    state.needChatScroll = true;
+    if(typeof saveActiveThread==="function") saveActiveThread();
+    if(typeof postAppEvent==="function") postAppEvent("chat_message",{ text:`分享了歌：${n.name}` });
+    if(typeof triggerAIReply==="function") triggerAIReply(); else render();
   };
   // 聊天里他发的点歌卡
   document.querySelectorAll("[data-song-play]").forEach(el=>{
     el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); songChipPlay(el.dataset.songPlay); };
   });
+  // 歌单卡「全部播放」
+  document.querySelectorAll("[data-playlist-all]").forEach(el=>{
+    el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); playlistPlayAll(el.dataset.playlistAll); };
+  });
+  // 缺封面的歌曲卡：后台补查。一次最多 4 张，查到会重绘一次；
+  // 查过（成功或失败）都记在 __songMeta 里，不会每次重绘都再打一遍接口。
+  {
+    const need = Array.from(document.querySelectorAll("[data-song-meta]")).slice(0, 4);
+    need.forEach(el=>{ songMetaResolve(el.dataset.songMeta); });
+  }
 
   // ─── 钱包 ───────────────────────────────────────────────
   const walAmt = document.getElementById("wal-amt");
@@ -20445,58 +20735,6 @@ function bindEvents(){
     btn.onclick=()=>playPuppy(+btn.dataset.gbtn);
   });
 
-  // 猜词游戏
-  document.querySelectorAll("[data-guess-opp]").forEach(btn=>{
-    btn.onclick=()=>{ state.guessGame.opponentId=btn.dataset.guessOpp; render(); };
-  });
-  document.querySelectorAll("[data-guess-desc]").forEach(btn=>{
-    btn.onclick=()=>{ state.guessGame.describer=btn.dataset.guessDesc; render(); };
-  });
-  const guessStartBtn=document.getElementById("guess-start");
-  if(guessStartBtn) guessStartBtn.onclick=()=>guessStart();
-  const guessSendBtn=document.getElementById("guess-send");
-  if(guessSendBtn) guessSendBtn.onclick=()=>guessSend();
-  const guessInp=document.getElementById("guess-input");
-  if(guessInp){
-    guessInp.oninput=()=>{ state.guessGame.draft=guessInp.value; };
-    guessInp.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); guessSend(); } };
-  }
-  const guessGive=document.getElementById("guess-giveup");
-  if(guessGive) guessGive.onclick=()=>{
-    const g=state.guessGame;
-    g.phase="ended"; g.result="lose";
-    g.history.push({role:"system",content:"揭晓：答案是「"+g.word+"」"});
-    render();
-  };
-  const guessAgain=document.getElementById("guess-again");
-  if(guessAgain) guessAgain.onclick=()=>guessStart();
-  const guessBack=document.getElementById("guess-back-setup");
-  if(guessBack) guessBack.onclick=()=>{ state.guessGame.phase="setup"; render(); };
-
-  // 海龟汤
-  const soupBank=document.getElementById("soup-from-bank");
-  if(soupBank) soupBank.onclick=()=>soupStartFromBank();
-  const soupAi=document.getElementById("soup-from-ai");
-  if(soupAi) soupAi.onclick=()=>soupStartFromAI();
-  const soupSend=document.getElementById("soup-send");
-  if(soupSend) soupSend.onclick=()=>soupSendMsg();
-  const soupInp=document.getElementById("soup-input");
-  if(soupInp){
-    soupInp.oninput=()=>{ state.soupGame.draft=soupInp.value; };
-    soupInp.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); soupSendMsg(); } };
-  }
-  const soupReveal=document.getElementById("soup-reveal");
-  if(soupReveal) soupReveal.onclick=()=>{
-    const g=state.soupGame;
-    g.phase="revealed";
-    g.history.push({role:"system", content:"—— 揭晓汤底 ——"});
-    render();
-  };
-  const soupAgain=document.getElementById("soup-again");
-  if(soupAgain) soupAgain.onclick=()=>{
-    state.soupGame={ phase:"setup", surface:"", bottom:"", title:"", history:[], loading:false, draft:"", source:"" };
-    render();
-  };
 
   // 指令游戏
   const cmdAddToggle=document.getElementById("cmd-add-toggle");
@@ -20701,46 +20939,10 @@ function bindEvents(){
   if(chatVoiceBtn) chatVoiceBtn.onclick = (e)=>{ e.stopPropagation(); chatVoiceStart(); };
 
   // ─── 语音消息（voce）：录音 → 转写 → 语音条气泡 ───────────────────────────
-  const VOICE_EMOJI = { happy:"😊", sad:"😢", angry:"😠", neutral:"😐", surprised:"😲", fearful:"😨", disgusted:"🤢" };
+  // hervoice 的 8 类在前，voce/SenseVoice 的几类在后
   const VOICE_MAX_SEC = 60;
   let __chatRec = null;   // {mediaRecorder, chunks, audioCtx, analyser, raf, timer, sec, stream, startAt, timerId, strip}
   let __chatVoice = null; // {audio, btn, spans, raf}  单例播放器
-
-  function fmtDur(sec){ sec = Math.max(0, Math.round(sec||0)); return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
-
-  function voiceWaveformHtml(seed, n=28){
-    // 确定性伪随机波形（同一文本渲染稳定）
-    let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))>>>0;
-    const rng=()=> (h=(h*1664525+1013904223)>>>0)/4294967296;
-    const env=i=>Math.sin(i/(n-1)*Math.PI)*0.6+0.15;
-    let out="";
-    for(let i=0;i<n;i++){
-      const v=Math.max(0.08, Math.min(1, env(i)*(rng()*0.6+0.4)));
-      out+=`<span style="height:${Math.round(v*22)+2}px"></span>`;
-    }
-    return `<div class="voice-wave">${out}</div>`;
-  }
-
-  function chatVoiceBarHtml(m, isMe, glassCls, bubbleColor){
-    const v=m.voice||{};
-    const src=v.dataUrl||"";
-    const dur=Math.max(1, Math.round(v.duration||0));
-    const emo=v.emotion||"";
-    const text=v.text||m.content||"";
-    const bars=voiceWaveformHtml(text||src, 28);
-    return `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor||""}>
-      <div class="voice-bar">
-        <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}" aria-label="播放语音"><i data-lucide="play"></i></button>
-        ${bars}
-        <div class="voice-meta">
-          <span class="voice-dur">${fmtDur(dur)}</span>
-          ${emo?`<span class="voice-emo">${VOICE_EMOJI[emo]||"🎤"}</span>`:""}
-          ${text?`<button type="button" class="voice-text-toggle" aria-label="显示转写文字">文</button>`:""}
-        </div>
-      </div>
-      ${text?`<div class="voice-transcript">${esc(text)}</div>`:""}
-    </div>`;
-  }
 
   function chatVoiceStart(){
     if(__chatRec) return;
@@ -20837,10 +21039,10 @@ function bindEvents(){
 
   async function chatVoiceSend(blob, dur, strip){
     try{
-      const { text, emotion }=await chatVoiceTranscribe(blob);
+      const { text, emotion, hint }=await chatVoiceTranscribe(blob);
       const dataUrl=await blobToDataUrl(blob);
       const now=new Date().toISOString();
-      state.pendingUser.push({ role:"user", content:text||"🎤 语音消息", voice:{ dataUrl, duration:dur, emotion:emotion||"neutral" }, time:now });
+      state.pendingUser.push({ role:"user", content:text||"🎤 语音消息", voice:{ dataUrl, duration:dur, emotion:emotion||"neutral", hint:hint||"" }, time:now });
       if(typeof saveActiveThread==="function") saveActiveThread();
       state.needChatScroll=true;
       if(strip&&strip.parentNode) strip.parentNode.removeChild(strip);
@@ -20861,10 +21063,36 @@ function bindEvents(){
     });
   }
 
+  /** hervoice 单步：POST {base}/api/voice/upload（字段名 file）
+   * → {text, emotion, confidence, hint}。emotion 是 8 类之一，hint 是一句「此刻状态」。
+   * 转写之外还带语气，所以排在最前面。 */
+  async function hervoiceUpload(base, blob){
+    const fd=new FormData();
+    fd.append("file", blob, "voice.webm");
+    const res=await fetch(base.replace(/\/+$/,"")+"/api/voice/upload",{ method:"POST", body:fd });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const d=await res.json();
+    if(!d||d.error) throw new Error((d&&d.error)||"hervoice 无返回");
+    if(!d.text||!String(d.text).trim()) throw new Error("没有识别到内容");
+    return {
+      text:String(d.text).trim(),
+      emotion:d.emotion||"neutral",
+      hint:d.hint||"",
+      confidence:(d.confidence!=null?d.confidence:null),
+    };
+  }
+
   async function chatVoiceTranscribe(blob){
     const cfg=state.callConfig||{};
+    const her=(cfg.hervoiceUrl||"").trim();
     const voce=((cfg.voceUrl||"").trim()||"http://115.29.237.172:3456").replace(/\/+$/,"");
-    // 优先 voce 双步 /upload + /stt
+    const errs=[];
+    // 1) hervoice（填了才走）：文字 + 语气一次拿到
+    if(her){
+      try{ return await hervoiceUpload(her, blob); }
+      catch(e){ errs.push("hervoice: "+(e&&e.message||e)); }
+    }
+    // 2) voce 双步 /upload + /stt
     try{
       const fd=new FormData();
       fd.append("audio", blob, "recording.webm");
@@ -20875,18 +21103,27 @@ function bindEvents(){
           const st=await fetch(voce+"/stt",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({audio_path:upj.filename}) });
           if(st.ok){
             const d=await st.json();
-            if(d&&d.text) return { text:d.text, emotion:d.emotion||"neutral" };
+            if(d&&d.text) return { text:d.text, emotion:d.emotion||"neutral", hint:d.hint||"" };
           }
         }
       }
-    }catch(e){ /* 回退单步 STT */ }
-    if(typeof callSttUpload==="function"){
-      const text=await callSttUpload(blob);
-      let emotion="neutral";
-      try{ const s=ensureCallSession(); if(s&&s.lastVoiceMeta&&s.lastVoiceMeta.emotion) emotion=s.lastVoiceMeta.emotion; }catch(e){}
-      return { text, emotion };
+      errs.push("voce: HTTP "+up.status);
+    }catch(e){ errs.push("voce: "+(e&&e.message||e)); }
+    // 3) hervoice 部署在 voce 同一台上的情况（没单独填 URL 时兜一次）
+    if(!her){
+      try{ return await hervoiceUpload(voce, blob); }
+      catch(e){ errs.push("hervoice@voce: "+(e&&e.message||e)); }
     }
-    throw new Error("STT 服务不可用");
+    // 4) 最后回退网关 /transcribe | /stt
+    if(typeof callSttUpload==="function"){
+      try{
+        const text=await callSttUpload(blob);
+        let emotion="neutral";
+        try{ const s=ensureCallSession(); if(s&&s.lastVoiceMeta&&s.lastVoiceMeta.emotion) emotion=s.lastVoiceMeta.emotion; }catch(e){}
+        return { text, emotion, hint:"" };
+      }catch(e){ errs.push("网关: "+(e&&e.message||e)); }
+    }
+    throw new Error(errs.join(" / ")||"STT 服务不可用");
   }
 
   // 语音条回放：单例播放器 + 事件委托（render 重渲染后依然生效）
@@ -21213,7 +21450,7 @@ function bindEvents(){
         const row = t.closest && t.closest("[data-msg-idx]");
         if(row){
           // 可交互内容（按钮/链接/图片/贴纸/思考按钮）不触发操作条
-          if(t.closest("button,a,[data-action-send],img")) return;
+          if(t.closest("button,a,[data-action-send],[data-song-play],img")) return;
           const idx = +row.dataset.msgIdx;
           state.msgBarIdx = state.msgBarIdx===idx ? null : idx;
           render();
@@ -21643,18 +21880,6 @@ function bindEvents(){
   if(mnp) mnp.onclick = ()=> musicPlayPrev();
   const mnx = document.getElementById("music-now-next");
   if(mnx) mnx.onclick = ()=> musicPlayNext();
-  const mtt = document.getElementById("music-tb-toggle");
-  if(mtt) mtt.onclick = ()=> musicTogglePlay();
-  const mto = document.getElementById("music-tb-open");
-  if(mto) mto.onclick = ()=>{ state.tab="home"; state.subPage="music"; render(); };
-  const mtm = document.getElementById("music-tb-mem");
-  if(mtm) mtm.onclick = ()=> musicSaveToMemory();
-  const mtc = document.getElementById("music-tb-close");
-  if(mtc) mtc.onclick = ()=>{
-    try{ const aa=document.getElementById("mp-audio"); if(aa){ aa.pause(); aa.removeAttribute("src"); } }catch(e){}
-    state.musicNow=null; state.musicPlaying=false; persist("musicNow"); render();
-    if(typeof showToast==="function") showToast("已关闭播放栏");
-  };
   const mnt = document.getElementById("music-now-toggle");
   if(mnt) mnt.onclick = ()=> musicTogglePlay();
   const mnm = document.getElementById("music-now-mem");
@@ -23017,47 +23242,123 @@ reader.readAsArrayBuffer(f);
     state._usageAutoLoaded = false;
   }
 
-  // 吃苹果
-  document.querySelectorAll("[data-ea-theme]").forEach(btn=>{
-    btn.onclick = (ev)=>{
-      if(ev){ ev.preventDefault(); ev.stopPropagation(); }
-      const id = btn.getAttribute("data-ea-theme") || btn.dataset.eaTheme;
-      if(!id) return;
-      const e = eatAppleEnsure();
-      if(e.themeId === id && e.phase === "pick") return;
-      e.themeId = id;
-      e.phase = "pick";
-      e.menu = null;
-      e.cart = [];
-      e.loading = false;
+  // ─── 朋友圈 ───────────────────────────────────────────────
+  if(state.tab === "moments"){
+    // 进页面就扫一遍到期的（另一条路是 proactiveTick 的 10 分钟循环）
+    try{ if(typeof momentsProcessDue === "function") momentsProcessDue(); }catch(e){}
+  }
+  const moNew = document.getElementById("mo-new");
+  if(moNew) moNew.onclick = ()=>{ state.momentComposing = true; render(); };
+  const moCancel = document.getElementById("mo-cancel");
+  if(moCancel) moCancel.onclick = ()=>{
+    state.momentComposing = false; state.momentDraft = ""; state.momentImage = ""; render();
+  };
+  const moInput = document.getElementById("mo-input");
+  if(moInput) moInput.oninput = ()=>{ state.momentDraft = moInput.value; };
+  const moPick = document.getElementById("mo-pick-img");
+  const moFile = document.getElementById("mo-file");
+  if(moPick && moFile) moPick.onclick = ()=> moFile.click();
+  if(moFile) moFile.onchange = ()=>{
+    const f = moFile.files && moFile.files[0];
+    if(!f) return;
+    const fr = new FileReader();
+    fr.onload = ()=>{ state.momentImage = String(fr.result||""); render(); };
+    fr.readAsDataURL(f);
+  };
+  const moDrop = document.getElementById("mo-drop-img");
+  if(moDrop) moDrop.onclick = ()=>{ state.momentImage = ""; render(); };
+  const moSend = document.getElementById("mo-send");
+  if(moSend) moSend.onclick = ()=>{
+    const txt = (document.getElementById("mo-input")||{}).value || state.momentDraft || "";
+    if(!txt.trim() && !state.momentImage){ if(typeof showToast==="function") showToast("写点什么再发"); return; }
+    momentsPost(txt, state.momentImage);
+    state.momentComposing = false; state.momentDraft = ""; state.momentImage = "";
+    render();
+  };
+  document.querySelectorAll("[data-mo-like]").forEach(b=>{ b.onclick = ()=> momentToggleMyLike(b.dataset.moLike); });
+  document.querySelectorAll("[data-mo-del]").forEach(b=>{ b.onclick = ()=> momentDelete(b.dataset.moDel); });
+  document.querySelectorAll("[data-mo-cmt]").forEach(b=>{
+    b.onclick = ()=>{
+      state.momentCommentOpen = (state.momentCommentOpen === b.dataset.moCmt) ? null : b.dataset.moCmt;
+      state.momentCommentDraft = "";
+      render();
+    };
+  });
+  const moCmtInput = document.getElementById("mo-cmt-input");
+  if(moCmtInput){
+    moCmtInput.oninput = ()=>{ state.momentCommentDraft = moCmtInput.value; };
+    moCmtInput.onkeydown = e=>{
+      if(e.key === "Enter"){ e.preventDefault(); momentAddComment(state.momentCommentOpen, moCmtInput.value); }
+    };
+  }
+  document.querySelectorAll("[data-mo-cmt-send]").forEach(b=>{
+    b.onclick = ()=>{
+      const v = (document.getElementById("mo-cmt-input")||{}).value || state.momentCommentDraft || "";
+      momentAddComment(b.dataset.moCmtSend, v);
+    };
+  });
+
+  // 吃苹果 · 壳
+  document.querySelectorAll("[data-ea-shell]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const e = eaEnsure();
+      const id = btn.dataset.eaShell;
+      if(e.shellId !== id){ e.shellId = id; e.data = null; e.err = ""; }
       try{ persist("eatApple"); }catch(err){}
       render();
     };
   });
-  const eaGen = document.getElementById("ea-gen");
-  if(eaGen) eaGen.onclick = ()=> eatAppleGenMenu();
-  document.querySelectorAll("[data-ea-item]").forEach(btn=>{
-    btn.onclick = ()=> eatAppleToggleCart(+btn.dataset.eaItem);
+  const eaBackShell = document.getElementById("ea-back-shell");
+  if(eaBackShell) eaBackShell.onclick = ()=>{
+    const e = eaEnsure(); e.shellId = null; e.err = "";
+    try{ persist("eatApple"); }catch(err){}
+    render();
+  };
+  const eaFlushSlots = ()=>{
+    const e = eaEnsure();
+    document.querySelectorAll("[data-ea-slot]").forEach(inp=>{
+      if(!e.slots[e.shellId]) e.slots[e.shellId] = {};
+      e.slots[e.shellId][inp.dataset.eaSlot] = inp.value;
+    });
+    try{ persist("eatApple"); }catch(err){}
+  };
+  const eaGenBtn = document.getElementById("ea-gen");
+  if(eaGenBtn) eaGenBtn.onclick = ()=>{ eaFlushSlots(); eaGenerate(); };
+  document.querySelectorAll("[data-ea-slot]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const e = eaEnsure();
+      if(!e.slots[e.shellId]) e.slots[e.shellId] = {};
+      e.slots[e.shellId][inp.dataset.eaSlot] = inp.value;
+      try{ persist("eatApple"); }catch(err){}
+    };
   });
-  const eaOrder = document.getElementById("ea-order");
-  if(eaOrder) eaOrder.onclick = ()=> eatAppleStartProgress();
-  const eaBackPick = document.getElementById("ea-back-pick");
-  if(eaBackPick) eaBackPick.onclick = ()=> eatAppleReset(true);
-  const eaStageNext = document.getElementById("ea-stage-next");
-  if(eaStageNext) eaStageNext.onclick = ()=> eatAppleNextStage();
-  const eaStageRetry = document.getElementById("ea-stage-retry");
-  if(eaStageRetry) eaStageRetry.onclick = ()=> eatAppleRetryStage();
-  document.querySelectorAll("[data-ea-star]").forEach(btn=>{
-    btn.onclick = ()=>{ eatAppleEnsure().stars = +btn.dataset.eaStar; render(); };
+  const eaHandoffBtn = document.getElementById("ea-handoff");
+  // 先把还没 change 的输入收进来，免得刚打完字直接点按钮就丢掉
+  if(eaHandoffBtn) eaHandoffBtn.onclick = ()=>{ eaFlushSlots(); eaHandoff(); };
+  document.querySelectorAll("[data-ea-palette]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const e = eaEnsure(); e.palette = btn.dataset.eaPalette;
+      try{ persist("eatApple"); }catch(err){}
+      render();
+    };
   });
-  const eaComment = document.getElementById("ea-comment");
-  if(eaComment) eaComment.oninput = ()=>{ eatAppleEnsure().comment = eaComment.value; };
-  const eaReviewSend = document.getElementById("ea-review-send");
-  if(eaReviewSend) eaReviewSend.onclick = ()=> eatAppleSubmitReview();
-  const eaAgain = document.getElementById("ea-again");
-  if(eaAgain) eaAgain.onclick = ()=>{ eatAppleReset(false); eatAppleGenMenu(); };
-  const eaHome = document.getElementById("ea-home");
-  if(eaHome) eaHome.onclick = ()=> eatAppleReset(true);
+  // 随机分配器：选项池由模型给一次，之后每次抽签都在本地跑，不再调模型
+  const eaRoll = document.getElementById("ea-iwrs-roll");
+  if(eaRoll) eaRoll.onclick = ()=>{
+    let pool = {};
+    try{ pool = JSON.parse(document.getElementById("ea-iwrs-pool")?.dataset.pool || "{}"); }catch(err){}
+    document.querySelectorAll("[data-iwrs-key]").forEach((el, i)=>{
+      const arr = pool[el.dataset.iwrsKey];
+      if(!Array.isArray(arr) || !arr.length){ el.textContent = "—"; return; }
+      // 逐行停下的滚动感：每行错开一点时间再定住
+      let ticks = 0;
+      const spin = setInterval(()=>{
+        el.textContent = arr[Math.floor(Math.random()*arr.length)];
+        if(++ticks > 6 + i*2){ clearInterval(spin); }
+      }, 55);
+    });
+  };
+
 
 
 
@@ -23122,6 +23423,8 @@ const sttUrl = document.getElementById("call-stt-url");
   if(sttTok) sttTok.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.sttToken=sttTok.value.trim(); persist("callConfig"); };
   const voceUrlInp = document.getElementById("call-voce-url");
   if(voceUrlInp) voceUrlInp.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.voceUrl=voceUrlInp.value.trim(); persist("callConfig"); };
+  const hervoiceUrlInp = document.getElementById("call-hervoice-url");
+  if(hervoiceUrlInp) hervoiceUrlInp.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.hervoiceUrl=hervoiceUrlInp.value.trim(); persist("callConfig"); };
   if(typeof callInvitePollStart === "function") callInvitePollStart();
 
 
@@ -23252,27 +23555,6 @@ const sttUrl = document.getElementById("call-stt-url");
   };
 
 
-  // 解谜房间
-  document.querySelectorAll("[data-puzzle-start]").forEach(btn=>{
-    btn.onclick = ()=>{
-      if(btn.disabled) return;
-      puzzleStart(btn.dataset.puzzleStart);
-    };
-  });
-  document.querySelectorAll("[data-puzzle-choice]").forEach(btn=>{
-    btn.onclick = ()=> puzzleChoose(+btn.dataset.puzzleChoice);
-  });
-  const puzzleSubmit = document.getElementById("puzzle-submit");
-  if(puzzleSubmit) puzzleSubmit.onclick = ()=> puzzleSubmitAnswer();
-  const puzzleAns = document.getElementById("puzzle-answer");
-  if(puzzleAns){
-    puzzleAns.oninput = ()=>{ ensurePuzzleProgress().answerDraft = puzzleAns.value; };
-    puzzleAns.onkeydown = e=>{ if(e.key==="Enter"){ e.preventDefault(); puzzleSubmitAnswer(); } };
-  }
-  const puzzleAbandonBtn = document.getElementById("puzzle-abandon");
-  if(puzzleAbandonBtn) puzzleAbandonBtn.onclick = ()=> puzzleAbandon();
-  const puzzleBackSel = document.getElementById("puzzle-back-select");
-  if(puzzleBackSel) puzzleBackSel.onclick = ()=> puzzleContinueNext();
 
 
 
@@ -23705,7 +23987,7 @@ function msgsToApiFormat(allMsgs, isGroup){
   if(limit > 0) list = list.slice(-limit);
   return list.map(m=>{
     if(m.role==="user"){
-      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${truthDareCardLabel(m)}${m.content}` };
+      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
       // 多模态：透传图片（图片不进文本前缀）
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
@@ -23742,6 +24024,17 @@ function getWindowedMessages(allMsgs, target){
   return { messages: list, summary };
 }
 
+/** 语音消息给模型的语气前缀。转写只有「说了什么」，情绪/hint 是「怎么说的」——
+ * 以前这两项只存在气泡里，模型从来看不到，语音和打字对它没区别。 */
+function voiceToneLabel(m){
+  const v = m && m.voice;
+  if(!v) return "";
+  const bits = [];
+  if(v.emotion && v.emotion !== "neutral") bits.push(v.emotion);
+  if(v.hint) bits.push(String(v.hint).slice(0, 40));
+  return bits.length ? `[语音 · ${bits.join(" · ")}] ` : "[语音] ";
+}
+
 function buildMainChatRequest(ag, extraHint){
   const target = state.chatTarget || "a1";
   const threadMsgs = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || [];
@@ -23752,7 +24045,7 @@ function buildMainChatRequest(ag, extraHint){
   const win = getWindowedMessages(allMsgs, target);
   const apiMsgs = win.messages.map(m=>{
     if(m.role==="user"){
-      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${truthDareCardLabel(m)}${m.content}` };
+      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
     }
@@ -23953,6 +24246,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   }
   cleanBody = handleNoteMarkers(cleanBody);   // 机写小纸条：⟪写纸条:内容⟫ → 聊天卡片
   cleanBody = handleDiaryMarkers(cleanBody);  // 机写日记：⟪写日记:标题|正文⟫ → 聊天轻提示
+  cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
+  cleanBody = handleMomentMarkers(cleanBody); // 朋友圈：⟪动态:正文|内部备注⟫ → 他自己发一条动态
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
@@ -23960,6 +24255,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleAnnoMarkers(cleanBody); // 共读批注（VPS 书）
   cleanBody = handleReadMarkMarkers(cleanBody); // 一起读划线：⟪批注:摘句|想法⟫
   cleanBody = handleSongMarkers(cleanBody);     // 点歌：⟪点歌:歌名 - 歌手⟫ → 聊天里的可播卡片
+  cleanBody = handlePlaylistMarkers(cleanBody); // 歌单：⟪歌单:名字|歌1|歌2⟫ → 可连播的歌单卡
   cleanBody = handleTruthDareMarkers(cleanBody);   // 真心话大冒险：⟪真心话⟫/⟪大冒险⟫/⟪抽卡⟫
   // Project 文件：先拆块入库，正文擦除，后面再推信封卡片
   let projectFilesFromReply = [];
@@ -24001,7 +24297,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       speakerName: ag.name,
       speakerColor: ag.color,
       usage: i===0 ? lastUsage : null,
-      thinking: i===0 ? (thinking || "（本通未返回思考：可点「编辑思考」手写，或换用带 thinking 的模型）") : null,
+      thinking: i===0 ? (thinking || null) : null,
     });
   });
   // RPG：从本轮助手第一条开始播，点继续往后翻
@@ -24104,7 +24400,7 @@ async function triggerAIReply(){
         if(limit>0) list = list.slice(-limit);
         else if(list.length > 80) list = list.slice(-80);
         const apiMsgs = list.map(m=>{
-          if(m.role==="user") return { role:"user", content:`[时间: ${formatTimeFull(m.time)}] 用户：${m.content}` };
+          if(m.role==="user") return { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}用户：${m.content}` };
           if(m.speakerId === ag.id) return { role:"assistant", content: m.content };
           return { role:"user", content:`【${m.speakerName||"另一位"}】${m.content}` };
         });
@@ -24206,225 +24502,6 @@ ${thinkingText}`;
   state.chatLoading=false;
   saveActiveThread();
   render();
-}
-
-// ─── 海龟汤逻辑 ──────────────────────────────────────────────────────────────
-function soupStartFromBank(){
-  const item = SOUP_BANK[Math.floor(Math.random()*SOUP_BANK.length)];
-  state.soupGame = {
-    phase: "playing",
-    surface: item.surface,
-    bottom: item.bottom,
-    title: item.title,
-    history: [{ role:"system", content:"题库出题 · 开始提问吧" }],
-    loading: false,
-    draft: "",
-    source: "bank",
-  };
-  render();
-}
-async function soupStartFromAI(){
-  if(!state.apiConfig.claudeKey && !state.apiConfig.openaiKey && !state.apiConfig.auxOpenaiKey){
-    const anyKey = (state.agents||[]).some(a=>agentHasKey(a));
-    if(!anyKey){ alert("请先配置 API Key"); return; }
-  }
-  state.soupGame.loading = true;
-  state.soupGame.phase = "setup";
-  render();
-  const prompt = `请出一道中文「海龟汤」情景谜题（situation puzzle）。
-要求：
-1. 输出严格两段，用 --- 分隔：
-第一段：汤面（只给表面诡异情景，2-4 句，不要剧透）
-第二段：汤底（完整合理解释）
-2. 逻辑自洽，适合用是/否问题推理，不要血腥猎奇过头。
-3. 不要编号，不要「汤面：」标签，只用 --- 分隔两段。`;
-  try{
-    let text = await callAuxAPI(state.apiConfig, prompt);
-    if((!text || !text.trim()) && typeof agentById==="function"){
-      const ag = agentById("a1") || (state.agents||[])[0];
-      if(ag && agentHasKey(ag)){
-        text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-        const parsed = parseThinking(text);
-        text = parsed.body || text;
-      }
-    }
-    const parts = String(text||"").split(/\n---\n|---/).map(s=>s.trim()).filter(Boolean);
-    let surface = parts[0] || "";
-    let bottom = parts.slice(1).join("\n") || "";
-    if(!bottom){
-      // 容错：整段当汤面，让用户玩时再揭晓会提示
-      surface = String(text||"").trim();
-      bottom = "（AI 未给出清晰汤底，可再开一局）";
-    }
-    state.soupGame = {
-      phase: "playing",
-      surface,
-      bottom,
-      title: "AI 现编",
-      history: [{ role:"system", content:"AI 出题 · 开始提问吧" }],
-      loading: false,
-      draft: "",
-      source: "ai",
-    };
-  }catch(e){
-    alert("出题失败："+e.message);
-    state.soupGame.loading = false;
-  }
-  render();
-}
-async function soupSendMsg(){
-  const g = state.soupGame;
-  if(g.phase!=="playing" || g.loading) return;
-  const inp = document.getElementById("soup-input");
-  const text = (inp?.value || g.draft || "").trim();
-  if(!text) return;
-  g.draft = "";
-  g.history.push({ role:"user", content: text });
-  g.loading = true;
-  render();
-
-  const histStr = g.history.filter(h=>h.role!=="system").slice(-12).map(h=>
-    (h.role==="user"?"玩家：":"主持：")+h.content
-  ).join("\n");
-
-  const prompt = `你是海龟汤主持人。汤面与汤底如下（玩家看不到汤底）：
-【汤面】${g.surface}
-【汤底】${g.bottom}
-
-对话历史：
-${histStr}
-
-规则：
-- 若玩家在提问：只回答「是」「否」「无关」「是也不是」之一，必要时加极短半句澄清，不要泄题。
-- 若玩家在陈述完整汤底：若基本正确，回答「答对了！」并可用一两句确认；若不对，说「还不对」并鼓励继续问。
-- 不要主动说出汤底全文。
-只输出你的一句主持回复。`;
-
-  try{
-    let reply = await callAuxAPI(state.apiConfig, prompt);
-    if((!reply || !reply.trim())){
-      const ag = agentById("a1") || (state.agents||[])[0];
-      if(ag && agentHasKey(ag)){
-        reply = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-        const parsed = parseThinking(reply);
-        reply = parsed.body || reply;
-      }
-    }
-    reply = String(reply||"").trim() || "……";
-    g.history.push({ role:"ai", content: reply });
-    if(/答对了|完全正确|猜对了/.test(reply)){
-      g.phase = "revealed";
-      g.history.push({ role:"system", content:"—— 汤底如下 ——" });
-    }
-  }catch(e){
-    g.history.push({ role:"ai", content:"（主持走神了："+e.message+"）" });
-  }
-  g.loading = false;
-  render();
-}
-
-// ─── 猜词游戏逻辑 ────────────────────────────────────────────────────────────
-function guessPickWord(){
-  return GUESS_WORDS[Math.floor(Math.random()*GUESS_WORDS.length)];
-}
-async function guessStart(){
-  const g = state.guessGame;
-  const ag = agentById(g.opponentId);
-  if(!ag || !agentHasKey(ag)){ alert("请先在设置里为该 AI 配置 Key"); return; }
-  g.word = guessPickWord();
-  g.history = [{ role:"system", content:`游戏开始 · 词已抽取 · ${g.describer==="user"?"请描述这个词，让 AI 来猜":"AI 将先给出描述"}` }];
-  g.phase = "playing";
-  g.result = "";
-  g.draft = "";
-  g.loading = false;
-  render();
-  if(g.describer === "ai"){
-    await guessAskAiDescribe();
-  }
-}
-async function guessAskAiDescribe(){
-  const g = state.guessGame;
-  const ag = agentById(g.opponentId);
-  g.loading = true; render();
-  const prompt = `你在和用户玩猜词游戏。秘密词是「${g.word}」。
-请用 1-3 句中文描述这个词的特征、用途或相关场景，但绝对不能直接说出这个词本身，也不能用谐音直接点破。
-只输出描述正文，不要引号，不要前言。`;
-  try{
-    const text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-    const { body } = parseThinking(text);
-    g.history.push({ role:"ai", content: (body||text).trim() });
-  }catch(e){
-    g.history.push({ role:"ai", content:"（描述失败："+e.message+"）" });
-  }
-  g.loading = false; render();
-}
-async function guessAskAiGuess(userDesc){
-  const g = state.guessGame;
-  const ag = agentById(g.opponentId);
-  g.loading = true; render();
-  const histStr = g.history.filter(h=>h.role!=="system").map(h=>
-    (h.role==="user"?"用户描述：":"你曾猜：")+h.content
-  ).join("\n");
-  const prompt = `你在和用户玩猜词游戏。用户在描述一个词，你来猜。
-历史：
-${histStr}
-用户最新描述：${userDesc}
-
-规则：只输出你猜的一个中文词（2-6 个字），不要解释，不要标点。若实在不知道可输出「不知道」。`;
-  try{
-    const text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-    const { body } = parseThinking(text);
-    const guess = (body||text).trim().replace(/[。！？\s]/g,"").slice(0,12);
-    g.history.push({ role:"ai", content: "我猜是："+guess });
-    if(guess === g.word || guess.includes(g.word) || g.word.includes(guess)){
-      g.phase = "ended";
-      g.result = "win";
-      g.history.push({ role:"system", content:"正确！词就是「"+g.word+"」" });
-    }
-  }catch(e){
-    g.history.push({ role:"ai", content:"（猜测失败："+e.message+"）" });
-  }
-  g.loading = false; render();
-}
-async function guessJudgeUserGuess(guess){
-  const g = state.guessGame;
-  const clean = guess.trim().replace(/[。！？\s]/g,"");
-  g.history.push({ role:"user", content: "我猜："+clean });
-  if(clean === g.word || clean.includes(g.word) || g.word.includes(clean)){
-    g.phase = "ended";
-    g.result = "win";
-    g.history.push({ role:"system", content:"答对了！就是「"+g.word+"」" });
-    render();
-    return;
-  }
-  // 让 AI 给一点新的提示（不直接说词）
-  const ag = agentById(g.opponentId);
-  g.loading = true; render();
-  const prompt = `猜词游戏。秘密词「${g.word}」。用户刚猜「${clean}」，不对。
-请再给一句新的中文提示（不能出现秘密词），简短鼓励。只输出提示正文。`;
-  try{
-    const text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-    const { body } = parseThinking(text);
-    g.history.push({ role:"ai", content: (body||text).trim() });
-  }catch(e){
-    g.history.push({ role:"ai", content:"不对哦，再试试～" });
-  }
-  g.loading = false; render();
-}
-async function guessSend(){
-  const g = state.guessGame;
-  if(g.phase!=="playing" || g.loading) return;
-  const inp = document.getElementById("guess-input");
-  const text = (inp?.value || g.draft || "").trim();
-  if(!text) return;
-  g.draft = "";
-  if(g.describer==="user"){
-    g.history.push({ role:"user", content: text });
-    render();
-    await guessAskAiGuess(text);
-  } else {
-    await guessJudgeUserGuess(text);
-  }
 }
 
 // ─── 小狗游戏 ────────────────────────────────────────────────────────────────
@@ -24821,13 +24898,13 @@ window.reinitState = function(){
     bodyVitals:"bodyVitals",sixAxis:"sixAxis",bodyFeel:"bodyFeel",bodyWant:"bodyWant",
     proactiveConfig:"proactiveConfig",proactiveLastLocal:"proactiveLastLocal",
     proactiveInbox:"proactiveInbox",dreamConfig:"dreamConfig",dreamState:"dreamState",
-    puzzleProgress:"puzzleProgress",cabinets:"cabinets",cabinetFeedChat:"cabinetFeedChat",
+    cabinets:"cabinets",cabinetFeedChat:"cabinetFeedChat",
     sparkVault:"sparkVault",callConfig:"callConfig",
     callRecords:"callRecords",pushStats:"pushStats",ntfyConfig:"ntfyConfig",ntfyLog:"ntfyLog",
     branding:"branding",hisPhone:"hisPhone",captivityConfig:"captivityConfig",eatApple:"eatApple",
     eatApple:"eatApple",
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
-    letterSurfacedIds:"letterSurfacedIds",galateaEventId:"galateaEventId"
+    letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",moments:"moments",galateaEventId:"galateaEventId"
   };
 
   // 迁移：若带前缀的键为空，但无前缀旧键有数据，拷过来（只迁一次）
@@ -25087,6 +25164,30 @@ if(!window.__proactiveBoot){
       }
     }catch(e){}
   }, 2500);
+}
+
+// 上面那次只在开机后跑一遍。它的门槛是「距上一条消息 ≥2 小时」，
+// 而刚打开 App 的那一刻多半刚聊过 —— 一 return 整个会话就再也不查了，
+// 主动消息于是几乎永远等不到。补一个循环 + 每次回到前台再查一次。
+// 频次不用担心：proactiveTryLocal 自己有冷静期(2–3.5h)和每日上限(白天5/夜里3–5)。
+function proactiveTick(){
+  window.__proactiveLastTick = Date.now();
+  try{ if(typeof proactiveTryLocal === "function") proactiveTryLocal(false); }catch(e){}
+  // 朋友圈到期的回复也搭这趟车。教程里的「坑一」就是纯惰性生成：
+  // 发完动态就锁屏，没人再发请求，回复永远不生成 —— 有这个循环就不会。
+  try{ if(typeof momentsProcessDue === "function") momentsProcessDue(); }catch(e){}
+  try{
+    const cfg = state.proactiveConfig || {};
+    if(cfg.enabled && cfg.baseUrl && typeof proactivePullQuiet === "function") proactivePullQuiet();
+  }catch(e){}
+}
+if(!window.__proactiveTimer){
+  window.__proactiveTimer = setInterval(proactiveTick, 10 * 60 * 1000);
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState !== "visible") return;
+    if(Date.now() - (window.__proactiveLastTick || 0) < 60000) return; // 来回切前台防抖
+    proactiveTick();
+  });
 }
 
 
@@ -25461,6 +25562,51 @@ function handleDiaryMarkers(body){
   });
   return text || (isPrivate ? "（写了一篇只给自己的日记）" : "（写了一篇日记，翻开机日记页看看吧）");
 }
+/** ⟪日记解锁:标题关键词⟫ —— 把之前写的私密日记打开给她看。
+ * 以前只有「上锁」（⟪写日记(仅自己)⟫ → visibility:private），却没有任何一处能再打开，
+ * 界面上那句「给你看时自动解锁」于是永远不会发生。这里补上开锁的那一半。 */
+function handleDiaryUnlockMarkers(body){
+  let text = String(body||"");
+  if(!text || text.indexOf("日记解锁") < 0) return text;
+  const hits = [];
+  text = text.replace(/[⟪《【\[]\s*日记解锁\s*(?:[:：]\s*([^⟫》】\]]*))?\s*[⟫》】\]]/g, (_, kw)=>{
+    hits.push(String(kw||"").trim());
+    return "";
+  }).replace(/\n{3,}/g,"\n\n").trim();
+  if(hits.length) mcUnlockDiariesByHints(hits);
+  return text;
+}
+
+/** 按关键词找到对应的私密日记并开锁；本地还没拉过列表就先拉一次 */
+async function mcUnlockDiariesByHints(hints){
+  try{
+    if(!Array.isArray(state.mcDiaries) || !state.mcDiaries.length){
+      const d = await mcFetch("/diary/list?visibility=all");
+      if(d && d.diaries) state.mcDiaries = d.diaries;
+    }
+    const locked = (state.mcDiaries||[]).filter(x =>
+      x && (x.visibility === "private" || x.locked) && !mcIsUnlocked(x.id));
+    if(!locked.length) return;
+    let opened = 0;
+    hints.forEach(kw=>{
+      let rec = null;
+      if(kw){
+        rec = locked.find(x => !mcIsUnlocked(x.id) &&
+          (String(x.title||"").indexOf(kw) >= 0 || String(x.content||"").indexOf(kw) >= 0));
+      }
+      if(!rec) rec = locked.find(x => !mcIsUnlocked(x.id)); // 没指名就开还锁着的第一篇
+      if(!rec) return;
+      mcUnlockDiary(rec);
+      opened++;
+      mcPushCard("diary_notice", rec, {
+        content: `（TA 把一篇之前没给你看的日记${rec.title?`《${rec.title}》`:""}打开了）`,
+        snap: { title: rec.title||"", body: rec.content||"", visibility:"visible", author:"ai" },
+      });
+    });
+    if(opened) render();
+  }catch(e){}
+}
+
 /** ⟪写信:正文|时间描述⟫ → POST /letter；立即投递的进聊天，定时的到点由轮询 surfacing */
 function handleLetterMarkers(body){
   let text = String(body||"");
@@ -25506,6 +25652,7 @@ function mcPromptBlock(){
 你可以在正式回复里用下面的暗号写东西，暗号会被系统识别并从显示文本里擦除，TA 看不到暗号本身：
 - 小纸条：真心想留一句短话时写一行 ⟪写纸条:内容⟫（内容 ≤60 字，口语短句，不要每轮都用）。
 - 机日记：由你代写今天发生的事或你的心里话，写进「机日记」（你的专属日记，TA 不能写）。写一行 ⟪写日记:标题|正文⟫（对你可见）；只写给你自己的私密日记用 ⟪写日记(仅自己):标题|正文⟫。正文 ≤300 字，标题 ≤20 字可省标题只写正文。
+- 开锁：写过的「仅自己」私密日记，哪天愿意给她看了，写一行 ⟪日记解锁:标题或正文里的一个词⟫，那篇就从上锁变成她能点开的。不写关键词就默认开还锁着的最近一篇。真心想给她看时才用。
 - 信箱定时信：想写一封到点投递的信时写一行 ⟪写信:正文|时间描述⟫。时间描述支持：现在/马上、N分钟后、N小时后、今晚HH:MM、明早HH:MM、明天HH:MM、HH:MM（今天，过了就顺延明天）等，识别不了时间会立刻投递。正文 ≤200 字，除非真想定时否则别用。
 规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。`;
 }
