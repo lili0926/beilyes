@@ -12230,7 +12230,11 @@ async function songMetaResolve(q){
   try{
     const s = await songSearchFirst(key);
     if(s){
-      __songMeta[key] = { cover: s.cover||"", name: s.name||"", artists: Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||"") };
+      __songMeta[key] = {
+        cover: s.cover||"", name: s.name||"",
+        artists: Array.isArray(s.artists)?s.artists.join(" / "):(s.artists||""),
+        source: s.source || (state.musicConfig && state.musicConfig.source) || "netease",
+      };
       render();                                  // 拿到封面后重绘一次，卡片就有图了
     } else {
       __songMeta[key] = "fail";
@@ -16274,24 +16278,38 @@ function renderInline(content, clickable, nsfwMode){
 
 /** 他点给她的歌 → 和她分享出去的用同一张卡。
  * 暗号里只有文字，封面得现查；songMetaResolve 查到后会重绘一次补上。 */
+/** 歌曲卡的唯一渲染入口 —— 她分享的和他点的走同一个函数、同一套 DOM，
+ * 所以两边长得一模一样。尺寸固定在 CSS 里（.song-share 定宽定高），不跟着曲名长短缩。
+ * o = { name, artists, cover, source, query, clickable, isMe, needMeta } */
+function songCardHtml(o){
+  const name = o.name || "未知曲目";
+  const artists = o.artists || "";
+  const srcLabel = o.source === "spotify" ? "Spotify" : "网易云";
+  return `<div class="song-share ${o.isMe?"me":"them"}"${o.clickable?` data-song-play="${escAttr(o.query||"")}"`:""}${o.needMeta?` data-song-meta="${escAttr(o.query||"")}"`:""}>
+    <div class="song-share-art">
+      ${o.cover?`<img src="${escAttr(o.cover)}" alt=""/>`:`<div class="song-share-noart"><i data-lucide="music"></i></div>`}
+      ${o.clickable?`<span class="song-share-play"><i data-lucide="play"></i></span>`:""}
+    </div>
+    <div class="song-share-meta">
+      <div class="song-share-name">${esc(name)}</div>
+      <div class="song-share-artist">${esc(artists||"—")}</div>
+      <div class="song-share-foot"><span class="song-share-src">${srcLabel}</span>一起听</div>
+    </div>
+  </div>`;
+}
+
+/** 他点的歌：暗号里只有文字，封面靠 songMetaResolve 补，补到之前先占位 */
 function aiSongCardHtml(body, clickable){
   const query = String(body||"").trim();
   const meta = songMetaGet(query);
   const dash = query.split(/\s+-\s+/);
-  const name = (meta && meta.name) || (dash[0]||query).trim();
-  const artists = (meta && meta.artists) || (dash.slice(1).join(" - ")||"").trim();
   const cover = (meta && meta.cover) || "";
-  return `<div class="song-share them${cover?"":" no-art"}"${clickable?` data-song-play="${escAttr(query)}"`:""}${cover?"":` data-song-meta="${escAttr(query)}"`}>
-    <div class="song-share-art">
-      ${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<div class="song-share-noart"><i data-lucide="music"></i></div>`}
-      ${clickable?`<span class="song-share-play"><i data-lucide="play"></i></span>`:""}
-    </div>
-    <div class="song-share-meta">
-      <div class="song-share-name">${esc(name||"未知曲目")}</div>
-      <div class="song-share-artist">${esc(artists||"—")}</div>
-      <div class="song-share-foot"><span class="song-share-src">一起听</span>${clickable?"点一下就播":""}</div>
-    </div>
-  </div>`;
+  return songCardHtml({
+    name:    (meta && meta.name) || (dash[0]||query).trim(),
+    artists: (meta && meta.artists) || (dash.slice(1).join(" - ")||"").trim(),
+    cover, source: (meta && meta.source) || "netease",
+    query, clickable: !!clickable, isMe: false, needMeta: !cover,
+  });
 }
 
 /** 他建的歌单：一张卡，逐首可点，也能整张连播 */
@@ -17830,23 +17848,16 @@ function chatVoiceBarHtml(m, isMe, glassCls, bubbleColor){
 }
 
 /** 她从「一起听」分享进聊天的歌：封面 + 曲名 + 歌手 + 可点播放的卡片 */
+/** 她从「一起听」分享进聊天的歌。和他点的歌共用 songCardHtml，长得完全一致。 */
 function songShareCardHtml(m, isMe){
   const s = m.song || {};
-  const name = s.name || "未知曲目";
   const artists = Array.isArray(s.artists) ? s.artists.join(" / ") : (s.artists || "");
-  const query = artists ? (name + " - " + artists) : name;
-  const srcLabel = s.source === "spotify" ? "Spotify" : "网易云";
-  return `<div class="song-share ${isMe?"me":"them"}" data-song-play="${escAttr(query)}">
-    <div class="song-share-art">
-      ${s.cover?`<img src="${escAttr(s.cover)}" alt=""/>`:`<div class="song-share-noart"><i data-lucide="music"></i></div>`}
-      <span class="song-share-play"><i data-lucide="play"></i></span>
-    </div>
-    <div class="song-share-meta">
-      <div class="song-share-name">${esc(name)}</div>
-      <div class="song-share-artist">${esc(artists||"—")}</div>
-      <div class="song-share-foot"><span class="song-share-src">${srcLabel}</span>一起听</div>
-    </div>
-  </div>`;
+  const name = s.name || "未知曲目";
+  return songCardHtml({
+    name, artists, cover: s.cover || "", source: s.source,
+    query: artists ? (name + " - " + artists) : name,
+    clickable: true, isMe: !!isMe, needMeta: !s.cover,
+  });
 }
 
 function renderChat(){
@@ -19744,6 +19755,58 @@ if(!window.__mpDelegated){
         if(typeof render==="function") render();
         return;
       }
+      // 吃苹果 · 壳：放进这个兜底委托，不依赖 bindEvents 跑到那一行（它在三千行绑定之后，
+      // 前面任何一处抛错这些按钮就全哑了 —— 这也是这个委托存在的原因）
+      const eaShellBtn = raw.closest("[data-ea-shell]");
+      if(eaShellBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const st = eaEnsure();
+        const id = eaShellBtn.getAttribute("data-ea-shell");
+        if(st.shellId !== id){ st.shellId = id; st.data = null; st.err = ""; }
+        try{ persist("eatApple"); }catch(_){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(raw.closest("#ea-back-shell")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const st = eaEnsure(); st.shellId = null; st.err = "";
+        try{ persist("eatApple"); }catch(_){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(raw.closest("#ea-gen")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        try{
+          const st = eaEnsure();
+          document.querySelectorAll("[data-ea-slot]").forEach(inp=>{
+            if(!st.slots[st.shellId]) st.slots[st.shellId] = {};
+            st.slots[st.shellId][inp.getAttribute("data-ea-slot")] = inp.value;
+          });
+        }catch(_){}
+        if(typeof eaGenerate==="function") eaGenerate();
+        return;
+      }
+      if(raw.closest("#ea-handoff")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        try{
+          const st = eaEnsure();
+          document.querySelectorAll("[data-ea-slot]").forEach(inp=>{
+            if(!st.slots[st.shellId]) st.slots[st.shellId] = {};
+            st.slots[st.shellId][inp.getAttribute("data-ea-slot")] = inp.value;
+          });
+        }catch(_){}
+        if(typeof eaHandoff==="function") eaHandoff();
+        return;
+      }
+      const eaPal = raw.closest("[data-ea-palette]");
+      if(eaPal){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const st = eaEnsure(); st.palette = eaPal.getAttribute("data-ea-palette");
+        try{ persist("eatApple"); }catch(_){}
+        if(typeof render==="function") render();
+        return;
+      }
+
       // 功能入口：仅功能卡，避免子页内部误伤
       const subBtn = raw.closest("button.feat-card[data-sub], .feat-card[data-sub]");
       if(subBtn && !raw.closest(".bottom-nav")){
@@ -22636,8 +22699,6 @@ reader.readAsArrayBuffer(f);
     const b = (state.books||[]).find(x=>x.id===state.readingNow.bookId);
     if(b && b.remoteId) readLoadMarks(b.remoteId);
   }
-
-  c
 
   const watchFloatOpen = document.getElementById("watch-float-open");
   if(watchFloatOpen) watchFloatOpen.onclick = ()=>{ state.tab="home"; state.subPage="watch"; render(); };
