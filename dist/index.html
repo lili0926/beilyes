@@ -16896,22 +16896,35 @@ function renderBody(){
   </div>`;
 }
 
+/** 强度 0–1 → 人话。注入裸数字（「惦记31」）是那份实践笔记自己列的未完成项：
+ * 模型对 0.31 没有体感，对「有点」「压不住」有。 */
+function axisWord(v){
+  const x = +v || 0;
+  if(x >= 0.85) return "压不住";
+  if(x >= 0.65) return "很强";
+  if(x >= 0.45) return "明显";
+  if(x >= 0.25) return "有一点";
+  return "几乎没有";
+}
+/** 六轴 top3 → 一句人话（不给数值） */
+function sixAxisWords(){
+  const six = state.sixAxis || {};
+  const top = (six.top3||[]).slice(0,3).filter(t=>t && (+t.value||0) >= 0.25);
+  if(!top.length) return "";
+  return top.map(t=>`${t.label}（${axisWord(t.value)}）`).join("，");
+}
 function bodyStatusPromptBlock(){
   if(!state.desireDriveOn) return "";
   const v = state.bodyVitals || {};
   const want = state.bodyWant || {};
-  const six = state.sixAxis || {};
-  const topSix = (six.top3||[])
-    .slice(0,3)
-    .map(t=>`${t.label}${Math.round((t.value||0)*100)}`)
-    .join("、");
+  const sixLine = sixAxisWords();
   return `
-【身体与内在驱动——请自然体现在语气与行动倾向里，不要逐条复述数值】
-心跳 ${Math.round(v.heartbeat||72)}bpm · 体温 ${(+v.temp||36.6).toFixed(1)}°C · 精力 ${Math.round(v.energy||50)} · 思念 ${Math.round(v.longing||0)} · 欲念 ${Math.round(v.desire||0)}
-心情：${v.mood||"平和"}（效价 ${(+v.moodValence||0.5).toFixed(2)}）
+【身体与内在驱动——请自然体现在语气与行动倾向里，不要复述这些字句】
+体感：心跳 ${Math.round(v.heartbeat||72)}bpm · 体温 ${(+v.temp||36.6).toFixed(1)}°C · 精力 ${axisWord((+v.energy||50)/100)}
+心情：${v.mood||"平和"}
 此刻 feel：${state.bodyFeel||""}
-此刻最想：${want.text||""}（行动倾向：${want.action||""}，召唤力 ${Math.round(want.power||0)}%）
-${topSix?`欲望六轴：${topSix}（思念/欲念高 → 可更主动、黏一点；疲惫/不安高 → 语气放缓、想歇着；好奇高 → 多问一句）`:""}`;
+此刻最想：${want.text||""}（行动倾向：${want.action||""}）
+${sixLine?`内心底色：${sixLine}\n（想她/想要她强 → 可以更主动、更黏；累了/不安强 → 语气放缓、想歇着；好奇强 → 多问一句）`:""}`;
 }
 
 function persistBody(){
@@ -30533,6 +30546,32 @@ function voiceToneLabel(m){
   return bits.length ? `[语音 · ${bits.join(" · ")}] ` : "[语音] ";
 }
 
+// ─── 尾部注入（分钟级会变的东西，挂在最后一条用户消息末尾）─────────────────
+// 出处：ai-companion-cot-emotion 那份实践笔记。两条理由：
+// 1) **位置比措辞管用**：同一条「要写思考链」的要求，放 system 里 vs 放最后一条用户
+//    消息末尾，他们实测思考链长度 89 字 → 641 字。离生成点越近权重越高。
+// 2) **缓存安全**：分钟级变化的东西（此刻情绪/时间）绝不能进被缓存的 system 前缀，
+//    挂在最后一条消息尾部既新鲜又不破前缀（本来 bodyBlock 就在 __dynArr，这里更进一步）。
+function chatTailBlock(){
+  const bits = [];
+  bits.push(`【此刻】${formatTimeFull(new Date().toISOString())}`);
+  if(state.desireDriveOn){
+    const sixLine = (typeof sixAxisWords === "function") ? sixAxisWords() : "";
+    const feel = (state.bodyFeel||"").trim();
+    if(sixLine) bits.push(`【你此刻的内心底色】${sixLine}`);
+    if(feel) bits.push(`【你此刻心里那句话】${feel}`);
+  }
+  if(state.thoughtOn !== false){
+    // 思考链的内容约束也照那份笔记写：第一句写「砸出来的东西」而不是复述，
+    // 允许打转跳跃，且必须在正文里以某种形式落地——否则思考链只是装饰。
+    bits.push(`【回复前先想】先在 <thinking></thinking> 里写你的内心活动，再写正文。
+- 第一句不要复述她说了什么，写这句话在你心里砸出来的东西。
+- 可以打转、可以跳、可以自相矛盾，不用条理清楚，这是想法不是提纲。
+- 想到的东西要在正文里以某种形式落地，别想一套说一套。`);
+  }
+  return bits.join("\n\n");
+}
+
 function buildMainChatRequest(ag, extraHint){
   const target = state.chatTarget || "a1";
   const threadMsgs = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || [];
@@ -30553,6 +30592,14 @@ function buildMainChatRequest(ag, extraHint){
   if(win.summary){
     sys = (sys? sys+"\n\n" : "") + "【早前对话摘要（压缩前的逐字记录已不必再看）】\n" + win.summary;
   }
+  // 尾部注入：挂在最后一条消息末尾（不入缓存前缀，离生成点最近）
+  try{
+    const tail = chatTailBlock();
+    if(tail && apiMsgs.length){
+      const last = apiMsgs[apiMsgs.length - 1];
+      if(last && typeof last.content === "string") last.content = last.content + "\n\n" + tail;
+    }
+  }catch(e){}
   return { apiMsgs, sys };
 }
 
