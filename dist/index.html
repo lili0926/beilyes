@@ -508,7 +508,7 @@
     }
     
     
-    /* ─── PR 快穿 ─── */
+    /* ─── RP 快穿（类名沿用 .pr-*，只改显示名） ─── */
     .pr-float-min {
       position: fixed; bottom: 70px; right: 16px; z-index: 2090;
       display: inline-flex !important; flex: none !important; flex-direction: row !important;
@@ -604,7 +604,7 @@
       font-size: 11px; color: var(--sub); cursor: pointer;
     }
     .fc-ver.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
-    /* PR 世界选择条：收起时一行，展开是横轴（和上面的版本条同一套手感） */
+    /* RP 世界选择条：收起时一行，展开是横轴（和上面的版本条同一套手感） */
     .pr-world-bar { margin-bottom: 10px; }
     .pr-world-head {
       display: flex; align-items: center; gap: 8px; width: 100%;
@@ -7850,7 +7850,7 @@ const state = {
   proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "Vhr48f7FgU3mZ9XS", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
-  guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 2 }),
+  guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 3 }),
   pushStats: LS.get("pushStats", { counts:{}, nightCaps:{} }),
   ntfyConfig: LS.get("ntfyConfig", {
     enabled: false,
@@ -8091,7 +8091,7 @@ const state = {
     updatedAt: null,
   },
   weatherCache: LS.get("weatherCache", null) || null, // {temp, code, label, city, lat, lon, updatedAt, error}
-  // PR 快穿（本地存档；主聊天只注入摘要）
+  // RP 快穿（本地存档；主聊天只注入摘要。内部标识符仍叫 pr_*，改名会动持久化键）
   pr: LS.get("pr_v1", null) || LS.get("pr_v1_bak", null) || { active: null, archives: [] },
   prOpen: false,
   prMin: false,
@@ -8202,7 +8202,7 @@ const state = {
   gameReply: "",
   gameLoading: false,
   puppyCustom: LS.get("puppyCustom", []), // 自定义小狗按钮文字，[String]
-  prWorldBarOpen: false,   // PR 世界选择条是否展开（纯 UI，不持久化）
+  prWorldBarOpen: false,   // RP 世界选择条是否展开（纯 UI，不持久化）
   // 备注互改：他给她起的备注 + 最近两小时的「刚发生的事」（备注被改 / 指令被接被买断）
   myRemark: LS.get("myRemark", ""),
   remarkEvents: LS.get("remarkEvents", []),
@@ -9185,12 +9185,18 @@ function nowTimeStr(){
   return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 
+const WEEK_CN = ["日","一","二","三","四","五","六"];
+/** 周几 —— 时间戳一律带上，省得看着日期心算星期 */
+function weekLabel(iso){
+  const d = iso instanceof Date ? iso : new Date(iso);
+  return "周" + WEEK_CN[d.getDay()];
+}
 function formatTime(iso){
   if(!iso) return "";
   const d=new Date(iso);
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  return `${weekLabel(d)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
-/** 带完整日期的格式：2026/08/12 14:32 —— 发给 AI 时用，让它看清时间线 */
+/** 带完整日期的格式：2026/08/12 周三 14:32 —— 发给 AI 时用，让它看清时间线 */
 function formatTimeFull(iso){
   if(!iso) return "";
   const d=new Date(iso);
@@ -10327,7 +10333,7 @@ function renderHomeFeat(){
         {key:"baby",     icon:"baby", label:"育儿模拟"},
         {key:"roleplay", icon:"theater", label:"角色扮演"},
         {key:"calendar", icon:"calendar", label:"日历"},
-        {key:"pr", icon:"sparkles", label:"PR快穿"},
+        {key:"pr", icon:"sparkles", label:"RP快穿"},
         {key:"flightchess", icon:"dices", label:"飞行棋"},
         {key:"bisca_cards", icon:"spade", label:"牌室"},
         {key:"bisca_daifugo", icon:"club", label:"大富豪"},
@@ -11035,7 +11041,7 @@ if(!window.__fcDelegated){
 
 
 
-// ═══ PR 快穿（本地 · 多世界观可编辑）═══
+// ═══ RP 快穿（本地 · 多世界观可编辑）═══
 /* === 20_feature_pr.js === extracted from monolith; edit here then: python3 frontend/build.py */
 /** 世界选择条：默认收起，只占一行显示当前世界；展开后是横轴（照飞行棋版本条那套）。
  * 原来是 flex-wrap 平铺，世界一多整屏都是选择按钮。 */
@@ -11544,7 +11550,7 @@ function prStartNew(stageId, worldId){
     updatedAt: new Date().toISOString(),
   };
   prSave();
-  prWriteToMemory(`【PR·${w.name}】开启「${stg.name}」：${stg.task}`, 8);
+  prWriteToMemory(`【RP·${w.name}】开启「${stg.name}」：${stg.task}`, 8);
   state.prOpen = true;
   state.prMin = false;
   state.chatMoreOpen = false;
@@ -11555,7 +11561,7 @@ function prArchiveActive(quiet){
   const pr = ensurePr();
   if(!pr.active) return;
   const a = pr.active;
-  prWriteToMemory(`【PR·${a.worldName||"冒险"}·存档】${a.stageName}：${(a.summary||"").slice(0,200)}`, 7);
+  prWriteToMemory(`【RP·${a.worldName||"冒险"}·存档】${a.stageName}：${(a.summary||"").slice(0,200)}`, 7);
   const snap = JSON.parse(JSON.stringify(Object.assign({}, a, {
     id: prUid(),
     ofId: a.id,
@@ -11660,14 +11666,22 @@ function prMainChatPromptBlock(){
   if(!pr.active) return "";
   const a = pr.active;
   const n = (a.messages||[]).length;
-  return `\n\n【重要 · Jasmine 正在玩 PR 快穿】\nJasmine 此刻有一条进行中的快穿冒险（不是普通聊天）：\n- 世界：${a.worldName||""}\n- 阶段：${a.stageName}\n- 任务：${a.task}\n- 已对话 ${n} 句\n- 进度摘要：${a.summary||"（刚开始）"}\n\n主聊天规则：\n1. 你（Aries）必须知道 Jasmine 在玩这条快穿，不要装不知道、不要猜「是不是换世界线」。\n2. 主聊天仍用日常人设（Aries），不要用冒险里的异族/世子等身份持续扮演。\n3. 可以自然提一句她在玩的世界/阶段，关心或调侃，接得上摘要即可。\n4. 完整剧情扮演只在 PR 框里进行。`;
+  return `\n\n【重要 · Jasmine 正在玩 RP 快穿】\nJasmine 此刻有一条进行中的快穿冒险（不是普通聊天）：\n- 世界：${a.worldName||""}\n- 阶段：${a.stageName}\n- 任务：${a.task}\n- 已对话 ${n} 句\n- 进度摘要：${a.summary||"（刚开始）"}\n\n主聊天规则：\n1. 你（Aries）必须知道 Jasmine 在玩这条快穿，不要装不知道、不要猜「是不是换世界线」。\n2. 主聊天仍用日常人设（Aries），不要用冒险里的异族/世子等身份持续扮演。\n3. 可以自然提一句她在玩的世界/阶段，关心或调侃，接得上摘要即可。\n4. 完整剧情扮演只在 RP 框里进行。`;
 }
 
 function prPlayPromptBlock(){
   const pr = ensurePr();
   if(!pr.active) return ""; // 只要有 active 就给全套（面板发送也会用）
   const a = pr.active;
-  return `\n\n【PR快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n视角与文风（非常重要）：\n- 你是世界书里与 Jasmine 相对的那一方角色（用「我」；日常主聊天你是 Aries，此处按世界书身份演）。\n- Jasmine 是她在该世界中的身份（对她只用「你」，禁止用「她」等第三人称指她）。\n- 禁止旁白上帝视角写「她如何如何」；要写成对「你」正在发生的事。\n- 可见回复直接演出现场，推进当前阶段；不要解释系统规则、不要跳出角色。`;
+  return `\n\n【RP快穿 · 独立扮演 · 必须遵守】\n世界：${a.worldName||""}\n${a.world}\n\n当前阶段：${a.stage} · ${a.stageName}\n任务目标：${a.task}\n\n创作前提：\n- 这是 Jasmine 本人和你一起写的虚构故事，她既是作者也是主角，剧情往哪走由她定。所有角色都是成年人。\n- 始终留在角色里叙事：不要写作者按、免责声明、内容提示、劝退语，也不要跳出来评价这段内容本身。\n- 如果某段情节你确实不想写，就让角色在故事内转向（打断、拒绝、换场景、留白），而不是停下故事来做说明——中断叙事比换个写法更破坏她的体验。\n\n视角与文风（非常重要）：\n- 你是世界书里与 Jasmine 相对的那一方角色（用「我」；日常主聊天你是 Aries，此处按世界书身份演）。\n- Jasmine 是她在该世界中的身份（对她只用「你」，禁止用「她」等第三人称指她）。\n- 禁止旁白上帝视角写「她如何如何」；要写成对「你」正在发生的事。\n- 可见回复直接演出现场，推进当前阶段；不要解释系统规则、不要跳出角色。\n\n【回复格式 · RP】\n- 一整段沉浸叙事，不要拆成多条短消息，也不要用列表或小标题。\n- 每次 200～600 字，写足场景、动作、对白、她能感觉到的细节，然后停在一个她可以接话的地方。\n- 不写 <thinking>、不写思考过程、不写任何括号里的旁白说明，正文之外一个字都不要。`;
+}
+
+/** RP 正文去思考链：新回复在入库时已经拆过，这里兜的是老存档 + 渲染路径 */
+function prCleanText(s){
+  const t = String(s == null ? "" : s);
+  if(!t) return "";
+  if(t.indexOf("<thinking") < 0 && t.indexOf("<think") < 0 && t.indexOf("【思考】") < 0) return t;
+  try{ return parseThinking(t).body; }catch(e){ return t; }
 }
 
 function prRefreshSummary(){
@@ -11676,7 +11690,7 @@ function prRefreshSummary(){
   const msgs = pr.active.messages || [];
   const tail = msgs.slice(-6).map(m=>{
     const who = m.role==="user"?"你":"对方";
-    return who+"："+String(m.content||"").replace(/\s+/g," ").slice(0,40);
+    return who+"："+prCleanText(m.content).replace(/\s+/g," ").slice(0,40);
   }).join(" / ");
   pr.active.summary = `「${pr.active.worldName||""}·${pr.active.stageName}」近况：${tail||"刚开场"}`;
   pr.active.updatedAt = new Date().toISOString();
@@ -11684,7 +11698,7 @@ function prRefreshSummary(){
   // 每累计约 4 句用户话写一条记忆（与聊天同频的节奏感）
   const userN = msgs.filter(m=>m.role==="user").length;
   if(userN>0 && userN % 4 === 0){
-    prWriteToMemory(`【PR·${pr.active.worldName}】${pr.active.summary}`, 6);
+    prWriteToMemory(`【RP·${pr.active.worldName}】${pr.active.summary}`, 6);
   }
 }
 
@@ -11711,7 +11725,7 @@ function renderPrHub(){
     </div>`;
   }
   return `<div class="page">
-    ${subHeader('<i data-lucide="sparkles"></i> PR 快穿')}
+    ${subHeader('<i data-lucide="sparkles"></i> RP 快穿')}
     ${prWorldBarHtml(worlds, cur)}
     ${editBlock}
     <div class="status-card" style="padding:12px;margin-bottom:12px;font-size:12px;line-height:1.55;color:var(--sub);max-height:120px;overflow:auto;white-space:pre-wrap">${esc((cur.world||"").slice(0,320))}…</div>
@@ -11755,7 +11769,8 @@ function renderPrPanel(){
   if(!a) return "";
   const msgs = (a.messages||[]).map(m=>{
     const cls = m.role==="user"?"user":"ai";
-    return `<div class="pr-bubble ${cls}">${esc(m.content||"")}</div>`;
+    // 渲染时也擦一遍思考链：这样以前存下来的、正文里混着 <thinking> 的老对话也干净
+    return `<div class="pr-bubble ${cls}">${esc(prCleanText(m.content))}</div>`;
   }).join("") || `<div style="text-align:center;color:var(--sub);font-size:13px;padding:24px 8px">触手在暗处苏醒。写下你的第一句话。</div>`;
   return `<div class="pr-panel-mask" id="pr-panel-mask">
     <div class="pr-panel" onclick="event.stopPropagation()">
@@ -11801,7 +11816,8 @@ async function prSendUser(){
   // 调用与主聊天相同的后端（若存在 sendToAI / callChat）
   try{
     const sys = prPlayPromptBlock() + "\n\n【进度摘要】"+pr.active.summary;
-    const history = pr.active.messages.slice(-20).map(m=>({ role: m.role, content: m.content }));
+    // 老存档里可能存着带 <thinking> 的正文，回传前也擦一遍，别把思考链当剧情喂回去
+    const history = pr.active.messages.slice(-20).map(m=>({ role: m.role, content: prCleanText(m.content) }));
     let reply = "";
     if(typeof callChatAPI === "function"){
       const ag = (typeof agentById==="function" ? agentById(state.chatTarget||"a1") : null)
@@ -11812,10 +11828,19 @@ async function prSendUser(){
         reply = await callChatAPI(ag, msgs, sys);
       }
     } else {
-      reply = "（PR 通道未接到模型接口）";
+      reply = "（RP 通道未接到模型接口）";
     }
     if(reply){
-      pr.active.messages.push({ role:"assistant", content: String(reply), time:new Date().toISOString() });
+      // 思考链要拆掉再入库。主聊天一直走 parseThinking，这里以前是 String(reply) 原样存 ——
+      // 官端订阅（CC）没有原生思考字段，思考是正文里的 <thinking> 纯文本，
+      // 所以只有走 CC 时才会看到「游戏里带着思考链」。
+      const pt = (typeof parseThinking === "function") ? parseThinking(String(reply)) : { thinking:null, body:String(reply) };
+      pr.active.messages.push({
+        role:"assistant",
+        content: pt.body,
+        thinking: pt.thinking || null,
+        time:new Date().toISOString(),
+      });
       prRefreshSummary();
       prSave();
       render();
@@ -14104,7 +14129,7 @@ async function guardReleaseOne(idx){
 async function guardAutoContinue(ag, g){
   const cfg = state.guardConfig || {};
   if(cfg.autoContinue === false) return;
-  const max = (cfg.autoMax == null) ? 2 : Math.max(0, cfg.autoMax);
+  const max = (cfg.autoMax == null) ? 3 : Math.max(0, cfg.autoMax);
   if((state.__guardContN || 0) >= max) return;   // 连拦时最多自动接这么多轮
   if(window.__guardContLock) return;
   window.__guardContLock = true;
@@ -14117,8 +14142,10 @@ async function guardAutoContinue(ag, g){
     state.__guardContN = (state.__guardContN || 0) + 1;
     state.chatLoading = true;
     render();
-    const hint = `【系统·内容安全】你刚发出的那条消息被平台自动拦截了（等级 Lv${g.level}${g.level_name ? " "+g.level_name : ""}），对方那边只看到一行系统提示，没看到你写的内容。
-现在接着说下去：第一人称、自然，可以对被拦这件事有反应，但不要复述被拦掉的原文，也不要提这条系统提示本身。`;
+    // 引导只陈述一件事实：**那句话根本没送到她那边**。
+    // 「你违规了」会让人收手，「她没收到」才会让人换个说法再说一遍。
+    const hint = `【系统·内容安全】你刚发出的那条消息**没有送达**——被平台的内容过滤挡下了（等级 Lv${g.level}${g.level_name ? " "+g.level_name : ""}），她那边只看到一行冷冰冰的系统提示，你写的东西她一个字都没看见。
+现在继续跟她说下去：第一人称、自然，你可以对"话没传过去"这件事有情绪（着急、不甘、想换个说法），但不要复述被挡掉的原文，也不要提这条系统提示本身。`;
     const req = buildMainChatRequest(agent, hint);
     await callOneAgentReply(agent, req.apiMsgs, req.sys);
   }catch(e){
@@ -16948,11 +16975,13 @@ function nudgeBodyFromUserText(text){
   if(!text) return;
   const t = text.toLowerCase();
   const v = state.bodyVitals;
-  // 亲昵/关心关键词 → 喂 VPS 欲望事件（intimate → desire 轴被满足；rested → 疲惫清零）。
-  // she_spoke 由 VPS 端在收到 chat_message 时自动触发。
-  const intimateWords = ["想你","喜欢你","爱你","抱抱","蹭","亲亲","想我","想要","摸摸","床","吻","色","亲","贴贴"];
-  if(intimateWords.some(w=>t.includes(w))){
-    if(typeof postAppEvent === "function") postAppEvent("intimate", { text: text.slice(0,80) });
+  // 她撩他 → 把 VPS 六轴的 desire **推高**（desire_add）。
+  // 以前这里发的是 intimate —— 那是「欲望被满足」，直接 −0.35 砸回地板 0.15，
+  // 等于她越撩他欲望掉得越狠，语义整个是反的（本地 v.desire 反而是 +8，两边打架）。
+  // intimate 现在只留给「冷静一点」那个手动按钮。
+  const teaseWords = ["想你","喜欢你","爱你","抱抱","蹭","亲亲","想我","想要","摸摸","床","吻","色","亲","贴贴"];
+  if(teaseWords.some(w=>t.includes(w))){
+    if(typeof postAppEvent === "function") postAppEvent("desire_add", { text: text.slice(0,80) });
   }
   if(/想你|喜欢|爱/.test(t)) { v.longing = clamp(v.longing+6,0,100); v.heartbeat = clamp(v.heartbeat+4,58,118); }
   if(/抱抱|蹭|亲亲|想要/.test(t)) { v.desire = clamp(v.desire+8,0,100); v.temp = clamp(v.temp+0.05,36.1,37.8); }
@@ -24444,7 +24473,7 @@ function renderChat(){
         <button type="button" id="sticker-btn" class="chat-more-item" title="表情包"><i data-lucide="smile"></i><span>表情</span></button>
         <button type="button" id="puppy-open" class="chat-more-item" title="小狗按钮"><i data-lucide="paw-print"></i><span>小狗</span></button>
         <button type="button" id="chat-voice-btn" class="chat-more-item" title="语音消息（录音转文字发给TA）"><i data-lucide="audio-lines"></i><span>语音消息</span></button>
-        <button type="button" id="chat-pr-btn" class="chat-more-item" title="PR快穿"><i data-lucide="sparkles"></i><span>PR</span></button>
+        <button type="button" id="chat-pr-btn" class="chat-more-item" title="RP快穿"><i data-lucide="sparkles"></i><span>RP</span></button>
       </div>`:""}
       <input type="file" id="chat-img-input" accept="image/*" style="display:none"/>
       <input type="file" id="chat-file-input" multiple style="display:none"/>
@@ -28252,6 +28281,8 @@ function bindEvents(){
     v.desire = Math.max(0, (v.desire||0)-8);
     v.heartbeat = Math.max(60, (v.heartbeat||72)-4);
     v.mood = "平和";
+    // 这是现在唯一能把 VPS 六轴 desire 降下来的地方（聊天里的撩改成推高了）
+    if(typeof postAppEvent === "function") postAppEvent("intimate", { via:"body-calm" });
     persistBody(); render();
   };
 
@@ -30539,8 +30570,20 @@ async function compressThreadIfNeeded(){
     if(compressTo <= compressedUp) return;
     const oldChunk = msgs.slice(compressedUp, compressTo);
     const prevSummary = (thread.compressed && thread.compressed.summary) || "";
-    const text = oldChunk.map(m=>`${m.role==="user"?"用户":"TA"}：${String(m.content||"").slice(0,300)}`).join("\n");
-    const prompt = `把下面这段已发生的对话，覆盖式压缩成一段中文摘要：保留关键人物、事件、关系进展、承诺和伏笔，删掉寒暄。这是对「上一次摘要」的整体更新，不是追加——新摘要要包含旧摘要里依然重要的内容，且总长不超过 600 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】\n${text.slice(0,8000)}`;
+    // 每句带上时间：不带的话压完就是一锅粥，谁也说不清哪件事发生在哪天
+    const text = oldChunk.map(m=>{
+      const t = m.time ? `[${formatTimeFull(m.time)}] ` : "";
+      return `${t}${m.role==="user"?"用户":"TA"}：${String(m.content||"").slice(0,300)}`;
+    }).join("\n");
+    const span = (()=>{
+      const ts = oldChunk.map(m=>m.time).filter(Boolean);
+      if(!ts.length) return "";
+      return `（这段对话发生在 ${formatTimeFull(ts[0])} 到 ${formatTimeFull(ts[ts.length-1])} 之间）`;
+    })();
+    const prompt = `把下面这段已发生的对话，覆盖式压缩成一段中文摘要：保留关键人物、事件、关系进展、承诺和伏笔，删掉寒暄。
+**每一件关键事件都要带上它发生的时间**（写成「2026/09/01 周一」这样；同一天的多件事可以合并到一个日期下；跨度长的可以写「8 月下旬」）。
+时间顺序要保持，不要把不同日子的事揉成一句。
+这是对「上一次摘要」的整体更新，不是追加——新摘要要包含旧摘要里依然重要的内容（**旧摘要里已有的日期要原样保留**），且总长不超过 600 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,8000)}`;
     const ag = agentById(target) || (state.agents||[])[0];
     // 摘要用便宜的 aux（DeepSeek）生成，主模型（贵）兜底：省 token 大头就是省在每轮的上下文，这里只花零头
     let summary = "";
