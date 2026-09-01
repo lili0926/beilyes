@@ -8739,6 +8739,55 @@ function memRemotePost(path, body){
     .then(r=> r.ok ? r.json() : null)
     .catch(()=>null);
 }
+/** 记忆整理/合并统一走**聊天模型**，DeepSeek(aux) 只当兜底。
+ * 原来顺序是反的：aux 优先、聊天模型只在返回空串时兜底 —— 而 DeepSeek 欠费报 402
+ * 时抛的是异常不是空串，兜底那一层根本走不到，于是自动沉淀整个哑掉，还只 console.warn。 */
+async function memModelCall(prompt){
+  let result = "";
+  try{
+    const ag = (typeof agentById==="function")
+      ? (agentById(state.chatTarget==="group" ? "a1" : (state.chatTarget||"a1")) || (state.agents||[])[0])
+      : (state.agents||[])[0];
+    if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
+      const raw = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
+      const parsed = (typeof parseThinking==="function") ? parseThinking(raw) : { body: raw };
+      result = parsed.body || raw || "";
+    }
+  }catch(e){
+    state.__memErr = "聊天模型整理失败：" + String((e&&e.message)||e).slice(0,80);
+  }
+  if(!result || !result.trim()){
+    try{ result = await callAuxAPI(state.apiConfig, prompt); }
+    catch(e){ state.__memErr = (state.__memErr ? state.__memErr+"；" : "") + "aux 也失败：" + String((e&&e.message)||e).slice(0,60); }
+  }
+  return String(result||"");
+}
+/** 本地 layer → 云端 type（_memTypeToLayer 的反向） */
+function _layerToMemType(layer){
+  if(layer==="handoff") return "promise";
+  if(layer==="daily") return "preference";
+  return "normal";
+}
+/** 把本地刚提炼出来的记忆推进云端向量库。
+ * /mem/add 只做「保存 + 向量化」（向量走 SiliconFlow，和 DeepSeek 不是一个账户），
+ * 不调任何 LLM —— 所以提炼归聊天模型，存储归云端，两边各干各的。 */
+async function memPushToCloud(list){
+  if(!memRemoteOn() || !Array.isArray(list) || !list.length) return 0;
+  let n = 0;
+  for(const m of list.slice(0, 30)){
+    const txt = String((m && m.content) || "").trim();
+    if(!txt) continue;
+    try{
+      const r = await memRemotePost("/add", {
+        content: txt,
+        type: _layerToMemType(m.layer),
+        importance: (m.importance>=8) ? "high" : ((m.importance<=3) ? "low" : "medium"),
+      });
+      if(r && r.ok) n++;
+    }catch(e){ /* 单条失败不影响其它 */ }
+  }
+  return n;
+}
 function _memTypeToLayer(type){
   if(type==="promise") return "handoff";   // 承诺/约定 → 待办
   if(type==="preference") return "daily";  // 偏好 → 日常
@@ -25825,7 +25874,8 @@ async function integrateMemoriesFromChat(){
     const created = await memDigestTranscript(transcript, rangeLabel, msgCount);
     state.memories = [...created, ...state.memories];
     persist("memories");
-    alert(`已从聊天整理出 ${created.length} 条记忆`);
+    const up = await memPushToCloud(created); // 同步进云端向量库
+    alert(`已从聊天整理出 ${created.length} 条记忆${up?`（已同步云端 ${up} 条）`:""}`);
   }catch(e){ alert("从聊天整理失败："+e.message); }
   state.memMergeLoading=false; render();
 }
@@ -25863,18 +25913,7 @@ async function memDigestTranscript(transcript, rangeLabel, msgCount){
       i = end;
     }
   }
-  async function callMemOnce(prompt){
-    let result = await callAuxAPI(state.apiConfig, prompt);
-    if((!result || !result.trim()) && typeof agentById==="function"){
-      const ag = agentById("a1") || (state.agents||[])[0];
-      if(ag && agentHasKey(ag)){
-        result = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-        const parsed = typeof parseThinking==="function" ? parseThinking(result) : {body:result};
-        result = parsed.body || result;
-      }
-    }
-    return String(result||"");
-  }
+  const callMemOnce = (prompt)=> memModelCall(prompt);
   let result = "";
   for(let ci=0; ci<chunks.length; ci++){
     const part = chunks[ci];
@@ -25987,20 +26026,17 @@ async function memAutoIntegrate(){
       const cAtRun = memRelevantCount(tid);
       const transcript = collectChatTranscript({ threadIds:[tid], skip: info.done, maxPerThread:0 });
       if(!transcript.trim()){ state.memCheckpoint[tid] = cAtRun; continue; }
-      // 云端记忆优先：POST /mem/ingest，成功即推进检查点，本地不再重复提炼
-      if(typeof memRemotePost==="function" && memRemoteOn()){
-        const remoteRes = await memRemotePost("/ingest", { transcript, rangeLabel:"最近 "+info.n+" 条" });
-        if(remoteRes && remoteRes.ok && (remoteRes.count||0) > 0){
-          totalRemote += (remoteRes.count || 0);
-          state.memCheckpoint[tid] = cAtRun;
-          persist("memCheckpoint");
-          continue;
-        }
-        // 云端 0 条 / 失败 → 落到本地提炼兜底，避免空结果吞掉检查点导致记忆永不生成
-      }
+      // 提炼一律走**聊天模型**（memDigestTranscript 里已改成聊天模型主力）。
+      // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
+      // DeepSeek 欠费时它照样回 {ok:true,count:0}，把「失败」伪装成「没什么可记的」。
+      // 现在云端只负责**存**（/mem/add 只做保存 + 向量化，不调任何 LLM）。
       try{
         const created = await memDigestTranscript(transcript, "最近 "+info.n+" 条", info.n);
-        if(created && created.length){ state.memories=[...created, ...state.memories]; totalCreated += created.length; }
+        if(created && created.length){
+          state.memories=[...created, ...state.memories];
+          totalCreated += created.length;
+          totalRemote += await memPushToCloud(created); // 同步进云端向量库，检索才找得到
+        }
         // 成功处理即推进检查点（含空结果，避免反复花钱重试同一批）
         state.memCheckpoint[tid] = cAtRun;
         persist("memCheckpoint");
@@ -26020,12 +26056,14 @@ async function memAutoIntegrate(){
 /** 多选已有记忆 → 合并成一条 */
 async function mergeMemories(){
   if(state.memSelected.length<2) return alert("请至少选择 2 条记忆进行合并");
-  if(!state.apiConfig.claudeKey && !state.apiConfig.auxOpenaiKey && !state.apiConfig.openaiKey) return alert("请先配置 API Key");
+  // 合并也走聊天模型，所以有聊天 Key 就够了（原来只认 apiConfig 那三把，没配 aux 会被拦下）
+  const _hasAg = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
+  if(!_hasAg && !state.apiConfig.claudeKey && !state.apiConfig.auxOpenaiKey && !state.apiConfig.openaiKey) return alert("请先配置 API Key");
   const toMerge=state.memories.filter(m=>state.memSelected.includes(m.id));
   const prompt=`以下是${toMerge.length}条记忆碎片，请帮我将它们整合成一段精炼的日记（300字以内），保留情感核心，去除重复：\n\n${toMerge.map((m,i)=>`${i+1}. [${m.layer}] ${m.content}`).join("\n\n")}`;
   state.memMergeLoading=true; render();
   try{
-    const result=await callAuxAPI(state.apiConfig, prompt);
+    const result=await memModelCall(prompt);
     const merged={
       id:Date.now(), content:result, layer:"diary",
       importance:Math.max(...toMerge.map(m=>m.importance||5)),
