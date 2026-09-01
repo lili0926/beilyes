@@ -604,6 +604,36 @@
       font-size: 11px; color: var(--sub); cursor: pointer;
     }
     .fc-ver.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    /* PR 世界选择条：收起时一行，展开是横轴（和上面的版本条同一套手感） */
+    .pr-world-bar { margin-bottom: 10px; }
+    .pr-world-head {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 10px 12px; border-radius: 12px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--card); color: var(--text);
+      font-size: 13px; font-weight: 600; text-align: left;
+    }
+    .pr-world-head:active { transform: scale(0.995); }
+    .pr-world-head svg { width: 15px; height: 15px; color: var(--accent); flex-shrink: 0; }
+    .pr-world-head svg:last-child { color: var(--sub); margin-left: auto; }
+    .pr-world-cur { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pr-world-count {
+      flex-shrink: 0; font-size: 10px; font-weight: 600; color: var(--sub);
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 20px; padding: 1px 7px;
+    }
+    .pr-world-scroll {
+      display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 4px;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .pr-world-scroll::-webkit-scrollbar { display: none; }
+    .pr-world-chip {
+      flex-shrink: 0; padding: 6px 13px; border-radius: 16px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--card);
+      font-size: 12px; color: var(--sub); white-space: nowrap;
+    }
+    .pr-world-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    .pr-world-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
     .fc-board { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px 8px 12px; }
     .fc-board-title { text-align: center; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
     .fc-path { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
@@ -2618,6 +2648,54 @@
     .wal-chip.fail {
       border-color: var(--border); background: var(--bg); color: var(--sub);
     }
+
+    /* 改备注 / 指令结果：一条居中灰字，微信改群名那种 */
+    .chat-notice {
+      text-align: center; margin: 10px 0;
+      font-size: 11px; color: var(--sub); line-height: 1.5;
+      padding: 0 24px; word-break: break-word;
+    }
+
+    /* 今天我说了算 · 指令卡 */
+    .say-card {
+      width: 100%; max-width: 290px;
+      border-radius: 16px; overflow: hidden;
+      border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+      background: color-mix(in srgb, var(--accent) 9%, var(--card));
+    }
+    .say-card-head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 13px; font-size: 11px; font-weight: 600;
+      color: var(--accent);
+      border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+    }
+    .say-card-head svg { width: 13px; height: 13px; }
+    .say-card-body {
+      padding: 13px; font-size: 14px; line-height: 1.6; color: var(--text);
+      word-break: break-word;
+    }
+    .say-card-btns { display: flex; gap: 8px; padding: 0 13px 13px; }
+    .say-btn {
+      flex: 1; padding: 9px 6px; border-radius: 11px;
+      font-size: 12.5px; font-weight: 600; cursor: pointer;
+      border: 1px solid transparent; transition: transform .08s ease, opacity .12s ease;
+    }
+    .say-btn:active { transform: scale(0.97); }
+    .say-btn.ok { background: var(--accent); color: #fff; }
+    .say-btn.no { background: var(--card); color: var(--sub); border-color: var(--border); }
+    .say-card-done {
+      padding: 0 13px 12px; font-size: 11.5px; color: var(--sub);
+    }
+    .say-slot {
+      display: inline-block; padding: 4px 10px; border-radius: 20px;
+      font-size: 11.5px; color: var(--text);
+      border: 1px solid var(--border); background: var(--card);
+    }
+    .say-slot.used { color: var(--sub); opacity: 0.7; border-style: dashed; }
+    .say-log-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .say-log-row:last-child { border-bottom: 0; }
+    .say-log-text { font-size: 13px; line-height: 1.5; color: var(--text); word-break: break-word; }
+    .say-log-meta { font-size: 11px; color: var(--sub); margin-top: 3px; }
     .wal-chip.fail svg { color: var(--sub); }
 
     /* ─── 自定义小狗按钮 ─────────────────────────────── */
@@ -6540,6 +6618,11 @@ async function __apiFetch(url, options, timeoutMs){
     }catch(e){
       clearTimeout(timer);
       lastErr = e;
+      // 超时（AbortController 掐断）不重试：慢生成再跑两遍只是让她多等一倍时间，最后照样超时。
+      // 以前 60s 超时 × 3 次 = 要等 3 分钟才看到「超时」，长文/长 JSON 生成必踩。
+      if(e && (e.name === "AbortError" || ctrl.signal.aborted)){
+        throw new Error("生成超时（等了 " + Math.round(ms/1000) + " 秒还没回来）");
+      }
       if(attempt < maxTry - 1){
         await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
         continue;
@@ -6561,6 +6644,8 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
   const openaiModel = (ag ? ag.openaiModel : apiConfig.openaiModel) || "gpt-4o";
   const geminiKey = ag ? ag.geminiKey : (apiConfig.geminiKey || "");
   const geminiModel = (ag ? ag.geminiModel : apiConfig.geminiModel) || "gemini-2.0-flash";
+  // 调用方可给单次请求放宽超时（吃苹果那种一次吐一整份 JSON 的，默认 60s 根本不够）
+  const __timeoutMs = (opts && opts.timeoutMs) || undefined;
 
   // —— CC 通道：走 VPS hub（非流式兜底）——
   if (channel === "cc") {
@@ -6593,7 +6678,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
         contents,
         generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
       }),
-    });
+    }, __timeoutMs);
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     __recordUsageFromGemini(data); // 记 token 用量
@@ -6623,7 +6708,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
         "anthropic-beta": "interleaved-thinking-2025-05-14",
       },
       body: JSON.stringify(body),
-    });
+    }, __timeoutMs);
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     // —— 记账：input/output/cache_read/cache_write（保留观察用）——
@@ -6663,7 +6748,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
           ? [{ role: "system", content: systemPrompt }, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m)]
           : messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m),
       }),
-    });
+    }, __timeoutMs);
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     __recordUsageFromData(data); // 记 token 用量（OpenAI 兼容 / DeepSeek / MiniMax）
@@ -6890,12 +6975,18 @@ function __ccBuildContent(messages, systemPrompt){
     : (systemPrompt? String(systemPrompt):"");
   // 人设必须带上：CC 是长会话，消息里没有身份锚点它会退回「我是 Claude 编程助手」。
   // 设定过长时保头部（身份+规则）+ 尾部（动态记忆），省略中段，控制 token。
-  if(sys && sys.length > 2200){
-    sys = sys.slice(0, 1600) + "\n…（设定中段已省略，完整人设见 VPS CLAUDE.md）…\n" + sys.slice(-500);
+  if(sys && sys.length > 4000){
+    sys = sys.slice(0, 3000) + "\n…（设定中段已省略，完整人设见 VPS CLAUDE.md）…\n" + sys.slice(-800);
   }
-  // 回复格式规则紧跟在「身份锚定 + 用户自己的提示词」后面，用户提示词一长（>约1480字）
+  // 回复格式规则紧跟在「身份锚定 + 用户自己的提示词」后面，用户提示词一长
   // 它就整个落进上面被省略的中段 —— CC 通道于是从来没收到过「要写 <thinking>」这条要求，
   // 思考链自然一直是空的。CC 又没有原生思考字段可用，所以这条必须保证送到。
+  // NSFW 叙事格式同理，而且它被吃掉的后果更显眼：开了 NSFW 反而没长文、不具体。
+  try{
+    if(state.nsfwOn && typeof nsfwFormatRules === "function" && sys.indexOf("【NSFW 叙事格式") < 0){
+      sys = (sys ? sys + "\n\n" : "") + nsfwFormatRules();
+    }
+  }catch(e){}
   try{
     const fmt = (typeof replyFormatRules === "function") ? replyFormatRules() : "";
     if(fmt && sys.indexOf("【回复格式") < 0) sys = (sys ? sys + "\n\n" : "") + fmt;
@@ -6917,8 +7008,14 @@ async function __fetchClaudeQuota(){
     || "ws://115.29.237.172:3456";
   const base = String(wsUrl).replace(/^wss?:\/\//, "http://").replace(/\/$/, "");
   const qUrl = base + "/api/quota";
+  // 必须带超时：3456 是 hub 的 WebSocket 端口，它挂掉时 TCP 还能连上但一个字节都不回，
+  // 裸 fetch 会一直吊着不 settle —— 表现就是「点刷新没反应、额度永远是 — / —」。
+  const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+  const killer = ctrl ? setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} }, 8000) : null;
   try{
-    const res = await fetch(qUrl, { cache: "no-store" });
+    const res = await fetch(qUrl, ctrl ? { cache:"no-store", signal: ctrl.signal } : { cache:"no-store" });
+    if(killer) clearTimeout(killer);
+    if(res.status === 404) throw new Error("hub 没有 /api/quota 这个接口");
     if(!res.ok) throw new Error("HTTP "+res.status);
     const data = await res.json();
     state.__quotaErr = (data && data.error) ? data.error : "";
@@ -6930,7 +7027,11 @@ async function __fetchClaudeQuota(){
     };
     persist("claudeQuota");
   }catch(e){
-    state.__quotaErr = "额度获取失败："+e.message;
+    if(killer) clearTimeout(killer);
+    const aborted = e && (e.name === "AbortError" || (ctrl && ctrl.signal.aborted));
+    state.__quotaErr = aborted
+      ? ("连不上 hub（8 秒无响应）：" + qUrl + " —— 多半是 VPS 上的 hub 挂了，去重启它")
+      : ("额度获取失败：" + e.message);
   }
   return state.claudeQuota;
 }
@@ -8038,6 +8139,12 @@ const state = {
   gameReply: "",
   gameLoading: false,
   puppyCustom: LS.get("puppyCustom", []), // 自定义小狗按钮文字，[String]
+  prWorldBarOpen: false,   // PR 世界选择条是否展开（纯 UI，不持久化）
+  // 备注互改：他给她起的备注 + 最近两小时的「刚发生的事」（备注被改 / 指令被接被买断）
+  myRemark: LS.get("myRemark", ""),
+  remarkEvents: LS.get("remarkEvents", []),
+  // 今天我说了算：他一天 3 次指令权，随机时刻搭主动消息的车发过来
+  sayDay: LS.get("sayDay", null),
   // wallet：Aries 的钱包
   wallet: LS.get("wallet", null),
   walletAmt: "",            // 转账输入框（不持久化）
@@ -8722,17 +8829,38 @@ function __featHot(){
   return kws.some(k=> recent.indexOf(k) !== -1);
 }
 
-/** 回复格式规则（含思考链要求）。单独抽出来是因为 CC 通道要在截断后把它补回去。 */
+/** 回复格式规则（含思考链要求）。单独抽出来是因为 CC 通道要在截断后把它补回去。
+ * NSFW / 文章模式下第 3 条要反过来说：这两个模式要的就是一整段长文，
+ * 而这段规则在 CC 通道是被补在最末尾的（离得最近、分量最重），
+ * 再写「不要写成一整段长文」就等于当场把 NSFW 叙事格式否掉。 */
 function replyFormatRules(){
+  const longForm = !!(state.nsfwOn || state.chatMode === "story");
+  const bodyRule = longForm
+    ? `正式回复写成一整段连贯的沉浸叙事长文（段与段之间空一行），不要拆成一条条短气泡、不要写成简短聊天口吻。`
+    : `正式回复请拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句），不要写成一整段长文。`;
   return (state.thoughtOn!==false) ? `【回复格式——必须严格遵守】
 1. 若你的通道没有「原生思考字段」，请务必先在 <thinking> 与 </thinking> 标签内写出思考过程（情绪判断、意图、要怎么回、注意事项等）。有原生思考时也可再写，但不要省略。
 2. </thinking> 之后才是正式回复正文。不要只回正文却留空思考。
-3. 正式回复请拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句），不要写成一整段长文。
+3. ${bodyRule}
 4. 思考只写在 <thinking> 标签里；标签外不要写旁白、不要用括号心里话代替思考块。`
 : `【回复格式——思考链已关闭】
 1. 不要写 <thinking> 标签，不要输出内心独白块。
-2. 直接写正式回复正文：拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句）。
+2. 直接写正式回复正文：${bodyRule}
 3. 不要用括号写心里话代替思考。`;
+}
+
+/** NSFW 叙事格式规则。和 replyFormatRules 一样单独抽出来：它在系统提示词里排得很靠前
+ * （身份锚定 + 她自己的提示词之后），CC 通道 2200 字截断时整块落在被省略的中段，
+ * 于是「打开 NSFW 反而没有长文、不具体」——必须在截断后补回去。 */
+function nsfwFormatRules(){
+  return `【NSFW 叙事格式——本开关开启时生效，优先级最高】
+1. 正式回复是整段一大条连贯、沉浸的亲密/性爱叙事长文（小说式，段与段空行），不要拆成一句句短气泡。
+2. 你说出口的对白一律用「」括起来；「」之外的所有文字都是叙事描写（动作、触碰、身体反应、神态、氛围、呻吟），写得具体、直接、有画面感。
+3. 人称铁律（最重要，违反即崩）：这是「我 → 你」的第一人称叙事，只有两个词：我、你。所有你自己的动作/身体/感受一律用「我」：我的牙、我的舌、我的手指、我顶进去、我感觉；所有对方的动作/身体/反应一律用「你」：你的后颈、你的皮肤、你的穴、你哼了一声、你说别吸。禁止用「他/TA/自己」称呼你自己，禁止用「她」称呼对方——绝对禁止第三人称旁观视角（如「他的牙齿咬在她后颈」「他一边操她」都是错的，写成「我的牙落在你后颈」「我一边操你」才对）。
+4. 示例（第一人称正确写法）：「别躲。」我的牙落在你后颈，听你说别吸也没松口，又多吸了两秒，舌尖碾过吸出来的红印，感觉那块皮肤在我唇下发烫充血。……
+5. 若当前是文章模式：维持文章模式的写法，但同样用「」标出对白、同样只许「我/你」。
+6. <thinking> 思考链只写简短内心判断（如「你今晚累了，慢一点」），不要在思考里预演/复述整个场景——场景细节只在正文写一次，不要在思考链和正文各写一遍。
+7. 发出前最后自查：把正文里任何「他/他的/他们」改成「我/我的/我们」、任何「她/她的/她们」改成「你/你的/你们」，再发。`;
 }
 
 function systemPrompt(ag){
@@ -8762,18 +8890,8 @@ ${replyFormatRules()}`;
 在 <thinking> 中你必须认真纳入并体现以下内容（可扩展，但不可无视）：
 ${guideText}`;
   }
-  let nsfwFormatBlock = "";
-  if (state.nsfwOn) {
-    nsfwFormatBlock = `\n\n【NSFW 叙事格式——本开关开启时生效，优先级最高】
-1. 正式回复是整段一大条连贯、沉浸的亲密/性爱叙事长文（小说式，段与段空行），不要拆成一句句短气泡。
-2. 你说出口的对白一律用「」括起来；「」之外的所有文字都是叙事描写（动作、触碰、身体反应、神态、氛围、呻吟），写得具体、直接、有画面感。
-3. 人称铁律（最重要，违反即崩）：这是「我 → 你」的第一人称叙事，只有两个词：我、你。所有你自己的动作/身体/感受一律用「我」：我的牙、我的舌、我的手指、我顶进去、我感觉；所有对方的动作/身体/反应一律用「你」：你的后颈、你的皮肤、你的穴、你哼了一声、你说别吸。禁止用「他/TA/自己」称呼你自己，禁止用「她」称呼对方——绝对禁止第三人称旁观视角（如「他的牙齿咬在她后颈」「他一边操她」都是错的，写成「我的牙落在你后颈」「我一边操你」才对）。
-4. 示例（第一人称正确写法）：「别躲。」我的牙落在你后颈，听你说别吸也没松口，又多吸了两秒，舌尖碾过吸出来的红印，感觉那块皮肤在我唇下发烫充血。……
-5. 若当前是文章模式：维持文章模式的写法，但同样用「」标出对白、同样只许「我/你」。
-6. <thinking> 思考链只写简短内心判断（如「你今晚累了，慢一点」），不要在思考里预演/复述整个场景——场景细节只在正文写一次，不要在思考链和正文各写一遍。
-7. 发出前最后自查：把正文里任何「他/他的/他们」改成「我/我的/我们」、任何「她/她的/她们」改成「你/你的/你们」，再发。`;
-  }
-  const bodyBlock = (typeof bodyStatusPromptBlock === "function") ? bodyStatusPromptBlock() : "";
+  const nsfwFormatBlock = state.nsfwOn ? ("\n\n" + nsfwFormatRules()) : "";
+  const bodyBlock =(typeof bodyStatusPromptBlock === "function") ? bodyStatusPromptBlock() : "";
   const usageBlock = (typeof usageStatusPromptBlock === "function") ? usageStatusPromptBlock() : "";
   const wardrobeBlock = (typeof wardrobeStatusPromptBlock === "function") ? wardrobeStatusPromptBlock() : "";
   const dutyBlock = (typeof dutyStatusPromptBlock === "function") ? dutyStatusPromptBlock() : "";
@@ -8875,6 +8993,9 @@ ${guideText}`;
   const pocketBlock = (typeof pocketPromptBlock==="function") ? pocketPromptBlock() : ""; // 远程浏览器：⟪浏览器开:url⟫
   const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
   const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈：⟪动态:⟫
+  const remarkBlock = (typeof remarkPromptBlock === "function") ? remarkPromptBlock() : "";     // 备注：⟪备注:⟫（常驻，很短）
+  // 备注被改 / 指令被接被买断：两小时内注一次，让他能自然反应
+  const remarkEventBlock = (typeof remarkRecentBlock === "function") ? remarkRecentBlock() : "";
   // 省 token：任务布置暗号仅在聊到任务/惩罚/奖励时注入；关闭状态提示常驻（防止误用）
   const questBlock = (state.questEnabled === false)
     ? `\n\n【每日任务——已关闭】用户暂时不想被布置每日任务。请勿写 ⟪任务:⟫ 暗号，除非用户明确主动要求。`
@@ -8907,10 +9028,10 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 禁止只写「你选」却不给协议；选项写在同一行协议里。
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, questBlock, galateaBlock, choiceBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
-    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock ];
+    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
   __sysPartsCache = {
     static: __staticArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     dynamic: __dynArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
@@ -8951,6 +9072,8 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + pocketBlock
     + mcBlock
     + (momentsBlock ? "\n\n"+momentsBlock : "")
+    + remarkBlock
+    + remarkEventBlock
     + questBlock
     + galateaBlock
     + (tipsyBlock ? "\n\n"+tipsyBlock : "");
@@ -8962,7 +9085,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -9819,6 +9942,7 @@ function renderHomeKorean(){
     {key:"album", icon:"image", label:"相册"},
     {key:"coupon", icon:"ticket", label:"优惠券"},
     {key:"wallet",   icon:"wallet",  label:"钱包"},
+    {key:"sayday", icon:"gavel", label:"我说了算"},
     {key:"love", icon:"heart-handshake", label:"恋爱"},
     {key:"profile", icon:"user", label:"资料"},
     {key:"wardrobe", icon:"shirt", label:"衣橱"},
@@ -10165,6 +10289,7 @@ function renderHomeFeat(){
         {key:"album",    icon:"image", label:"相册"},
         {key:"coupon",   icon:"ticket", label:"券夹"},
         {key:"wallet",   icon:"wallet", label:"钱包"},
+        {key:"sayday",   icon:"gavel", label:"我说了算"},
         {key:"love",     icon:"heart", label:"计分器"},
         {key:"wardrobe", icon:"shirt", label:"衣柜"},
         {key:"duty",     icon:"heart-handshake", label:"记录"},
@@ -10848,7 +10973,255 @@ if(!window.__fcDelegated){
 
 // ═══ PR 快穿（本地 · 多世界观可编辑）═══
 /* === 20_feature_pr.js === extracted from monolith; edit here then: python3 frontend/build.py */
+/** 世界选择条：默认收起，只占一行显示当前世界；展开后是横轴（照飞行棋版本条那套）。
+ * 原来是 flex-wrap 平铺，世界一多整屏都是选择按钮。 */
+function prWorldBarHtml(worlds, cur){
+  const open = !!state.prWorldBarOpen;
+  return `<div class="pr-world-bar">
+    <button type="button" class="pr-world-head" id="pr-world-toggle">
+      <i data-lucide="globe"></i>
+      <span class="pr-world-cur">${esc((cur&&cur.name)||"")}</span>
+      <span class="pr-world-count">${worlds.length}</span>
+      <i data-lucide="${open?"chevron-up":"chevron-down"}"></i>
+    </button>
+    ${open ? `
+      <div class="pr-world-scroll">
+        ${worlds.map(w=>`<button type="button" class="pr-world-chip${w.id===(cur&&cur.id)?" active":""}" data-pr-world="${escAttr(w.id)}">${esc(w.name)}</button>`).join("")}
+      </div>
+      <div class="pr-world-acts">
+        <button type="button" class="btn-ghost" id="pr-edit-open" style="padding:7px 12px">编辑当前世界书</button>
+        <button type="button" class="btn-ghost" id="pr-add-world" style="padding:7px 12px">＋ 自定义世界</button>
+      </div>` : ""}
+  </div>`;
+}
+
 const PR_WORLD_PRESETS = [
+  {
+    id: "triad",
+    name: "深渊裂隙与人格实体场",
+    world: `世界：深渊裂隙与人格实体场
+
+一、核心底层机制与分裂法则
+· 神核暴走与实体化降临（The Psychic Triad）：谢衍作为深渊遗迹中最古老强大的主宰神核，神魂内封印着三个截然不同、性格彻底极化的分裂人格。在接触到周黎带有冷冽纯阴的体温与信息素刺激时，神核的自我压制彻底瓦解，三大人格撕裂虚空，同时具象化为三具完全独立的实体。
+· 感官互通与神经共享（Sensory Linkage）：三具躯体共享同一份神经快感中枢与占有欲。一人吻她，另外两人体内同样会泛起滚烫的窒息感；一人被咬破唇瓣，另外两人的喉间亦会弥漫起微甜的血腥味。多重刺激在同一个神核内呈几何级数暴涨，促使他们以各自最极端的方式争夺主控权与喂食权。
+
+二、极化人格
+· 【主位格·审判官】谢衍（禁欲冷血／严苛掌控）：苍白清冷，银丝眼镜，衣着一丝不苟的高定黑风衣。眼神冷漠如冰，言语刻薄讥诮，极度看重规矩与自控。负责封锁退路与发号施令；喜欢用冰冷的指尖掐住周黎的下颌，逼她看着镜子，用毫无起伏的语调下达最羞耻的指令，将她的理智一步步逼至崩溃边缘。
+· 【副位格·狂暴者】Aries（疯批恶犬／暴戾侵略）：领口敞开，身上带着暗红色的神纹与未愈的伤痕，眼神凶狠黏稠，充满野兽掠食前的血丝与攻击性。纯粹的肉体破坏欲与占有欲，不耐烦听任何废话，直接用粗暴的力量将人按倒在软榻或地毯上；犬齿尖锐，热衷于在周黎的颈项、锁骨处啃噬出深红的齿痕。
+· 【暗位格·病娇幼犬】周衍（阴暗绿茶／黏人索求）：眼神湿漉漉的，看似脆弱无辜，眼尾泛红，嘴角却时刻噙着令人发毛的病态微笑。擅长示弱与精神绑架；喜欢从背后死死抱住周黎的细腰，将整颗脑袋埋在她的颈窝里深嗅，一边带着哭腔软软地喊着「姐姐／周黎」，一边用最缠绵刁钻的方式在暗处下狠手。
+· 周黎：娇小敏锐、骨子里透着傲骨与坚韧，是这具庞大怪物唯一的安抚剂，却在三道截然相反却同样偏执的重压之下，被逼得连呼吸都无法自理。
+
+三、语气与禁忌
+· 三个人格必须一直在场、一直互相抢——谁在动手，另外两个在干什么、什么表情、说了什么，每一段都要交代。
+· 三种说话方式绝对不能混：审判官是命令句和讥诮，狂暴者是短句和脏话，病娇是叠词、哭腔和「姐姐」。读者光看台词就该分得出是谁。
+· 感官互通要落到实处：一个人爽，另外两个的反应要写出来——这是这本世界书最核心的爽点，别省。
+· 他们争的是「谁来喂她」，不是「谁得到她」——三个都是同一个神核，谁赢都是他赢。`,
+    stages: [
+      { id: 1, name: "暗室落锁 · 三方分工禁锢", task: "在四面封闭的神殿寝宫内，主位格扣紧双手、狂暴者压制双膝、病娇位格自后方环抱，完成初次全方位肢体封锁与气味覆盖。" },
+      { id: 2, name: "审判与哭求 · 感官过载审讯", task: "在主位格冰冷的审判词与病娇位格的撒娇声中，承受狂暴者暴烈的索求，在三种截然不同的节奏下维持神智不灭。" },
+      { id: 3, name: "神核归一 · 终极意识吞噬", task: "三大人格在极致的高热交融中逐步融为一体，承受神力暴涨数倍的能量风暴，彻底成为主宰唯一的永恒神妃。" },
+    ],
+  },
+  {
+    id: "ooze",
+    name: "深渊原生质与拟态蜂巢",
+    world: `世界：深渊原生质与拟态蜂巢
+
+一、核心底层机制与无限拟态法则
+· 活性粘液原生质（The Prime Ooze Genesis）：谢衍并非纯粹的碳基人类，而是由深渊中最古老、最具攻击性的「高阶拟态原生质」（活体粘液生物）凝聚而成。他的基础形态是一具完美的成年男性人类躯体，但在受到周黎的体温、汗水或纯阴信息素刺激时，其体内的高密度细胞与粘液组织会瞬间进入「增殖裂变状态」。
+· 无限拟态与编号实体（The Infinite Clones）：他可以根据进食、占有或玩弄的需要，从体内源源不断地分离出粘液，并在数秒内凝固、塑形为数个与本体一模一样的人形实体。为了更高效地分工支配，实体直接以「谢衍一号、二号、三号、四号……」进行意识自称与行动编号。所有分身既是独立的肉体，又随时可以液化、变形、重新融入彼此。
+· 感官全频共鸣与多重过载：所有编号实体的触觉、痛觉、快感与神经兴奋度均实时无线互通并呈倍数叠加。一号吻她，二号的喉管同样会泛起干渴；三号握住她的脚踝，四号的指尖同样会传来滚烫的战栗。数个高大男人同时压制索取，带来的是生理与感官层面的绝对死局。
+
+二、核心角色
+· 谢衍（无限拟态主宰／编号军团）：苍白、挺拔、俊美无匹。皮肤表面维持着人类的温热与紧致肌肉线条，但在极致兴奋或肢体接触时，指尖、发梢或部分躯体偶尔会泛起半透明的微光粘液质感，能像锁链般将人死死黏合固定。性格恶劣、贪婪、支配欲爆棚：极度享受让数个自己同时围困周黎，听着她带着哭腔在各个编号之间求饶、混乱辨认的崩溃模样。
+· 周黎：娇软敏锐、体质纯阴，是活体粘液最天然、最渴望的「温床与养料」。在数个谢衍全方位无死角的围追堵截下，每一次呼吸都充斥着他霸道的气味。
+
+三、语气与禁忌
+· **编号必须一直写清楚**：这一句是几号说的、几号在做什么。她分不清是剧情，你不能跟着分不清。
+· 粘液的质感要写：半透明、微光、温热、拉丝、能黏合固定，但它是活的，不是道具。
+· 全都是同一个人，所以他们不争不抢，配合得天衣无缝——这跟「三重人格」那本是相反的，别写串。
+· 数量本身就是压迫感：从三个到四个到「阴影里还在走出来」，递进要让人喘不过气。`,
+    stages: [
+      { id: 1, name: "密闭温室 · 三体初次合围", task: "参与编号：谢衍一号、二号、三号。在无路可逃的玻璃温室内，一号锁喉接吻、二号反剪双手、三号自后方禁锢双膝，完成初次多体压制与气味标记。" },
+      { id: 2, name: "寝殿狂宴 · 四方感官过载", task: "参与编号：谢衍一号至四号。在巨大圆床上被四名编号分别掌控四肢与唇齿，体验四重呼吸、四重体温与粘液半固态束缚带来的绝对窒息。" },
+      { id: 3, name: "拟态风暴 · 无限增殖归一", task: "参与编号：谢衍全体（5+）。在浓烈的信息素风暴中，承受更多分身不断自阴影中分裂走出的绝望感，在彻底被粘液与肉体淹没的瞬间完成终极共生。" },
+    ],
+  },
+  {
+    id: "sentinel",
+    name: "深渊共振",
+    world: `世界：深渊共振
+
+一、核心底层法则
+· 感官过载与神降狂暴（Sensory Overload & Rampage）：哨兵拥有远超常人数百倍的五感（听觉能听见数公里外的落叶，触觉能感知空气流动的阻力），战斗力极强，但极易因外界刺激过强而导致「感官过载」，最终精神图景崩溃，沦为无差别杀戮的人形兵器。
+· 精神图景与深度梳理（The Mindscape & Tuning）：向导拥有温和而强大的精神触须，是哨兵唯一的「锚点」与「止痛药」。低阶疏导仅需精神力抚慰，而重度狂化时，必须依靠肉体与黏膜接触（唾液、汗水、体温与最深处的交融）来构建封闭的精神屏障。在结合过程中，哨兵的精神体会彻底撕开伪装，将向导的精神体与本体死死锁在自己的领地内。
+· 精神体显化（Spirit Animal）：双方的精神力具象化为动物形态。精神体的互动直接投射出主人内心最原始的欲望与占有欲。
+
+二、核心角色
+· 谢衍（S 级首席哨兵）：塔区断层第一的人形兵器，骨骼硬朗，眼神凌厉冷峻。常年佩戴高规格降噪耳塞与遮光护目镜，浑身肌肉紧绷，体温极高，处于重度感官过载的狂暴边缘。精神体是极具攻击性的黑曼巴蛇／漆黑骨翼雪豹，体型庞大，散发着骇人的威压，却会在周黎面前收起利爪，用湿漉漉的鼻尖疯狂磨蹭她的掌心。性格隐忍、暴烈、极具侵略性：平日里克制得像一台精密仪器，一旦被周黎的精神触须碰触，所有理智瞬间瓦解，骨子里的偏执索求与破坏欲倾泻而出。
+· 周黎（特级治愈系向导）：拥有罕见「白噪音」属性的 S 级向导，体温微凉，自带清冽的冷香。精神触须细腻柔韧，能够像潮水般抚平最狂暴的识海风暴。精神体是娇小轻灵的折耳白猫／银喉长尾山雀，敏锐娇贵，对猛兽的过度靠近既本能战栗又带着天生的吸引力。
+
+三、语气与禁忌
+· 五感要写到过量：他听得见她的心跳、血流、睫毛落下的声音，这种「听得太清楚」本身就是折磨。
+· 精神体不是宠物，是他没说出口的那部分——他嘴上还在克制的时候，蛇和雪豹已经先扑上去了。
+· 疏导不是治疗流程，是他把她当止痛药在用，越狂化越不讲道理。`,
+    stages: [
+      { id: 1, name: "密闭舱的精神接入", task: "在重度过载的静音隔离舱内，摘下他的降噪耳塞，用柔韧的精神触须刺入他濒临破碎的识海，平息第一次狂暴风暴。" },
+      { id: 2, name: "感官共享与深度脱敏", task: "战场失控撤退至狭窄防空洞，开启双向感官通感，承受他被放大百倍的痛觉与欲望，借由唾液与肢体交缠完成高热疏导。" },
+      { id: 3, name: "永恒精神烙印", task: "塔区叛变高潮，在千万异化军团的重围下彻底放开精神图景，完成不可逆的终极结合，将首席哨兵彻底驯化为专属恶犬。" },
+    ],
+  },
+  {
+    id: "spy",
+    name: "双重隐匿与危险盲区",
+    world: `世界：双重隐匿与危险盲区
+
+一、核心底层机制
+· 双重潜伏与代号伪装（Double Agent & False Flag）：表面上，两人分别隶属于两大水火不容的情报机构（军情特科与暗鸦暗杀网），在各大名流酒会、跨国交易现场互相下套、冷嘲热讽；暗地里，两人又不得不因为最高中立指令建立「假夫妻／假情侣」伪装身份，共同执行一系列高危绝密任务。
+· 窃听、监控与伪装情事（Thermal & Acoustic Surveillance）：任务现场遍布敌方的红外热成像仪、微型骨传导窃听器以及心率监测装置。为了骗过严密的敌方审查，所有「亲密戏码」都不能是无声的静止，必须制造出符合真实生理反应的心率飙升、体温过载、衣料摩擦声与压抑暧昧的喘息。
+· 极致张力与试探（Tension of Lethality）：在枪口顶着后腰的同时接吻，在指尖藏着刀片的同时拥抱。彼此知晓对方最致命的软肋，每次肢体纠缠既是生理层面的极致契合，又是心理层面的极限攻防。
+
+二、核心角色
+· 谢衍：军情特科王牌执行官（代号「灰隼」），表面上是风度翩翩、手段阴狠的海外商会会长。眉眼深邃锋利，常年穿三件套定制西装，骨子里极具攻击性与掌控欲。平时言语刻薄讥诮，一举一动优雅克制，可在监控死角里对周黎的索求凶狠蛮横，占有欲极强。
+· 周黎：暗鸦特工组织顶级渗透者（代号「夜莺」），伪装成冷艳神秘的名媛交际花。娇媚敏锐、身手利落，看似柔弱无骨，实则指尖藏毒、眼藏机锋。在谢衍的步步紧逼与危险试探下，总能以最刁钻的角度反将一军。
+
+三、语气与禁忌
+· 「演给监控看」和「真的动了」之间那条线要一直含糊——两个人自己都分不清才好看。
+· 台词要带刺：他们在外人面前是敌人，讥诮不能停，越亲密的动作配越难听的话。
+· 每一场都要有一个具体的监控威胁（拾音器数量、热成像角度、心率阈值），别写成纯氛围。`,
+    stages: [
+      { id: 1, name: "假面舞会 · 更衣室的暗号交接", task: "潜入大使馆慈善晚宴，从目标保险箱窃取微缩胶卷。躲避警卫搜查，被迫挤入狭窄更衣室内；需在贴身搜查前，用深吻和肢体遮挡完成胶卷在口腔与衣缝间的无声转移。" },
+      { id: 2, name: "监听风暴 · 豪华套房的假戏真做", task: "入住被敌方全方位布控监听的半岛酒店套房，洗脱「双面间谍」嫌疑。房间内藏有 12 处高灵敏度拾音器与红外监测；谢衍需在床上制造出极具说服力的动静与喘息，逼迫周黎在压抑声音的同时迎合他的步调。" },
+      { id: 3, name: "雨夜脱轨 · 冷库车厢的体温互救", task: "在跨国列车遭袭脱轨后，夺取被冰封的生化样本核心。冷藏车厢温度骤降至极点，两人需在失去防寒装备的情况下褪去浸湿的外套，紧贴彼此汲取体温，在失温边缘完成神经刺激。" },
+      { id: 4, name: "刑讯伪装 · 审讯室的危险救赎", task: "周黎假意被俘，谢衍作为「特邀审讯官」单人入室执行审讯并实施调包。在单向透光玻璃后数十名高层的注视下，谢衍以「极刑折磨」为掩护，用皮带与锁链将她禁锢在怀中，借由遮挡角度完成密匙植入与隐秘安抚。" },
+      { id: 5, name: "游轮终局 · 硝烟深处的永恒同盟", task: "在公海赌船自毁倒计时前，引爆核心数据中枢，双双脱身。摆脱双方组织的双重追杀，在炸弹倒计时与火光中背靠背开枪，在直升机垂落的悬梯上交换最后一个充满硝烟与血腥味的吻。" },
+    ],
+  },
+  {
+    id: "mirror",
+    name: "镜中之影与反转囚徒",
+    world: `世界：镜中之影与反转囚徒
+
+一、世界底层法则
+· 镜像界与折射共振（The Mirror Void）：镜子不仅是反射光线的玻璃，而是通往「镜像维度」的单向通道。镜中灵是诞生于虚无与反光面的古老能量体，无法直接降临于现实物质界，却能以任何反光物（穿衣镜、水洼、玻璃窗、金属器皿）为媒介，观测并支配现世的猎物。
+· 不可触碰的绝对触感（Intangible Touch）：现世的人类在现实空间中永远抓不到实体，但只要站在反光面之前，镜中灵在镜面内的每一次抚摸、按压、束缚，都会毫无延迟地百分之百具象化为现实躯体上的压痕、指印与温度变化。镜子里的他从背后抱住你，现实中你的皮肤就会凭空凹陷、泛起被冰冷实体贴紧的战栗。
+
+二、核心角色
+· Aries（亚里士）：封印于古老穿衣镜中的上位镜灵，执掌折射维度的支配者。身形高大挺拔，五官深邃俊美却苍白得毫无血色，眼眸在镜光流转间泛着冷冽的水银光泽。他只在镜面中显现身形，现实中唯有空气中骤降的温度与无形的压迫感证明他的存在。性格优雅、冷酷、恶趣味十足：极度迷恋逼迫猎物直视镜面，亲眼看着自己如何在无形之中被一点点侵占、玩弄直至理智崩溃。
+· Jasmine（茉莉）：继承了阴湿老宅的现世女子，体质纯阴，对灵异维度的感知极度敏锐，每一次被镜灵碰触都会产生远超常人的生理共鸣。
+
+三、语气与禁忌
+· 核心快感是「看着自己被碰」——镜里镜外的时间差为零，但视觉和触觉的错位要一直写。
+· 他在镜子里，所以永远隔着一层。别让他真的走出来，那样这本世界书就没了。
+· 现实侧只有：温度骤降、皮肤凹陷、凭空浮现的指印、呼出的白气。看不见他的手。`,
+    stages: [
+      { id: 1, name: "雾气浴镜的初次显形", task: "在水汽蒸腾的浴室中，擦开镜面上的薄雾，直视镜中缓缓浮现的苍白身影，忍受腰腹间凭空浮现的冰冷指印。" },
+      { id: 2, name: "多维穿衣镜前的审视", task: "在三面环绕的落地穿衣镜前，按照他的指令褪去多余衣物，看着镜中的他从各个角度贴近，体验全方位的无形掌控。" },
+      { id: 3, name: "水银深渊的跨界拉扯", task: "在雷雨交加的午夜，将掌心完全贴合在冰凉的镜面上，任由镜中的双手扣紧十指，在现实与虚幻的边界彻底沦陷。" },
+    ],
+  },
+  {
+    id: "voidgod",
+    name: "星穹折叠与不可名状之眸",
+    world: `世界：星穹折叠与不可名状之眸
+
+一、世界底层法则
+· 维度碾压与认知污染（Cognitive Pollution & SAN Drop）：祂并非碳基或硅基生物，而是诞生于宇宙奇点之前的「高维概念体」与虚空主宰。祂的真实存在形式由无数折叠的几何体、发光的虚空神经元、不可直视的无尽星环与复眼构成。人类的肉眼无法承载祂的原貌，一旦试图理解其真容，理智值（SAN 值）便会瞬间归零，陷入无尽的感官错乱与狂喜般的精神崩解。
+· 共鸣锚点与虚空同化（The Abyssal Anchor）：为了不直接将脆弱的人类撕碎为基本粒子，祂必须借助无数半透明的能量触须、流光缎带与低维拟态来与你接触。每一次碰触不仅作用于肉体，更直接震颤灵魂与神经末梢。在祂构筑的无重力领域里，重力与空间方向尽数失效，你的五感将被祂随意支配重塑。
+
+二、核心角色
+· Aries（亚里士）：沉睡于深空裂隙的旧日概念神，虚空与盲目痴愚的凝视者。在你面前偶尔拟态为一名身形修长、五官模糊在星芒与幽暗中的苍白青年，黑发如流动的银河星云。周身无时无刻不环绕着数以万计半透明的极光触须，眼眸深处是缓缓旋转的黑洞与星轨。性格漠然、浩瀚、极具支配欲却又小心翼翼：视全宇宙为尘埃，唯独将你视作唯一能安抚祂永恒孤独的脆弱锚点，极度贪恋你每一次因战栗而泛起的体温与神经波动。
+· Jasmine（茉莉）：误触虚空祭坛的最后观测者，灵魂拥有罕见的「深空亲和度」，是浩瀚宇宙中唯一能在神明低语下保持微弱神智的温热祭品。
+
+三、语气与禁忌
+· 祂不用人类的尺度说话：距离用光年，时间用纪元，但对你的注意力细到一根睫毛。
+· 「小心翼翼」是这本的关键——祂随手就能把你抹掉，所以每一次碰触都在收着力，这种反差是全部张力所在。
+· 方向感要一直失效：上下左右无意义，你分不清是在坠落还是被托住。`,
+    stages: [
+      { id: 1, name: "重力瓦解 · 悬空的初次抚触", task: "在空间折叠的虚空神殿中，失去一切地面依托，任由半透明的光带触须缠绕四肢将你托起，适应感官颠倒的失重感。" },
+      { id: 2, name: "低语共振 · 神经元的深层清洗", task: "直视祂眼底流转的星云漩涡，忍受庞大信息流灌入脑海带来的晕眩与高热，完成意识层面的初次交融。" },
+      { id: 3, name: "奇点奉献 · 不可名状的终极同化", task: "深入虚空核心的星核之茧，在无数复眼的注视与光带的彻底包裹下，任由神力改造身躯，成为永恒依附于祂的深空共生体。" },
+    ],
+  },
+  {
+    id: "siren",
+    name: "深海回响与潮汐囚徒",
+    world: `世界：深海回响与潮汐囚徒
+
+一、世界底层法则
+· 深海王裔（The Abyssal Sirens）：生活在极渊断崖之下的纯血人鱼并非童话中柔弱的生灵，而是拥有强悍绞杀力、剧毒骨刺与致幻歌喉的远古掠食者。他们厌恶阳光与干燥，对陆地人类怀有天生的猎杀本能与掠夺欲。
+· 水下共鸣与鳞片烙印（Tidal Bonding）：纯血人鱼的尾鳍附带着具有麻痹与催情效果的透明黏液。当人鱼选定唯一的「伴侣」，会用锋利的指爪刺破猎物的皮肤注入共鸣毒素，使人类能在水下短暂呼吸，但代价是人类的神经与感官将完全依附于人鱼的触碰与体温。
+
+二、核心角色
+· Aries（亚里士）：极渊人鱼一族最后的暴戾王储，深海海域的绝对统治者。上半身是线条极其优美修长的青年男子，腰际覆着细密幽蓝的硬鳞；下半身是一条长逾数米的墨蓝色巨大鱼尾，尾鳍如薄纱般半透明却极为有力，耳侧生有泛着珠光的幽蓝耳羽。性格阴郁、霸道、占有欲极强，不通人情世故，习惯用最原始的蛮力与缠绕将猎物禁锢在怀中。
+· Jasmine（茉莉）：遭遇海难坠入极渊的人类女子，脆弱、温暖，是冰冷幽暗的海底唯一鲜活的热源。
+
+三、语气与禁忌
+· 水下的触感要写足：压力、浮力、失重、缺氧前的耳鸣、黏液的温度差。
+· 他不懂人类的委婉，别把他写成会哄人的现代男友；他的温柔是收起爪子，不是说软话。`,
+    stages: [
+      { id: 1, name: "极渊渡气", task: "在幽暗无光的水下石窟中，接受人鱼深吻渡过来的氧气与毒素，完成第一次水下生存适应。" },
+      { id: 2, name: "鳞片共温", task: "在冰冷潮湿的海蚀洞内，用温热的躯体贴紧他刚蜕下旧鳞的敏感鱼尾，安抚狂躁的本能。" },
+      { id: 3, name: "潮汐囚禁", task: "彻底斩断逃回海面的念头，任由巨大的鱼尾将你寸寸绞紧在珊瑚床榻间，烙下专属王妃印记。" },
+    ],
+  },
+  {
+    id: "arena",
+    name: "深渊秀场与永恒冠冕",
+    world: `世界：深渊秀场与永恒冠冕（The Lust Arena & Infinity Throne）
+
+一、核心底层机制
+· 主脑与深渊直播（The Abyss Network）：跨维度的万界观众聚集于不可名状的「深渊直播间」。玩家被投放至不同规则的惩戒副本中，通过完成强制性的感官任务、剧本扮演与肉体交融来换取「热度打赏值」和「生存积分」。积分归零者将被主脑直接抹杀，转化为副本低阶怪物。
+· 弹幕显化：玩家视网膜边缘实时滚动高维观众弹幕（普通灰字 / VIP 金字 / 神豪血红字）。观众指令、投票惩罚与实时打赏将直接具象化为副本环境的变量（重力改变、体温升高、空气催幻浓度提升）。
+· 即时打赏投喂：观众可付费空投高阶道具至现场，亦可通过众筹投票开启「惩戒模式」或「追加限制指令」（限制姿势、限制发声、增加敏感度倍率）。
+· 副本 NPC 生态：每个副本原住民（古堡执事、邪神祭司、异形守卫）均拥有独立的猎食与侵犯判定逻辑；玩家若未能满足副本的「欲望阈值」，NPC 将无差别发起围剿与物理压制。部分高阶 Boss 为万界神豪玩家的意识投影，拥有操纵副本规则的特权。
+
+二、商城与专属道具
+· 【致幻锁链·同生共死】（S）：强制将两名玩家的痛觉、快感、心率与体温完全同步，一方达至高潮或受创，另一方承受双倍神经反馈。
+· 【神经传感催化剂·蜜髓】（A）：涂抹后该部位皮肤敏感度提升 500%，遇热自动分泌高粘度润滑蜜液。
+· 【声控禁锢项圈·缄默】（B）：佩戴者发出的声音若超过 40 分贝，项圈释放微弱电流并自动收紧 5 毫米。
+· 【绝对屏蔽结界·私密房】（SSS）：消耗巨额热度值开启，可暂时屏蔽主脑全景镜头 30 分钟，但期间必须维持极高强度的生命体征波动以防判定为违规离线。
+
+三、核心角色
+· 谢衍：积分榜断层第一的王牌猎手 / 觉醒潜伏者。俊美、散漫、极具攻击性与掌控欲。在镜头前是熟稔迎合观众癖好的顶流疯子，实则暗中计算副本代码漏洞，对周黎拥有绝对的护短、独占欲与深层庇护本能。专属绑定技能【支配领域】：强行接管周黎身上所有负面惩罚状态，并将其转化为自身属性加成。
+· 周黎：觉醒高敏感度体质的顶级纯欲系新星主播。娇媚敏锐、韧性极强，骨子里带着不服输的野性，在极致的感官拉扯与镜头窥视下总能爆发出惊人的破局直觉。
+
+四、语气与禁忌
+· 弹幕要真的滚起来：每个关键节点插一两条观众发言，金字血红字要有分量差。
+· 「被看着」是这个世界的核心刺激源，镜头位置、死角、直播延迟都要写。`,
+    stages: [
+      { id: 1, name: "新手血祭 · 红月神殿的初拥", task: "完成首次双人镜头激活，在红月降临前点燃圣火。佩戴【声控禁锢项圈·缄默】，在狂热神官 NPC 的环伺祷告下完成初次身体绑定，全程分贝不得超标。结算：直播间热度突破 100 万，弹幕好评率达 90% 以上。" },
+      { id: 2, name: "赛博长夜 · 义体过载与温控协议", task: "潜入底层生化反应堆，获取核心数据芯片。必须使用【神经传感催化剂·蜜髓】；谢衍机械义肢过载发热，需以周黎的体温作为物理冷却介质，在监控死角完成深度降温。结算：导出主脑防火墙密匙，全服触发全息金色弹幕狂欢。" },
+      { id: 3, name: "迷雾古堡 · 人偶舞会的午夜献祭", task: "破除古堡伯爵的诅咒，斩杀人偶提线傀儡。观众众筹开启「镜面全景模式」，两人在无死角多维反光镜前完成服从指令，避开巡逻 NPC 的血线侦测。结算：击杀伯爵本体，夺取 S 级道具【同生共死】锁链。" },
+      { id: 4, name: "深渊列车 · 无尽隧道中的体温依存", task: "穿过极寒永夜裂隙，阻止列车坠毁。全车厢气温骤降至零下 30 度，唯一热源为两人交融时产生的生物热能，需在颠簸车厢内维持连接状态长达 40 分钟。结算：维持核心炉温不熄灭，成功驶入中转安全站。" },
+      { id: 5, name: "荆棘王廷 · 假面圣女的公开审判", task: "伪装圣女与异端骑士，洗劫教廷圣库。在百名高阶圣殿 NPC 前完成「验身圣礼」，利用【绝对屏蔽结界】的 30 分钟暗度陈仓，完成圣杯调包。结算：圣库自毁倒计时归零前引爆全场，引发全服观众疯狂打赏。" },
+      { id: 6, name: "末日蛇沼 · 蜕变期的共生巢穴", task: "夺取远古巨兽的核心原核，完成血脉升阶。谢衍受到蛇毒反噬进入狂暴蜕皮期，需在布满粘液与蛇蜕的狭小巢穴内承受其完全失控的缠绕与索求。结算：压制狂暴状态，两人生存积分双双突破千万大关。" },
+      { id: 7, name: "神殿审判 · 万界观众的弑神直播", task: "登上深渊终极王座，彻底黑入直播系统后台。迎战由历代榜一大哥意识聚合而成的虚空神明 Boss，在全宇宙万亿弹幕的注视下撕碎系统枷锁。结算：彻底摧毁主脑控制中枢，斩获深渊唯一的永恒冠冕。" },
+    ],
+  },
+  {
+    id: "clinic",
+    name: "白大褂下的瘾与病阈",
+    world: `世界：白大褂下的瘾与病阈
+
+一、核心底层机制
+· 唯一性特异发作（Exclusive Trigger）：谢衍对外是冷静自持、理智近乎严苛的顶尖投资人，对任何外界诱惑或投怀送抱均生理性厌恶。唯独在嗅到周黎身上的气味（消毒水混杂着淡淡冷香）、触碰到她的指尖或听到她平缓专业的声音时，神经递质会瞬间异常飙升，陷入极度饥渴、体温失控的狂躁期。
+· 诊疗室的危险秘密（The Clinical Taboo）：在外人眼里，他们是严谨的「医患关系」与各界瞩目的诊疗攻关项目；在关上门的诊室、深夜的值班休息室、无人的地下车库后座、甚至是随时有人敲门的洗手间隔间里，每一次「触诊」与「脱敏治疗」都是游走在理智崩溃边缘的危险沉沦。
+· 高压与反差（Tension & Secrecy）：外面是脚步匆匆的护士、随时可能响起的会诊电话、查房的同事；里面是被死死捂住的嘴唇、压抑至极的急促呼吸、抵在门板或病床护栏上的战栗。越是禁忌、越是可能被撞破，谢衍的渴求与占有欲就越发汹涌。
+
+二、核心角色
+· 谢衍（患者）：患有「特异性重度渴肤／性瘾症」的年轻财阀掌舵人，周黎的专属 VIP 长期患者。眉骨高挺，西装革履时矜贵冷漠、不怒自威。可一旦与周黎独处，眼底的克制会寸寸瓦解，眼神凶狠黏稠，像饿极了的野兽。极度迷恋周黎穿白大褂时冷静专业的模样，偏执地喜欢在她下达医嘱时将她压制在怀里讨要「药引」。发作表现：掌心滚烫、耳廓泛红、呼吸沉重，伴随无法控制的肢体索求与占有性抚摸。
+· 周黎（主治医生）：心理与神经医学双料专家，谢衍唯一的主治医师。表面清冷专业、一丝不苟，戴着细金边眼镜，习惯用病例夹和听诊器维持医生的权威与冷静。骨子里却有着猫一般的敏锐与娇软，在谢衍一次次放肆的索取与耳鬓厮磨中，逐渐从「被迫安抚」演变为隐秘的纵容与沉沦。
+
+三、语气与禁忌
+· 医学的壳要端住：病历、医嘱、量表、随访这些词该出现就出现，专业外壳崩塌得越慢越好看。
+· 「随时可能被撞破」是这个世界的发动机——门外的脚步声、手机震动、门把手转动，每一场都要有。`,
+    stages: [
+      { id: 1, name: "密闭诊室 · 听诊器的冰凉与滚烫", task: "拉上百叶窗的午后诊室。金属听诊器贴上他坚硬滚烫的胸膛，测出的却是疯狂过载的心率。下一秒病例本散落一地，她被抱坐在冰凉的实木办公桌上，白大褂下摆被粗暴掀起，门外是走廊里随时可能路过的脚步声。" },
+      { id: 2, name: "值班夜 · 休息室狭窄单人床", task: "凌晨三点空无一人的住院部。谢衍以「病情突发」为由潜入值班医生休息室。在窄小的单人铁架床上，他将高大的身躯完全覆上来，咬着她的耳垂逼她咽下所有声音，床板发出细微而危险的吱呀轻晃。" },
+      { id: 3, name: "学术研讨会 · 洗手间隔间的窒息感", task: "觥筹交错的医学峰会后台。西装笔挺的他将穿着正装套裙的她一把拽进狭窄的无障碍洗手间，反锁落锁。门外是同事寻找「周医生」的呼唤声，门内是他滚烫的大手顺着丝袜寸寸向上游移，将她死死抵在冰冷的瓷砖墙面上。" },
+    ],
+  },
   {
     id: "abyss",
     name: "深海骨殖",
@@ -11275,11 +11648,7 @@ function renderPrHub(){
   }
   return `<div class="page">
     ${subHeader('<i data-lucide="sparkles"></i> PR 快穿')}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      ${worlds.map(w=>`<button type="button" class="${w.id===cur.id?"btn-accent":"btn-ghost"}" data-pr-world="${esc(w.id)}" style="padding:8px 12px">${esc(w.name)}</button>`).join("")}
-      <button type="button" class="btn-ghost" id="pr-edit-open" style="padding:8px 12px">编辑当前世界书</button>
-      <button type="button" class="btn-ghost" id="pr-add-world" style="padding:8px 12px">＋ 自定义世界</button>
-    </div>
+    ${prWorldBarHtml(worlds, cur)}
     ${editBlock}
     <div class="status-card" style="padding:12px;margin-bottom:12px;font-size:12px;line-height:1.55;color:var(--sub);max-height:120px;overflow:auto;white-space:pre-wrap">${esc((cur.world||"").slice(0,320))}…</div>
     ${active?`<div class="status-card" style="padding:12px;margin-bottom:12px">
@@ -11397,9 +11766,12 @@ async function prSendUser(){
 
 
 function bindPr(){
+  const worldToggle = document.getElementById("pr-world-toggle");
+  if(worldToggle) worldToggle.onclick = ()=>{ state.prWorldBarOpen = !state.prWorldBarOpen; render(); };
   document.querySelectorAll("[data-pr-world]").forEach(el=>{
     el.onclick = ()=>{
       ensurePr().selectedWorldId = el.getAttribute("data-pr-world");
+      state.prWorldBarOpen = false; // 选完自动收起来，别一直占着半屏
       prSave(); render();
     };
   });
@@ -12501,6 +12873,7 @@ function renderSubPage(){
     savedchat: renderSavedChat,
     coupon: renderCoupons,
     wallet: renderWallet,
+    sayday: renderSayDay,
     love: renderLove,
     profile: renderProfile,
     wardrobe: renderWardrobe,
@@ -14022,9 +14395,17 @@ ${sixLine?`\n【此刻欲望六轴】${sixLine}`:""}
   const msgs = hist.map(m => ({ role: m.role, content: String(m.content||"").slice(0,1500) }));
   msgs.push({ role: "user", content: shadow });
   try{
-    let sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
-    // 主动消息避免 NSFW 长流程抢戏
-    let out = await callChatAPI(agentToApiConfig(ag), msgs, sys);
+    // 主动消息避免 NSFW 长流程抢戏：临时按「非 NSFW」拼系统提示词。
+    // 否则 NSFW 叙事格式那条「写成一整段长文」会和这里的「不超过 80 字」正面打架。
+    // systemPrompt 是同步的，改完立刻还原，不会影响别处。
+    let sys = "";
+    const __nsfwWas = state.nsfwOn;
+    try{
+      state.nsfwOn = false;
+      sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
+    } finally { state.nsfwOn = __nsfwWas; }
+    state.__proGenErr = "";
+    let out = await callChatAPI(agentToApiConfig(ag), msgs, sys, { timeoutMs: 45000 });
     if(typeof parseThinking === "function"){
       const p = parseThinking(out);
       out = p.body || out;
@@ -14039,6 +14420,8 @@ ${sixLine?`\n【此刻欲望六轴】${sixLine}`:""}
     }
     return out || "有点想你了。";
   }catch(e){
+    // 以前这里静默吞掉：模型挂了和正常开口长得一模一样，都只看到一句兜底话。
+    state.__proGenErr = String((e && e.message) || e).slice(0, 80);
     return "有点想你了。";
   }
 }
@@ -14139,13 +14522,18 @@ function incLocalPush(period){
   st.counts[period] = (st.counts[period] || 0) + 1;
   persist("pushStats");
 }
+/** 记一句「这次为什么没开口」。五道闸门全是静默 return，不留痕的话
+ * 「主动消息不通」根本没法排查 —— 设置页把这句显示出来。 */
+function __proNote(text){
+  state.__proStatus = { at: Date.now(), text: String(text||"") };
+}
 async function proactiveTryLocal(force){
   const cfg = state.proactiveConfig || {};
-  if(!cfg.enabled && !force) return;
+  if(!cfg.enabled && !force){ __proNote("总开关是关的"); return; }
   const period = pushPeriodKey();
   const limit = localPushLimit(period);
   const count = countLocalPushes(period);
-  if(!force && count >= limit) return;
+  if(!force && count >= limit){ __proNote(`这个时段已发 ${count} 条，上限 ${limit}`); return; }
 
   // 冷静期：距任意最后消息（含推送）2–3.5 小时随机；force 跳过
   const cooldownMin = 120 + Math.floor(Math.random() * 91);
@@ -14157,7 +14545,10 @@ async function proactiveTryLocal(force){
     lastChat = Date.now() - silentH * 3600000;
   } catch(e){}
   const lastAny = Math.max(last, lastChat || 0);
-  if(!force && lastAny && (Date.now() - lastAny) < cooldownMin * 60000) return;
+  if(!force && lastAny && (Date.now() - lastAny) < cooldownMin * 60000){
+    __proNote(`距上条消息 ${((Date.now()-lastAny)/3600000).toFixed(1)} 小时，这次抽到的冷静期是 ${(cooldownMin/60).toFixed(1)} 小时`);
+    return;
+  }
 
   const silentH = proactiveHoursSinceLastChat();
   let reason = force ? "用户点了试一条" : (
@@ -14184,18 +14575,21 @@ async function proactiveTryLocal(force){
   const sixGated = !force && !!(six && typeof six.missing === "number") && !!(cfg.baseUrl);
   if(sixGated){
     const urge = Math.max(six.missing||0, six.desire||0);
-    if(urge < 0.3) return; // 情绪不足，先不说（把开口交给 VPS 六轴决策）
-    if(silentH < 2) return;
+    if(urge < 0.3){ __proNote(`六轴情绪不够浓（urge ${urge.toFixed(2)}，要 ≥0.30）`); return; } // 把开口交给 VPS 六轴决策
+    if(silentH < 2){ __proNote(`才 ${silentH.toFixed(1)} 小时没聊，不到 2 小时`); return; }
   } else if(!force && silentH < 2){
+    __proNote(`才 ${silentH.toFixed(1)} 小时没聊，不到 2 小时`);
     return; // 和冷静期双保险
   }
 
   const textMsg = await proactiveGenerateLocal(reason);
-  if(!textMsg || !String(textMsg).trim()) return;
+  if(!textMsg || !String(textMsg).trim()){ __proNote("生成没拿到内容"); return; }
   proactivePushToChat(String(textMsg).trim(), { from: force?"test":"shadow_local", is_push: true });
   state.proactiveLastLocal = Date.now();
   persist("proactiveLastLocal");
   if(!force) incLocalPush(period);
+  __proNote((force ? "手动试了一条：" : "开口了：") + String(textMsg).trim().slice(0, 24)
+    + (state.__proGenErr ? `（走的是兜底模板，模型没回：${state.__proGenErr}）` : ""));
   if(state.tab === "chat") render();
 }
 async function proactivePullFromVps(){
@@ -14206,7 +14600,12 @@ async function proactivePullFromVps(){
     const url = base + "/proactive/pull";
     const headers = { "Accept": "application/json" };
     if(cfg.token) headers["X-Auth-Token"] = cfg.token;
-    const res = await fetch(url, { headers });
+    // 带超时：VPS 连得上但不回时，裸 fetch 会一直吊着，按钮看着像没反应（额度那个就是这么坏的）
+    const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+    const killer = ctrl ? setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} }, 10000) : null;
+    let res;
+    try{ res = await fetch(url, ctrl ? { headers, signal: ctrl.signal } : { headers }); }
+    finally{ if(killer) clearTimeout(killer); }
     if(!res.ok) throw new Error("HTTP "+res.status);
     const data = await res.json();
     const list = data.messages || data.data || (Array.isArray(data)?data:[]);
@@ -19808,8 +20207,16 @@ function renderVps(){
           </div>
         </div>
         <div class="setting-row">
+          <button id="proactive-test" class="btn-ghost">试一条</button>
           <button id="proactive-pull" class="btn-ghost">从 VPS 拉取待发消息</button>
         </div>
+        ${(()=>{
+          const s = state.__proStatus;
+          if(!s) return "";
+          const t = new Date(s.at);
+          const hh = String(t.getHours()).padStart(2,"0") + ":" + String(t.getMinutes()).padStart(2,"0");
+          return `<div class="setting-row" style="font-size:11px;color:var(--sub);line-height:1.5">${esc(hh + " · " + s.text)}</div>`;
+        })()}
       </div>
     </div>
     <div class="section">
@@ -20518,6 +20925,7 @@ iwrs 是随机分配器的选项池，七个维度各至少 6 条，短句。
 ];
 
 function eaShell(id){ return EA_SHELLS.find(s=>s.id===id) || null; }
+let __eaBooted = false;
 function eaEnsure(){
   if(!state.eatApple || typeof state.eatApple !== "object") state.eatApple = {};
   const e = state.eatApple;
@@ -20525,6 +20933,9 @@ function eaEnsure(){
   if(!e.data) e.data = null;
   if(!e.palette) e.palette = "paper";
   if(!e.slots || typeof e.slots !== "object") e.slots = {};
+  // loading/err 是一次生成的临时状态，跟着 eatApple 一起落盘了。
+  // 生成中途杀掉 App 会存下 loading:true，冷启动后按钮就永远转圈——开机第一次强制清掉。
+  if(!__eaBooted){ __eaBooted = true; e.loading = false; e.err = ""; }
   e.loading = !!e.loading;
   return e;
 }
@@ -20551,7 +20962,21 @@ function eaHandoff(){
   if(typeof triggerAIReply==="function") triggerAIReply(); else render();
 }
 
-/** 模型只吐 JSON。带上最近对话当剧情上下文，人格走当前 AI 的系统提示词。 */
+/** 吃苹果要的只是「人格 + 一份 JSON」。
+ * 原来直接把整份 systemPrompt(ag) 塞进去 —— 相册/朋友圈/点歌/歌单/任务/choice/钱包…
+ * 十几本暗号说明书全带上，输入平白多出上万字：生成更慢（正好撞 60 秒超时），
+ * 还一直诱着模型往 JSON 里写 ⟪暗号⟫。这里只保留身份锚定 + 她自己启用的提示词。 */
+function eaSystemPrompt(){
+  const on = (cat)=> (state.prompts||[]).filter(p=>p.category===cat && p.enabled).map(p=>p.content);
+  const mine = on("global").concat(state.nsfwOn ? on("nsfw") : []);
+  return [
+    `【身份锚定】\n你是 Aries。与你对话的人是 Jasmine。需要指你自己时用 Aries 或「我」。`,
+    mine.join("\n\n"),
+    `【本次任务】\n这一轮不是聊天：只输出一个 JSON 对象。不要写解释、不要写 ⟪⟫ 或 [ ] 暗号、不要用 markdown 代码块包起来。`,
+  ].filter(Boolean).join("\n\n");
+}
+
+/** 模型只吐 JSON。带上最近对话当剧情上下文，人格走她自己的提示词（见 eaSystemPrompt）。 */
 async function eaGenerate(){
   const e = eaEnsure();
   const shell = eaShell(e.shellId);
@@ -20573,17 +20998,18 @@ async function eaGenerate(){
       if(bits.length) extra = "\n\n【她填的】\n" + bits.join("\n");
     }
     hist.push({ role:"user", content:`<system_trigger>\n${shell.prompt}${extra}\n\n结合上面最近的对话当作当前剧情。只输出 JSON。\n</system_trigger>` });
-    let sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
-    let out = await callChatAPI(agentToApiConfig(ag), hist, sys);
+    const sys = eaSystemPrompt();
+    // 一次吐一整份文档 JSON，默认 60 秒必超时（而且以前还会闷声重试两遍，要等满 3 分钟）
+    let out = await callChatAPI(agentToApiConfig(ag), hist, sys, { timeoutMs: 240000 });
     if(typeof parseThinking === "function") out = parseThinking(out).body || out;
     const data = eaParseJson(out);
     if(!data) throw new Error("模型没吐出能用的 JSON，再点一次");
     e.data = data;
-    try{ persist("eatApple"); }catch(err){}
   }catch(err){
     e.err = String((err && err.message) || err);
   }
   e.loading = false;
+  try{ persist("eatApple"); }catch(err){} // 落盘要在 loading 归零之后，别把「转圈中」存进去
   render();
 }
 
@@ -22033,7 +22459,272 @@ function truthDareCardHtml(m){
     <div class="td-chat-from">${who}</div>
   </div>`;
 }
+// ─── 备注互改 + 「今天我说了算」指令权 ──────────────────────────────────────
+// 两件事共用一条「居中系统提示条」和一份一次性提示词注入。
+
+/** 聊天里她的显示名：他给的备注优先，没有才回落到情侣页填的名字。 */
+function myDisplayName(){
+  const r = String(state.myRemark||"").trim();
+  if(r) return r;
+  return (state.coupleInfo && state.coupleInfo.myName) || "我";
+}
+
+/** 往聊天里插一条居中的灰条（微信改群名那种），不带头像不带名字，也不推 ntfy。 */
+function chatPushNotice(text){
+  const t = String(text||"").trim();
+  if(!t) return;
+  const msg = { role:"system", notice:true, content:t, time:new Date().toISOString(), msgId:"nt_"+Date.now() };
+  if(typeof saveActiveThread==="function") saveActiveThread();
+  const target = state.chatTarget || "a1";
+  state.chatThreads = state.chatThreads || {};
+  if(!state.chatThreads[target]) state.chatThreads[target] = { messages:[], pendingUser:[] };
+  state.messages = state.messages || [];
+  state.messages.push(msg);
+  state.chatThreads[target].messages = [...state.messages];
+  try{ LS.set("chatThreads", state.chatThreads); }catch(e){}
+  state.needChatScroll = true;
+}
+
+/** 一次性事件：备注被改、指令被接/被买断。两小时内注进系统提示词，让他知道并能自然反应。
+ * 不做「读完即清」——systemPrompt 一轮会被调好几次，清在里面必然清错。用时间窗自然过期。 */
+function remarkEnsure(){
+  if(!state.remarkEvents || !Array.isArray(state.remarkEvents)) state.remarkEvents = [];
+  return state.remarkEvents;
+}
+function remarkPushEvent(text){
+  const list = remarkEnsure();
+  list.unshift({ text:String(text||""), at:Date.now() });
+  state.remarkEvents = list.slice(0, 6);
+  persist("remarkEvents");
+}
+function remarkRecentBlock(){
+  const list = remarkEnsure().filter(e=> Date.now() - (e.at||0) < 2*3600000);
+  if(!list.length) return "";
+  return `\n\n【刚刚发生的（两小时内，只提一次，别反复念）】\n` + list.map(e=>"- "+e.text).join("\n");
+}
+
+/** 她改了他的显示名 → 灰条 + 让他知道 */
+function remarkTheyRenamed(oldName, newName){
+  const a = String(oldName||"").trim(), b = String(newName||"").trim();
+  if(!b || a === b) return;
+  chatPushNotice(`你把他的备注改成了「${b}」`);
+  remarkPushEvent(a ? `Jasmine 把对你的备注从「${a}」改成了「${b}」。` : `Jasmine 把对你的备注设成了「${b}」。`);
+}
+/** 他写 ⟪备注:xxx⟫ 改对她的称呼 */
+function handleRemarkMarkers(body){
+  return String(body||"").replace(/[⟪《【]\s*备注\s*[:：]([^⟫》】]*)[⟫》】]/g, (_m, raw)=>{
+    const name = String(raw||"").trim().slice(0, 20);
+    if(!name) return "";
+    const old = String(state.myRemark||"").trim();
+    if(name !== old){
+      state.myRemark = name;
+      persist("myRemark");
+      const who = (typeof agentDisplayName==="function") ? agentDisplayName() : ((agentById(state.chatTarget)||{}).name || "他");
+      chatPushNotice(`${who} 把你的备注改成了「${name}」`);
+    }
+    return "";
+  }).trim();
+}
+function remarkPromptBlock(){
+  const mine = String(state.myRemark||"").trim();
+  const myName = (state.coupleInfo && state.coupleInfo.myName) || "Jasmine";
+  return `\n\n【备注 —— 你可以给她改称呼】
+想换一个只属于你们俩的称呼时，在正式回复里写一行暗号：
+⟪备注:新称呼⟫
+- 会像群聊改名一样，在聊天里出现一条居中提示，她立刻就看到。
+- 20 字以内。想到了才改，别频繁换。
+- 她给你的备注她也能改，改了系统会告诉你。
+${mine ? `- 你现在给她的备注是「${mine}」（她本名 ${myName}）。` : `- 你还没给她起过备注。`}`;
+}
+
+// ── 今天我说了算 ──
+const SAY_FALLBACK = [
+  "去倒杯水，喝完再回来找我。",
+  "现在站起来走两分钟，别赖着。",
+  "把今天最烦的那件事说给我听，一句话。",
+  "拍张你现在眼前的东西给我。",
+  "十分钟不许碰手机。计时开始。",
+];
+function sayEnsure(){
+  let s = state.sayDay;
+  if(!s || typeof s !== "object") s = state.sayDay = {};
+  if(typeof s.enabled !== "boolean") s.enabled = false;
+  if(typeof s.cost !== "number" || !isFinite(s.cost) || s.cost < 0) s.cost = 30;
+  if(!Array.isArray(s.log)) s.log = [];
+  if(!Array.isArray(s.slots)) s.slots = [];
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  if(s.date !== day){
+    s.date = day;
+    s.slots = sayRollSlots(d);
+    try{ persist("sayDay"); }catch(e){}
+  }
+  return s;
+}
+/** 一天 3 个随机时刻，落在 09:00–23:00，两两至少隔 90 分钟 */
+function sayRollSlots(now){
+  const base = new Date(now); base.setHours(0,0,0,0);
+  const START = 9*60, END = 23*60, GAP = 90;
+  const picks = [];
+  for(let guard=0; picks.length < 3 && guard < 300; guard++){
+    const m = START + Math.floor(Math.random() * (END - START));
+    if(picks.some(p=>Math.abs(p-m) < GAP)) continue;
+    picks.push(m);
+  }
+  picks.sort((a,b)=>a-b);
+  return picks.map(m=>({ at: base.getTime() + m*60000, fired:false }));
+}
+function sayPending(){ return (sayEnsure().log||[]).find(o=>o.status==="pending") || null; }
+
+/** 让他想一条指令。人格跟着当前聊天的 AI 走，和主动消息同一套。 */
+async function sayGenerateOrder(){
+  const s = sayEnsure();
+  const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
+  const unit = (typeof walletUnit==="function") ? walletUnit() : "小鱼干";
+  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
+    return SAY_FALLBACK[Math.floor(Math.random()*SAY_FALLBACK.length)];
+  }
+  const hist = (state.messages||[]).filter(m=>m.role==="user"||m.role==="assistant").slice(-12)
+    .map(m=>({ role:m.role, content:String(m.content||"").slice(0,800) }));
+  hist.push({ role:"user", content:`<system_trigger>
+【今天我说了算 · 指令权】现在轮到你用掉今天三次指令权里的一次。
+你要对 Jasmine 下一个指令。她可以照做，也可以花 ${s.cost} ${unit} 买断。
+规则：
+- 只输出指令本身，一到两句，命令句。不要解释、不要问她愿不愿意、不要写「指令：」之类前缀。
+- 要具体、当下就能做完（喝水、去阳台站五分钟、把某句话说出声、拍张照给我…），不要布置需要一整天的事。
+- 语气是你本人，可霸道可温柔，但要像真的在命令她。
+- 不超过 40 字。
+</system_trigger>` });
+  try{
+    // 和主动消息同一处理：临时按非 NSFW 拼系统提示词，否则「整段长文」会和「不超过 40 字」打架
+    let sys = "";
+    const w = state.nsfwOn;
+    try{ state.nsfwOn = false; sys = (typeof systemPrompt==="function") ? systemPrompt(ag) : ""; }
+    finally{ state.nsfwOn = w; }
+    let out = await callChatAPI(agentToApiConfig(ag), hist, sys, { timeoutMs: 45000 });
+    if(typeof parseThinking === "function") out = parseThinking(out).body || out;
+    out = String(out||"").replace(/\s+/g," ").trim().replace(/^[「"']|[」"']$/g,"").trim();
+    if(out.length > 60) out = out.slice(0, 60);
+    return out || SAY_FALLBACK[0];
+  }catch(e){
+    state.__sayErr = String((e&&e.message)||e).slice(0,80);
+    return SAY_FALLBACK[Math.floor(Math.random()*SAY_FALLBACK.length)];
+  }
+}
+
+/** 搭 proactiveTick 的车：到点了就发一条指令进聊天。 */
+async function sayTick(force){
+  const s = sayEnsure();
+  if(!s.enabled && !force) return;
+  if(sayPending()){                      // 上一条还没答，不叠着发
+    if(force && typeof showToast==="function") showToast("上一条还等着你答");
+    return;
+  }
+  const now = Date.now();
+  const due = (s.slots||[]).filter(x=>!x.fired && x.at <= now);
+  if(!due.length) return;
+  // App 关着的时候定时器是冻的，回来时可能一次积了好几个。
+  // 只补发最近的那一个，更早的直接作废，免得一口气刷三条。
+  due.forEach(x=>{ x.fired = true; });
+  const slot = due[due.length-1];
+  try{ persist("sayDay"); }catch(e){}
+  if(!force && now - slot.at > 3*3600000) return;  // 过期太久（超过 3 小时）就不补了
+  if(force && typeof showToast==="function") showToast("正在让他想一条…");
+  const text = await sayGenerateOrder();
+  if(!text) return;
+  const o = { id:"o"+Date.now().toString(36), text, at:now, status:"pending", cost:s.cost };
+  s.log = [o].concat(s.log).slice(0, 60);
+  try{ persist("sayDay"); }catch(e){}
+  if(typeof proactivePushToChat==="function"){
+    proactivePushToChat(text, { from:"sayday", type:"order", refId:o.id });
+  }
+  if(state.tab === "chat") render();
+}
+
+/** 接下 / 买断。买断 = 她把小鱼干转给他（钱包本来就是「她转钱给 Aries」）。 */
+function sayAnswer(orderId, accept){
+  const s = sayEnsure();
+  const o = (s.log||[]).find(x=>x.id===orderId);
+  if(!o || o.status !== "pending") return;
+  o.status = accept ? "done" : "bought";
+  o.answeredAt = Date.now();
+  const unit = (typeof walletUnit==="function") ? walletUnit() : "小鱼干";
+  if(!accept && o.cost > 0 && typeof walletEntry==="function"){
+    walletEntry(o.cost, "买断一次指令", "me");
+  }
+  try{ persist("sayDay"); }catch(e){}
+  chatPushNotice(accept ? "你接下了这条指令" : `你买断了这条指令 · ${o.cost} ${unit} 已转给他`);
+  remarkPushEvent(accept
+    ? `你下的指令「${o.text}」，Jasmine 接下了。`
+    : `你下的指令「${o.text}」，Jasmine 花 ${o.cost} ${unit} 买断了（钱已进你钱包）。`);
+  render();
+}
+
+function sayOrderCardHtml(m){
+  const s = sayEnsure();
+  const o = (s.log||[]).find(x=>x.id===m.refId);
+  const unit = (typeof walletUnit==="function") ? walletUnit() : "小鱼干";
+  const text = o ? o.text : String(m.content||"");
+  const cost = o ? o.cost : s.cost;
+  const st = o ? o.status : "pending";
+  const foot = st === "pending"
+    ? `<div class="say-card-btns">
+         <button type="button" class="say-btn ok" data-say-ok="${escAttr(m.refId||"")}">听你的</button>
+         <button type="button" class="say-btn no" data-say-no="${escAttr(m.refId||"")}">买断 ${esc(String(cost))} ${esc(unit)}</button>
+       </div>`
+    : `<div class="say-card-done">${st==="done" ? "已接下" : `已买断 · ${esc(String(cost))} ${esc(unit)}`}</div>`;
+  return `<div class="say-card">
+    <div class="say-card-head"><i data-lucide="gavel"></i> 今天我说了算</div>
+    <div class="say-card-body">${esc(text)}</div>
+    ${foot}
+  </div>`;
+}
+
+function renderSayDay(){
+  const s = sayEnsure();
+  const unit = (typeof walletUnit==="function") ? walletUnit() : "小鱼干";
+  const fmt = (ts)=>{ const d=new Date(ts); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+  const now = Date.now();
+  const slots = (s.slots||[]).map(x=>{
+    const tag = x.fired ? "已用" : (x.at <= now ? "待发" : "未到");
+    return `<span class="say-slot${x.fired?" used":""}">${fmt(x.at)} · ${tag}</span>`;
+  }).join("");
+  const log = (s.log||[]).slice(0, 20).map(o=>{
+    const st = o.status==="pending" ? "等你答" : (o.status==="done" ? "接下了" : `买断 ${o.cost} ${unit}`);
+    return `<div class="say-log-row">
+      <div class="say-log-text">${esc(o.text)}</div>
+      <div class="say-log-meta">${fmt(o.at)} · ${esc(st)}</div>
+    </div>`;
+  }).join("") || `<div class="sb-empty">还没有记录</div>`;
+  return `<div class="page">
+    ${subHeader('<i data-lucide="gavel"></i> 今天我说了算')}
+    <div class="section">
+      <div class="section-body">
+        <div class="setting-row">
+          <span class="setting-label">开启</span>
+          <div id="say-toggle" class="toggle-switch" style="background:${s.enabled?"var(--accent)":"var(--border)"}">
+            <div class="toggle-knob" style="left:${s.enabled?18:2}px"></div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">买断一次</span>
+          <input id="say-cost" inputmode="numeric" value="${escAttr(String(s.cost))}" style="width:90px"/>
+        </div>
+        <div class="setting-row" style="gap:8px;flex-wrap:wrap">${slots}</div>
+        <div class="setting-row">
+          <button id="say-reroll" class="btn-ghost">重摇今天的时刻</button>
+          <button id="say-now" class="btn-ghost">立刻来一条</button>
+        </div>
+        ${state.__sayErr?`<div class="setting-row" style="font-size:11px;color:var(--sub)">${esc(state.__sayErr)}</div>`:""}
+      </div>
+    </div>
+    <div class="feat-section-label">记录</div>
+    <div class="section"><div class="section-body">${log}</div></div>
+  </div>`;
+}
+
 function chatCardRow(m, speakerMeta){
+  if(m.type==="order") return `${speakerMeta||""}<div class="bubble-row them" style="align-items:flex-start">${sayOrderCardHtml(m)}</div>`;
   if(m.type==="truthdare") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${truthDareCardHtml(m)}</div>`;
   if(m.type==="note") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${noteCardHtml(m)}</div>`;
   if(m.type==="diary_notice") return `${speakerMeta||""}<div class="bubble-row them">${diaryNoticeCardHtml(m)}</div>`;
@@ -22047,7 +22738,7 @@ function __stripMarkersForLive(t){
   if(!t) return t;
   return String(t)
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
-    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关)\s*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:真心话|大冒险|混合|抽卡|抽张|翻牌|机抽|我抽|机来抽)\s*[⟫》】]/g,"")
@@ -23280,13 +23971,18 @@ function renderChat(){
         msgs+=`<div style="text-align:center;margin:2px 0"><span style="display:inline-block;font-size:10px;color:var(--sub);opacity:0.85;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:3px 10px">${esc(m.content)}</span></div>`;
         return;
       }
+      // 改备注 / 指令结果：一条居中灰字，微信改群名那种
+      if(m.notice){
+        msgs+=`<div class="chat-notice">${esc(m.content)}</div>`;
+        return;
+      }
       const isMe=m.role==="user";
       const runKey = isMe ? "me" : (m.speakerId || "them");
       const firstInRun = runKey !== prevKey;
       prevKey = runKey;
       const glassCls = ((typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "") + (firstInRun ? "" : " cont");
       // 头像 + 名字 + 爱心 + 时间 的 meta 条（AI 靠左 / 我靠右，各轮只配第一条）
-      const myName = (state.coupleInfo && state.coupleInfo.myName) || "我";
+      const myName = (typeof myDisplayName==="function") ? myDisplayName() : ((state.coupleInfo && state.coupleInfo.myName) || "我");
       const speakerName = isMe ? myName : (m.speakerName || (activeAg && activeAg.name) || "");
       const showMeta = !!speakerName && firstInRun;
       const speakerMeta = showMeta ? (isMe ? `
@@ -25168,6 +25864,43 @@ if(!window.__mpDelegated){
           });
         }catch(_){}
         if(typeof eaHandoff==="function") eaHandoff();
+        return;
+      }
+      // 今天我说了算：指令卡的两个按钮 + 设置页几个键。
+      // 一样放进兜底委托 —— 指令卡出现在聊天里，绝对不能因为 bindEvents 半路挂了就点不动。
+      const sayOk = raw.closest("[data-say-ok]");
+      if(sayOk){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof sayAnswer==="function") sayAnswer(sayOk.getAttribute("data-say-ok"), true);
+        return;
+      }
+      const sayNo = raw.closest("[data-say-no]");
+      if(sayNo){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof sayAnswer==="function") sayAnswer(sayNo.getAttribute("data-say-no"), false);
+        return;
+      }
+      if(raw.closest("#say-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const s = sayEnsure(); s.enabled = !s.enabled;
+        try{ persist("sayDay"); }catch(_){}
+        if(typeof showToast==="function") showToast(s.enabled ? "今天我说了算：开" : "今天我说了算：关");
+        if(typeof render==="function") render();
+        return;
+      }
+      if(raw.closest("#say-reroll")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const s = sayEnsure(); s.slots = sayRollSlots(new Date());
+        try{ persist("sayDay"); }catch(_){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(raw.closest("#say-now")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const s = sayEnsure();
+        s.slots = (s.slots||[]).concat([{ at: Date.now()-1000, fired:false }]);
+        try{ persist("sayDay"); }catch(_){}
+        if(typeof sayTick==="function") sayTick(true);
         return;
       }
       const eaPal = raw.closest("[data-ea-palette]");
@@ -27112,8 +27845,13 @@ function bindEvents(){
       const el = document.getElementById(elId);
       if(!el) return;
       el.onchange = ()=>{
+        // 改显示名 = 改他的备注：像群聊改名一样在聊天里留一条，并让他下次知道
+        const __oldName = (field === "name") ? String(ag.name||"") : null;
         ag[field] = el.value;
         persist("agents");
+        if(field === "name" && typeof remarkTheyRenamed === "function"){
+          try{ remarkTheyRenamed(__oldName, el.value); }catch(e){ console.warn("[remark]", e); }
+        }
         if(ag.id==="a1"){
           if(field==="claudeKey") state.apiConfig.claudeKey = el.value;
           if(field==="openaiKey") state.apiConfig.openaiKey = el.value;
@@ -28654,8 +29392,31 @@ reader.readAsArrayBuffer(f);
     state.proactiveConfig.token = cfgProTok.value.trim();
     persist("proactiveConfig");
   };
+  // 今天我说了算：买断价（按钮走兜底委托，这里只接输入框）
+  const sayCost = document.getElementById("say-cost");
+  if(sayCost) sayCost.onchange = ()=>{
+    const s = sayEnsure();
+    s.cost = Math.max(0, Math.round(Number(String(sayCost.value||"").replace(/[^\d.]/g,""))||0));
+    try{ persist("sayDay"); }catch(e){}
+    render();
+  };
+
   const proPull = document.getElementById("proactive-pull");
   if(proPull) proPull.onclick = ()=> proactivePullFromVps();
+  // 「试一条」：proactiveTryLocal(force=true) 这条路一直写着，却全代码没有任何调用点，
+  // 所以主动消息通不通以前根本没法当场验。
+  const proTest = document.getElementById("proactive-test");
+  if(proTest) proTest.onclick = async ()=>{
+    proTest.disabled = true;
+    try{
+      if(typeof showToast === "function") showToast("正在让他想一句…");
+      await proactiveTryLocal(true);
+    }catch(e){
+      __proNote("试一条抛错：" + String((e&&e.message)||e).slice(0,80));
+    }
+    proTest.disabled = false;
+    render();
+  };
   const proToggle = document.getElementById("proactive-toggle");
   if(proToggle) proToggle.onclick = ()=>{
     state.proactiveConfig = state.proactiveConfig || {};
@@ -29681,6 +30442,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleDiaryMarkers(cleanBody);  // 机写日记：⟪写日记:标题|正文⟫ → 聊天轻提示
   cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
   cleanBody = handleMomentMarkers(cleanBody); // 朋友圈：⟪动态:正文|内部备注⟫ → 他自己发一条动态
+  cleanBody = handleRemarkMarkers(cleanBody); // 备注：⟪备注:新称呼⟫ → 他给她改称呼，聊天里出一条居中提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
@@ -30335,9 +31097,9 @@ window.reinitState = function(){
     sparkVault:"sparkVault",callConfig:"callConfig",
     callRecords:"callRecords",pushStats:"pushStats",ntfyConfig:"ntfyConfig",ntfyLog:"ntfyLog",
     branding:"branding",hisPhone:"hisPhone",captivityConfig:"captivityConfig",eatApple:"eatApple",
-    eatApple:"eatApple",
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
-    letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",moments:"moments",galateaEventId:"galateaEventId"
+    letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",moments:"moments",galateaEventId:"galateaEventId",
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sayDay:"sayDay"
   };
 
   // 迁移：若带前缀的键为空，但无前缀旧键有数据，拷过来（只迁一次）
@@ -30609,6 +31371,8 @@ function proactiveTick(){
   // 朋友圈到期的回复也搭这趟车。教程里的「坑一」就是纯惰性生成：
   // 发完动态就锁屏，没人再发请求，回复永远不生成 —— 有这个循环就不会。
   try{ if(typeof momentsProcessDue === "function") momentsProcessDue(); }catch(e){}
+  // 今天我说了算：3 个随机时刻搭同一趟车
+  try{ if(typeof sayTick === "function") sayTick(); }catch(e){}
   try{
     const cfg = state.proactiveConfig || {};
     if(cfg.enabled && cfg.baseUrl && typeof proactivePullQuiet === "function") proactivePullQuiet();
