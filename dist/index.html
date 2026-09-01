@@ -6634,6 +6634,27 @@ async function __apiFetch(url, options, timeoutMs){
 }
 
 
+// Claude 官方通道的模型：以前四处写死 claude-sonnet-4-6，设置里也没有可选的地方。
+// 现在统一走这里，agent 上没设就用默认（Jasmine 要 Opus 4.6）。
+const CLAUDE_DEFAULT_MODEL = "claude-opus-4-6";
+const CLAUDE_MODEL_OPTIONS = [
+  { id: "claude-opus-4-6",   label: "Opus 4.6 · 默认" },
+  { id: "claude-opus-5",     label: "Opus 5" },
+  { id: "claude-sonnet-5",   label: "Sonnet 5" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6 · 更便宜" },
+  { id: "claude-haiku-4-5",  label: "Haiku 4.5 · 最省" },
+];
+function claudeModelOf(ag, cfg){
+  const pick = (ag && ag.claudeModel) || (cfg && cfg.claudeModel) || "";
+  return String(pick).trim() || CLAUDE_DEFAULT_MODEL;
+}
+/** 思考链配置。4.6 起 budget_tokens 已废弃（在 Opus 5 / Sonnet 5 上直接 400），
+ * 统一用 adaptive；display 必须显式写 summarized —— 5 系默认是 omitted，
+ * 那样 thinking 块会回空字符串，聊天里的思考链就全没了。 */
+function claudeThinkingParam(){
+  return { type: "adaptive", display: "summarized" };
+}
+
 async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
   // 支持直接传 agent 对象（apiConfig._agent 或 apiConfig 本身带 channel=gemini）
   const ag = apiConfig._agent || null;
@@ -6694,10 +6715,10 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
       : (systemPrompt ? String(systemPrompt) : "");
     const sysMsgs = sysText ? [{ role:"user", content:sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
-      model: "claude-sonnet-4-6",
+      model: claudeModelOf(ag, apiConfig),
       max_tokens: 16000,
       messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
-      thinking: { type: "enabled", budget_tokens: 3000 },
+      thinking: claudeThinkingParam(),
     };
     const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -6705,7 +6726,6 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
         "Content-Type": "application/json",
         "x-api-key": claudeKey,
         "anthropic-version": "2023-06-01",
-        "anthropic-beta": "interleaved-thinking-2025-05-14",
       },
       body: JSON.stringify(body),
     }, __timeoutMs);
@@ -7071,20 +7091,20 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     return { reply: t ? ("<thinking>\n"+t+"\n</thinking>\n\n"+b) : b, usage };
   };
 
-  // —— Claude 官方（interleaved-thinking 流式）——
+  // —— Claude 官方（adaptive thinking 流式；adaptive 自带交错思考，不用再加 beta 头）——
   if(channel === "claude"){
     const sysText = (systemPrompt != null && typeof systemPrompt === "object")
       ? (systemPrompt.static || "") + (systemPrompt.dynamic ? "\n\n"+systemPrompt.dynamic : "")
       : (systemPrompt ? String(systemPrompt) : "");
     const sysMsgs = sysText ? [{ role:"user", content:sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
-      model: "claude-sonnet-4-6", max_tokens: 16000, stream: true,
+      model: claudeModelOf(ag, cfg), max_tokens: 16000, stream: true,
       messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
-      thinking: { type:"enabled", budget_tokens:3000 },
+      thinking: claudeThinkingParam(),
     };
     const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
-      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01", "anthropic-beta":"interleaved-thinking-2025-05-14" },
+      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01" },
       body: JSON.stringify(body),
     });
     if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
@@ -7259,14 +7279,14 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
       : (systemPrompt ? String(systemPrompt) : "");
     const sysMsgs = sysText ? [{ role:"user", content: sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
-      model:"claude-sonnet-4-6", max_tokens:16000,
+      model: claudeModelOf(creds, creds), max_tokens:16000,
       messages:[ ...sysMsgs, ...convo ],
-      thinking:{ type:"enabled", budget_tokens:3000 },
+      thinking: claudeThinkingParam(),
     };
     if(toolsParam) body.tools = toolsParam;
     const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
-      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01", "anthropic-beta":"interleaved-thinking-2025-05-14" },
+      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01" },
       body: JSON.stringify(body),
     });
     const data = await res.json();
@@ -7525,7 +7545,7 @@ async function callAuxAPI(apiConfig, prompt) {
     const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{ "Content-Type":"application/json","x-api-key":claudeKey,"anthropic-version":"2023-06-01" },
-      body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1024, messages:[{ role:"user", content:prompt }] }),
+      body: JSON.stringify({ model: claudeModelOf(null, apiConfig), max_tokens:1024, messages:[{ role:"user", content:prompt }] }),
     });
     const data = await res.json();
     return data.content?.[0]?.text || "";
@@ -8267,6 +8287,7 @@ function ensureAgents(){
       if(typeof ag.ccWsUrl !== "string" || !ag.ccWsUrl) ag.ccWsUrl = (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
       if(typeof ag.ccPin !== "string" || !ag.ccPin) ag.ccPin = (state.callConfig&&state.callConfig.ccPin) || "498898";
       if(typeof ag.ccModel !== "string") ag.ccModel = "";
+      if(typeof ag.claudeModel !== "string") ag.claudeModel = ""; // 空 = 用 CLAUDE_DEFAULT_MODEL
     });
     if(!state.agents.find(a=>a.id==="a1")){
       state.agents = defaultAgents().concat(state.agents);
@@ -25343,6 +25364,10 @@ function renderAgentSettingsBlock(ag, idx){
       ${ag.channel==="claude"?`
         <div class="setting-row"><span class="setting-label">Claude Key</span>
           <input type="password" id="${prefix}-claudeKey" value="${escAttr(ag.claudeKey||"")}" placeholder="sk-ant-..."/></div>
+        <div class="setting-row"><span class="setting-label">模型</span>
+          <select id="${prefix}-claudeModel" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+            ${CLAUDE_MODEL_OPTIONS.map(m=>`<option value="${escAttr(m.id)}" ${claudeModelOf(ag,null)===m.id?"selected":""}>${esc(m.label)}</option>`).join("")}
+          </select></div>
       `:ag.channel==="gemini"?`
         <div class="setting-row"><span class="setting-label">Gemini Key</span>
           <input type="password" id="${prefix}-geminiKey" value="${escAttr(ag.geminiKey||"")}" placeholder="AIza..."/></div>
@@ -27866,6 +27891,7 @@ function bindEvents(){
     };
     bind("name", prefix+"-name", true);
     bind("claudeKey", prefix+"-claudeKey");
+    bind("claudeModel", prefix+"-claudeModel", true);
     bind("geminiKey", prefix+"-geminiKey");
     bind("geminiModel", prefix+"-geminiModel");
     bind("openaiKey", prefix+"-openaiKey");
