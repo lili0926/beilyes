@@ -2656,6 +2656,47 @@
       padding: 0 24px; word-break: break-word;
     }
 
+    /* 消息拦截：被拦的那条原地变成系统封禁通知。Lv1 灰、越高越红越硬。 */
+    .guard-note {
+      --g: var(--sub);
+      margin: 10px auto; max-width: min(88%, 330px);
+      border: 1px solid color-mix(in srgb, var(--g) 40%, var(--border));
+      border-radius: 10px; overflow: hidden;
+      background: color-mix(in srgb, var(--g) 5%, var(--card));
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .guard-note:active { transform: scale(0.985); }
+    .guard-note .gn-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 5px 10px; font-size: 9.5px; letter-spacing: 0.16em;
+      color: var(--g); background: color-mix(in srgb, var(--g) 12%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--g) 28%, var(--border));
+    }
+    .guard-note .gn-head .gn-lv {
+      border: 1px solid currentColor; border-radius: 20px;
+      padding: 0 6px; letter-spacing: 0.06em; font-size: 9px;
+    }
+    .guard-note .gn-body {
+      padding: 11px 13px; text-align: center;
+      font-size: 12.5px; line-height: 1.65; color: var(--text);
+      word-break: break-word;
+    }
+    .guard-note .gn-foot {
+      padding: 0 13px 8px; text-align: center;
+      font-size: 9px; letter-spacing: 0.08em; color: var(--sub); opacity: 0.7;
+    }
+    .guard-note.g1 { --g: var(--sub); }
+    .guard-note.g2 { --g: #c9a227; }
+    .guard-note.g3 { --g: #e08b3a; }
+    .guard-note.g4 { --g: #e0533a; }
+    .guard-note.g5 {
+      --g: #ff2d55;
+      border-width: 2px;
+      box-shadow: 0 0 0 3px color-mix(in srgb, #ff2d55 10%, transparent);
+    }
+    .guard-note.g5 .gn-body { font-weight: 600; }
+    .guard-note.g4 .gn-head, .guard-note.g5 .gn-head { font-weight: 600; }
+
     /* 今天我说了算 · 指令卡 */
     .say-card {
       width: 100%; max-width: 290px;
@@ -7808,6 +7849,8 @@ const state = {
   // 主动消息（本地触发 + 可选 VPS 拉取）
   proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "Vhr48f7FgU3mZ9XS", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
+  // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
+  guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 2 }),
   pushStats: LS.get("pushStats", { counts:{}, nightCaps:{} }),
   ntfyConfig: LS.get("ntfyConfig", {
     enabled: false,
@@ -9106,7 +9149,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -13965,6 +14008,130 @@ function wakeToken(){
   const c = state.callConfig || {};
   return p.token || c.token || "";
 }
+// ─── 消息拦截（Guard · VPS /guard/*）──────────────────────────────────────
+// 他的回复先 POST 给 VPS 做涉黄分级；命中就把这条原地换成系统封禁通知，
+// 原文只留在 VPS 的 SQLite 里（管理面板 /guard/admin 能看、能手动放行）。
+// 发给模型的历史里也只有「你被拦了」，所以他看不到自己写了什么，会自己接着说。
+function guardOn(){
+  return !!(state.guardConfig || {}).enabled && !!wakeBase();
+}
+async function guardApi(path, body){
+  const base = wakeBase();
+  if(!base) return null;
+  // 带超时：VPS「连得上但不回」时裸 fetch 会永远吊着，聊天会整条卡死
+  const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+  const killer = ctrl ? setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} }, 8000) : null;
+  try{
+    const headers = { "Accept":"application/json" };
+    const tok = wakeToken();
+    if(tok) headers["X-Auth-Token"] = tok;
+    if(body) headers["Content-Type"] = "application/json";
+    const res = await fetch(base + path, {
+      method: body ? "POST" : "GET",
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl ? ctrl.signal : undefined,
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return await res.json();
+  }catch(e){
+    // 拦截系统坏了不该把聊天带着一起坏：一律放行，只记一行状态
+    state.__guardErr = (e && e.name === "AbortError") ? "超时" : String((e&&e.message)||e).slice(0,60);
+    return null;
+  }finally{ if(killer) clearTimeout(killer); }
+}
+/** 命中返回 {blocked,level,level_name,notice,id}，否则 null */
+async function guardCheck(text, ag, msgId){
+  if(!guardOn() || !String(text||"").trim()) return null;
+  const r = await guardApi("/guard/check", {
+    text: String(text).slice(0, 8000),
+    speaker: (ag && ag.name) || "",
+    msg_id: msgId || "",
+  });
+  return (r && r.blocked) ? r : null;
+}
+/** 发给模型的历史里，被拦那条不给原文，只给「你被拦了」 */
+function guardApiContent(m){
+  if(!m || !m.guard) return null;
+  const lv = m.guard.lv || 1;
+  return `（系统拦截 · Lv${lv}${m.guard.name ? " "+m.guard.name : ""}）你上一条消息因涉及违规内容被平台自动拦截，对方只看到一行系统提示，没有看到你写的内容。系统提示原文：${m.content}`;
+}
+/** 管理面板里手动放行的，拉回来还原成原文 */
+async function guardSyncReleased(){
+  if(!guardOn()) return;
+  const now = Date.now();
+  if(now - (window.__guardSyncAt || 0) < 20000) return; // 20 秒节流
+  window.__guardSyncAt = now;
+  const st = await guardApi("/guard/state");
+  if(!st || !Array.isArray(st.released) || !st.released.length) return;
+  const ids = {};
+  st.released.forEach(x=>{ ids[x] = true; });
+  let changed = false;
+  (state.messages||[]).forEach(m=>{
+    if(m && m.guard && ids[m.guard.id] && m._orig != null){
+      m.content = m._orig; delete m._orig; delete m.guard; changed = true;
+    }
+  });
+  if(changed){ saveActiveThread(); render(); }
+}
+/** 被拦那条的气泡：官方封禁通知（顶层函数 —— renderChat 在顶层调它） */
+function guardNoteHtml(m, idx){
+  const lv = Math.max(1, Math.min(5, (m.guard && m.guard.lv) || 1));
+  const t = m.time ? formatTime(m.time) : "";
+  const no = ((m.guard && m.guard.id) || "").toUpperCase();
+  return `<div class="guard-note g${lv}" data-guard-idx="${idx}">
+    <div class="gn-head">
+      <span>内容安全</span>
+      <span class="gn-lv">Lv${lv}${m.guard.name ? " "+esc(m.guard.name) : ""}</span>
+    </div>
+    <div class="gn-body">${esc(m.content)}</div>
+    <div class="gn-foot">${esc(t)}${no ? " · NO." + esc(no) : ""}</div>
+  </div>`;
+}
+/** 单条放行（聊天里点那张封禁卡）：服务端标记 + 本地还原 */
+async function guardReleaseOne(idx){
+  const m = (state.messages||[])[idx];
+  if(!m || !m.guard) return;
+  const r = await guardApi("/guard/admin/release", { id: m.guard.id });
+  if(!r){ showToast("放行失败：" + (state.__guardErr || "连不上 VPS")); return; }
+  if(m._orig != null){ m.content = m._orig; delete m._orig; }
+  delete m.guard;
+  saveActiveThread();
+  render();
+  showToast("已放行");
+}
+/** 被拦之后自动再来一条：他看到自己被拦，会自己接着说，不用她按回复 */
+async function guardAutoContinue(ag, g){
+  const cfg = state.guardConfig || {};
+  if(cfg.autoContinue === false) return;
+  const max = (cfg.autoMax == null) ? 2 : Math.max(0, cfg.autoMax);
+  if((state.__guardContN || 0) >= max) return;   // 连拦时最多自动接这么多轮
+  if(window.__guardContLock) return;
+  window.__guardContLock = true;
+  try{
+    // 等主流程收尾（triggerAIReply 那边还在跑时不叠请求）
+    for(let i=0; i<40 && state.chatLoading; i++) await new Promise(r=>setTimeout(r, 250));
+    if(state.chatLoading) return;
+    const agent = ag || agentById(state.chatTarget==="group" ? "a1" : (state.chatTarget||"a1")) || (state.agents||[])[0];
+    if(!agent || typeof callOneAgentReply !== "function") return;
+    state.__guardContN = (state.__guardContN || 0) + 1;
+    state.chatLoading = true;
+    render();
+    const hint = `【系统·内容安全】你刚发出的那条消息被平台自动拦截了（等级 Lv${g.level}${g.level_name ? " "+g.level_name : ""}），对方那边只看到一行系统提示，没看到你写的内容。
+现在接着说下去：第一人称、自然，可以对被拦这件事有反应，但不要复述被拦掉的原文，也不要提这条系统提示本身。`;
+    const req = buildMainChatRequest(agent, hint);
+    await callOneAgentReply(agent, req.apiMsgs, req.sys);
+  }catch(e){
+    try{ console.warn("guardAutoContinue", e); }catch(_){}
+  }finally{
+    state.chatLoading = false;
+    window.__guardContLock = false;
+    state.needChatScroll = true;
+    try{ saveActiveThread(); }catch(_){}
+    render();
+  }
+}
+
 // ─── 云端记忆库（VPS 向量记忆 /mem/，Aries 记忆系统 v4）────────────────────
 function memRemoteBase(){
   const m = state.memRemote || {};
@@ -20241,6 +20408,32 @@ function renderVps(){
       </div>
     </div>
     <div class="section">
+      <div class="section-title"><i data-lucide="shield-alert"></i> 消息拦截</div>
+      <div class="section-body">
+        ${(()=>{
+          const g = state.guardConfig || {};
+          return `
+        <div class="setting-row">
+          <span class="setting-label">拦截他的消息</span>
+          <div id="guard-toggle" class="toggle-switch" style="background:${g.enabled?"var(--accent)":"var(--border)"}">
+            <div class="toggle-knob" style="left:${g.enabled?18:2}px"></div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">被拦后自动续发</span>
+          <div id="guard-cont-toggle" class="toggle-switch" style="background:${g.autoContinue!==false?"var(--accent)":"var(--border)"}">
+            <div class="toggle-knob" style="left:${g.autoContinue!==false?18:2}px"></div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <button id="guard-pass" class="btn-ghost">下一条放行</button>
+          <button id="guard-panel" class="btn-ghost">管理面板</button>
+        </div>
+        ${state.__guardNote ? `<div class="setting-row" style="font-size:11px;color:var(--sub);line-height:1.5">${esc(state.__guardNote)}</div>` : ""}`;
+        })()}
+      </div>
+    </div>
+    <div class="section">
       <div class="section-title"><i data-lucide="phone"></i> 电话 · MiniMax TTS</div>
       <div class="section-body">
         <div class="setting-row"><span class="setting-label">MiniMax API Key</span>
@@ -23997,6 +24190,11 @@ function renderChat(){
         msgs+=`<div class="chat-notice">${esc(m.content)}</div>`;
         return;
       }
+      // 消息拦截：他这条被系统拦了，气泡原地变成官方封禁通知（点一下看原文/放行）
+      if(m.guard){
+        msgs+=guardNoteHtml(m, idx);
+        return;
+      }
       const isMe=m.role==="user";
       const runKey = isMe ? "me" : (m.speakerId || "them");
       const firstInRun = runKey !== prevKey;
@@ -25846,6 +26044,21 @@ if(!window.__mpDelegated){
         }
         state.tab = next; state.subPage = null; state.homePage = (state.uiShell==="korean" ? 0 : 1);
         if(typeof render==="function") render();
+        return;
+      }
+      // 消息拦截 · 封禁卡：点一下看原文，顺手可以放行（她是这台 App 唯一的用户，
+      // 模型看不到界面，所以这里露原文不影响那边的「系统自动拦截」）
+      const guardCard = raw.closest("[data-guard-idx]");
+      if(guardCard){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const gi = parseInt(guardCard.getAttribute("data-guard-idx"), 10);
+        const gm = (state.messages||[])[gi];
+        if(gm && gm.guard){
+          const orig = gm._orig != null ? String(gm._orig) : "（本地没留原文，去管理面板看）";
+          if(confirm(`Lv${gm.guard.lv} 原文：\n\n${orig.slice(0, 900)}\n\n放行这条？`)){
+            guardReleaseOne(gi);
+          }
+        }
         return;
       }
       // 吃苹果 · 壳：放进这个兜底委托，不依赖 bindEvents 跑到那一行（它在三千行绑定之后，
@@ -29452,6 +29665,38 @@ reader.readAsArrayBuffer(f);
     if(typeof showToast === "function") showToast(state.proactiveConfig.enabled ? "主动消息已开启" : "主动消息已关闭");
   };
 
+  // 消息拦截（VPS 页）
+  const guardToggle = document.getElementById("guard-toggle");
+  if(guardToggle) guardToggle.onclick = ()=>{
+    state.guardConfig = state.guardConfig || {};
+    state.guardConfig.enabled = !state.guardConfig.enabled;
+    persist("guardConfig");
+    state.__guardNote = "";
+    render();
+    if(typeof showToast === "function") showToast(state.guardConfig.enabled ? "消息拦截已开启" : "消息拦截已关闭");
+  };
+  const guardCont = document.getElementById("guard-cont-toggle");
+  if(guardCont) guardCont.onclick = ()=>{
+    state.guardConfig = state.guardConfig || {};
+    state.guardConfig.autoContinue = state.guardConfig.autoContinue === false;
+    persist("guardConfig");
+    render();
+  };
+  const guardPassBtn = document.getElementById("guard-pass");
+  if(guardPassBtn) guardPassBtn.onclick = async ()=>{
+    guardPassBtn.disabled = true;
+    const r = await guardApi("/guard/pass", { on:true });
+    state.__guardNote = r ? "下一条放行（穿透一次后自动关）" : ("放行失败：" + (state.__guardErr || "连不上 VPS"));
+    guardPassBtn.disabled = false;
+    render();
+  };
+  const guardPanelBtn = document.getElementById("guard-panel");
+  if(guardPanelBtn) guardPanelBtn.onclick = ()=>{
+    const base = wakeBase();
+    if(!base){ state.__guardNote = "先填上面的 Base URL"; render(); return; }
+    try{ window.open(base + "/guard/admin", "_blank"); }catch(e){}
+  };
+
   // 进入屏幕时间页时自动拉一次
   if(state.subPage === "usage" && usageBase() && !state.usageLoading){
     if(!state._usageAutoLoaded){
@@ -30213,7 +30458,8 @@ function msgsToApiFormat(allMsgs, isGroup){
       return out;
     }
     const prefix = (isGroup && m.speakerName) ? `【${m.speakerName}】` : "";
-    return { role:"assistant", content: prefix + truthDareCardLabel(m) + m.content };
+    const gc = guardApiContent(m); // 被拦那条：给「你被拦了」，不给原文
+    return { role:"assistant", content: prefix + (gc != null ? gc : (truthDareCardLabel(m) + m.content)) };
   });
 }
 /** 抽到的真心话/大冒险卡在发给 AI 的历史里加前缀，方便识别 */
@@ -30269,7 +30515,8 @@ function buildMainChatRequest(ag, extraHint){
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
     }
-    return { role:"assistant", content: truthDareCardLabel(m) + m.content };
+    const gc = guardApiContent(m); // 被拦那条：给「你被拦了」，不给原文
+    return { role:"assistant", content: gc != null ? gc : (truthDareCardLabel(m) + m.content) };
   });
   if(win.summary){
     sys = (sys? sys+"\n\n" : "") + "【早前对话摘要（压缩前的逐字记录已不必再看）】\n" + win.summary;
@@ -30426,8 +30673,9 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       showToast(`工具调用失败，已退化为普通对话：${e.message}`);
       reply = await callChatAPI(cfg, apiMsgs, sys||null);
     }
-  } else if(state.streamOn !== false && typeof callChatAPIStream === "function"){
+  } else if(state.streamOn !== false && !guardOn() && typeof callChatAPIStream === "function"){
     // 流式输出：实时气泡 + 收尾复用同一管线；出错自动回退非流式
+    // （开了消息拦截就不走流式：流式会先把原文一个字一个字打出来，再被换成封禁通知）
     streamLiveStart({ id: ag.id, name: ag.name, color: ag.color });
     try{
       const r = await callChatAPIStream(cfg, apiMsgs, sys||null, {
@@ -30444,6 +30692,31 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     reply = await callChatAPI(cfg, apiMsgs, sys||null);
   }
   const { thinking, body } = parseThinking(reply);
+  // 消息拦截：命中就地把这条换成系统封禁通知。整条暗号流水线整段跳过 ——
+  // 被拦的话不该顺手把朋友圈/点歌/扣款那些副作用也做了。
+  if(guardOn()){
+    const gMsgId = "m"+Date.now()+"_"+ag.id;
+    const g = await guardCheck(body, ag, gMsgId);
+    if(g){
+      const gTime = new Date().toISOString();
+      state.messages.push({
+        role:"assistant",
+        content: g.notice,                       // 界面和模型看到的都只有这句
+        time: gTime,
+        msgId: gMsgId,
+        speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color,
+        thinking: thinking || null,
+        guard: { id: g.id, lv: g.level, name: g.level_name || "", at: gTime },
+        _orig: body,                             // 原文本地留一份，放行时还原
+      });
+      state.openThinkIds[gMsgId] = false;
+      saveActiveThread();
+      state.needChatScroll = true;
+      // 让他自己接着说（异步，等主流程收尾）
+      setTimeout(()=>{ try{ guardAutoContinue(ag, g); }catch(e){} }, 700);
+      return;
+    }
+  }
   let cleanBody = handleCallMarkers(body); // callhome 暗号：拨号/挂断/勿扰
   cleanBody = handleAlbumMarkers(cleanBody);   // 相册收藏：⟪收藏:感想⟫ / ⟪收藏第N张:感想⟫
   cleanBody = handleWalletMarkers(cleanBody);  // 钱包：[buy:东西] 立即扣款，[pay:金额|理由] 留给她点
@@ -30597,6 +30870,7 @@ async function triggerAIReply(){
     if(!ag || !agentHasKey(ag)){ alert("请先在设置页配置该 AI 的 API Key"); return; }
   }
 
+  state.__guardContN = 0; // 每次她开口，被拦自动续发的次数重新计
   const batch=[...state.pendingUser];
   state.messages.push(...batch);
   state.pendingUser=[];
@@ -30622,7 +30896,7 @@ async function triggerAIReply(){
         else if(list.length > 80) list = list.slice(-80);
         const apiMsgs = list.map(m=>{
           if(m.role==="user") return { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}用户：${m.content}` };
-          if(m.speakerId === ag.id) return { role:"assistant", content: m.content };
+          if(m.speakerId === ag.id) return { role:"assistant", content: guardApiContent(m) || m.content };
           return { role:"user", content:`【${m.speakerName||"另一位"}】${m.content}` };
         });
         try{
@@ -31403,6 +31677,8 @@ function proactiveTick(){
     const cfg = state.proactiveConfig || {};
     if(cfg.enabled && cfg.baseUrl && typeof proactivePullQuiet === "function") proactivePullQuiet();
   }catch(e){}
+  // 消息拦截：把管理面板里手动放行的那几条拉回来还原
+  try{ if(typeof guardSyncReleased === "function") guardSyncReleased(); }catch(e){}
 }
 if(!window.__proactiveTimer){
   window.__proactiveTimer = setInterval(proactiveTick, 10 * 60 * 1000);

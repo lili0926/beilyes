@@ -2656,6 +2656,47 @@
       padding: 0 24px; word-break: break-word;
     }
 
+    /* 消息拦截：被拦的那条原地变成系统封禁通知。Lv1 灰、越高越红越硬。 */
+    .guard-note {
+      --g: var(--sub);
+      margin: 10px auto; max-width: min(88%, 330px);
+      border: 1px solid color-mix(in srgb, var(--g) 40%, var(--border));
+      border-radius: 10px; overflow: hidden;
+      background: color-mix(in srgb, var(--g) 5%, var(--card));
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .guard-note:active { transform: scale(0.985); }
+    .guard-note .gn-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 5px 10px; font-size: 9.5px; letter-spacing: 0.16em;
+      color: var(--g); background: color-mix(in srgb, var(--g) 12%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--g) 28%, var(--border));
+    }
+    .guard-note .gn-head .gn-lv {
+      border: 1px solid currentColor; border-radius: 20px;
+      padding: 0 6px; letter-spacing: 0.06em; font-size: 9px;
+    }
+    .guard-note .gn-body {
+      padding: 11px 13px; text-align: center;
+      font-size: 12.5px; line-height: 1.65; color: var(--text);
+      word-break: break-word;
+    }
+    .guard-note .gn-foot {
+      padding: 0 13px 8px; text-align: center;
+      font-size: 9px; letter-spacing: 0.08em; color: var(--sub); opacity: 0.7;
+    }
+    .guard-note.g1 { --g: var(--sub); }
+    .guard-note.g2 { --g: #c9a227; }
+    .guard-note.g3 { --g: #e08b3a; }
+    .guard-note.g4 { --g: #e0533a; }
+    .guard-note.g5 {
+      --g: #ff2d55;
+      border-width: 2px;
+      box-shadow: 0 0 0 3px color-mix(in srgb, #ff2d55 10%, transparent);
+    }
+    .guard-note.g5 .gn-body { font-weight: 600; }
+    .guard-note.g4 .gn-head, .guard-note.g5 .gn-head { font-weight: 600; }
+
     /* 今天我说了算 · 指令卡 */
     .say-card {
       width: 100%; max-width: 290px;
