@@ -2360,6 +2360,7 @@ const state = {
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
   guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 3 }),
+  guardPeekIdx: null,   // 正在看原文的那条封禁卡（纯 UI，不持久化）
   pushStats: LS.get("pushStats", { counts:{}, nightCaps:{} }),
   ntfyConfig: LS.get("ntfyConfig", {
     enabled: false,
@@ -8622,8 +8623,44 @@ function guardNoteHtml(m, idx){
     <div class="gn-foot">${esc(t)}${no ? " · NO." + esc(no) : ""}</div>
   </div>`;
 }
+/** 点封禁卡弹出来的原文面板（顶层函数 —— renderChat 在顶层调它） */
+function guardPeekHtml(){
+  const idx = state.guardPeekIdx;
+  if(idx == null) return "";
+  const m = (state.messages||[])[idx];
+  if(!m || !m.guard) return "";
+  const g = m.guard;
+  const lv = Math.max(1, Math.min(5, g.lv || 1));
+  const orig = (m._orig != null && String(m._orig).trim())
+    ? String(m._orig)
+    : "（这条的原文本地没留，去管理面板看）";
+  const hits = Array.isArray(g.hits) ? g.hits : [];
+  return `<div class="gpeek-mask" id="gpeek-mask">
+    <div class="gpeek g${lv}" onclick="event.stopPropagation()">
+      <div class="gpeek-bar"></div>
+      <div class="gpeek-hd">
+        <span class="t">内容安全 · 原文</span>
+        <span class="lv">他看到 Lv${lv}${g.name?" "+esc(g.name):""}</span>
+        <button type="button" class="x" data-gpeek-close="1">✕</button>
+      </div>
+      <div class="gpeek-meta">
+        ${g.wordLv?`<span class="real">实际尺度 Lv${g.wordLv}</span>`:""}
+        ${g.streak?`<span>被拦第 ${g.streak} 条</span>`:""}
+        ${m.time?`<span>${esc(formatTime(m.time))}</span>`:""}
+        ${g.id?`<span>NO.${esc(String(g.id).toUpperCase())}</span>`:""}
+        ${hits.length?`<span>命中 ${esc(hits.slice(0,6).join("、"))}</span>`:""}
+      </div>
+      <div class="gpeek-body"><span class="q">他实际说的</span>${esc(orig)}</div>
+      <div class="gpeek-ft">
+        <button type="button" data-gpeek-copy="${idx}">复制</button>
+        <button type="button" class="go" data-gpeek-release="${idx}">放行这条</button>
+      </div>
+    </div>
+  </div>`;
+}
 /** 单条放行（聊天里点那张封禁卡）：服务端标记 + 本地还原 */
 async function guardReleaseOne(idx){
+  state.guardPeekIdx = null;
   const m = (state.messages||[])[idx];
   if(!m || !m.guard) return;
   const r = await guardApi("/guard/admin/release", { id: m.guard.id });
@@ -18949,6 +18986,7 @@ function renderChat(){
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>
     ${typeof thinkModalHtml==="function" ? thinkModalHtml() : ""}
+    ${typeof guardPeekHtml==="function" ? guardPeekHtml() : ""}
     ${viewMode==="rpg" ? renderRpgStage(activeAg, isGroup) : ""}
     <div class="chat-input-bar">
       ${guideOpen?`
@@ -20600,16 +20638,43 @@ if(!window.__mpDelegated){
       }
       // 消息拦截 · 封禁卡：点一下看原文，顺手可以放行（她是这台 App 唯一的用户，
       // 模型看不到界面，所以这里露原文不影响那边的「系统自动拦截」）
+      // 面板自己的按钮：关闭 / 复制 / 放行（都走这个兜底委托，不依赖 bindEvents）
+      const gpClose = raw.closest("[data-gpeek-close]");
+      if(gpClose || (raw.id === "gpeek-mask")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.guardPeekIdx = null;
+        if(typeof render==="function") render();
+        return;
+      }
+      const gpCopy = raw.closest("[data-gpeek-copy]");
+      if(gpCopy){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const ci = parseInt(gpCopy.getAttribute("data-gpeek-copy"), 10);
+        const cm = (state.messages||[])[ci];
+        const txt = (cm && cm._orig != null) ? String(cm._orig) : "";
+        try{
+          if(txt && navigator.clipboard) navigator.clipboard.writeText(txt);
+          if(typeof showToast==="function") showToast(txt ? "已复制原文" : "本地没留原文");
+        }catch(_){}
+        return;
+      }
+      const gpRel = raw.closest("[data-gpeek-release]");
+      if(gpRel){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const ri = parseInt(gpRel.getAttribute("data-gpeek-release"), 10);
+        state.guardPeekIdx = null;
+        if(typeof guardReleaseOne==="function") guardReleaseOne(ri);
+        else if(typeof render==="function") render();
+        return;
+      }
       const guardCard = raw.closest("[data-guard-idx]");
       if(guardCard){
         e.preventDefault(); e.stopImmediatePropagation();
         const gi = parseInt(guardCard.getAttribute("data-guard-idx"), 10);
         const gm = (state.messages||[])[gi];
         if(gm && gm.guard){
-          const orig = gm._orig != null ? String(gm._orig) : "（本地没留原文，去管理面板看）";
-          if(confirm(`Lv${gm.guard.lv} 原文：\n\n${orig.slice(0, 900)}\n\n放行这条？`)){
-            guardReleaseOne(gi);
-          }
+          state.guardPeekIdx = gi;
+          if(typeof render==="function") render();
         }
         return;
       }
@@ -25306,7 +25371,12 @@ async function callOneAgentReply(ag, apiMsgs, sys){
         msgId: gMsgId,
         speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color,
         thinking: thinking || null,
-        guard: { id: g.id, lv: g.level, name: g.level_name || "", at: gTime },
+        // wordLv/hits 只给她自己看（弹窗里显示「他其实说到什么程度」），不进模型历史
+        guard: {
+          id: g.id, lv: g.level, name: g.level_name || "", at: gTime,
+          wordLv: g.word_level || 0, hits: Array.isArray(g.hits) ? g.hits.slice(0, 12) : [],
+          streak: g.streak || 0,
+        },
         _orig: body,                             // 原文本地留一份，放行时还原
       });
       state.openThinkIds[gMsgId] = false;
