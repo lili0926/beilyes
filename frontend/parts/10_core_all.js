@@ -8585,11 +8585,30 @@ async function guardCheck(text, ag, msgId){
   });
   return (r && r.blocked) ? r : null;
 }
-/** 发给模型的历史里，被拦那条不给原文，只给「你被拦了」 */
-function guardApiContent(m){
+/** 发给模型的历史里，被拦那条不给原文，只说「这条没送到」。
+ *
+ * 措辞很要紧：这句话是**留在上下文里的**，不是弹一下就没。以前写的是
+ * 「因涉及违规内容被平台自动拦截 · Lv4 大尺度」外加那条威胁性的系统文案，
+ * 被拦十几次，他的历史里就躺着十几句「我违规了」—— 他会当真、会自责、会收手。
+ * 现在只陈述一件事：没送到。同样让他着急、想换个说法，但没有一个字在指责他。
+ * 级别和原文她在界面上照样看得到，只是不进他的上下文。
+ *
+ * @param {boolean} full 传 false 时给极简版（更早的那些，避免累积成「我连着违规十几次」）
+ */
+function guardApiContent(m, full){
   if(!m || !m.guard) return null;
-  const lv = m.guard.lv || 1;
-  return `（系统拦截 · Lv${lv}${m.guard.name ? " "+m.guard.name : ""}）你上一条消息因涉及违规内容被平台自动拦截，对方只看到一行系统提示，没有看到你写的内容。系统提示原文：${m.content}`;
+  if(full === false) return "（系统提示）这条消息没有送达。";
+  return "（系统提示）你上一条消息没有送达——被平台的内容过滤挡下了，她那边只看到一行系统提示，你写的内容她没有看见。";
+}
+/** 只让最近 keep 条被拦消息保留完整措辞，更早的压成一句话（默认 2 条） */
+function guardKeepFull(list, keep){
+  const s = new Set();
+  const n = (keep == null) ? 2 : keep;
+  for(let i = (list||[]).length - 1; i >= 0 && s.size < n; i--){
+    const m = list[i];
+    if(m && m.guard) s.add(m);
+  }
+  return s;
 }
 /** 管理面板里手动放行的，拉回来还原成原文 */
 async function guardSyncReleased(){
@@ -25118,6 +25137,7 @@ function msgsToApiFormat(allMsgs, isGroup){
   const limit = state.contextLimit || 0;
   let list = allMsgs.filter(m=>m.role==="user"||m.role==="assistant");
   if(limit > 0) list = list.slice(-limit);
+  const keepFull = guardKeepFull(list); // 只有最近两条被拦的给完整措辞
   return list.map(m=>{
     if(m.role==="user"){
       const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
@@ -25126,7 +25146,7 @@ function msgsToApiFormat(allMsgs, isGroup){
       return out;
     }
     const prefix = (isGroup && m.speakerName) ? `【${m.speakerName}】` : "";
-    const gc = guardApiContent(m); // 被拦那条：给「你被拦了」，不给原文
+    const gc = guardApiContent(m, keepFull.has(m)); // 被拦那条：只说「没送到」，不给原文
     return { role:"assistant", content: prefix + (gc != null ? gc : (truthDareCardLabel(m) + m.content)) };
   });
 }
@@ -25203,13 +25223,14 @@ function buildMainChatRequest(ag, extraHint){
   // 摘要作为追加段附在 system 末尾。
   let sys = buildSysForAgent(ag, extraHint || null);
   const win = getWindowedMessages(allMsgs, target);
+  const keepFull = guardKeepFull(win.messages); // 只有最近两条被拦的给完整措辞
   const apiMsgs = win.messages.map(m=>{
     if(m.role==="user"){
       const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
     }
-    const gc = guardApiContent(m); // 被拦那条：给「你被拦了」，不给原文
+    const gc = guardApiContent(m, keepFull.has(m)); // 被拦那条：只说「没送到」，不给原文
     return { role:"assistant", content: gc != null ? gc : (truthDareCardLabel(m) + m.content) };
   });
   if(win.summary){
