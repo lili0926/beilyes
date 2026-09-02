@@ -9231,11 +9231,12 @@ const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"que
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
-  if(!PERSIST_MAP[key]) return;
+  if(!PERSIST_MAP[key]) return false;
   const storageKey = PERSIST_MAP[key];
-  LS.set(storageKey, state[key]);
+  const ok = LS.set(storageKey, state[key]); // 落盘成败要回传：配额满时 LS.set 是静默 false
   // 壁纸/头像走手机原生存储：即使 localStorage 没满也镜像一份，冷启动 restoreNativeMirrors 以原生为准
   if(__NATIVE_IMAGE_KEYS.has(key)) __nativeMirrorWrite(storageKey, state[key]);
+  return ok;
 }
 
 // ─── 顶部浮窗通知（API 报错等不留在聊天里）────────────────────────────────────
@@ -14323,14 +14324,20 @@ function memRemotePost(path, body){
   const tok = wakeToken();
   if(tok) headers["X-Auth-Token"] = tok;
   return fetch(base + path, { method:"POST", headers, body: JSON.stringify(body||{}) })
-    .then(r=> r.ok ? r.json() : null)
-    .catch(()=>null);
+    .then(r=>{
+      if(r.ok) return r.json();
+      // 状态码要留下来，否则上层只知道「没成功」，说不出是 401 还是 404
+      window.__memCloudErr = "POST "+path+" → HTTP "+r.status+(r.status===401?"（鉴权失败，检查唤醒 token）":"");
+      return null;
+    })
+    .catch(e=>{ window.__memCloudErr = "POST "+path+" 失败："+String((e&&e.message)||e); return null; });
 }
 /** 记忆整理/合并统一走**聊天模型**，DeepSeek(aux) 只当兜底。
  * 原来顺序是反的：aux 优先、聊天模型只在返回空串时兜底 —— 而 DeepSeek 欠费报 402
  * 时抛的是异常不是空串，兜底那一层根本走不到，于是自动沉淀整个哑掉，还只 console.warn。 */
 async function memModelCall(prompt){
   let result = "";
+  state.__memErr = ""; // 每次重算，否则上一轮的旧错误会挂在界面上误导
   try{
     const ag = (typeof agentById==="function")
       ? (agentById(state.chatTarget==="group" ? "a1" : (state.chatTarget||"a1")) || (state.agents||[])[0])
@@ -14359,8 +14366,13 @@ function _layerToMemType(layer){
  * /mem/add 只做「保存 + 向量化」（向量走 SiliconFlow，和 DeepSeek 不是一个账户），
  * 不调任何 LLM —— 所以提炼归聊天模型，存储归云端，两边各干各的。 */
 async function memPushToCloud(list){
-  if(!memRemoteOn() || !Array.isArray(list) || !list.length) return 0;
-  let n = 0;
+  window.__memPushErr = "";
+  if(!Array.isArray(list) || !list.length){ window.__memPushErr = "没有可上传的记忆"; return 0; }
+  if(!memRemoteOn()){
+    window.__memPushErr = (state.memRemote||{}).enabled===false ? "云端开关是关的" : "没配置云端地址（VPS 主动消息那格的地址是空的）";
+    return 0;
+  }
+  let n = 0, failed = 0, lastErr = "";
   for(const m of list.slice(0, 30)){
     const txt = String((m && m.content) || "").trim();
     if(!txt) continue;
@@ -14371,8 +14383,10 @@ async function memPushToCloud(list){
         importance: (m.importance>=8) ? "high" : ((m.importance<=3) ? "low" : "medium"),
       });
       if(r && r.ok) n++;
-    }catch(e){ /* 单条失败不影响其它 */ }
+      else { failed++; lastErr = r ? "服务端拒收" : "请求失败（网络/鉴权）"; }
+    }catch(e){ failed++; lastErr = String((e&&e.message)||e).slice(0,60); } // 单条失败不影响其它
   }
+  if(failed) window.__memPushErr = `${failed} 条没上去：${lastErr}`;
   return n;
 }
 function _memTypeToLayer(type){
@@ -14423,13 +14437,21 @@ async function memRemoteRefresh(){
     } else if(res && (typeof res.total === "number" || Array.isArray(res.memories))){
       // 兜底：即使后端只回 memories 没 total，也按数组长度显示
       window.__memCloudInfo = { n: (typeof res.total === "number") ? res.total : (res.memories||[]).length };
+      window.__memCloudErr = "";
     } else {
       window.__memCloudInfo = { n:-2 };
     }
     state.memCloudCheckedAt = Date.now();
-    if(state.subPage==="memory" && typeof render==="function") render();
-  }catch(e){ window.__memCloudInfo = { n:-2 }; }
+  }catch(e){
+    // 这里只该抓「请求失败」。render() 以前也在 try 里，它一抛错就被写成「云端未连接」——
+    // 明明 200 回来了，界面却说连不上。重绘挪到 finally 之后，与连通性彻底分开。
+    window.__memCloudInfo = { n:-2 };
+    window.__memCloudErr = String((e && e.message) || e);
+  }
   finally{ state.memCloudLoading = false; }
+  if(state.subPage==="memory" && typeof render==="function"){
+    try{ render(); }catch(e){ console.error("[memRemoteRefresh] render", e); }
+  }
 }
 
 // ─── 小纸条 / 机日记 / 信箱：VPS 接口封装 ──────────────────────────────────
@@ -25205,17 +25227,30 @@ function renderMemory(){
       <div class="mem-header-top">
         <p style="font-size:11px;color:var(--sub)">${state.memories.length} 条本地记忆 · 聊天会自动沉淀</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          <span style="font-size:11px;color:var(--sub)" title="${(()=>{const e=window.__memCloudErr;return e?esc(e):"";})()}">${(()=>{const ci=window.__memCloudInfo||{n:-1};const on=(typeof memRemoteOn==="function")&&memRemoteOn();if(!on)return "";if(ci.n===-2)return "云端 ✗ 未连接";if(ci.n>=0)return "☁️ 云端 "+ci.n+" 条";return "☁️ 云端…";})()}</span>
+          <span style="font-size:11px;color:var(--sub)">${(()=>{const ci=window.__memCloudInfo||{n:-1};const on=(typeof memRemoteOn==="function")&&memRemoteOn();if(!on)return "";if(ci.n===-2)return "云端 ✗ 未连接";if(ci.n>=0)return "☁️ 云端 "+ci.n+" 条";return "☁️ 云端…";})()}</span>
           <button id="mem-cloud-toggle" class="btn-ghost auto-toggle${(state.memRemote||{}).enabled===false?" off":""}">☁️ 云端 ${(state.memRemote||{}).enabled===false?"关":"开"}</button>
           <button id="mem-auto-toggle" class="btn-ghost auto-toggle${state.memAutoDisabled?" off":""}">
             ${state.memAutoRunning?"沉淀中…":(state.memAutoDisabled?"自动沉淀 关":"自动沉淀 开")}
           </button>
         </div>
       </div>
+      ${(()=>{
+        // 状态行：以前自动沉淀的每一道闸门都是静默 return、失败只进 console，
+        // 手机上看不到 console —— 所以「不会自动整合」查了好几轮都没线索。这里把它说出来。
+        const note = (state.__memNote && state.__memNote.text) || "";
+        const cerr = window.__memCloudErr || "";
+        const ci = window.__memCloudInfo || {};
+        const parts = [];
+        if(note) parts.push(esc(note));
+        if(ci.n === -2 && cerr) parts.push(esc(String(cerr).slice(0,90)));
+        if(!parts.length) return "";
+        return `<div style="font-size:11px;color:var(--sub);opacity:.85;margin-top:4px;line-height:1.5;word-break:break-all">${parts.join(" · ")}</div>`;
+      })()}
       <div class="mem-actions" style="flex-wrap:wrap">
         <button id="mem-from-chat" class="btn-accent2">
           ${state.memMergeLoading?"整理中...":'<i data-lucide="message-circle"></i> 从聊天整理'}
         </button>
+        <button id="mem-auto-now" class="btn-ghost">${state.memAutoRunning?"沉淀中…":"立刻沉淀"}</button>
         ${selN>=2?`<button id="mem-merge" class="btn-ghost">合并选中(${selN})</button>`:""}
         <button id="mem-add-toggle" class="btn-accent">+ 添加</button>
       </div>
@@ -26270,6 +26305,13 @@ if(!window.__mpDelegated){
         }
         state.tab = next; state.subPage = null; state.homePage = (state.uiShell==="korean" ? 0 : 1);
         if(typeof render==="function") render();
+        return;
+      }
+      // 记忆库「立刻沉淀」：绕过 60 条阈值和 20 分钟冷却跑一次，结果写进状态行。
+      // 接在兜底委托里，bindEvents 半路挂了也点得动（注意：这段在下面 const id 之前，不能引用 id）
+      if(raw.closest && raw.closest("#mem-auto-now")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof memAutoIntegrate==="function") memAutoIntegrate({ force:true });
         return;
       }
       // 消息拦截 · 封禁卡：点一下看原文，顺手可以放行（她是这台 App 唯一的用户，
@@ -31346,11 +31388,13 @@ ${modeHint}
 
 // ─── 记忆：从聊天记录提炼 / 合并已有 ─────────────────────────────────────────
 function collectChatTranscript(opts = {}){
-  // opts: { threadIds, dateFrom, dateTo, days, maxPerThread, skip }
+  // opts: { threadIds, dateFrom, dateTo, days, maxPerThread, skip, limit }
   // 优先 dateFrom/dateTo（YYYY-MM-DD，含当天全部，默认不截断条数）；skip=跳过每线程最早 N 条（自动沉淀检查点用）
+  // limit=skip 之后只取前 N 条（自动沉淀分批用；maxPerThread 取的是**最后** N 条，两者别混）
   const threadIds = opts.threadIds || ["a1","a2","group"];
   const maxPerThread = opts.maxPerThread > 0 ? opts.maxPerThread : 0;
   const skip = opts.skip > 0 ? opts.skip : 0;
+  const limit = opts.limit > 0 ? opts.limit : 0;
   let startMs = 0, endMs = 0;
   if(opts.dateFrom || opts.dateTo){
     if(opts.dateFrom){
@@ -31389,6 +31433,7 @@ function collectChatTranscript(opts = {}){
     if(!th || !Array.isArray(th.messages) || !th.messages.length) return;
     let list = th.messages.filter(m=>(m.role==="user"||m.role==="assistant") && inRange(m));
     if(skip > 0) list = list.slice(skip);
+    if(limit > 0) list = list.slice(0, limit);
     if(maxPerThread > 0) list = list.slice(-maxPerThread);
     if(!list.length) return;
     totalCount += list.length;
@@ -31402,6 +31447,7 @@ function collectChatTranscript(opts = {}){
   if(!blocks.length && state.messages && state.messages.length){
     let list = state.messages.filter(m=>(m.role==="user"||m.role==="assistant") && inRange(m));
     if(skip > 0) list = list.slice(skip);
+    if(limit > 0) list = list.slice(0, limit);
     if(maxPerThread > 0) list = list.slice(-maxPerThread);
     const lines = list.map(m=>m.role==="user"?`用户：${m.content}`:`TA：${m.content}`);
     if(lines.length){
@@ -31462,10 +31508,20 @@ async function integrateMemoriesFromChat(){
   try{
     const created = await memDigestTranscript(transcript, rangeLabel, msgCount);
     state.memories = [...created, ...state.memories];
-    persist("memories");
+    const saved = persist("memories");
     const up = await memPushToCloud(created); // 同步进云端向量库
-    alert(`已从聊天整理出 ${created.length} 条记忆${up?`（已同步云端 ${up} 条）`:""}`);
-  }catch(e){ alert("从聊天整理失败："+e.message); }
+    // 上云 0 条以前是静默的（提示语里那一段直接不显示），结果就是「整理出来了但没上传」谁也不知道。
+    // 现在没上去一定说原因 —— 只存在本地的记忆，清了缓存就真没了。
+    const cloudTxt = up
+      ? `\n已同步云端 ${up} 条`
+      : `\n⚠️ 没同步到云端：${window.__memPushErr || "原因未知"}`;
+    const saveTxt = saved === false ? "\n⚠️ 本地保存失败（存储可能满了）" : "";
+    alert(`已从聊天整理出 ${created.length} 条记忆${cloudTxt}${saveTxt}`);
+    __memNote(`手动整理 ${created.length} 条，上云 ${up} 条${window.__memPushErr?" · "+window.__memPushErr:""}`);
+  }catch(e){
+    alert("从聊天整理失败："+e.message);
+    __memNote("手动整理失败："+String(e.message||e).slice(0,80));
+  }
   state.memMergeLoading=false; render();
 }
 
@@ -31565,7 +31621,12 @@ ${part}
       activations:1, resolved:false, pinned:false, fromChat:true,
     });
   });
-  if(!created.length) throw new Error("AI 没有返回可解析的记忆，请重试");
+  // 模型那层的真实原因（Key 没配 / 402 / 超时）在 memModelCall 里记进了 __memErr，
+  // 不带上来的话这里永远只有一句「请重试」，等于什么都没说
+  if(!created.length){
+    const why = state.__memErr ? ("：" + state.__memErr) : (String(result||"").trim() ? "：模型回的内容没法解析" : "：模型没有返回内容");
+    throw new Error("没能提炼出记忆" + why);
+  }
   return created;
 }
 
@@ -31578,13 +31639,31 @@ function memRelevantCount(tid){
   return 0;
 }
 
-/** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App） */
-async function memAutoIntegrate(){
-  if(state.memAutoRunning) return;
-  if(state.memAutoDisabled) return;
+/** 自动沉淀的状态行：每一道闸门都要留下「为什么没跑」，否则整条链全是静默 return，
+ *  从外面完全看不出卡在哪（主动消息那次就是这么白查了好几轮）。 */
+function __memNote(msg){
+  state.__memNote = { text: String(msg||""), at: Date.now() };
+}
+/** 自动沉淀一次要消化的上限。基线一旦被写成 0（冷启动时线程还没 hydrate 就跑了这一轮），
+ *  不设上限就会把几千条历史一次性喂给模型 —— 必然超时/超长，然后整条线程永远卡在这。 */
+const MEM_AUTO_MAX_PER_RUN = 200;
+/** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App）
+ *  opts.force=true 跳过「攒够 60 条」和 20 分钟冷却（记忆库页的「立刻沉淀」用） */
+async function memAutoIntegrate(opts){
+  const force = !!(opts && opts.force);
+  // 卡死自愈：memAutoRunning 不持久化，但一次 await 永远不 settle（hub 不回、fetch 没超时）
+  // 就会把它钉在 true 上，整个会话再不沉淀。超过 10 分钟视为死掉，放行重跑。
+  if(state.memAutoRunning){
+    if(Date.now() - (state.__memAutoStartAt||0) < 10*60000){
+      __memNote("上一轮还在跑（"+Math.round((Date.now()-(state.__memAutoStartAt||Date.now()))/1000)+"s）");
+      return;
+    }
+    console.warn("[memAuto] 上一轮超过 10 分钟没结束，判定卡死，重跑");
+  }
+  if(state.memAutoDisabled && !force){ __memNote("自动沉淀开关是关的"); return; }
   const anyKey = state.apiConfig && (state.apiConfig.claudeKey || state.apiConfig.auxOpenaiKey || state.apiConfig.openaiKey);
   const agKey = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
-  if(!anyKey && !agKey) return;
+  if(!anyKey && !agKey){ __memNote("没有可用的 API Key"); return; }
   const ids = [...((state.agents||[]).map(a=>a.id)), "group"];
   const cp = state.memCheckpoint || {};
   const newPer = {};
@@ -31600,46 +31679,81 @@ async function memAutoIntegrate(){
       cp[id] = done;
       baselineChanged = true;
     } else done = +done || 0;
+    // 检查点是「第几条」这种绝对下标，而聊天记录会变短（冷启动多源抢救挑中了更短的那份、
+    // 手动清理、换账号前缀）。一旦 done > c，n 就永远是负数，这条线程**再也不会沉淀**，
+    // 而且全程没有任何提示。夹回来。
+    if(done > c){
+      console.warn("[memAuto] 检查点比实际记录还靠后，回夹", id, done, "→", c);
+      done = c; cp[id] = done; baselineChanged = true;
+    }
     const n = c - done;
     if(n > 0){ newPer[id] = { n, done }; totalNew += n; }
   });
-  if(baselineChanged) persist("memCheckpoint");
-  if(totalNew < 60) return; // 攒够 60 条（约 6 轮对话）才整理一次，减少打扰与 API 消耗
+  if(baselineChanged){ state.memCheckpoint = cp; persist("memCheckpoint"); }
+  if(!force && totalNew < 60){ __memNote(`新增 ${totalNew} 条，攒够 60 条才自动整理`); return; }
+  if(totalNew <= 0){ __memNote("没有新的聊天可整理"); return; }
   const now = Date.now();
-  if(now - (state.memLastAutoAt||0) < 20*60000) return; // 20 分钟冷却
+  const cool = 20*60000 - (now - (state.memLastAutoAt||0));
+  if(!force && cool > 0){ __memNote(`冷却中，还有 ${Math.ceil(cool/60000)} 分钟`); return; }
   state.memAutoRunning = true;
+  state.__memAutoStartAt = now;
+  state.__memErr = "";
+  __memNote("整理中…");
+  if(state.subPage==="memory") render();
   let totalCreated = 0, totalRemote = 0;
+  const errs = [];
   try{
     for(const [tid, info] of Object.entries(newPer)){
       if(info.n < 4) continue;
-      const cAtRun = memRelevantCount(tid);
-      const transcript = collectChatTranscript({ threadIds:[tid], skip: info.done, maxPerThread:0 });
-      if(!transcript.trim()){ state.memCheckpoint[tid] = cAtRun; continue; }
+      // 一次最多消化 MEM_AUTO_MAX_PER_RUN 条，剩下的下一轮接着来；检查点只推进到实际消化的位置
+      const take = Math.min(info.n, MEM_AUTO_MAX_PER_RUN);
+      const upTo = info.done + take;
+      const transcript = collectChatTranscript({ threadIds:[tid], skip: info.done, limit: take, maxPerThread:0 });
+      if(!transcript.trim()){ cp[tid] = upTo; state.memCheckpoint = cp; persist("memCheckpoint"); continue; }
       // 提炼一律走**聊天模型**（memDigestTranscript 里已改成聊天模型主力）。
       // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
       // DeepSeek 欠费时它照样回 {ok:true,count:0}，把「失败」伪装成「没什么可记的」。
       // 现在云端只负责**存**（/mem/add 只做保存 + 向量化，不调任何 LLM）。
       try{
-        const created = await memDigestTranscript(transcript, "最近 "+info.n+" 条", info.n);
+        const created = await memDigestTranscript(transcript, "最近 "+take+" 条", take);
         if(created && created.length){
           state.memories=[...created, ...state.memories];
           totalCreated += created.length;
           totalRemote += await memPushToCloud(created); // 同步进云端向量库，检索才找得到
+          if(window.__memPushErr) errs.push(window.__memPushErr);
         }
         // 成功处理即推进检查点（含空结果，避免反复花钱重试同一批）
-        state.memCheckpoint[tid] = cAtRun;
+        cp[tid] = upTo; state.memCheckpoint = cp;
         persist("memCheckpoint");
-      }catch(e){ console.warn("[memAuto] 线程", tid, e); /* 该线程失败不推进，下次重试 */ }
+      }catch(e){
+        // 以前这里只有 console.warn —— 手机上看不到 console，所以「不会自动整合」查了几轮都没线索
+        const why = String((e&&e.message)||e).slice(0,80);
+        errs.push(`${tid}：${why}`);
+        console.warn("[memAuto] 线程", tid, e); /* 该线程失败不推进，下次重试 */
+      }
+    }
+    if(totalCreated > 0){
+      const ok = persist("memories");
+      if(ok === false) errs.push("本地保存失败（存储可能满了）");
     }
     if(totalCreated > 0 || totalRemote > 0){
-      if(totalCreated > 0){ persist("memories"); }
       state.memLastAutoAt = now; persist("memLastAutoAt");
       const cloudTxt = totalRemote > 0 ? `（云端 ${totalRemote}）` : "";
-      showToast(`🧠 已自动沉淀 ${totalCreated + totalRemote} 条记忆${cloudTxt}`);
-      if(state.subPage==="memory") render();
+      showToast(`🧠 已自动沉淀 ${totalCreated} 条记忆${cloudTxt}`);
     }
-  }catch(e){ console.warn("[memAuto]", e); }
-  finally{ state.memAutoRunning = false; }
+    __memNote(totalCreated || totalRemote
+      ? `已沉淀 ${totalCreated} 条，上云 ${totalRemote} 条${errs.length?" · "+errs[0]:""}`
+      : (errs.length ? "整理失败："+errs[0] : "这批聊天没提炼出可存的记忆"));
+    // __memErr 可能已经被 memDigestTranscript 拼进错误信息里了，别重复贴一遍
+    if(state.__memErr && state.__memNote.text.indexOf(state.__memErr) < 0){
+      __memNote(state.__memNote.text + " · " + state.__memErr);
+    }
+  }catch(e){
+    __memNote("整理异常："+String((e&&e.message)||e).slice(0,80));
+    console.warn("[memAuto]", e);
+  }
+  finally{ state.memAutoRunning = false; state.__memAutoStartAt = 0; }
+  if(state.subPage==="memory") render();
 }
 
 /** 多选已有记忆 → 合并成一条 */
