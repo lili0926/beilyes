@@ -1224,7 +1224,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
     const pin = (ag&&ag.ccPin) || apiConfig.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
     const modelId = (ag && ag.ccModel) || apiConfig.ccModel || "";
     try{ await __ccEnsureModel(wsUrl, pin, modelId); }catch(e){}
-    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), { model: __ccModelAlias(modelId), timeoutMs: (opts && opts.timeoutMs) });
+    return await __ccHubSend(wsUrl, pin, __ccBuildContent(messages, systemPrompt), { model: __ccModelAlias(modelId), timeoutMs: (opts && opts.timeoutMs), background: !!(opts && opts.background) });
   }
 
   if (channel === "gemini") {
@@ -1418,8 +1418,24 @@ function __ccIsSystemNoise(text){
     /上下文(?:已|即将|自动)?压缩/,
     /会话已压缩/,
     /以下是(?:之前)?对话的?(?:压缩|摘要)/,
+    // 新版 Claude Code 压缩输出的开头，旧的几条正则漏了这些
+    /ran out of context/i,
+    /^\s*analysis\s*:/i,
+    /summary of the conversation so far/i,
+    /把下面这段已发生的对话/,        // 我们自己的压缩提示词被原样回显
+    /【上一次摘要】|【新对话】/,
   ];
   if(STRONG.some(re=>re.test(s))) return true;
+  // 1.5) **我们自己那份对话压缩摘要**被回显回来了。CC 是共享终端、hub 的回复没有请求 id，
+  // 压缩请求和她发的消息撞在一起时，摘要会串到聊天里 —— 拿存好的那份直接比对，最准。
+  try{
+    const th = (state.chatThreads||{})[state.chatTarget||"a1"];
+    const sum = String((th && th.compressed && th.compressed.summary) || "").trim();
+    if(sum.length > 80 && s.length > 80){
+      const head = sum.slice(0, 60);
+      if(s.indexOf(head) >= 0 || sum.indexOf(s.slice(0, 60)) >= 0) return true;
+    }
+  }catch(e){}
   // 2) 结构特征：压缩摘要是一份带编号小标题的长清单，正常说话不会长这样
   const SECTIONS = [
     /primary request and intent/i,
@@ -1434,10 +1450,26 @@ function __ccIsSystemNoise(text){
   if(s.length > 600 && SECTIONS.filter(re=>re.test(s)).length >= 3) return true;
   return false;
 }
-/** 发一条消息给 CC，resolve 其完整回复；opts.onLive 收 edit 流。 */
+// 同时在等 CC 的请求列表。**hub 的回复里没有任何请求 id**，`type:"message"` 一来就
+// 广播给 _replyCbs 里所有人（见 __ccConnect 的 onmessage）—— 两个请求同时在等，
+// 先回来的那条会把两个 Promise 一起 resolve。她遇到的「摘要被当成回复发出来」就是这么来的：
+// 对话压缩（compressThreadIfNeeded）和她刚发的消息撞在一起，摘要抢先回来，两边都收下了。
+// 没有 id 可配对，只能保证**同一时刻只有一个请求在等**：
+//   - 后台任务（压缩/记忆整理）遇到有人在等 → 直接跳过，下轮再来（后台任务本来就可重试）
+//   - 前台消息（她发的）遇到有人在等 → 抢占，把在等的全部作废（她的消息永远优先）
+const __ccPending = [];
+/** 发一条消息给 CC，resolve 其完整回复；opts.onLive 收 edit 流；opts.background=后台任务，忙则让路。 */
 function __ccHubSend(wsUrl, pin, content, opts){
   return new Promise((resolve, reject)=>{
     const o = opts||{};
+    if(__ccPending.length){
+      if(o.background){
+        reject(new Error("CC 正忙（有消息在等回复），后台任务这轮跳过"));
+        return;
+      }
+      // 前台抢占：把还在等的全部作废，避免它们的回复串到这条上
+      __ccPending.slice().forEach(p=>{ try{ p.fail(new Error("被新消息抢占")); }catch(e){} });
+    }
     const ws = __ccConnect(wsUrl, pin);
     if(!ws){ reject(new Error("CC hub 连接失败(检查 ws 地址)")); return; }
     let settled=false;
@@ -1446,8 +1478,12 @@ function __ccHubSend(wsUrl, pin, content, opts){
     const timer=setTimeout(()=>fail(new Error(sawCompact
       ? "CC 刚做完上下文压缩，这条没回上来，再说一次"
       : "CC 回复超时")), (o.timeoutMs||180000));
+    const slot = { background: !!o.background, fail: (e)=>fail(e) };
+    __ccPending.push(slot);
     function cleanup(){
       clearTimeout(timer);
+      const i = __ccPending.indexOf(slot);
+      if(i >= 0) __ccPending.splice(i, 1);
       if(__onReply) __cc._replyCbs = __cc._replyCbs.filter(f=>f!==__onReply);
       if(__onEdit) __cc._editCbs = __cc._editCbs.filter(f=>f!==__onEdit);
       if(__onStatus) __cc._statusCbs = __cc._statusCbs.filter(f=>f!==__onStatus);
@@ -3163,6 +3199,18 @@ function agentHasKey(ag){
   if(ag.channel==="gemini") return !!ag.geminiKey;
   if(ag.channel==="cc") return true; // cc 通道自带默认 hub 地址兜底，不需要 API key
   return !!(ag.openaiKey);
+}
+/** 后台任务（对话压缩摘要 / 记忆提炼）该用哪个 agent。
+ * 优先**不是 CC 通道**的：CC 是往共享终端敲字，hub 的回复没有请求 id，
+ * 后台任务和她发的消息撞在一起就会互相串（摘要被当成回复贴进聊天）。
+ * 实在只有 CC 可用时返回它，但调用方必须带 background:true，忙的时候自己让路。 */
+function bgChatAgent(){
+  const list = (state.agents||[]).filter(a=>typeof agentHasKey==="function" && agentHasKey(a));
+  const cur = agentById(state.chatTarget==="group" ? "a1" : (state.chatTarget||"a1"));
+  if(cur && agentHasKey(cur) && cur.channel !== "cc") return cur;
+  const nonCc = list.find(a=>a.channel !== "cc");
+  if(nonCc) return nonCc;
+  return (cur && agentHasKey(cur)) ? cur : (list[0] || null);
 }
 function agentToApiConfig(ag){
   // 兼容旧 callChatAPI / callAuxAPI 形状
@@ -8771,11 +8819,11 @@ async function memModelCall(prompt){
   let result = "";
   state.__memErr = ""; // 每次重算，否则上一轮的旧错误会挂在界面上误导
   try{
-    const ag = (typeof agentById==="function")
-      ? (agentById(state.chatTarget==="group" ? "a1" : (state.chatTarget||"a1")) || (state.agents||[])[0])
-      : (state.agents||[])[0];
+    // 记忆提炼是后台任务：优先走非 CC 的通道，落到 CC 时也标 background，
+    // 免得提炼出来的 LAYER|… 串到聊天里去（CC 的回复没有请求 id，见 __ccHubSend）
+    const ag = (typeof bgChatAgent==="function") ? bgChatAgent() : (state.agents||[])[0];
     if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
-      const raw = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
+      const raw = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, { background:true });
       const parsed = (typeof parseThinking==="function") ? parseThinking(raw) : { body: raw };
       result = parsed.body || raw || "";
     }
@@ -25318,13 +25366,17 @@ async function compressThreadIfNeeded(){
 **每一件关键事件都要带上它发生的时间**（写成「2026/09/01 周一」这样；同一天的多件事可以合并到一个日期下；跨度长的可以写「8 月下旬」）。
 时间顺序要保持，不要把不同日子的事揉成一句。
 这是对「上一次摘要」的整体更新，不是追加——新摘要要包含旧摘要里依然重要的内容（**旧摘要里已有的日期要原样保留**），且总长不超过 600 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,8000)}`;
-    const ag = agentById(target) || (state.agents||[])[0];
+    // 兜底优先挑非 CC 的通道：CC 是共享终端，摘要和她刚发的消息撞在一起会互相串
+    // （hub 的回复没有请求 id）—— 「换官方订阅渠道就把摘要发出来了」就是这么来的。
+    const ag = (typeof bgChatAgent==="function" ? bgChatAgent() : null) || agentById(target) || (state.agents||[])[0];
     // 摘要用便宜的 aux（DeepSeek）生成，主模型（贵）兜底：省 token 大头就是省在每轮的上下文，这里只花零头
     let summary = "";
     try{ summary = (await callAuxAPI(state.apiConfig, prompt)) || ""; }catch(e){}
     if(!summary.trim() && typeof callChatAPI==="function" && ag){
-      summary = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
+      summary = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, { background:true });
     }
+    // 空摘要绝不能覆盖上一份，否则压缩点白推进、旧对话就真丢了
+    if(!String(summary||"").trim()) return;
     thread.compressed = { summary: (summary||"").slice(0,1200), upToIndex: compressTo, at: new Date().toISOString() };
     saveActiveThread();
   }catch(e){ /* 压缩失败不阻塞聊天 */ }
