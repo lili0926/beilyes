@@ -5561,6 +5561,229 @@
       max-width: 92% !important;
     }
 
+    /* ══════════════════════════════════════════════════════════════════
+       蓝晒壳 shell-blueprint
+       暗 = 蓝晒（蓝底白线）· 亮 = 白图（浅底蓝线，.bp-diazo）
+       颜色靠 applyThemeVars 锁死的 7 个变量吃，这里只管形态：
+       没有圆角、只有发丝线、标号走等宽、气泡是挂在纸上的标注
+       ══════════════════════════════════════════════════════════════════ */
+    body.shell-blueprint {
+      --bp-grid: rgba(190,225,245,.055);
+      --bp-grid-b: rgba(190,225,245,.095);
+      --bp-warn: #C6A04C;
+      --bp-me: #123D5C;
+    }
+    body.shell-blueprint.bp-diazo {
+      --bp-grid: rgba(18,50,76,.05);
+      --bp-grid-b: rgba(18,50,76,.09);
+      --bp-warn: #98721E;
+      --bp-me: #D4DEE3;
+    }
+    /* 晒图纸的网格 */
+    body.shell-blueprint #app {
+      background-color: var(--bg);
+      background-image:
+        linear-gradient(var(--bp-grid-b) 1px, transparent 1px),
+        linear-gradient(90deg, var(--bp-grid-b) 1px, transparent 1px),
+        linear-gradient(var(--bp-grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px);
+      background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+    }
+    /* 一律直角 + 发丝线：图纸上没有圆角 */
+    body.shell-blueprint .card,
+    body.shell-blueprint .feat-card,
+    body.shell-blueprint .feat-icon,
+    body.shell-blueprint .section,
+    body.shell-blueprint .btn-ghost,
+    body.shell-blueprint .btn-accent,
+    body.shell-blueprint .btn-accent2,
+    body.shell-blueprint .chip,
+    body.shell-blueprint .filter-chip,
+    body.shell-blueprint .theme-chip,
+    body.shell-blueprint .font-chip,
+    body.shell-blueprint .back-btn,
+    body.shell-blueprint .card-btn,
+    body.shell-blueprint .avatar-circle,
+    body.shell-blueprint .chat-input-bar textarea,
+    body.shell-blueprint input,
+    body.shell-blueprint textarea,
+    body.shell-blueprint select {
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    body.shell-blueprint .feat-card,
+    body.shell-blueprint .card,
+    body.shell-blueprint .section {
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+    body.shell-blueprint .feat-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--sub);
+    }
+    body.shell-blueprint .feat-section-label,
+    body.shell-blueprint .section-title {
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--sub); font-weight: 400;
+    }
+    body.shell-blueprint .page-title {
+      font-weight: 600; letter-spacing: .04em;
+    }
+    /* 底栏：当前页用红铅笔画一条顶边 */
+    body.shell-blueprint .bottom-nav {
+      background: var(--card); border-top: 1px solid var(--border);
+      backdrop-filter: none; box-shadow: none;
+    }
+    body.shell-blueprint .bottom-nav button {
+      border-top: 2px solid transparent; margin-top: -1px;
+    }
+    body.shell-blueprint .bottom-nav button.active {
+      border-top-color: var(--accent);
+    }
+    /* 气泡 = 挂在纸上的标注：不做圆角、不做阴影、不做尾巴，
+       靠一根 1px 引线和左右方向说明是谁。左右内边距收紧（她提的） */
+    body.shell-blueprint .bubble {
+      border-radius: 0 !important; box-shadow: none !important;
+      padding: 6px 9px; position: relative;
+    }
+    body.shell-blueprint .bubble.them {
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    body.shell-blueprint .bubble.me {
+      background: var(--bp-me); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    body.shell-blueprint .bubble.them::after,
+    body.shell-blueprint .bubble.me::after {
+      content: ""; position: absolute; top: 13px;
+      width: 7px; height: 1px; background: var(--border);
+    }
+    body.shell-blueprint .bubble.them::after { left: -8px; }
+    body.shell-blueprint .bubble.me::after { right: -8px; }
+    body.shell-blueprint .chat-header,
+    body.shell-blueprint .sub-header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: none; -webkit-backdrop-filter: none;
+    }
+    body.shell-blueprint .chat-input-bar {
+      background: var(--card); border-top: 1px solid var(--border);
+    }
+
+    /* ── 首页 = 宫殿平面 ─────────────────────────────────── */
+    body.shell-blueprint .bp-home { padding-bottom: 18px; }
+    .bp-rule {
+      display: flex; align-items: center; gap: 9px; margin: 20px 0 11px;
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--sub);
+    }
+    .bp-rule::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .bp-rule .bp-n { color: var(--accent); }
+    .bp-rule .bp-cnt { color: var(--accent); letter-spacing: .1em; }
+
+    .bp-gauge { border: 1px solid var(--border); background: var(--card); padding: 13px 14px 11px; }
+    .bp-gauge-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+    .bp-gauge-top b { font-size: 15px; font-weight: 600; letter-spacing: .04em; }
+    .bp-stamp {
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 9px; letter-spacing: .12em; color: var(--accent2);
+      border: 1px solid currentColor; padding: 2px 6px; white-space: nowrap;
+    }
+    .bp-stamp.off { color: var(--sub); }
+    .bp-axes { display: grid; gap: 8px; }
+    .bp-axis { display: grid; grid-template-columns: 42px 1fr 56px; gap: 10px; align-items: center; }
+    .bp-axis .bp-k { font-size: 12.5px; color: var(--text); opacity: .85; letter-spacing: .04em; }
+    .bp-axis .bp-v {
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 10px; color: var(--sub); text-align: right; letter-spacing: .04em;
+      font-variant-numeric: tabular-nums;
+    }
+    .bp-track { position: relative; height: 12px; }
+    .bp-base { position: absolute; left: 0; right: 0; bottom: 5px; height: 1px; background: var(--border); }
+    .bp-ticks {
+      position: absolute; left: 0; right: 0; bottom: 3px; height: 5px;
+      background-image: linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 20% 100%;
+    }
+    .bp-fill { position: absolute; left: 0; bottom: 5px; height: 3px; background: var(--accent2); }
+    .bp-pen { position: absolute; bottom: 0; width: 1px; height: 12px; background: var(--text); }
+    .bp-axis.hot .bp-fill, .bp-axis.hot .bp-pen { background: var(--accent); }
+    .bp-axis.hot .bp-v { color: var(--accent); }
+
+    /* 剖面索引：楼层就是一张剖面图，B1 在地坪线以下 */
+    .bp-floorplan { display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: stretch; }
+    .bp-section { display: flex; flex-direction: column; border: 1px solid var(--border); background: var(--card); overflow: hidden; }
+    .bp-fbtn {
+      flex: 1; background: transparent; border: 0; cursor: pointer; padding: 0 2px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 11px; color: var(--sub); letter-spacing: .05em;
+      border-left: 2px solid transparent; min-height: 44px;
+    }
+    .bp-fbtn + .bp-fbtn { border-top: 1px solid var(--border); }
+    .bp-fbtn em { font-style: normal; font-size: 8px; opacity: .8; letter-spacing: 0; }
+    .bp-fbtn[aria-current="true"] {
+      color: var(--accent); border-left-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 11%, transparent);
+    }
+    .bp-ground {
+      height: 9px; flex: none; border-top: 1px solid var(--text);
+      background-image: repeating-linear-gradient(45deg, var(--border) 0 1px, transparent 1px 5px);
+    }
+    .bp-planwrap { border: 1px solid var(--border); background: var(--card); padding: 8px 8px 4px; }
+    .bp-plan { display: block; width: 100%; height: auto; }
+    .bp-walls rect { fill: none; stroke: var(--text); stroke-width: 1.6; }
+    .bp-walls rect.bp-outer { stroke-width: 2.4; }
+    .bp-thin { fill: none; stroke: var(--border); stroke-width: .8; }
+    .bp-cell { fill: transparent; cursor: pointer; }
+    .bp-room:active .bp-cell,
+    .bp-room:hover .bp-cell { fill: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .bp-room.lit .bp-cell { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .bp-room:focus { outline: none; }
+    .bp-room:focus-visible .bp-cell { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: var(--accent); stroke-width: 1.4; }
+    .bp-dot { fill: var(--accent); }
+    .bp-rname { font-size: 11px; fill: var(--text); letter-spacing: .08em; }
+    .bp-rno, .bp-corr, .bp-northtxt {
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 7.5px; fill: var(--sub); letter-spacing: .1em;
+    }
+    .bp-corr { font-size: 9px; text-anchor: middle; letter-spacing: .2em; }
+    .bp-core-t { font-size: 12px; fill: var(--sub); letter-spacing: .28em; }
+    .bp-north { fill: none; stroke: var(--accent); stroke-width: 1.2; }
+    .bp-northtxt { fill: var(--accent); }
+    .bp-floorcap {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 7px;
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 9.5px; letter-spacing: .1em; color: var(--sub);
+    }
+    .bp-floorcap b { font-family: inherit; font-size: 12px; color: var(--text); letter-spacing: .12em; }
+
+    /* 图纸目录：平面上放不下的长尾全在这儿，一个不少 */
+    .bp-index { border: 1px solid var(--border); background: var(--card); }
+    .bp-idx-grp {
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 9px; letter-spacing: .18em; color: var(--sub);
+      padding: 8px 12px 4px; background: color-mix(in srgb, var(--text) 6%, transparent);
+    }
+    .bp-idx-row {
+      display: grid !important; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: baseline;
+      width: 100%; padding: 8px 12px; border: 0 !important; border-top: 1px solid var(--border) !important;
+      background: transparent !important; text-align: left; font-size: 13.5px; color: var(--text);
+      border-radius: 0 !important; box-shadow: none !important;
+    }
+    /* 目录是列表不是卡片，别跟着 .feat-card 一起缩放 */
+    body.shell-blueprint .bp-idx-row:active { transform: none; }
+    .bp-idx-row:active { background: color-mix(in srgb, var(--accent) 10%, transparent) !important; }
+    .bp-idx-no, .bp-idx-st {
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+      font-size: 9.5px; color: var(--sub); letter-spacing: .06em; font-variant-numeric: tabular-nums;
+    }
+    .bp-idx-st.on { color: var(--accent); }
+    .bp-idx-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   </style>
 
   <div id="app"></div>
