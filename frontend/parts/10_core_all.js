@@ -2307,7 +2307,8 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude | korean
+  uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude | korean | blueprint
+  bpFloor: "f1", // 蓝晒壳当前楼层（不持久化：冷启动回一层，会话内切走再回来还在原楼层）
   // 工作间（独立 WS，绝不复用 __cc 恋爱通道）
   wsWsUrl: LS.get("wsWsUrl", "ws://115.29.237.172/ws/workshop") || "ws://115.29.237.172/ws/workshop",
   wsPin: LS.get("wsPin", "521314") || "521314",
@@ -3253,6 +3254,13 @@ function applyThemeVars(){
   if((state.uiShell||"")==="korean"){
     const kr = {bg:"#F4F4F6",card:"#FFFFFF",accent:"#1C1C1E",accent2:"#8E8E93",text:"#1C1C1E",sub:"#8E8E93",border:"#E5E5EA"};
     Object.keys(kr).forEach(k=>r.style.setProperty("--"+k, kr[k]));
+  } else if((state.uiShell||"")==="blueprint"){
+    // 蓝晒壳同样锁死变量（照韩系那套做法）：整套界面靠这 7 个变量吃到蓝图配色，
+    // CSS 那边只补「没有圆角、发丝线、等宽标号」这些形态上的东西。
+    const bp = bpIsDiazo()
+      ? {bg:"#E3E7E1",card:"#F7F9F4",accent:"#A5462A",accent2:"#3D6280",text:"#12324C",sub:"#6C89A0",border:"#9CB1BD"}
+      : {bg:"#061B2D",card:"#0E324D",accent:"#E28A5D",accent2:"#A6C2D5",text:"#E1EAF1",sub:"#7292AA",border:"#2C5675"};
+    Object.keys(bp).forEach(k=>r.style.setProperty("--"+k, bp[k]));
   } else {
     ["bg","card","accent","accent2","text","sub","border"].forEach(k=>r.style.setProperty("--"+k,t[k]));
   }
@@ -3326,12 +3334,18 @@ function applyThemeVars(){
   else if(uf==="noto-kr") document.body.classList.add("font-noto-kr");
   else if(uf==="noto-sc") document.body.classList.add("font-noto-sc");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","bp-diazo","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
   else if(sh === "claude") document.body.classList.add("shell-claude");
   else if(sh === "korean") document.body.classList.add("shell-korean");
+  else if(sh === "blueprint"){
+    document.body.classList.add("shell-blueprint");
+    // 蓝晒（蓝底白线）/ 白图（浅底蓝线）是同一张图的正负片。
+    // 不新加设置项：跟着当前主题的明暗走 —— 浅色主题出白图，深色主题出蓝晒。
+    if(bpIsDiazo()) document.body.classList.add("bp-diazo");
+  }
   else document.body.classList.add("shell-classic");
   if(state.chatViewMode === "rpg" && state.tab === "chat")
     document.body.classList.add("rpg-chat-on");
@@ -4459,6 +4473,7 @@ function renderHomeSwipe(){
     try{ if(typeof sbEnsureWeather==="function") sbEnsureWeather(false); }catch(e){}
     return renderHomeKorean();
   }
+  if((state.uiShell || "") === "blueprint") return renderHomeBlueprint();
   const p = state.homePage === 0 ? "page0" : state.homePage === 2 ? "page2" : "page1";
   return `<div class="home-swipe-wrap" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
@@ -4858,8 +4873,8 @@ function renderHomeMain(){
   `;
 }
 
-function renderHomeFeat(){
-  const groups = [
+// 功能总表：功能页和蓝晒壳的「图纸目录」共用同一份，避免加了功能只在一处出现
+const FEAT_GROUPS = [
     {
       label: "功能",
       items: [
@@ -4925,7 +4940,9 @@ function renderHomeFeat(){
         {key:"quest",    icon:"list-checks", label:"每日任务"},
       ],
     },
-  ];
+];
+function renderHomeFeat(){
+  const groups = FEAT_GROUPS;
   return `
     <h2 class="page-title" style="margin-bottom:4px">功能页</h2>
     ${groups.map(g=>`
@@ -4943,6 +4960,224 @@ function renderHomeFeat(){
     `).join("")}
     ${homeDots(2)}
   `;
+}
+
+// ═══ 蓝晒壳（blueprint）· 首页 = 宫殿平面图 ═══════════════════════════════
+// 亮 = 白图（浅底蓝线）· 暗 = 蓝晒（蓝底白线），跟着当前主题的明暗走，不新增设置项。
+/** 当前主题偏亮 → 出白图。用的是和 contrastFg 一样的相对亮度。 */
+function bpIsDiazo(){
+  try{
+    const t = (typeof T === "function") ? T() : null;
+    let h = String((t && t.bg) || "#ffffff").replace("#","");
+    if(h.length === 3) h = h.split("").map(c=>c+c).join("");
+    const n = parseInt(h, 16);
+    if(isNaN(n)) return true;
+    const L = (0.2126*((n>>16)&255) + 0.7152*((n>>8)&255) + 0.0722*(n&255)) / 255;
+    return L > 0.5;
+  }catch(e){ return true; }
+}
+
+// 楼层。每层的分隔完全不同（1F 大厅 / 2F 走廊 / 3F 套间 / B1 机房），
+// 但**楼梯间在每层同一个坐标**——真房子就是这么盖的，手指也不用重新学。
+// 底栏已有的（聊天、动态）不重复放进平面；放不下的长尾全在下面的图纸目录里。
+// 加房间只改这份数据：{key(=data-sub), name, x, y, w, h}
+const BP_CORE = { x:114, y:102, w:92, h:92 };
+const BP_FLOORS = [
+  { id:"f1", label:"1F", name:"起居", core:"中庭", rooms:[
+    { key:"calendar", name:"日历",   x:10,  y:10,  w:196, h:88 },
+    { key:"wallet",   name:"钱包",   x:210, y:10,  w:100, h:88 },
+    { key:"mailbox",  name:"信箱",   x:10,  y:102, w:100, h:92 },
+    { key:"diary",    name:"日记",   x:210, y:102, w:100, h:92 },
+    { key:"memory",   name:"记忆库", x:10,  y:198, w:100, h:84 },
+    { key:"phone",    name:"电话",   x:114, y:198, w:196, h:84 },
+  ]},
+  { id:"f2", label:"2F", name:"共处", core:"楼梯", corridor:{ x:10, y:10, w:34, h:272, label:"廊" }, rooms:[
+    { key:"music",   name:"一起听",   x:48,  y:10,  w:110, h:88 },
+    { key:"read",    name:"一起读",   x:162, y:10,  w:148, h:88 },
+    { key:"watch",   name:"一起看",   x:48,  y:102, w:62,  h:92 },
+    { key:"cooking", name:"烹饪",     x:210, y:102, w:100, h:92 },
+    { key:"game",    name:"小狗游戏", x:48,  y:198, w:130, h:84 },
+    { key:"quest",   name:"每日任务", x:182, y:198, w:128, h:84 },
+  ]},
+  { id:"f3", label:"3F", name:"里间", core:"楼梯", rooms:[
+    { key:"pr",         name:"快穿 RP",  x:10,  y:10,  w:100, h:180 },
+    { key:"mdiary",     name:"机日记",   x:114, y:10,  w:92,  h:88  },
+    { key:"roleplay",   name:"角色扮演", x:210, y:10,  w:100, h:88  },
+    { key:"eatapple",   name:"吃苹果",   x:210, y:102, w:100, h:92  },
+    { key:"wardrobe",   name:"衣柜",     x:10,  y:198, w:96,  h:84  },
+    { key:"captivity",  name:"囚禁",     x:110, y:198, w:200, h:84  },
+  ]},
+  { id:"fb", label:"B1", name:"机房", core:"机井", underground:true, rooms:[
+    { key:"vps",      name:"VPS",      x:10,  y:10,  w:92,  h:60  },
+    { key:"ntfy",     name:"上推通知", x:10,  y:74,  w:92,  h:60  },
+    { key:"usage",    name:"屏幕时间", x:10,  y:138, w:92,  h:56  },
+    { key:"backup",   name:"备份",     x:10,  y:198, w:92,  h:84  },
+    { key:"mcphall",  name:"MCP 大厅", x:210, y:10,  w:100, h:184 },
+    { key:"workshop", name:"工作间",   x:106, y:198, w:204, h:84  },
+  ]},
+];
+
+/** 房间的「灯」：有东西等着就亮起来。位置是记忆，灯是状态，两件事分开。
+ *  返回 {txt, lit}；读不到就安静地什么都不显示。 */
+function bpMeta(key){
+  const q = (v)=> (v == null ? "" : String(v));
+  try{
+    switch(key){
+      case "memory":   return { txt: q((state.memories||[]).length), lit:false };
+      case "wallet":   return { txt: q(((state.wallet||{}).balance) ?? ""), lit:false };
+      case "calendar": {
+        const n = ((state.calendar||{}).events||[]).length;
+        return { txt: n ? n+" 项" : "", lit:false };
+      }
+      case "pr": {
+        const a = (state.pr||{}).active;
+        return a ? { txt: q(a.world||"进行中").slice(0,6), lit:true } : { txt:"", lit:false };
+      }
+      case "eatapple": return { txt: (typeof EA_SHELLS!=="undefined" ? EA_SHELLS.length+" 壳" : ""), lit:false };
+      case "vps": {
+        const six = state.sixAxis;
+        const on = !!(six && typeof six.missing === "number");
+        return { txt: on ? "六轴在跑" : "未连", lit: on };
+      }
+      case "quest":    return { txt: state.questEnabled ? "开" : "关", lit: !!state.questEnabled };
+      case "read":     return { txt: q(((state.readingNow||{}).title)||"").slice(0,6), lit:false };
+      case "music":    return { txt: q(((state.musicNow||{}).name)||"").slice(0,6), lit:false };
+      case "mdiary":   return { txt: (state.mcUnlocked ? "已解锁" : "已锁"), lit:false };
+      case "roleplay": return { txt: q((state.roleplays||[]).length), lit:false };
+      case "wardrobe": return { txt: q((state.wardrobeItems||[]).length), lit:false };
+      case "backup": {
+        const at = (state.backupRemind||{}).lastBackupAt || 0;
+        if(!at) return { txt:"没备过", lit:true };
+        const d = Math.floor((Date.now()-at)/86400000);
+        return { txt: d<=0 ? "今天" : d+" 天前", lit: d > 14 };
+      }
+      default: return { txt:"", lit:false };
+    }
+  }catch(e){ return { txt:"", lit:false }; }
+}
+
+/** 一层平面。墙直接由房间矩形描边叠出来——相邻两间共用的那条自然变粗，
+ *  跟真图纸一个道理，也省得手算墙线。加房间只改 BP_FLOORS。 */
+function bpPlanSvg(f){
+  const no = (i)=> "A-" + (f.id==="fb" ? "B" : f.label[0]) + String(i+1).padStart(2,"0");
+  const walls = [];
+  const cells = [];
+  walls.push(`<rect class="bp-wall bp-outer" x="8" y="8" width="304" height="276"/>`);
+  if(f.corridor){
+    const c = f.corridor;
+    walls.push(`<rect class="bp-wall" x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}"/>`);
+    cells.push(`<text class="bp-corr" x="${c.x + c.w/2}" y="${c.y + c.h/2}">${esc(c.label)}</text>`);
+  }
+  f.rooms.forEach((r,i)=>{
+    const m = bpMeta(r.key);
+    walls.push(`<rect class="bp-wall" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"/>`);
+    const cx = r.x + 14;
+    const cy = r.y + Math.round(r.h/2);
+    cells.push(`<g class="bp-room${m.lit?" lit":""}" data-sub="${escAttr(r.key)}" role="button" tabindex="0" aria-label="${escAttr(r.name + (m.txt? " · "+m.txt : ""))}">
+      <rect class="bp-cell" x="${r.x+1}" y="${r.y+1}" width="${r.w-2}" height="${r.h-2}"/>
+      ${m.lit?`<circle class="bp-dot" cx="${r.x+r.w-10}" cy="${r.y+10}" r="2.6"/>`:""}
+      <text class="bp-rname" x="${cx}" y="${cy}">${esc(r.name)}</text>
+      <text class="bp-rno" x="${cx}" y="${cy+15}">${no(i)}${m.txt?" · "+esc(m.txt):""}</text>
+    </g>`);
+  });
+  // 核心筒：每层同一坐标。1F 的中庭点了去聊天，其它层是楼梯/机井，只是结构
+  const C = BP_CORE;
+  walls.push(`<rect class="bp-wall" x="${C.x}" y="${C.y}" width="${C.w}" height="${C.h}"/>`);
+  const steps = [];
+  for(let y = C.y + 10; y < C.y + C.h - 4; y += 14) steps.push(`M${C.x+10} ${y}H${C.x+C.w-10}`);
+  cells.push(f.id === "f1"
+    ? `<g class="bp-room bp-core" data-bp-chat="1" role="button" tabindex="0" aria-label="中庭 · 聊天">
+         <rect class="bp-cell" x="${C.x+1}" y="${C.y+1}" width="${C.w-2}" height="${C.h-2}"/>
+         <text class="bp-core-t" x="${C.x+14}" y="${C.y+52}">${esc(f.core)}</text>
+       </g>`
+    : `<g class="bp-core-still" aria-hidden="true"><path class="bp-thin" d="${steps.join("")}"/></g>`);
+  return `<svg class="bp-plan" viewBox="0 0 320 292" role="group" aria-label="${escAttr(f.label+" "+f.name+" 平面图")}">
+    <g class="bp-walls">${walls.join("")}</g>
+    ${cells.join("")}
+    <path class="bp-north" d="M298 270v-16 m0 16l-4-6 m4 6l4-6"/><text class="bp-northtxt" x="294" y="246">N</text>
+  </svg>`;
+}
+
+function renderHomeBlueprint(){
+  const cur = BP_FLOORS.find(f=>f.id === (state.bpFloor||"f1")) || BP_FLOORS[0];
+  const six = state.sixAxis || {};
+  const hasSix = typeof six.missing === "number";
+  const axes = (typeof SIX_AXIS_META !== "undefined" ? SIX_AXIS_META : []).map(a=>{
+    const v = Math.max(0, Math.min(1, +six[a.key] || 0));
+    const hot = v >= 0.65;
+    return `<div class="bp-axis${hot?" hot":""}">
+      <span class="bp-k">${esc(a.name)}</span>
+      <span class="bp-track"><span class="bp-base"></span><span class="bp-ticks"></span>
+        <span class="bp-fill" style="width:${Math.round(v*100)}%"></span>
+        <span class="bp-pen" style="left:${Math.round(v*100)}%"></span></span>
+      <span class="bp-v">${esc(typeof axisWord==="function" ? axisWord(v) : "")}</span>
+    </div>`;
+  }).join("");
+
+  // 图纸目录：功能总表原样铺开，平面上放不下的长尾都在这儿，一个不少
+  const planKeys = new Set();
+  BP_FLOORS.forEach(f=>f.rooms.forEach(r=>planKeys.add(r.key)));
+  let n = 0;
+  const idx = FEAT_GROUPS.map(g=>`
+    <div class="bp-idx-grp">${esc(g.label)}</div>
+    ${g.items.map(it=>{
+      n++;
+      const m = bpMeta(it.key);
+      return `<button type="button" class="bp-idx-row feat-card" data-sub="${escAttr(it.key)}">
+        <span class="bp-idx-no">${String(n).padStart(2,"0")}</span>
+        <span class="bp-idx-nm">${esc(it.label)}</span>
+        <span class="bp-idx-st${m.lit?" on":""}">${planKeys.has(it.key) ? "在平面" : (m.txt ? esc(m.txt) : "—")}</span>
+      </button>`;
+    }).join("")}
+  `).join("");
+  // 平面上有、功能总表里没有的（比如「备份」只挂在设置页）也要进目录，
+  // 否则目录就不是「一个不少」了
+  const realKeys = new Set();
+  FEAT_GROUPS.forEach(g=>g.items.forEach(it=>realKeys.add(it.key)));
+  const extras = [];
+  BP_FLOORS.forEach(f=>f.rooms.forEach(r=>{ if(!realKeys.has(r.key)) extras.push(r); }));
+  const idxExtra = extras.length ? `
+    <div class="bp-idx-grp">其它</div>
+    ${extras.map(r=>{
+      n++;
+      return `<button type="button" class="bp-idx-row feat-card" data-sub="${escAttr(r.key)}">
+        <span class="bp-idx-no">${String(n).padStart(2,"0")}</span>
+        <span class="bp-idx-nm">${esc(r.name)}</span>
+        <span class="bp-idx-st">在平面</span>
+      </button>`;
+    }).join("")}` : "";
+  const total = FEAT_GROUPS.reduce((s,g)=>s+g.items.length, 0) + extras.length;
+
+  return `<div class="page bp-home">
+    <div class="bp-rule"><span class="bp-n">01</span> 此刻</div>
+    <div class="bp-gauge">
+      <div class="bp-gauge-top">
+        <b>他现在</b>
+        <span class="bp-stamp${hasSix?"":" off"}">${hasSix ? "读数 "+esc(formatTime(Date.now())) : "未连 VPS"}</span>
+      </div>
+      <div class="bp-axes">${axes}</div>
+    </div>
+
+    <div class="bp-rule"><span class="bp-n">02</span> 宫殿 · 平面</div>
+    <div class="bp-floorplan">
+      <div class="bp-section" role="group" aria-label="楼层">
+        ${BP_FLOORS.filter(f=>!f.underground).map(f=>`
+          <button type="button" class="bp-fbtn" data-bp-floor="${f.id}" aria-current="${cur.id===f.id}">
+            ${f.label}<em>${esc(f.name)}</em>
+          </button>`).join("")}
+        <span class="bp-ground" aria-hidden="true"></span>
+        ${BP_FLOORS.filter(f=>f.underground).map(f=>`
+          <button type="button" class="bp-fbtn" data-bp-floor="${f.id}" aria-current="${cur.id===f.id}">
+            ${f.label}<em>${esc(f.name)}</em>
+          </button>`).join("")}
+      </div>
+      <div class="bp-planwrap">${bpPlanSvg(cur)}</div>
+    </div>
+    <div class="bp-floorcap"><b>${cur.label} ${esc(cur.name)}</b><span>${cur.rooms.length} 间 · 核心筒对齐</span></div>
+
+    <div class="bp-rule"><span class="bp-n">03</span> 图纸目录 <span class="bp-cnt">${total}</span></div>
+    <div class="bp-index">${idx}${idxExtra}</div>
+  </div>`;
 }
 
 function avatarHtml(src,size,fallbackEmoji){
@@ -20195,6 +20430,7 @@ function renderTheme(){
         <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
         <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
         <button type="button" class="font-chip${state.uiShell==="korean"?" active":""}" data-ui-shell="korean">韩系</button>
+        <button type="button" class="font-chip${state.uiShell==="blueprint"?" active":""}" data-ui-shell="blueprint">蓝晒</button>
       </div>
       
     </div>
@@ -20765,6 +21001,17 @@ function bindCoreNav(){
 }
 if(!window.__mpDelegated){
   window.__mpDelegated = true;
+  // 蓝晒壳的房间是 SVG <g tabindex="0">，不是 button，回车/空格要自己接
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "Enter" && e.key !== " ") return;
+    const t = e.target;
+    if(!t || !t.closest) return;
+    const g = t.closest(".bp-room");
+    if(!g) return;
+    e.preventDefault();
+    if(typeof g.click === "function") g.click();
+    else g.dispatchEvent(new MouseEvent("click", { bubbles:true }));
+  });
   // —— 核心按钮委托（capture）：即使 bindEvents 中途抛错，导航/发信/退出仍可用 ——
   document.addEventListener("click", function(e){
     try{
@@ -20792,6 +21039,28 @@ if(!window.__mpDelegated){
       if(raw.closest && raw.closest("#mem-auto-now")){
         e.preventDefault(); e.stopImmediatePropagation();
         if(typeof memAutoIntegrate==="function") memAutoIntegrate({ force:true });
+        return;
+      }
+      // 蓝晒壳：换楼层 / 平面上点房间 / 中庭进聊天。
+      // 首页的唯一导航就是这张平面图，所以必须接在兜底委托里
+      const bpF = raw.closest && raw.closest("[data-bp-floor]");
+      if(bpF){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.bpFloor = bpF.getAttribute("data-bp-floor") || "f1";
+        if(typeof render==="function") render();
+        return;
+      }
+      if(raw.closest && raw.closest("[data-bp-chat]")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.tab = "chat"; state.subPage = null; state.needChatScroll = true;
+        if(typeof render==="function") render();
+        return;
+      }
+      const bpR = raw.closest && raw.closest(".bp-room[data-sub]");
+      if(bpR){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.subPage = bpR.getAttribute("data-sub");
+        if(typeof render==="function") render();
         return;
       }
       // 消息拦截 · 封禁卡：点一下看原文，顺手可以放行（她是这台 App 唯一的用户，
