@@ -14717,6 +14717,23 @@ function ensureCallAudio(){
   }
   return a;
 }
+/** 在「拨号 / 接听」那一下（真实用户手势）里把音频元素解锁。
+ *  安卓 WebView 常要求 play() 发生在用户手势里，而 TTS 是等模型回完才播的，
+ *  那时手势早过期了 —— 表现就是「接通了但一声不吭，也没有任何报错」。
+ *  这里先用一段极短的静音把它 play 过一次，之后再 src= 播就不受限了。 */
+let __callAudioUnlocked = false;
+function callUnlockAudio(){
+  if(__callAudioUnlocked) return;
+  try{
+    const a = ensureCallAudio();
+    a.muted = true;
+    a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA";
+    const p = a.play();
+    if(p && p.then) p.then(()=>{ a.pause(); a.muted = false; }).catch(()=>{ a.muted = false; });
+    else { a.pause(); a.muted = false; }
+    __callAudioUnlocked = true;
+  }catch(e){}
+}
 /** 网关鉴权 token：电话页填了就用电话页的，否则复用「主动消息」里那把（同一台 VPS，同一个 X-Auth-Token）。
  *  以前只读 callConfig.token，而这一格默认是空的 —— 结果 /tts/minimax 与 /stt 一律 401，电话不出声。 */
 function callAuthToken(){
@@ -14724,11 +14741,22 @@ function callAuthToken(){
   if(c.token && String(c.token).trim()) return String(c.token).trim();
   return (typeof wakeToken === "function" ? (wakeToken()||"") : "");
 }
+/** TTS 走哪个代理。**没填就回落到网关 baseUrl** —— 老存档里的 callConfig 是整份覆盖默认值的，
+ *  2508 行那个 ttsProxy 默认值它吃不到，于是直连 api.minimax.chat：
+ *  一是 WebView 里必被 CORS 挡，二是用的是 App 里那把早就过期的 Key，
+ *  MiniMax 原样回一句 "invalid api key"（她在电话页看到的就是这句）。
+ *  服务端 /tts/minimax 自己持有有效 Key，走代理才是对的路。 */
+function ttsProxyBase(){
+  const cfg = state.callConfig || {};
+  const p = (cfg.ttsProxy || "").trim() || (cfg.baseUrl || "").trim()
+    || (typeof wakeBase === "function" ? (wakeBase()||"") : "");
+  return String(p||"").replace(/\/$/,"");
+}
 async function minimaxSynthesize(text){
   const cfg = state.callConfig || {};
   if(!cfg.ttsEnabled || cfg.ttsProvider === "none") return null;
   const key = (cfg.minimaxKey||"").trim();
-  const hasProxy = !!(cfg.ttsProxy || "").trim();
+  const hasProxy = !!ttsProxyBase();
   // 后端代理持 Key 时（ttsProxy 指向 VPS /tts/minimax），app 可以不填 Key
   if(!key && !hasProxy) throw new Error("未填写 MiniMax API Key（或 TTS 代理）");
   const cleanText = String(text||"").replace(/\s+/g," ").trim().slice(0, 500);
@@ -14754,15 +14782,17 @@ async function minimaxSynthesize(text){
     },
   };
 
-  // 优先走自建代理（解决 CORS）
-  const proxy = (cfg.ttsProxy || "").replace(/\/$/,"");
+  // 优先走自建代理（解决 CORS，而且服务端那把 Key 才是有效的那把）
+  const proxy = ttsProxyBase();
   let url, headers, payload;
   if(proxy){
     url = proxy + "/tts/minimax";
     headers = { "Content-Type": "application/json" };
     const tok = callAuthToken();
     if(tok) headers["X-Auth-Token"] = tok;
-    payload = { ...body, api_key: key, group_id: cfg.minimaxGroupId||"", endpoint: cfg.minimaxEndpoint||"" };
+    // 服务端**明确忽略** body 里的 api_key / endpoint / group_id（那是个 SSRF + 送密钥出网的口子，
+    // main.py 里注释写着），所以这边也别再发了
+    payload = body;
   } else {
     let endpoint = (cfg.minimaxEndpoint || "https://api.minimax.chat/v1/t2a_v2").replace(/\/$/,"");
     if(cfg.minimaxGroupId) endpoint += (endpoint.includes("?")?"&":"?") + "GroupId=" + encodeURIComponent(cfg.minimaxGroupId);
@@ -14801,8 +14831,13 @@ async function minimaxSynthesize(text){
 }
 async function callSpeak(text){
   const cfg = state.callConfig || {};
-  if(!cfg.ttsEnabled) return;
-  if(!cfg.minimaxKey && !(cfg.ttsProxy||"").trim()) return; // app 无 Key 但走后端代理时仍出声
+  const s0 = ensureCallSession();
+  if(!cfg.ttsEnabled){ s0.ttsError = "语音合成开关是关的（电话页 → TTS）"; return; }
+  // 以前这里是闷声 return —— 「没声音又没有任何提示」就是这么来的
+  if(!cfg.minimaxKey && !ttsProxyBase()){
+    s0.ttsError = "没有 TTS 出口：既没填 MiniMax Key，也没有网关地址";
+    return;
+  }
   try{
     const result = await minimaxSynthesize(text);
     if(!result) return;
@@ -15249,6 +15284,7 @@ function renderPhone(){
 async function callStartOutgoing(){
   const s = ensureCallSession();
   if(s.phase==="active") return;
+  callUnlockAudio(); // 必须在这一下手势里解锁，等模型回完就来不及了
   s.phase = "active";
   s.reason = "你拨出的电话";
   callClearInviteTimer();
@@ -15280,6 +15316,7 @@ async function callSimulateIncoming(){
 }
 function callAccept(){
   const s = ensureCallSession();
+  callUnlockAudio(); // 同上：接听这一下是手势，TTS 播放时已经不是了
   callAnswerApi("accept", "");
   callClearInviteTimer();
   s.phase = "active";
@@ -15328,7 +15365,7 @@ async function callAiTurn(userText){
   }
   const meta = s.lastVoiceMeta || {};
   const metaLine = (meta.emotion||meta.tone) ? `\n用户语音线索：情绪=${meta.emotion||"?"}，语气=${meta.tone||"?"}` : "";
-  let prompt, ccOpts = null;
+  let prompt, ccOpts = null, sys = null;
   if(ag.channel === "cc"){
     // cc 是一条长会话：他自己就记得刚才说过什么，再把 caps 喂一遍纯属重复；
     // 而「只输出你要说的话、不要旁白」这类指令会永久留在同一个会话里，
@@ -15339,17 +15376,29 @@ async function callAiTurn(userText){
       : `[电话] ${userText || ""}${metaLine}`;
     ccOpts = { timeoutMs: 60000 };  // 打电话等 3 分钟没有意义
   } else {
-    // 直连通道没有记忆，仍要把背景和历史带上
+    // 直连通道没有记忆，仍要把背景和历史带上。
+    // **人设走 sys**：以前这里第三个参数写死 null，等于整通电话没有身份锚定、没有她写的
+    // 提示词、没有世界书、没有六轴 —— 说出来的话当然不是那个人。
+    // 电话要短句，所以拼 sys 时临时把 NSFW 长文和思考链关掉再还原（照主动消息那套做法）。
+    const _nsfw = state.nsfwOn, _thought = state.thoughtOn;
+    try{
+      state.nsfwOn = false;
+      state.thoughtOn = false;
+      sys = buildSysForAgent(ag, `【现在是语音通话，不是打字】
+- 口语、短句，一次说 1-3 句，像真的在打电话；绝对不要写成长文或旁白。
+- 只输出你要说出口的话：不要引号、不要动作描写、不要 <thinking>、不要任何暗号。
+- 匹配对方的能量：她轻你就轻，她急你就跟上。
+- 你的人设、称呼、和她的关系，和聊天里完全一样。`);
+    } finally {
+      state.nsfwOn = _nsfw;
+      state.thoughtOn = _thought;
+    }
     const hist = (s.caps||[]).slice(-8).map(c=>(c.who==="me"?"用户：":"你：")+c.text).join("\n");
-    prompt = `你在和用户「打电话」。口语、短句、一次 1-3 句，像真的通话不要长文。
-来电/通话背景：${s.reason||"闲聊"}${metaLine}
-历史：
-${hist}
-${userText && userText.startsWith("（") ? "系统："+userText : "用户刚说："+(userText||"")}
-只输出你要说的话，不要引号，不要旁白。匹配对方能量。`;
+    prompt = `【通话背景】${s.reason||"闲聊"}${metaLine}
+${hist ? "【刚才说过的】\n"+hist+"\n" : ""}${userText && userText.startsWith("（") ? "【系统】"+userText : "【她刚说】"+(userText||"")}`;
   }
   try{
-    let text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, ccOpts);
+    let text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], sys, ccOpts);
     if(typeof parseThinking==="function") text = parseThinking(text).body || text;
     text = String(text||"").trim().slice(0,300) || "……我在听。";
     // callhome ⟪挂断⟫：说完晚安后留赖床窗，期间用户说话可留住
@@ -15361,7 +15410,9 @@ ${userText && userText.startsWith("（") ? "系统："+userText : "用户刚说�
     s.ttsError = "";
     callSpeak(text).then(()=>{ if(state.subPage==="phone") render(); }).catch(()=>{});
   }catch(e){
-    s.caps.push({ who:"them", text:"信号不好……"+e.message });
+    // 标明是**模型**那条出的错。以前只写「信号不好……invalid api key」，
+    // 和 TTS 的报错长得一模一样，根本分不清是哪一半坏了
+    s.caps.push({ who:"them", text:"信号不好……（模型）"+e.message });
   }
   s.loading = false;
   render();
@@ -25241,7 +25292,9 @@ const sttUrl = document.getElementById("call-stt-url");
     state.musicConfig      = { ...(state.musicConfig||{}),      baseUrl: VPS_BASE, token: VPS_MUSIC_TOKEN };
     state.usageConfig      = { ...(state.usageConfig||{}),      baseUrl: VPS_BASE, token: VPS_MUSIC_TOKEN };
     state.proactiveConfig  = { ...(state.proactiveConfig||{}),  baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN };
-    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN, voceUrl: "http://115.29.237.172:3456" };
+    // ttsProxy 以前漏在这儿：一键填入之后 TTS 仍然直连 api.minimax.chat，
+    // 用的是 App 里那把过期 Key，于是「invalid api key」+ 没声音
+    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN, ttsProxy: VPS_BASE, ttsEnabled: true, voceUrl: "http://115.29.237.172:3456" };
     ["musicConfig","usageConfig","proactiveConfig","callConfig"].forEach(k=>{ if(typeof persist==="function") persist(k); });
     render();
   };
