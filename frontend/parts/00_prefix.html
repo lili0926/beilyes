@@ -2346,9 +2346,13 @@
 
     /* ─── 一起听 · 分享进聊天的歌曲卡 ─────────────────── */
     .song-share {
-      /* 定宽定高：他发的和她发的必须一模一样，且不跟着曲名长短缩 */
+      /* 定宽：他发的和她发的必须一模一样，且不跟着曲名长短缩。
+         高度用 min-height 不用 height —— 写死 78px 的时候，换个大一点的界面字体
+         或者来源标签长一点，三行文字就直接顶出卡片外面了（她报的那个溢出）。
+         overflow:hidden 是最后一道兜底。 */
       display: flex; align-items: center; gap: 12px; box-sizing: border-box;
-      width: 258px; max-width: 100%; height: 78px; flex: 0 0 auto;
+      width: 258px; max-width: 100%; min-height: 78px; flex: 0 0 auto;
+      overflow: hidden;
       padding: 10px; border-radius: 16px; cursor: pointer;
       border: 1px solid var(--border);
       background: linear-gradient(135deg,
@@ -2385,15 +2389,29 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .song-share-foot {
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; gap: 6px; min-width: 0;
       margin-top: 6px; font-size: 10px; color: var(--sub);
+      white-space: nowrap; overflow: hidden;
     }
+    .song-share-foot > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .song-share-src {
-      padding: 2px 6px; border-radius: 6px;
+      padding: 2px 6px; border-radius: 6px; flex: 0 1 auto; max-width: 60%;
       background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent);
     }
     /* 气泡里他发的歌卡：独占一行，别被行内文字挤住 */
     .song-share.them { margin: 2px 0; }
+
+    /* ─── 床事档案 ───────────────────────────────────── */
+    .bed-cool {
+      display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: color-mix(in srgb, var(--sub) 18%, transparent); color: var(--sub);
+    }
+    .bed-chart { display: grid; gap: 5px; width: 100%; }
+    .bed-row { display: grid; grid-template-columns: 72px 1fr 26px; gap: 8px; align-items: center; }
+    .bed-row-n { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bed-row-bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--sub) 16%, transparent); overflow: hidden; }
+    .bed-row-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+    .bed-row-c { font-size: 11px; color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
 
     /* ─── 朋友圈 / Moments ────────────────────────────── */
     .mo-page { padding-bottom: 96px; }
@@ -5563,21 +5581,32 @@
 
     /* ══════════════════════════════════════════════════════════════════
        蓝晒壳 shell-blueprint
-       暗 = 蓝晒（蓝底白线）· 亮 = 白图（浅底蓝线，.bp-diazo）
-       颜色靠 applyThemeVars 锁死的 7 个变量吃，这里只管形态：
-       没有圆角、只有发丝线、标号走等宽、气泡是挂在纸上的标注
+       暗 = 蓝晒（蓝底白线）· 亮 = 白图（浅底蓝线，.bp-diazo）—— 一键互换，不跟昼夜
+       **这是一张完全独立的壳**：配色由 T() 整份换掉（见 10_core_all.js），
+       壁纸/布料纹理/界面材质在 applyThemeVars 里对它一律不生效。
+       这里只管形态：没有圆角、只有发丝线、标号走等宽、气泡和顶底栏是同一片玻璃
        ══════════════════════════════════════════════════════════════════ */
     body.shell-blueprint {
       --bp-grid: rgba(190,225,245,.055);
       --bp-grid-b: rgba(190,225,245,.095);
       --bp-warn: #C6A04C;
       --bp-me: #123D5C;
+      /* 聊天页统一材质：顶栏底栏是真玻璃（带模糊），气泡是同一个色系的半透明填色 */
+      --bp-glass: rgba(14,50,77,.52);
+      --bp-glass-line: rgba(190,225,245,.20);
+      --bp-bub: rgba(14,50,77,.78);
+      --bp-bub-hi: rgba(23,71,105,.86);
+      --bp-blur: 16px;
     }
     body.shell-blueprint.bp-diazo {
       --bp-grid: rgba(18,50,76,.05);
       --bp-grid-b: rgba(18,50,76,.09);
       --bp-warn: #98721E;
       --bp-me: #D4DEE3;
+      --bp-glass: rgba(255,255,255,.56);
+      --bp-glass-line: rgba(18,50,76,.18);
+      --bp-bub: rgba(255,255,255,.82);
+      --bp-bub-hi: rgba(206,220,228,.88);
     }
     /* 晒图纸的网格 */
     body.shell-blueprint #app {
@@ -5593,7 +5622,7 @@
     body.shell-blueprint .card,
     body.shell-blueprint .feat-card,
     body.shell-blueprint .feat-icon,
-    body.shell-blueprint .section,
+    body.shell-blueprint .section-body,
     body.shell-blueprint .btn-ghost,
     body.shell-blueprint .btn-accent,
     body.shell-blueprint .btn-accent2,
@@ -5611,11 +5640,16 @@
       border-radius: 0 !important;
       box-shadow: none !important;
     }
+    /* 框只画一层：`.section` 是「标题 + .section-body」的外包装，本身不能再有边框，
+       否则每一页都是「一个框里套一个框」（设置类页面有 22 处这种结构） */
     body.shell-blueprint .feat-card,
     body.shell-blueprint .card,
-    body.shell-blueprint .section {
+    body.shell-blueprint .section-body {
       border: 1px solid var(--border);
       background: var(--card);
+    }
+    body.shell-blueprint .section {
+      border: 0; background: transparent; padding: 0;
     }
     body.shell-blueprint .feat-icon {
       background: transparent;
@@ -5631,10 +5665,12 @@
     body.shell-blueprint .page-title {
       font-weight: 600; letter-spacing: .04em;
     }
-    /* 底栏：当前页用红铅笔画一条顶边 */
+    /* 底栏：一片玻璃 + 当前页用红铅笔画一条顶边 */
     body.shell-blueprint .bottom-nav {
-      background: var(--card); border-top: 1px solid var(--border);
-      backdrop-filter: none; box-shadow: none;
+      background: var(--bp-glass); border-top: 1px solid var(--bp-glass-line);
+      backdrop-filter: blur(var(--bp-blur)) saturate(1.1);
+      -webkit-backdrop-filter: blur(var(--bp-blur)) saturate(1.1);
+      box-shadow: none;
     }
     body.shell-blueprint .bottom-nav button {
       border-top: 2px solid transparent; margin-top: -1px;
@@ -5642,19 +5678,23 @@
     body.shell-blueprint .bottom-nav button.active {
       border-top-color: var(--accent);
     }
-    /* 气泡 = 挂在纸上的标注：不做圆角、不做阴影、不做尾巴，
-       靠一根 1px 引线和左右方向说明是谁。左右内边距收紧（她提的） */
+    /* 气泡 = 压在图纸上的一片玻璃：不做圆角、不做阴影、不做尾巴，
+       靠一根 1px 引线和左右方向说明是谁。左右内边距收紧（她提的）。
+       材质不看「界面材质」那一栏 —— 蓝晒壳里气泡/顶栏/底栏永远是同一片玻璃。 */
+    /* 气泡**不做 backdrop-filter**：一屏最多几十个模糊层，手机 GPU 上很贵。
+       用不透明度高一点的半透明填色，网格照样透上来，观感几乎一样、代价差一个数量级。
+       真模糊只留给顶栏底栏那两条（各一层，压着内容滚，值这个钱）。 */
     body.shell-blueprint .bubble {
       border-radius: 0 !important; box-shadow: none !important;
       padding: 6px 9px; position: relative;
     }
     body.shell-blueprint .bubble.them {
-      background: var(--card); color: var(--text);
-      border: 1px solid var(--border);
+      background: var(--bp-bub) !important; color: var(--text);
+      border: 1px solid var(--bp-glass-line) !important;
     }
     body.shell-blueprint .bubble.me {
-      background: var(--bp-me); color: var(--text);
-      border: 1px solid var(--border);
+      background: var(--bp-bub-hi) !important; color: var(--text);
+      border: 1px solid var(--bp-glass-line) !important;
     }
     body.shell-blueprint .bubble.them::after,
     body.shell-blueprint .bubble.me::after {
@@ -5663,18 +5703,47 @@
     }
     body.shell-blueprint .bubble.them::after { left: -8px; }
     body.shell-blueprint .bubble.me::after { right: -8px; }
+    /* 顶栏 / 子页顶栏 / 输入条：和气泡同一片玻璃，图纸网格从底下透上来 */
     body.shell-blueprint .chat-header,
     body.shell-blueprint .sub-header {
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-      backdrop-filter: none; -webkit-backdrop-filter: none;
+      background: var(--bp-glass);
+      border-bottom: 1px solid var(--bp-glass-line);
+      backdrop-filter: blur(var(--bp-blur)) saturate(1.1);
+      -webkit-backdrop-filter: blur(var(--bp-blur)) saturate(1.1);
+      box-shadow: none;
     }
     body.shell-blueprint .chat-input-bar {
-      background: var(--card); border-top: 1px solid var(--border);
+      background: var(--bp-glass); border-top: 1px solid var(--bp-glass-line);
+      backdrop-filter: blur(var(--bp-blur)) saturate(1.1);
+      -webkit-backdrop-filter: blur(var(--bp-blur)) saturate(1.1);
+      box-shadow: none;
     }
+    /* 输入框自己再套一层框就是「两个框」，这里只留一条底线 */
+    body.shell-blueprint .chat-input-bar textarea {
+      background: transparent; border: 0; border-bottom: 1px solid var(--border);
+    }
+    body.shell-blueprint .chat-mode-switch {
+      background: transparent; border: 1px solid var(--bp-glass-line); border-radius: 0;
+    }
+    body.shell-blueprint .chat-mode-switch button { border-radius: 0; }
 
     /* ── 首页 = 宫殿平面 ─────────────────────────────────── */
     body.shell-blueprint .bp-home { padding-bottom: 18px; }
+    /* 图签：图号 + 晒印开关（蓝晒 / 白图，一键互换） */
+    .bp-tb {
+      display: flex; align-items: center; gap: 10px; padding-top: 2px;
+      font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
+    }
+    .bp-tb-no { font-size: 9px; letter-spacing: .2em; color: var(--sub); white-space: nowrap; }
+    .bp-tb-line { flex: 1; height: 1px; background: var(--border); }
+    .bp-neg { display: flex; border: 1px solid var(--border); flex: none; }
+    .bp-neg button {
+      font-family: inherit; font-size: 9.5px; letter-spacing: .14em;
+      padding: 4px 9px; border: 0; background: transparent; color: var(--sub);
+      cursor: pointer; border-radius: 0;
+    }
+    .bp-neg button + button { border-left: 1px solid var(--border); }
+    .bp-neg button.on { background: var(--accent); color: var(--bg); }
     .bp-rule {
       display: flex; align-items: center; gap: 9px; margin: 20px 0 11px;
       font-family: ui-monospace, "IBM Plex Mono", Consolas, monospace;
@@ -5683,6 +5752,15 @@
     .bp-rule::after { content: ""; flex: 1; height: 1px; background: var(--border); }
     .bp-rule .bp-n { color: var(--accent); }
     .bp-rule .bp-cnt { color: var(--accent); letter-spacing: .1em; }
+    /* 可收放的分节线（图纸目录）：横线用 span 画，好把「收起/展开」推到最右边 */
+    .bp-rule-btn {
+      width: 100%; background: transparent; border: 0; cursor: pointer;
+      font: inherit; color: inherit; text-align: left; padding: 0;
+    }
+    .bp-rule-btn::after { display: none; }
+    .bp-rule-btn .bp-rule-line { flex: 1; height: 1px; background: var(--border); }
+    .bp-rule-btn .bp-caret { color: var(--accent); letter-spacing: .1em; flex: none; }
+    .bp-rule-btn:active .bp-caret { opacity: .6; }
 
     .bp-gauge { border: 1px solid var(--border); background: var(--card); padding: 13px 14px 11px; }
     .bp-gauge-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; }
@@ -5733,7 +5811,8 @@
       height: 9px; flex: none; border-top: 1px solid var(--text);
       background-image: repeating-linear-gradient(45deg, var(--border) 0 1px, transparent 1px 5px);
     }
-    .bp-planwrap { border: 1px solid var(--border); background: var(--card); padding: 8px 8px 4px; }
+    /* 外墙那圈 rect 本身就是图框，外面再包一条边就成了「两个框」，只留底色 */
+    .bp-planwrap { border: 0; background: var(--card); padding: 8px 8px 4px; }
     .bp-plan { display: block; width: 100%; height: auto; }
     .bp-walls rect { fill: none; stroke: var(--text); stroke-width: 1.6; }
     .bp-walls rect.bp-outer { stroke-width: 2.4; }

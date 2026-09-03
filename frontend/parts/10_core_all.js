@@ -2309,6 +2309,10 @@ const state = {
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
   uiShell: LS.get("uiShell", "classic") || "classic", // classic | pixel | eldritch | claude | korean | blueprint
   bpFloor: "f1", // 蓝晒壳当前楼层（不持久化：冷启动回一层，会话内切走再回来还在原楼层）
+  bpDiazo: LS.get("bpDiazo", false), // 蓝晒壳晒印：false=蓝晒（蓝底白线）· true=白图（浅底蓝线）
+  bpIdxOpen: false, // 蓝晒壳图纸目录展开着没有（不持久化，跟 bpFloor 一样只活一次会话）
+  sexBed: LS.get("sexBed", null) || { log:[], cool:{}, streak:{} }, // 床事档案：记录/冷却/连击
+  bedTab: "week", // 床事报告看哪一档（不持久化）
   // 工作间（独立 WS，绝不复用 __cc 恋爱通道）
   wsWsUrl: LS.get("wsWsUrl", "ws://115.29.237.172/ws/workshop") || "ws://115.29.237.172/ws/workshop",
   wsPin: LS.get("wsPin", "521314") || "521314",
@@ -2334,7 +2338,10 @@ const state = {
   agents: LS.get("agents", null) || null,
   chatTarget: LS.get("chatTarget", "a1"), // "a1" | "a2" | "group"
   chatMode: LS.get("chatMode", "chat"), // chat=聊天 | story=文章（同人文叙事）
-  chatRenderLimit: 100, // 只渲染最近 N 条，记录完整保存（后台 AI 可整理记忆）
+  // 只渲染最近 N 条，记录完整保存（后台 AI 可整理记忆）。
+  // 40 是量出来的：100 条时一次重绘要现拼 94 KB / 2800 个标签 / 256 个图标，
+  // 手机上每点一下都要把这些拆了重建 —— 那就是"卡卡的"的来源。40 条约 38 KB。
+  chatRenderLimit: 40,
   chatThreads: LS.get("chatThreads", null) || null,
   memories: LS.get("memories",[]),
   prompts: LS.get("prompts",[]),
@@ -2821,7 +2828,14 @@ if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
   }
 }catch(e){}
 
-function T(){ return THEMES[state.theme]||THEMES["桃气浅春"]; }
+/** 当前配色。**蓝晒壳是一整张独立的壳**：它自带全套颜色，不吃配色盘、不吃布料纹理、
+ *  不吃自定义壁纸。所以这里直接把整份主题换掉 —— 全 App 那几百处 `${t.card}` 内联样式
+ *  跟着一起变，不用一处处补 body.shell-blueprint 覆盖。
+ *  （外观页里显示色卡/预览的地方读的是 THEMES[state.theme]，不受影响。） */
+function T(){
+  if((state.uiShell||"")==="blueprint") return bpTheme();
+  return THEMES[state.theme]||THEMES["桃气浅春"];
+}
 // 旧布料名 → 新蕾丝（兼容 localStorage 里存过的旧选项）
 const PATTERN_ALIAS = {
   "锦缎圆点":"网眼蕾丝", "软呢":"玫瑰蕾丝", "鱼骨纹":"扇形蕾丝", "水波纹":"镂空蕾丝",
@@ -3249,26 +3263,22 @@ function contrastFg(hex){
 }
 function applyThemeVars(){
   const t=T();
+  const isBp = (state.uiShell||"")==="blueprint";
   const r=document.documentElement;
   // 韩系壳：锁定浅灰黑白变量，避免主题色盘把桌面冲花
   if((state.uiShell||"")==="korean"){
     const kr = {bg:"#F4F4F6",card:"#FFFFFF",accent:"#1C1C1E",accent2:"#8E8E93",text:"#1C1C1E",sub:"#8E8E93",border:"#E5E5EA"};
     Object.keys(kr).forEach(k=>r.style.setProperty("--"+k, kr[k]));
-  } else if((state.uiShell||"")==="blueprint"){
-    // 蓝晒壳同样锁死变量（照韩系那套做法）：整套界面靠这 7 个变量吃到蓝图配色，
-    // CSS 那边只补「没有圆角、发丝线、等宽标号」这些形态上的东西。
-    const bp = bpIsDiazo()
-      ? {bg:"#E3E7E1",card:"#F7F9F4",accent:"#A5462A",accent2:"#3D6280",text:"#12324C",sub:"#6C89A0",border:"#9CB1BD"}
-      : {bg:"#061B2D",card:"#0E324D",accent:"#E28A5D",accent2:"#A6C2D5",text:"#E1EAF1",sub:"#7292AA",border:"#2C5675"};
-    Object.keys(bp).forEach(k=>r.style.setProperty("--"+k, bp[k]));
   } else {
+    // 蓝晒壳走的也是这条：T() 已经整份换成了它自带的配色
     ["bg","card","accent","accent2","text","sub","border"].forEach(k=>r.style.setProperty("--"+k,t[k]));
   }
-  const style = state.bubbleStyle || "solid";
+  const style = isBp ? "solid" : (state.bubbleStyle || "solid");
   const op = Math.min(1, Math.max(0.15, Number(state.bubbleOpacity)||0.72));
-  const meBase = (state.bubbleMeColor && state.bubbleMeColor.trim()) || t.bubble_me;
-  const themBase = (state.bubbleThemColor && state.bubbleThemColor.trim()) || t.bubble_them;
-  const grad = (typeof bubbleGrad==="function") ? bubbleGrad() : null;
+  // 蓝晒壳不吃自定义气泡色、也不吃渐变色卡：气泡是它自己那套玻璃标注
+  const meBase = (!isBp && state.bubbleMeColor && state.bubbleMeColor.trim()) || t.bubble_me;
+  const themBase = (!isBp && state.bubbleThemColor && state.bubbleThemColor.trim()) || t.bubble_them;
+  const grad = (!isBp && typeof bubbleGrad==="function") ? bubbleGrad() : null;
   if(grad){
     // 渐变色卡：浅色背景 + 深色文字（玻璃态下渐变作为底色）
     const meG = `linear-gradient(135deg, ${grad.c1}, ${grad.c2}, ${grad.c3})`;
@@ -3297,12 +3307,15 @@ function applyThemeVars(){
   }
   const app=document.getElementById("app");
   if(app){
+    // 「界面材质」（雾玻璃/水玻璃/图片皮肤）会往卡片上刷一层半透明白 !important，
+    // 蓝晒壳整套自成体系，这几个 class 一律不挂
     app.classList.remove("ui-glass-fog", "ui-glass-water", "ui-bubble-soft");
-    if((state.bubbleStyle||"solid")==="fog") app.classList.add("ui-glass-fog");
+    if(isBp){ /* 蓝晒壳的玻璃在 CSS 里自己做 */ }
+    else if((state.bubbleStyle||"solid")==="fog") app.classList.add("ui-glass-fog");
     else if((state.bubbleStyle||"solid")==="water") app.classList.add("ui-glass-water");
     else if(typeof isBubbleImageSkin==="function" && isBubbleImageSkin()) app.classList.add("ui-bubble-soft");
     try{
-      const bs = state.bubbleStyle || "solid";
+      const bs = isBp ? "solid" : (state.bubbleStyle || "solid");
       document.body.classList.remove("bubble-skin-soft","bubble-skin-suisei","bubble-skin-cool","bubble-skin-fish","bubble-skin-rainbow");
       if(bs==="soft"||bs==="suisei") document.body.classList.add("bubble-skin-suisei");
       else if(bs==="cool") document.body.classList.add("bubble-skin-cool");
@@ -3310,7 +3323,15 @@ function applyThemeVars(){
       else if(bs==="rainbow") document.body.classList.add("bubble-skin-rainbow");
     }catch(e){}
     app.style.backgroundColor=t.bg;
-    if(state.customWallpaper){
+    if(isBp){
+      // 蓝晒壳的底是 CSS 里那张晒图纸网格：壁纸和布料纹理都不上，
+      // 内联的 background-* 全部清空，否则会盖住网格
+      app.style.backgroundImage="";
+      app.style.backgroundSize="";
+      app.style.backgroundPosition="";
+      app.style.backgroundAttachment="";
+      app.style.backgroundRepeat="";
+    } else if(state.customWallpaper){
       app.style.backgroundImage=`url(${state.customWallpaper})`;
       app.style.backgroundSize="cover";
       app.style.backgroundPosition="center";
@@ -3350,8 +3371,10 @@ function applyThemeVars(){
   if(state.chatViewMode === "rpg" && state.tab === "chat")
     document.body.classList.add("rpg-chat-on");
 }
-/** 聊天气泡额外 class；同时 #app 会挂 ui-glass-* 作用于日历与卡片 */
-function bubbleGlassClass(){
+/** 聊天气泡额外 class；同时 #app 会挂 ui-glass-* 作用于日历与卡片。
+ *  raw=true 时不理会界面壳（外观页的材质预览要看真效果）。 */
+function bubbleGlassClass(raw){
+  if(!raw && (state.uiShell||"")==="blueprint") return ""; // 蓝晒壳的气泡材质写死在 CSS 里
   const s = state.bubbleStyle || "solid";
   if(s === "fog") return " glass-fog";
   if(s === "water") return " glass-water";
@@ -3663,8 +3686,11 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 用户说「出题 / 选择题 / 选一个 / 测测我 / 做选项卡」等时必须用上述 ⟪choice:…⟫ 协议，不要只用「A. B. C.」纯文本（纯文本也能显示，但协议更稳）。
 - 禁止只写「你选」却不给协议；选项写在同一行协议里。
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
+  // 床事目录：内容稳定（只在 NSFW 开关翻转时变），放静态段吃缓存；
+  // 会变的那半（本轮可选/冷却中）走 bedTailBlock 挂在最后一条消息末尾
+  const bedBlock = (typeof bedCatalogBlock === "function") ? bedCatalogBlock() : "";
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, bedBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
@@ -3712,6 +3738,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + remarkEventBlock
     + questBlock
     + galateaBlock
+    + (bedBlock ? "\n\n"+bedBlock : "")
     + (tipsyBlock ? "\n\n"+tipsyBlock : "");
 }
 let __sysPartsCache = null; // 拆分缓存（本进程内瞬态，不持久化）
@@ -3721,7 +3748,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -3907,6 +3934,75 @@ function splitReply(text){
 }
 
 // ─── 渲染 ────────────────────────────────────────────────────────────────────
+// ─── 图标：在字符串阶段就换成 SVG ──────────────────────────────────────────
+// 以前每次重绘都是 innerHTML 之后调 lucide.createIcons()：它扫一遍全文档的
+// [data-lucide]，然后逐个 createElementNS 现造 SVG 再 replaceWith。
+// 聊天页一次重绘要造 250 多个 —— 实测是整个重绘里最贵的一段。
+//
+// 改法：把每种图标第一次渲染出来的 SVG 收进缓存，之后直接在 HTML **字符串**里替换。
+// 浏览器的 HTML 解析器一次性建好，零 DOM 遍历、零逐节点构造。
+// 缓存是从 lucide 自己的产物里收的，所以输出跟以前逐字节一样，不用猜它的默认属性。
+// 238 处 `<i data-lucide>` 模板一行都没改。
+const __ICON_CACHE = new Map();
+let __iconNeedScan = true; // 有名字还没进缓存 → 这一帧仍回落到 createIcons
+
+// ─── 绑定时的一次性 DOM 索引 ────────────────────────────────────────────────
+// bindEvents() 里有 150 多处 `document.querySelectorAll("[data-xxx]")`，
+// 每一处都要把整个 #app 走一遍 —— 一次重绘就是十几万次节点访问。
+// 而这些选择器全是「某个 data-* 属性」这一种形状，所以改成：重绘后**走一遍** #app
+// 把所有 data-* 属性建成索引，bindEvents 里查表即可。
+// 索引只在 bindEvents 那一小段时间里有效（前后各置一次），过期一律回落真查询。
+let __domIdx = null;
+function buildDomIndex(root){
+  const idx = new Map();
+  try{
+    const all = root.getElementsByTagName("*");
+    for(let i=0; i<all.length; i++){
+      const at = all[i].attributes;
+      for(let j=0; j<at.length; j++){
+        const n = at[j].name;
+        if(n.lastIndexOf("data-", 0) !== 0) continue;
+        let arr = idx.get(n);
+        if(!arr) idx.set(n, arr = []);
+        arr.push(all[i]);
+      }
+    }
+  }catch(e){ return null; }
+  return idx;
+}
+/** bindEvents 专用：`[data-xxx]` 走索引，其它形状原样交给 querySelectorAll */
+function $$(sel){
+  if(__domIdx){
+    const m = /^\[(data-[a-z0-9-]+)\]$/.exec(sel);
+    if(m) return __domIdx.get(m[1]) || [];
+  }
+  return document.querySelectorAll(sel);
+}
+
+/** 把 HTML 串里已缓存的图标换成 SVG；没缓存过的原样留着交给 createIcons */
+function inlineIcons(html){
+  __iconNeedScan = false;
+  if(!__ICON_CACHE.size){ __iconNeedScan = true; return html; }
+  return String(html).replace(/<i data-lucide="([a-z0-9-]+)"><\/i>/g, (m, name)=>{
+    const svg = __ICON_CACHE.get(name);
+    if(svg) return svg;
+    __iconNeedScan = true;
+    return m;
+  });
+}
+/** 从刚渲染好的 DOM 里把没见过的图标收进缓存（只在这一帧真跑过 createIcons 时调） */
+function harvestIcons(root){
+  try{
+    const list = root.querySelectorAll("svg.lucide");
+    for(let i=0; i<list.length; i++){
+      const el = list[i];
+      const m = String(el.getAttribute("class")||"").match(/lucide-([a-z0-9-]+)/);
+      if(!m) continue;
+      if(!__ICON_CACHE.has(m[1])) __ICON_CACHE.set(m[1], el.outerHTML);
+    }
+  }catch(e){}
+}
+
 function render(){
   // 重绘会把整个 #app 的 innerHTML 换掉，正在输入的那个框也一起被销毁重建，
   // 焦点随之丢失 —— 手机上就表现为「每发一条消息键盘都收回去」「打着字光标乱跳」。
@@ -3973,26 +4069,34 @@ function render(){
       </div>`;
   }
   try{ if(typeof biscaBotPanelHtml==="function") html += biscaBotPanelHtml(); }catch(e){}
-  app.innerHTML=html;
-  // 补充 lucide v1.31 缺失的图标（pen-nib：书房页头），经 createIcons 传入合并图标集
-  try{
-    if(window.lucide){
-      if(window.lucide.icons && window.lucide.icons.PenNib){
-        window.lucide.createIcons();
-      }else{
-        window.lucide.createIcons({ icons: Object.assign({
-          PenNib: [
-            ["path",{d:"m12 19 7-7 3 3-7 7-3-3z"}],
-            ["path",{d:"m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"}],
-            ["path",{d:"M2 2l7.586 7.586"}],
-            ["circle",{cx:"11",cy:"11",r:"2"}]
-          ]
-        }, window.lucide.icons) });
+  app.innerHTML=inlineIcons(html);
+  // 缓存全命中时这一段整段跳过 —— 稳定态下不再有全文档扫描和逐个造 SVG。
+  // 只有出现没见过的图标（或首屏、lucide 刚加载好）才走一次真的 createIcons，
+  // 顺手把这一帧的产物收进缓存，下次就走字符串替换了。
+  if(__iconNeedScan){
+    try{
+      if(window.lucide){
+        // 补充 lucide v1.31 缺失的图标（pen-nib：书房页头），经 createIcons 传入合并图标集
+        if(window.lucide.icons && window.lucide.icons.PenNib){
+          window.lucide.createIcons();
+        }else{
+          window.lucide.createIcons({ icons: Object.assign({
+            PenNib: [
+              ["path",{d:"m12 19 7-7 3 3-7 7-3-3z"}],
+              ["path",{d:"m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"}],
+              ["path",{d:"M2 2l7.586 7.586"}],
+              ["circle",{cx:"11",cy:"11",r:"2"}]
+            ]
+          }, window.lucide.icons) });
+        }
+        harvestIcons(app);
       }
-    }
-  }catch(e){ console.error("[lucide]", e); }
+    }catch(e){ console.error("[lucide]", e); }
+  }
+  __domIdx = buildDomIndex(app);
   try{ bindEvents(); }
   catch(err){ console.error("[bindEvents]", err); try{ bindCoreNav(); }catch(e2){ console.error(e2); } }
+  finally{ __domIdx = null; } // 索引出了这一段就作废，绝不让后面的代码查到过期的 DOM
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
     const fel = document.getElementById(savedFocus.id);
@@ -4879,6 +4983,7 @@ const FEAT_GROUPS = [
       label: "功能",
       items: [
         {key:"body",     icon:"heart-pulse", label:"身体状况"},
+        {key:"bed",      icon:"flame", label:"床事档案"},
         {key:"phone",    icon:"phone", label:"电话"},
         {key:"vps",      icon:"monitor", label:"VPS"},
         {key:"ntfy",     icon:"bell", label:"上推通知"},
@@ -4963,18 +5068,18 @@ function renderHomeFeat(){
 }
 
 // ═══ 蓝晒壳（blueprint）· 首页 = 宫殿平面图 ═══════════════════════════════
-// 亮 = 白图（浅底蓝线）· 暗 = 蓝晒（蓝底白线），跟着当前主题的明暗走，不新增设置项。
-/** 当前主题偏亮 → 出白图。用的是和 contrastFg 一样的相对亮度。 */
-function bpIsDiazo(){
-  try{
-    const t = (typeof T === "function") ? T() : null;
-    let h = String((t && t.bg) || "#ffffff").replace("#","");
-    if(h.length === 3) h = h.split("").map(c=>c+c).join("");
-    const n = parseInt(h, 16);
-    if(isNaN(n)) return true;
-    const L = (0.2126*((n>>16)&255) + 0.7152*((n>>8)&255) + 0.0722*(n&255)) / 255;
-    return L > 0.5;
-  }catch(e){ return true; }
+// 蓝晒（暗，蓝底白线）/ 白图（亮，浅底蓝线）是同一张图的正负片。
+// 一键互换，**不跟主题明暗、也不跟昼夜走** —— 开关在首页图签和外观页各有一个。
+function bpIsDiazo(){ return !!state.bpDiazo; }
+/** 蓝晒壳自带的整套配色。函数声明（不是 const），避免被 T() 提前调到时 TDZ。 */
+function bpTheme(){
+  return bpIsDiazo()
+    ? { bg:"#E3E7E1", card:"#F7F9F4", accent:"#A5462A", accent2:"#3D6280",
+        text:"#12324C", sub:"#6C89A0", border:"#9CB1BD",
+        bubble_me:"#D4DEE3", bubble_them:"#F7F9F4" }
+    : { bg:"#061B2D", card:"#0E324D", accent:"#E28A5D", accent2:"#A6C2D5",
+        text:"#E1EAF1", sub:"#7292AA", border:"#2C5675",
+        bubble_me:"#123D5C", bubble_them:"#0E324D" };
 }
 
 // 楼层。每层的分隔完全不同（1F 大厅 / 2F 走廊 / 3F 套间 / B1 机房），
@@ -5114,41 +5219,38 @@ function renderHomeBlueprint(){
     </div>`;
   }).join("");
 
-  // 图纸目录：功能总表原样铺开，平面上放不下的长尾都在这儿，一个不少
+  // 图纸目录 = **平面上没画的那些**。画在平面上的房间就不在这儿重复列了
+  //（以前每条后面挂个「在平面」，等于同一个功能在首页出现两次）。
   const planKeys = new Set();
   BP_FLOORS.forEach(f=>f.rooms.forEach(r=>planKeys.add(r.key)));
   let n = 0;
-  const idx = FEAT_GROUPS.map(g=>`
-    <div class="bp-idx-grp">${esc(g.label)}</div>
-    ${g.items.map(it=>{
+  const idx = FEAT_GROUPS.map(g=>{
+    const items = g.items.filter(it=>!planKeys.has(it.key));
+    if(!items.length) return ""; // 整组都画在平面上了，连组标题一起省掉
+    return `<div class="bp-idx-grp">${esc(g.label)}</div>
+    ${items.map(it=>{
       n++;
       const m = bpMeta(it.key);
       return `<button type="button" class="bp-idx-row feat-card" data-sub="${escAttr(it.key)}">
         <span class="bp-idx-no">${String(n).padStart(2,"0")}</span>
         <span class="bp-idx-nm">${esc(it.label)}</span>
-        <span class="bp-idx-st${m.lit?" on":""}">${planKeys.has(it.key) ? "在平面" : (m.txt ? esc(m.txt) : "—")}</span>
+        <span class="bp-idx-st${m.lit?" on":""}">${m.txt ? esc(m.txt) : "—"}</span>
       </button>`;
-    }).join("")}
-  `).join("");
-  // 平面上有、功能总表里没有的（比如「备份」只挂在设置页）也要进目录，
-  // 否则目录就不是「一个不少」了
-  const realKeys = new Set();
-  FEAT_GROUPS.forEach(g=>g.items.forEach(it=>realKeys.add(it.key)));
-  const extras = [];
-  BP_FLOORS.forEach(f=>f.rooms.forEach(r=>{ if(!realKeys.has(r.key)) extras.push(r); }));
-  const idxExtra = extras.length ? `
-    <div class="bp-idx-grp">其它</div>
-    ${extras.map(r=>{
-      n++;
-      return `<button type="button" class="bp-idx-row feat-card" data-sub="${escAttr(r.key)}">
-        <span class="bp-idx-no">${String(n).padStart(2,"0")}</span>
-        <span class="bp-idx-nm">${esc(r.name)}</span>
-        <span class="bp-idx-st">在平面</span>
-      </button>`;
-    }).join("")}` : "";
-  const total = FEAT_GROUPS.reduce((s,g)=>s+g.items.length, 0) + extras.length;
+    }).join("")}`;
+  }).join("");
+  const total = n;
+  const idxOpen = !!state.bpIdxOpen;
 
+  const diazo = bpIsDiazo();
   return `<div class="page bp-home">
+    <div class="bp-tb">
+      <span class="bp-tb-no">MP · A-000</span>
+      <span class="bp-tb-line"></span>
+      <span class="bp-neg" role="group" aria-label="晒印">
+        <button type="button" data-bp-neg="0" class="${diazo?"":"on"}">蓝晒</button>
+        <button type="button" data-bp-neg="1" class="${diazo?"on":""}">白图</button>
+      </span>
+    </div>
     <div class="bp-rule"><span class="bp-n">01</span> 此刻</div>
     <div class="bp-gauge">
       <div class="bp-gauge-top">
@@ -5175,8 +5277,13 @@ function renderHomeBlueprint(){
     </div>
     <div class="bp-floorcap"><b>${cur.label} ${esc(cur.name)}</b><span>${cur.rooms.length} 间 · 核心筒对齐</span></div>
 
-    <div class="bp-rule"><span class="bp-n">03</span> 图纸目录 <span class="bp-cnt">${total}</span></div>
-    <div class="bp-index">${idx}${idxExtra}</div>
+    <button type="button" class="bp-rule bp-rule-btn" data-bp-idx="${idxOpen?"0":"1"}"
+            aria-expanded="${idxOpen}" aria-controls="bp-index">
+      <span class="bp-n">03</span> 图纸目录 <span class="bp-cnt">${total}</span>
+      <span class="bp-rule-line"></span>
+      <span class="bp-caret">${idxOpen?"收起":"展开"}</span>
+    </button>
+    ${idxOpen ? `<div class="bp-index" id="bp-index">${idx}</div>` : ""}
   </div>`;
 }
 
@@ -7738,6 +7845,7 @@ function bindWorkshop(){
 function renderSubPage(){
   const map={
     body: renderBody,
+    bed: renderBedPage,
     phone: renderPhone,
     sparkvault: renderSparkVault,
     vps: renderVps,
@@ -15258,17 +15366,39 @@ ${userText && userText.startsWith("（") ? "系统："+userText : "用户刚说�
   s.loading = false;
   render();
 }
+/**
+ * 通话摘要。以前这里是「拿他最后说的那句话截 40 字」——挂了电话，那通电话在他的
+ * 上下文里就只剩一句残句，等于打完就忘。参考 ringdonut 的 callSummary：
+ * 通话逐句记录喂给模型出一条真摘要，写进聊天历史，之后的对话才接得上。
+ * 走 memModelCall（bgChatAgent + background:true），不跟她正在等的回复抢 CC 通道。
+ */
+async function callMakeSummary(caps, dur){
+  const lines = (caps||[])
+    .map(c=>`${c.who==="them" ? "他" : "她"}：${String(c.text||"").trim()}`)
+    .filter(x=>x.length > 2).join("\n");
+  if(!lines || lines.length < 20) return "";
+  const prompt = `下面是刚结束的一通${callFormatDuration(dur)}语音通话的逐句记录。`
+    + `用两三句中文写清楚这通电话里真正发生了什么：谁提了什么、答应了什么、情绪是怎么走的。\n`
+    + `只写记录里有的，不要补充推测；不要用「本次通话」这种公文腔，就像事后回想那样写。\n\n${lines}`;
+  try{
+    const out = await memModelCall(prompt);
+    return String(out||"").trim().slice(0, 300);
+  }catch(e){ return ""; }
+}
+
 function callHangup(){
   const s = ensureCallSession();
   callClearInviteTimer();
   callCancelLinger();
   if(s.phase!=="active"){ s.phase="idle"; render(); return; }
   const dur = s.startAt ? Math.floor((Date.now()-s.startAt)/1000) : 0;
-  const summary = dur < 20 ? "短暂通话" : ((s.caps||[]).filter(c=>c.who==="them").slice(-1)[0]?.text || "通了电话").slice(0,40);
-  const rec = { id: Date.now(), duration: dur, summary, time: new Date().toISOString(), reason: s.reason||"" };
+  const caps = (s.caps||[]).slice(); // 下面要清空 s.caps，先留一份给异步摘要
+  const summary = dur < 20 ? "短暂通话" : ((caps.filter(c=>c.who==="them").slice(-1)[0]?.text) || "通了电话").slice(0,40);
+  const recId = Date.now();
+  const rec = { id: recId, duration: dur, summary, time: new Date().toISOString(), reason: s.reason||"" };
   state.callRecords = [rec, ...(state.callRecords||[])].slice(0, 40);
   persist("callRecords");
-  // 写入聊天一条记录
+  // 写入聊天一条记录（先落占位，真摘要回来了再原地换掉）
   if(typeof proactivePushToChat==="function"){
     proactivePushToChat(`📞 语音通话 · ${callFormatDuration(dur)}\n${summary}`, { from:"call-record" });
   }
@@ -15276,6 +15406,27 @@ function callHangup(){
   s.caps = [];
   s.startAt = 0;
   render();
+
+  // 太短或没说几句就不烧模型了
+  if(dur < 20 || caps.length < 3) return;
+  callMakeSummary(caps, dur).then(sum=>{
+    if(!sum) return;
+    try{
+      const r = (state.callRecords||[]).find(x=>x.id === recId);
+      if(r){ r.summary = sum; persist("callRecords"); }
+      // 聊天里那条占位换成真摘要（找最近一条 call-record）
+      const list = state.messages || [];
+      for(let i=list.length-1; i>=0 && i>=list.length-12; i--){
+        if(list[i] && list[i].from === "call-record"){
+          list[i].content = `📞 语音通话 · ${callFormatDuration(dur)}\n${sum}`;
+          break;
+        }
+      }
+      if(typeof saveActiveThread==="function") saveActiveThread();
+      persist("chatThreads");
+      if(typeof render==="function") render();
+    }catch(e){}
+  });
 }
 // ─── callhome 赖床窗：⟪挂断⟫ 后留 15s，说话可留住 ──────────────────────────
 let __lingerTimeout = null;
@@ -19110,7 +19261,7 @@ function renderChat(){
     msgs=`<div class="chat-empty"><div class="emoji"><i data-lucide="sparkles"></i></div><div>开始你们的对话吧<br><span style="font-size:11px;opacity:0.7">可连发几条 → 点输入框旁的回复按钮</span></div></div>`;
   } else {
     // 只渲染最近 N 条（记录完整保留，后台 AI 可整理记忆），聊天越长越不卡
-    const RENDER_LIMIT = state.chatRenderLimit || 100;
+    const RENDER_LIMIT = state.chatRenderLimit || 40;
     const total = state.messages.length;
     const hiddenCount = Math.max(0, total - RENDER_LIMIT);
     const startIdx = Math.max(0, total - RENDER_LIMIT);
@@ -19805,7 +19956,7 @@ function renderSavedChat(){
     ${subHeader('<i data-lucide="bookmark"></i> 收藏记录')}
     <div class="saved-search-wrap">
       <div class="saved-search-box">
-        <i data-lucide="search" style="flex-shrink:0;opacity:0.5;font-size:14px"></i>
+        <span style="flex-shrink:0;opacity:0.5;font-size:14px"><i data-lucide="search"></i></span>
         <input id="saved-search-inp" type="text" placeholder="搜索收藏的聊天记录" value="${escAttr(state.savedSearch||"")}"/>
         ${(state.savedSearch||"")?`<button type="button" id="saved-search-clear" class="saved-search-clear">✕</button>`:""}
       </div>
@@ -20332,7 +20483,7 @@ function renderTheme(){
   const glassCls = bStyle==="fog" ? " glass-fog" : (bStyle==="water" ? " glass-water" : "");
   // 图片气泡皮肤（水色/轻松熊/鱼饼熊/彩虹熊）：预览直接用真气泡 DOM，让皮肤 CSS 生效
   const imgSkin = (typeof isBubbleImageSkin==="function") && isBubbleImageSkin(bStyle);
-  const skinCls = imgSkin ? ((typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "") : "";
+  const skinCls = imgSkin ? ((typeof bubbleGlassClass==="function") ? bubbleGlassClass(true) : "") : "";
   const grad = (typeof bubbleGrad==="function") ? bubbleGrad() : null;
   const meBg = grad ? `linear-gradient(135deg, ${grad.c1}, ${grad.c2}, ${grad.c3})`
     : (bStyle==="solid" ? meCol : (typeof hexToRgba==="function" ? hexToRgba(meCol, (Number(state.bubbleOpacity)||0.72)) : meCol));
@@ -20432,7 +20583,11 @@ function renderTheme(){
         <button type="button" class="font-chip${state.uiShell==="korean"?" active":""}" data-ui-shell="korean">韩系</button>
         <button type="button" class="font-chip${state.uiShell==="blueprint"?" active":""}" data-ui-shell="blueprint">蓝晒</button>
       </div>
-      
+      ${state.uiShell==="blueprint"?`
+      <div class="font-switch-row" style="margin-top:8px">
+        <button type="button" class="font-chip${!state.bpDiazo?" active":""}" data-bp-neg="0">蓝晒</button>
+        <button type="button" class="font-chip${state.bpDiazo?" active":""}" data-bp-neg="1">白图</button>
+      </div>`:""}
     </div>
     <div class="theme-group" style="margin-top:16px">
       <div class="theme-group-label">字体</div>
@@ -20491,7 +20646,7 @@ function renderPrompts(){
           <div class="small-toggle" data-prompt-toggle="${p.id}" style="background:${p.enabled?"var(--accent)":"var(--border)"}">
             <div class="knob" style="left:${p.enabled?16:2}px"></div>
           </div>
-          <button class="mem-del" data-prompt-edit="${p.id}" title="编辑提示词"><i data-lucide="pencil" style="width:13px;height:13px;vertical-align:-2px"></i></button>
+          <button class="mem-del" data-prompt-edit="${p.id}" title="编辑提示词"><span style="font-size:13px;vertical-align:-2px;display:inline-flex"><i data-lucide="pencil"></i></span></button>
           <button class="mem-del" data-prompt-del="${p.id}">×</button>
         </div>
       </div>
@@ -21047,6 +21202,32 @@ if(!window.__mpDelegated){
       if(bpF){
         e.preventDefault(); e.stopImmediatePropagation();
         state.bpFloor = bpF.getAttribute("data-bp-floor") || "f1";
+        if(typeof render==="function") render();
+        return;
+      }
+      // 床事档案的周/月/全部切页
+      const bedTab = raw.closest && raw.closest("[data-bed-tab]");
+      if(bedTab){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.bedTab = bedTab.getAttribute("data-bed-tab") || "week";
+        if(typeof render==="function") render();
+        return;
+      }
+      // 图纸目录收放（默认收着：平面才是首页的主导航，目录是长尾）
+      const bpIdx = raw.closest && raw.closest("[data-bp-idx]");
+      if(bpIdx){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.bpIdxOpen = bpIdx.getAttribute("data-bp-idx") === "1";
+        if(typeof render==="function") render();
+        return;
+      }
+      // 蓝晒 / 白图：同一张图的正负片，一键互换。首页图签和外观页各有一个入口
+      const bpNeg = raw.closest && raw.closest("[data-bp-neg]");
+      if(bpNeg){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.bpDiazo = bpNeg.getAttribute("data-bp-neg") === "1";
+        try{ persist("bpDiazo"); }catch(err){}
+        if(typeof applyThemeVars==="function") applyThemeVars();
         if(typeof render==="function") render();
         return;
       }
@@ -21739,7 +21920,7 @@ function bindEvents(){
 
   bindHomeSwipe();
 
-  document.querySelectorAll("[data-sub]").forEach(btn=>{
+  $$("[data-sub]").forEach(btn=>{
     btn.onclick=()=>{ state.subPage=btn.dataset.sub; render(); };
   });
 
@@ -21783,7 +21964,7 @@ function bindEvents(){
   const bookCoverBtn = document.getElementById("book-cover");
   if(bookCoverBtn) bookCoverBtn.onclick = ()=>{ state.bookCover=true; render(); };
   // 点内页直接打字：整页点击进入「写下今天」编辑器（删除按钮除外）
-  document.querySelectorAll("[data-book-write]").forEach(pg=>{
+  $$("[data-book-write]").forEach(pg=>{
     pg.onclick = (e)=>{
       if(state.bookComposer) return;
       if(e.target && e.target.closest && e.target.closest(".book-del")) return;
@@ -21799,7 +21980,7 @@ function bindEvents(){
     bookWrap.addEventListener("touchmove", e=>{ dx=e.touches[0].clientX-sx; }, {passive:true});
     bookWrap.addEventListener("touchend", ()=>{ if(state.bookComposer) return; if(dx<-40) bookFlip(1); else if(dx>40) bookFlip(-1); });
   }
-  document.querySelectorAll("[data-book-del]").forEach(el=>{
+  $$("[data-book-del]").forEach(el=>{
     el.onclick = ()=>{
       const [who, idx] = (el.dataset.bookDel||"").split(":");
       if(!who || idx==null) return;
@@ -21841,7 +22022,7 @@ function bindEvents(){
   if(albumPrev) albumPrev.onclick = ()=> albumGo(-1);
   const albumNext = document.getElementById("album-next");
   if(albumNext) albumNext.onclick = ()=> albumGo(1);
-  document.querySelectorAll("[data-album-dot]").forEach(el=>{
+  $$("[data-album-dot]").forEach(el=>{
     el.onclick = ()=>{ state.albumIdx = +el.dataset.albumDot; render(); };
   });
   const albumEdit = document.getElementById("album-edit");
@@ -21866,22 +22047,22 @@ function bindEvents(){
   };
 
   // ─── 小狗动作：点爪印气泡 → 把 [action:xxx] 作为用户消息发出并让 TA 回 ───
-  document.querySelectorAll("[data-action-send]").forEach(el=>{
+  $$("[data-action-send]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); sendPuppyAction(el.dataset.actionSend); };
   });
   // 小狗按钮：顶栏图标 → 全屏按钮页
   const puppyOpen=document.getElementById("puppy-open");
   if(puppyOpen) puppyOpen.onclick=()=>{ state.puppyPageOpen=true; render(); };
-  document.querySelectorAll("[data-puppy-mode]").forEach(btn=>{
+  $$("[data-puppy-mode]").forEach(btn=>{
     btn.onclick=()=>{ state.gameMode = btn.dataset.puppyMode; render(); };
   });
-  document.querySelectorAll("[data-puppy-close]").forEach(btn=>{
+  $$("[data-puppy-close]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); state.puppyPageOpen=false; render(); };
   });
-  document.querySelectorAll("[data-puppy-close-backdrop]").forEach(el=>{
+  $$("[data-puppy-close-backdrop]").forEach(el=>{
     el.onclick=(ev)=>{ if(ev.target===el){ state.puppyPageOpen=false; render(); } };
   });
-  document.querySelectorAll("[data-puppy-send]").forEach(btn=>{
+  $$("[data-puppy-send]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       sendPuppyAction(btn.dataset.puppySend);
       state.puppyPageOpen=false; render();
@@ -21909,17 +22090,17 @@ function bindEvents(){
     if(typeof triggerAIReply==="function") triggerAIReply(); else render();
   };
   // 聊天里他发的点歌卡
-  document.querySelectorAll("[data-song-play]").forEach(el=>{
+  $$("[data-song-play]").forEach(el=>{
     el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); songChipPlay(el.dataset.songPlay); };
   });
   // 歌单卡「全部播放」
-  document.querySelectorAll("[data-playlist-all]").forEach(el=>{
+  $$("[data-playlist-all]").forEach(el=>{
     el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); playlistPlayAll(el.dataset.playlistAll); };
   });
   // 缺封面的歌曲卡：后台补查。一次最多 4 张，查到会重绘一次；
   // 查过（成功或失败）都记在 __songMeta 里，不会每次重绘都再打一遍接口。
   {
-    const need = Array.from(document.querySelectorAll("[data-song-meta]")).slice(0, 4);
+    const need = Array.from($$("[data-song-meta]")).slice(0, 4);
     need.forEach(el=>{ songMetaResolve(el.dataset.songMeta); });
   }
 
@@ -21936,29 +22117,29 @@ function bindEvents(){
     }
     render();
   };
-  document.querySelectorAll("[data-wal-quick]").forEach(btn=>{
+  $$("[data-wal-quick]").forEach(btn=>{
     btn.onclick = ()=>{ walletTransfer(+btn.dataset.walQuick, "转给你"); render(); };
   });
   // 聊天气泡里那张「他想要 N」卡片，点一下直接转
-  document.querySelectorAll("[data-wal-pay]").forEach(el=>{
+  $$("[data-wal-pay]").forEach(el=>{
     el.onclick = (ev)=>{ ev.preventDefault(); ev.stopPropagation();
       walletTransfer(+el.dataset.walPay, el.dataset.walWhy || "他要的"); render();
     };
   });
-  document.querySelectorAll("[data-wal-redeem]").forEach(btn=>{
+  $$("[data-wal-redeem]").forEach(btn=>{
     btn.onclick = ()=>{
       const r = walletRedeem(btn.dataset.walRedeem, "me");
       if(typeof showToast==="function") showToast(r.ok ? `已替他兑换 ${r.item.name}` : r.reason);
       render();
     };
   });
-  document.querySelectorAll("[data-wal-item-edit]").forEach(btn=>{
+  $$("[data-wal-item-edit]").forEach(btn=>{
     btn.onclick = ()=>{ state.walletShopEdit = btn.dataset.walItemEdit; render(); };
   });
-  document.querySelectorAll("[data-wal-item-cancel]").forEach(btn=>{
+  $$("[data-wal-item-cancel]").forEach(btn=>{
     btn.onclick = ()=>{ state.walletShopEdit = null; render(); };
   });
-  document.querySelectorAll("[data-wal-item-save]").forEach(btn=>{
+  $$("[data-wal-item-save]").forEach(btn=>{
     btn.onclick = ()=>{
       const w = ensureWallet();
       const it = (w.shop||[]).find(x=>x.id===btn.dataset.walItemSave);
@@ -21971,7 +22152,7 @@ function bindEvents(){
       walletSave(); state.walletShopEdit = null; render();
     };
   });
-  document.querySelectorAll("[data-wal-item-del]").forEach(btn=>{
+  $$("[data-wal-item-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const w = ensureWallet();
       const it = (w.shop||[]).find(x=>x.id===btn.dataset.walItemDel);
@@ -22012,10 +22193,10 @@ function bindEvents(){
   };
 
   // ─── 自定义小狗按钮 ─────────────────────────────────────
-  document.querySelectorAll("[data-puppy-play]").forEach(btn=>{
+  $$("[data-puppy-play]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); playPuppyText(btn.dataset.puppyPlay); };
   });
-  document.querySelectorAll("[data-puppy-custom-open]").forEach(btn=>{
+  $$("[data-puppy-custom-open]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       state.puppyComposing = btn.dataset.puppyCustomOpen || "chat";
       state.puppyDraft = "";
@@ -22024,12 +22205,12 @@ function bindEvents(){
       if(el) el.focus();
     };
   });
-  document.querySelectorAll("[data-puppy-custom-cancel]").forEach(btn=>{
+  $$("[data-puppy-custom-cancel]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       state.puppyComposing=false; state.puppyDraft=""; render();
     };
   });
-  document.querySelectorAll("[data-puppy-custom-send]").forEach(btn=>{
+  $$("[data-puppy-custom-send]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       const mode = btn.dataset.puppyCustomSend || "chat";
       puppyCustomSubmit(mode);
@@ -22037,7 +22218,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-puppy-del]").forEach(btn=>{
+  $$("[data-puppy-del]").forEach(btn=>{
     btn.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       puppyCustomRemove(btn.dataset.puppyDel); render();
     };
@@ -22060,27 +22241,27 @@ function bindEvents(){
   // ─── 表情包 ─────────────────────────────────────────────
   const stickerBtn=document.getElementById("sticker-btn");
   if(stickerBtn) stickerBtn.onclick=(e)=>{ e.stopPropagation(); state.stickerOpen=true; state.chatMoreOpen=false; render(); };
-  document.querySelectorAll("[data-sticker-close]").forEach(el=>{
+  $$("[data-sticker-close]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); state.stickerOpen=false; render(); };
   });
-  document.querySelectorAll("[data-sticker-close-backdrop]").forEach(el=>{
+  $$("[data-sticker-close-backdrop]").forEach(el=>{
     el.onclick=(ev)=>{ if(ev.target===el){ state.stickerOpen=false; render(); } };
   });
-  document.querySelectorAll("[data-sticker-send]").forEach(el=>{
+  $$("[data-sticker-send]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       sendSticker(el.dataset.stickerSend);
       state.stickerOpen=false; render();
     };
   });
-  document.querySelectorAll("[data-sticker-del]").forEach(el=>{
+  $$("[data-sticker-del]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       if(confirm("删除表情「"+el.dataset.stickerDel+"」？")){ delSticker(el.dataset.stickerDel); state.stickerOpen=true; render(); }
     };
   });
-  document.querySelectorAll("[data-sticker-add-toggle]").forEach(el=>{
+  $$("[data-sticker-add-toggle]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); state.stickerAddOpen=!state.stickerAddOpen; render(); };
   });
-  document.querySelectorAll("[data-sticker-add-save]").forEach(el=>{
+  $$("[data-sticker-add-save]").forEach(el=>{
     el.onclick=()=>{
       const gid=(id)=>document.getElementById(id);
       const name=(gid("sticker-add-name")||{}).value||"";
@@ -22092,20 +22273,20 @@ function bindEvents(){
     };
   });
   // 情侣计分器
-  document.querySelectorAll("[data-love-delta]").forEach(btn=>{
+  $$("[data-love-delta]").forEach(btn=>{
     btn.onclick=()=>{ loveApplyDelta(parseInt(btn.dataset.loveDelta,10)||0); };
   });
   const loveReason=document.getElementById("love-reason");
   if(loveReason) loveReason.oninput=()=>{ state.loveReasonDraft=loveReason.value; };
   // 主页资料卡：点头像进主页 / 页内编辑
-  document.querySelectorAll("[data-profile-open]").forEach(el=>{
+  $$("[data-profile-open]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       state.profileWho = el.dataset.profileOpen; // "me"（女方）或 AI 的 agent id
       state.tab = "home"; state.subPage = "profile"; render();
     };
   });
   if(state.subPage === "profile"){
-    document.querySelectorAll("[data-profile-edit]").forEach(btn=>{
+    $$("[data-profile-edit]").forEach(btn=>{
       btn.onclick=()=>{ profileEditField(btn.dataset.profileEdit); };
     });
     const bgBtn=document.querySelector("[data-profile-bg]");
@@ -22119,10 +22300,10 @@ function bindEvents(){
   }
 
   // ─── 券夹：兑现 / 编辑 / 编辑器 ───
-  document.querySelectorAll("[data-coupon-use]").forEach(el=>{
+  $$("[data-coupon-use]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); redeemCoupon(el.dataset.couponUse); };
   });
-  document.querySelectorAll("[data-coupon-edit]").forEach(el=>{
+  $$("[data-coupon-edit]").forEach(el=>{
     el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation();
       const c = (state.coupons||[]).find(x=>x.id===el.dataset.couponEdit);
       if(!c) return;
@@ -22163,10 +22344,10 @@ function bindEvents(){
       render();
       try{ if(typeof postAppEvent==="function") postAppEvent("coupon_delete",{ id:d.id }); }catch(e){}
     };
-    document.querySelectorAll("[data-coupon-color]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.color=el.dataset.couponColor; render(); }; });
-    document.querySelectorAll("[data-coupon-texture]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.texture=el.dataset.couponTexture; render(); }; });
-    document.querySelectorAll("[data-coupon-font]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.font=el.dataset.couponFont; render(); }; });
-    document.querySelectorAll("[data-coupon-status]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.status=el.dataset.couponStatus; render(); }; });
+    $$("[data-coupon-color]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.color=el.dataset.couponColor; render(); }; });
+    $$("[data-coupon-texture]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.texture=el.dataset.couponTexture; render(); }; });
+    $$("[data-coupon-font]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.font=el.dataset.couponFont; render(); }; });
+    $$("[data-coupon-status]").forEach(el=>{ el.onclick=()=>{ if(state.couponDraft) state.couponDraft.status=el.dataset.couponStatus; render(); }; });
     [["coupon-name","name"],["coupon-title","title"],["coupon-subtitle","subtitle"],["coupon-code","code"]].forEach(function(pair){
       const el = document.getElementById(pair[0]);
       if(el) el.oninput = ()=>{
@@ -22178,10 +22359,10 @@ function bindEvents(){
   }
 
   // 游戏
-  document.querySelectorAll("[data-gmode]").forEach(btn=>{
+  $$("[data-gmode]").forEach(btn=>{
     btn.onclick=()=>{ state.gameMode=btn.dataset.gmode; state.gameReply=""; render(); };
   });
-  document.querySelectorAll("[data-gbtn]").forEach(btn=>{
+  $$("[data-gbtn]").forEach(btn=>{
     btn.onclick=()=>playPuppy(+btn.dataset.gbtn);
   });
 
@@ -22204,7 +22385,7 @@ function bindEvents(){
   if(cmdTitle) cmdTitle.oninput=()=>{ state.newCmd.title=cmdTitle.value; };
   const cmdContent=document.getElementById("cmd-content");
   if(cmdContent) cmdContent.oninput=()=>{ state.newCmd.content=cmdContent.value; };
-  document.querySelectorAll("[data-cmd-run]").forEach(btn=>{
+  $$("[data-cmd-run]").forEach(btn=>{
     btn.onclick=async()=>{
       const id=+btn.dataset.cmdRun;
       const cmd=state.cmdList.find(c=>c.id===id);
@@ -22218,7 +22399,7 @@ function bindEvents(){
       state.cmdRunLoading=false; render();
     };
   });
-  document.querySelectorAll("[data-cmd-del]").forEach(btn=>{
+  $$("[data-cmd-del]").forEach(btn=>{
     btn.onclick=()=>{
       const id=+btn.dataset.cmdDel;
       state.cmdList=state.cmdList.filter(c=>c.id!==id);
@@ -22284,7 +22465,7 @@ function bindEvents(){
   };
 
   // 合集：加载某一项
-  document.querySelectorAll("[data-col-load]").forEach(btn=>{
+  $$("[data-col-load]").forEach(btn=>{
     btn.onclick=()=>{
       const id=+btn.dataset.colLoad;
       const item=state.htmlGameCollection.find(i=>i.id===id);
@@ -22297,7 +22478,7 @@ function bindEvents(){
   });
 
   // 合集：删除某一项
-  document.querySelectorAll("[data-col-del]").forEach(btn=>{
+  $$("[data-col-del]").forEach(btn=>{
     btn.onclick=()=>{
       const id=+btn.dataset.colDel;
       state.htmlGameCollection=state.htmlGameCollection.filter(i=>i.id!==id);
@@ -22645,7 +22826,7 @@ function bindEvents(){
     });
   }
 
-  document.querySelectorAll("[data-attach-del]").forEach(btn=>{
+  $$("[data-attach-del]").forEach(btn=>{
     btn.onclick=()=>{
       const i=+btn.dataset.attachDel;
       state.chatAttachments=(state.chatAttachments||[]).filter((_,idx)=>idx!==i);
@@ -22654,7 +22835,7 @@ function bindEvents(){
   });
   const loadEarlier=document.getElementById("load-earlier");
   if(loadEarlier) loadEarlier.onclick=()=>{
-    state.chatRenderLimit = (state.chatRenderLimit||100) + 100;
+    state.chatRenderLimit = (state.chatRenderLimit||40) + 40;
     render();
   };
   const chatSend=document.getElementById("chat-send");
@@ -22669,7 +22850,7 @@ function bindEvents(){
   if(trigger) trigger.onclick=triggerAIReply;
 
   // 聊天/文章模式切换
-  document.querySelectorAll("[data-chat-mode]").forEach(btn=>{
+  $$("[data-chat-mode]").forEach(btn=>{
     btn.onclick=()=>{
       const m = btn.dataset.chatMode === "story" ? "story" : "chat";
       if(state.chatMode === m) return;
@@ -22689,7 +22870,7 @@ function bindEvents(){
     try{ LS.set("thoughtOn", state.thoughtOn); }catch(e){}
     render();
   };
-  document.querySelectorAll("[data-guide-agent]").forEach(btn=>{
+  $$("[data-guide-agent]").forEach(btn=>{
     btn.onclick=()=>{ state.guideEditAgentId=btn.dataset.guideAgent; render(); };
   });
   const thoughtGuideEl=document.getElementById("thought-guide");
@@ -22726,7 +22907,7 @@ function bindEvents(){
       if(typeof render==="function") render();
     };
   }
-  document.querySelectorAll("[data-think-modal-close]").forEach(btn=>{
+  $$("[data-think-modal-close]").forEach(btn=>{
     if(btn.id==="think-modal-mask") return;
     btn.onclick=(e)=>{
       e.preventDefault(); e.stopPropagation();
@@ -22735,13 +22916,13 @@ function bindEvents(){
       if(typeof render==="function") render();
     };
   });
-  document.querySelectorAll("[data-think-save-fav]").forEach(btn=>{
+  $$("[data-think-save-fav]").forEach(btn=>{
     btn.onclick=()=>{
       const idx=+btn.dataset.msgIdx;
       if(typeof openSaveThink==="function") openSaveThink(idx);
     };
   });
-  document.querySelectorAll("[data-think-edit]").forEach(btn=>{
+  $$("[data-think-edit]").forEach(btn=>{
     btn.onclick=()=>{
       const id=btn.dataset.thinkEdit;
       state.editingThinkId=id;
@@ -22750,10 +22931,10 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-think-cancel]").forEach(btn=>{
+  $$("[data-think-cancel]").forEach(btn=>{
     btn.onclick=()=>{ state.editingThinkId=null; render(); };
   });
-  document.querySelectorAll("[data-think-save]").forEach(btn=>{
+  $$("[data-think-save]").forEach(btn=>{
     btn.onclick=()=>{
       const id=btn.dataset.thinkSave;
       const idx=+btn.dataset.msgIdx;
@@ -22764,7 +22945,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-think-regen]").forEach(btn=>{
+  $$("[data-think-regen]").forEach(btn=>{
     btn.onclick=()=>{
       const id=btn.dataset.thinkRegen;
       const idx=+btn.dataset.msgIdx;
@@ -22782,10 +22963,10 @@ function bindEvents(){
   // 记忆
   const memAddToggle=document.getElementById("mem-add-toggle");
   if(memAddToggle) memAddToggle.onclick=()=>{ state.memAdding=!state.memAdding; render(); };
-  document.querySelectorAll("[data-mem-filter]").forEach(btn=>{
+  $$("[data-mem-filter]").forEach(btn=>{
     btn.onclick=()=>{ state.memFilter=btn.dataset.memFilter; render(); };
   });
-  document.querySelectorAll("[data-select]").forEach(el=>{
+  $$("[data-select]").forEach(el=>{
     el.onclick=()=>{
       const id=+el.dataset.select;
       if(state.memSelected.includes(id)) state.memSelected=state.memSelected.filter(x=>x!==id);
@@ -22793,14 +22974,14 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-del]").forEach(el=>{
+  $$("[data-del]").forEach(el=>{
     el.onclick=()=>{
       state.memories=state.memories.filter(m=>m.id!==+el.dataset.del);
       state.memSelected=state.memSelected.filter(x=>x!==+el.dataset.del);
       persist("memories"); render();
     };
   });
-  document.querySelectorAll("[data-expand]").forEach(el=>{
+  $$("[data-expand]").forEach(el=>{
     el.onclick=()=>{ state.expandedMems[el.dataset.expand]=!state.expandedMems[el.dataset.expand]; render(); };
   });
   const memSave=document.getElementById("mem-save");
@@ -22848,7 +23029,7 @@ function bindEvents(){
   if(savedNewCatInp) savedNewCatInp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); newSaveCat(savedNewCatInp.value); } };
   const savedSaveCancel=document.getElementById("saved-save-cancel");
   if(savedSaveCancel) savedSaveCancel.onclick=closeSaveChat;
-  document.querySelectorAll("[data-save-cat]").forEach(btn=>{ btn.onclick=()=>saveChatTo(btn.dataset.saveCat); });
+  $$("[data-save-cat]").forEach(btn=>{ btn.onclick=()=>saveChatTo(btn.dataset.saveCat); });
   const savedSearchInp=document.getElementById("saved-search-inp");
   if(savedSearchInp){
     savedSearchInp.oninput=()=>{ state.savedSearch=savedSearchInp.value; render(); };
@@ -22856,8 +23037,8 @@ function bindEvents(){
   }
   const savedSearchClear=document.getElementById("saved-search-clear");
   if(savedSearchClear) savedSearchClear.onclick=()=>{ state.savedSearch=""; render(); };
-  document.querySelectorAll("[data-saved-cat]").forEach(btn=>{ btn.onclick=()=>{ state.savedCatSel=btn.dataset.savedCat; render(); }; });
-  document.querySelectorAll("[data-saved-del]").forEach(btn=>{ btn.onclick=()=>delSavedChat(btn.dataset.savedDel); });
+  $$("[data-saved-cat]").forEach(btn=>{ btn.onclick=()=>{ state.savedCatSel=btn.dataset.savedCat; render(); }; });
+  $$("[data-saved-del]").forEach(btn=>{ btn.onclick=()=>delSavedChat(btn.dataset.savedDel); });
   const savedCatAdd=document.querySelector("[data-saved-cat-add]");
   if(savedCatAdd) savedCatAdd.onclick=()=>{ state.savedNewCatOpen=true; render(); };
   const savedCatOk=document.getElementById("saved-cat-ok");
@@ -22916,7 +23097,7 @@ function bindEvents(){
   if(memIntCancel) memIntCancel.onclick=()=>{ state.memIntegrateOpen=false; render(); };
   const memIntConfirm=document.getElementById("mem-int-confirm");
   if(memIntConfirm) memIntConfirm.onclick=()=> integrateMemoriesFromChat();
-  document.querySelectorAll("[data-mem-int-th]").forEach(el=>{
+  $$("[data-mem-int-th]").forEach(el=>{
     el.onchange=()=>{
       const tid = el.dataset.memIntTh;
       const d = state.memIntegrateDraft || { threads:[] };
@@ -22935,7 +23116,7 @@ function bindEvents(){
   if(memTo) memTo.onchange = ()=>{
     state.memIntegrateDraft = { ...(state.memIntegrateDraft||{}), dateTo: memTo.value };
   };
-  document.querySelectorAll("[data-mem-int-preset]").forEach(btn=>{
+  $$("[data-mem-int-preset]").forEach(btn=>{
     btn.onclick=()=>{
       const pad = n=>String(n).padStart(2,"0");
       const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -22955,10 +23136,10 @@ function bindEvents(){
   });
 
   // 主题
-  document.querySelectorAll("[data-theme]").forEach(btn=>{
+  $$("[data-theme]").forEach(btn=>{
     btn.onclick=()=>{ state.theme=btn.dataset.theme; persist("theme"); render(); };
   });
-  document.querySelectorAll("[data-pattern]").forEach(btn=>{
+  $$("[data-pattern]").forEach(btn=>{
     btn.onclick=()=>{ state.pattern=btn.dataset.pattern; persist("pattern"); render(); };
   });
   const wpFile = document.getElementById("wallpaper-file");
@@ -22980,7 +23161,7 @@ function bindEvents(){
     applyThemeVars();
     render();
   };
-  document.querySelectorAll("[data-bubble-style]").forEach(btn=>{
+  $$("[data-bubble-style]").forEach(btn=>{
     btn.onclick = ()=>{
       state.bubbleStyle = btn.dataset.bubbleStyle || "solid";
       persist("bubbleStyle");
@@ -22988,7 +23169,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-ui-font]").forEach(btn=>{
+  $$("[data-ui-font]").forEach(btn=>{
     btn.onclick = ()=>{
       state.uiFont = btn.dataset.uiFont || "";
       persist("uiFont");
@@ -22996,7 +23177,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-ui-shell]").forEach(btn=>{
+  $$("[data-ui-shell]").forEach(btn=>{
     btn.onclick = ()=>{
       state.uiShell = btn.dataset.uiShell || "classic";
       persist("uiShell");
@@ -23008,7 +23189,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-bubble-grad]").forEach(btn=>{
+  $$("[data-bubble-grad]").forEach(btn=>{
     btn.onclick = ()=>{
       state.bubbleGrad = +btn.dataset.bubbleGrad || 0;
       persist("bubbleGrad");
@@ -23059,10 +23240,10 @@ function bindEvents(){
   // 提示词
   const promptAddToggle=document.getElementById("prompt-add-toggle");
   if(promptAddToggle) promptAddToggle.onclick=()=>{ state.promptAdding=!state.promptAdding; if(state.promptAdding) state.promptEditingId=null; render(); };
-  document.querySelectorAll("[data-prompt-filter]").forEach(btn=>{
+  $$("[data-prompt-filter]").forEach(btn=>{
     btn.onclick=()=>{ state.promptFilter=btn.dataset.promptFilter; render(); };
   });
-  document.querySelectorAll("[data-new-cat]").forEach(btn=>{
+  $$("[data-new-cat]").forEach(btn=>{
     btn.onclick=()=>{ state.newPrompt.category=btn.dataset.newCat; render(); };
   });
   const promptSave=document.getElementById("prompt-save");
@@ -23080,7 +23261,7 @@ function bindEvents(){
     state.newPrompt={title:"",content:"",category:"global",enabled:true};
     state.promptAdding=false; persist("prompts"); render();
   };
-  document.querySelectorAll("[data-prompt-edit]").forEach(el=>{
+  $$("[data-prompt-edit]").forEach(el=>{
     el.onclick=()=>{
       const id=+el.dataset.promptEdit;
       const p=state.prompts.find(x=>x.id===id);
@@ -23093,14 +23274,14 @@ function bindEvents(){
   });
   const promptCancel=document.getElementById("prompt-cancel");
   if(promptCancel) promptCancel.onclick=()=>{ state.promptAdding=false; state.promptEditingId=null; render(); };
-  document.querySelectorAll("[data-prompt-toggle]").forEach(el=>{
+  $$("[data-prompt-toggle]").forEach(el=>{
     el.onclick=()=>{
       const id=+el.dataset.promptToggle;
       state.prompts=state.prompts.map(p=>p.id===id?{...p,enabled:!p.enabled}:p);
       persist("prompts"); render();
     };
   });
-  document.querySelectorAll("[data-prompt-del]").forEach(el=>{
+  $$("[data-prompt-del]").forEach(el=>{
     el.onclick=()=>{
       state.prompts=state.prompts.filter(p=>p.id!==+el.dataset.promptDel);
       persist("prompts"); render();
@@ -23108,7 +23289,7 @@ function bindEvents(){
   });
 
   // 设置 · 多 AI
-  document.querySelectorAll("[data-ag-channel]").forEach(btn=>{
+  $$("[data-ag-channel]").forEach(btn=>{
     btn.onclick=()=>{
       const id = btn.dataset.agChannel;
       const val = btn.dataset.val;
@@ -23200,7 +23381,7 @@ function bindEvents(){
       };
     }
   });
-  document.querySelectorAll("[data-ag-avatar-clear]").forEach(btn=>{
+  $$("[data-ag-avatar-clear]").forEach(btn=>{
     btn.onclick=()=>{
       const ag = agentById(btn.dataset.agAvatarClear);
       if(!ag) return;
@@ -23209,7 +23390,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-aux-channel]").forEach(btn=>{
+  $$("[data-aux-channel]").forEach(btn=>{
     btn.onclick=()=>{ state.apiConfig.auxChannel=btn.dataset.auxChannel; persist("apiConfig"); render(); };
   });
   ["auxOpenaiKey","auxOpenaiBase","auxOpenaiModel"].forEach(k=>{
@@ -23217,7 +23398,7 @@ function bindEvents(){
     if(el) el.onchange=()=>{ state.apiConfig[k]=el.value; persist("apiConfig"); };
   });
   // 聊天对象切换（私聊 / 群聊）
-  document.querySelectorAll("[data-chat-target]").forEach(btn=>{
+  $$("[data-chat-target]").forEach(btn=>{
     btn.onclick=()=>{
       const id = btn.dataset.chatTarget;
       if(id === state.chatTarget) return;
@@ -23302,7 +23483,7 @@ function bindEvents(){
   };
 
   // 音乐
-  document.querySelectorAll("[data-music-src]").forEach(btn=>{
+  $$("[data-music-src]").forEach(btn=>{
     btn.onclick = ()=>{
       state.musicConfig.source = btn.dataset.musicSrc;
       persist("musicConfig");
@@ -23318,15 +23499,15 @@ function bindEvents(){
   }
   const ms = document.getElementById("music-search");
   if(ms) ms.onclick = ()=> musicSearch();
-  document.querySelectorAll("[data-music-play]").forEach(btn=>{
+  $$("[data-music-play]").forEach(btn=>{
     btn.onclick = ()=>{
       musicTapSong(+btn.dataset.musicPlay);
     };
   });
-  document.querySelectorAll("[data-music-browse]").forEach(btn=>{
+  $$("[data-music-browse]").forEach(btn=>{
     btn.onclick = ()=> musicBrowseGo(btn.dataset.musicBrowse);
   });
-  document.querySelectorAll("[data-music-playlist]").forEach(btn=>{
+  $$("[data-music-playlist]").forEach(btn=>{
     btn.onclick = ()=>{
       const p = state.musicPlaylists[+btn.dataset.musicPlaylist];
       if(p) musicOpenPlaylist(p.id, p.name);
@@ -23371,7 +23552,7 @@ function bindEvents(){
       render();
     }catch(e){ alert(e.message); }
   };
-  document.querySelectorAll("[data-music-backend]").forEach(btn=>{
+  $$("[data-music-backend]").forEach(btn=>{
     btn.onclick = ()=>{
       state.musicConfig.backend = btn.dataset.musicBackend || "auto";
       state._musicBackendResolved = null;
@@ -23379,7 +23560,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-cfg-music-backend]").forEach(btn=>{
+  $$("[data-cfg-music-backend]").forEach(btn=>{
     btn.onclick = ()=>{
       state.musicConfig.backend = btn.dataset.cfgMusicBackend || "auto";
       state._musicBackendResolved = null;
@@ -23399,10 +23580,10 @@ function bindEvents(){
   // 一起读
   const readFeed = document.getElementById("read-feed-toggle");
   if(readFeed) readFeed.onclick = ()=>{ state.readFeedChat=!state.readFeedChat; persist("readFeedChat"); render(); };
-  document.querySelectorAll("[data-read-tab]").forEach(btn=>{
+  $$("[data-read-tab]").forEach(btn=>{
     btn.onclick = ()=>{ state.readTab = btn.dataset.readTab; render(); };
   });
-  document.querySelectorAll("[data-read-open]").forEach(btn=>{
+  $$("[data-read-open]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = +btn.dataset.readOpen;
       const book = (state.books||[]).find(b=>b.id===id);
@@ -23420,7 +23601,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-read-del]").forEach(btn=>{
+  $$("[data-read-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = +btn.dataset.readDel;
       state.books = (state.books||[]).filter(b=>b.id!==id);
@@ -23456,25 +23637,25 @@ function bindEvents(){
   if(readRadio) readRadio.onclick = ()=> readBedtimeRadio();
 
   // ─── 书房 ─────────────────────────────────────────────
-  document.querySelectorAll("[data-shufang-new-book]").forEach(b=>{ b.onclick=()=>{ state.shufangShowNewBook=!state.shufangShowNewBook; render(); }; });
+  $$("[data-shufang-new-book]").forEach(b=>{ b.onclick=()=>{ state.shufangShowNewBook=!state.shufangShowNewBook; render(); }; });
   const shufangCreate=document.getElementById("shufang-create-book");
   if(shufangCreate) shufangCreate.onclick=()=> shufangCreateBook();
   const shufangNewTitle=document.getElementById("shufang-new-title");
   if(shufangNewTitle) shufangNewTitle.onkeydown=(e)=>{ if(e.key==="Enter") shufangCreateBook(); };
-  document.querySelectorAll("[data-shufang-open]").forEach(b=>{ b.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); shufangOpenBook(b.dataset.shufangOpen); }; });
-  document.querySelectorAll("[data-shufang-del]").forEach(b=>{ b.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); shufangDelBook(b.dataset.shufangDel); }; });
-  document.querySelectorAll("[data-shufang-back-shelf]").forEach(b=>{ b.onclick=()=>{ state.shufangTab="shelf"; state.shufangBookId=null; state.shufangChapterId=null; render(); }; });
-  document.querySelectorAll("[data-shufang-toggle-chars]").forEach(b=>{ b.onclick=()=>{ state.shufangShowChars=!state.shufangShowChars; render(); }; });
-  document.querySelectorAll("[data-shufang-char-add]").forEach(b=>{ b.onclick=()=>{ shufangAddChar(); }; });
-  document.querySelectorAll("[data-shufang-char-del]").forEach(b=>{ b.onclick=()=>{ shufangDelChar(b.dataset.shufangCharDel); }; });
-  document.querySelectorAll("[data-shufang-new-ch]").forEach(b=>{ b.onclick=()=>{ shufangNewChapter(); }; });
-  document.querySelectorAll("[data-shufang-open-ch]").forEach(b=>{ b.onclick=()=>{ shufangOpenChapter(b.dataset.shufangOpenCh); }; });
-  document.querySelectorAll("[data-shufang-del-ch]").forEach(b=>{ b.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); shufangDelChapter(b.dataset.shufangDelCh); }; });
-  document.querySelectorAll("[data-shufang-back-ch]").forEach(b=>{ b.onclick=()=>{ shufangSaveChapter(true); state.shufangTab="chapters"; state.shufangChapterId=null; render(); }; });
-  document.querySelectorAll("[data-shufang-toggle-pub]").forEach(b=>{ b.onclick=()=>{ state.shufangIsPublished=!state.shufangIsPublished; render(); }; });
-  document.querySelectorAll("[data-shufang-insert]").forEach(b=>{ b.onclick=()=>{ shufangInsertAtCursor(b.dataset.shufangInsert); }; });
-  document.querySelectorAll("[data-shufang-char-add-toggle]").forEach(b=>{ b.onclick=()=>{ state.shufangCharAddOpen=!state.shufangCharAddOpen; render(); }; });
-  document.querySelectorAll("[data-shufang-save]").forEach(b=>{ b.onclick=()=>{ shufangSaveChapter(false); }; });
+  $$("[data-shufang-open]").forEach(b=>{ b.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); shufangOpenBook(b.dataset.shufangOpen); }; });
+  $$("[data-shufang-del]").forEach(b=>{ b.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); shufangDelBook(b.dataset.shufangDel); }; });
+  $$("[data-shufang-back-shelf]").forEach(b=>{ b.onclick=()=>{ state.shufangTab="shelf"; state.shufangBookId=null; state.shufangChapterId=null; render(); }; });
+  $$("[data-shufang-toggle-chars]").forEach(b=>{ b.onclick=()=>{ state.shufangShowChars=!state.shufangShowChars; render(); }; });
+  $$("[data-shufang-char-add]").forEach(b=>{ b.onclick=()=>{ shufangAddChar(); }; });
+  $$("[data-shufang-char-del]").forEach(b=>{ b.onclick=()=>{ shufangDelChar(b.dataset.shufangCharDel); }; });
+  $$("[data-shufang-new-ch]").forEach(b=>{ b.onclick=()=>{ shufangNewChapter(); }; });
+  $$("[data-shufang-open-ch]").forEach(b=>{ b.onclick=()=>{ shufangOpenChapter(b.dataset.shufangOpenCh); }; });
+  $$("[data-shufang-del-ch]").forEach(b=>{ b.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); shufangDelChapter(b.dataset.shufangDelCh); }; });
+  $$("[data-shufang-back-ch]").forEach(b=>{ b.onclick=()=>{ shufangSaveChapter(true); state.shufangTab="chapters"; state.shufangChapterId=null; render(); }; });
+  $$("[data-shufang-toggle-pub]").forEach(b=>{ b.onclick=()=>{ state.shufangIsPublished=!state.shufangIsPublished; render(); }; });
+  $$("[data-shufang-insert]").forEach(b=>{ b.onclick=()=>{ shufangInsertAtCursor(b.dataset.shufangInsert); }; });
+  $$("[data-shufang-char-add-toggle]").forEach(b=>{ b.onclick=()=>{ state.shufangCharAddOpen=!state.shufangCharAddOpen; render(); }; });
+  $$("[data-shufang-save]").forEach(b=>{ b.onclick=()=>{ shufangSaveChapter(false); }; });
   const shufangBody=document.getElementById("shufang-editor-body");
   if(shufangBody) shufangBody.oninput=()=>{
     const el=document.getElementById("shufang-words");
@@ -23572,7 +23753,7 @@ function bindEvents(){
 
 
   // MCP 大厅
-  document.querySelectorAll("[data-mcp-transport]").forEach(btn=>{
+  $$("[data-mcp-transport]").forEach(btn=>{
     btn.onclick = ()=>{ const cfg = mcpEnsureConfig(); cfg.transport = btn.dataset.mcpTransport; persist("mcpConfig"); render(); };
   });
   const mcpUrl = document.getElementById("mcp-url");
@@ -23606,7 +23787,7 @@ function bindEvents(){
     cfg.url = u; cfg.proxy = p; cfg.transport = t; cfg.token = tk;
     persist("mcpConfig"); render();
   };
-  document.querySelectorAll("[data-mcp-bm]").forEach(btn=>{
+  $$("[data-mcp-bm]").forEach(btn=>{
     btn.onclick = ()=>{
       const cfg = mcpEnsureConfig();
       const b = cfg.bookmarks[+btn.dataset.mcpBm];
@@ -23617,14 +23798,14 @@ function bindEvents(){
       mcpConnect();
     };
   });
-  document.querySelectorAll("[data-mcp-bm-del]").forEach(btn=>{
+  $$("[data-mcp-bm-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const cfg = mcpEnsureConfig();
       cfg.bookmarks.splice(+btn.dataset.mcpBmDel, 1);
       persist("mcpConfig"); render();
     };
   });
-  document.querySelectorAll("[data-mcp-call]").forEach(btn=>{
+  $$("[data-mcp-call]").forEach(btn=>{
     btn.onclick = ()=>{ const name = btn.dataset.mcpCall; mcpCallTool(name, mcpCollectArgs(name)); };
   });
   const mcpAiGo = document.getElementById("mcp-ai-go");
@@ -23713,7 +23894,7 @@ function bindEvents(){
     persist("backupRemind");
   };
   // 后台生成三态
-  document.querySelectorAll("[data-bggen]").forEach(btn=>{
+  $$("[data-bggen]").forEach(btn=>{
     btn.onclick = ()=>{
       state.bgGen = btn.dataset.bggen || "off";
       persist("bgGen"); render();
@@ -23721,7 +23902,7 @@ function bindEvents(){
   });
 
   // 烹饪大师
-  document.querySelectorAll("[data-cook-tab]").forEach(btn=>{
+  $$("[data-cook-tab]").forEach(btn=>{
     btn.onclick = ()=>{ state.cookingTab = btn.dataset.cookTab; render(); };
   });
   const cookClaim = document.getElementById("cook-claim");
@@ -23731,7 +23912,7 @@ function bindEvents(){
     else alert("领到："+r.got.map(g=>g.emoji+g.name).join("、"));
     render();
   };
-  document.querySelectorAll("[data-cook-make]").forEach(btn=>{
+  $$("[data-cook-make]").forEach(btn=>{
     btn.onclick = ()=>{
       const r = cookMake(btn.dataset.cookMake);
       if(!r.ok) alert(r.msg);
@@ -23739,7 +23920,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-cook-sell]").forEach(btn=>{
+  $$("[data-cook-sell]").forEach(btn=>{
     btn.onclick = ()=>{
       const r = cookSell(btn.dataset.cookSell);
       if(!r.ok) alert(r.msg);
@@ -23747,7 +23928,7 @@ function bindEvents(){
       render();
     };
   });
-  document.querySelectorAll("[data-cook-buy]").forEach(btn=>{
+  $$("[data-cook-buy]").forEach(btn=>{
     btn.onclick = ()=>{
       const r = cookBuy(btn.dataset.cookBuy);
       if(!r.ok) alert(r.msg);
@@ -23756,7 +23937,7 @@ function bindEvents(){
   });
 
   // 菜单
-  document.querySelectorAll("[data-menu-tab]").forEach(btn=>{
+  $$("[data-menu-tab]").forEach(btn=>{
     btn.onclick = ()=>{ state.menuTab = btn.dataset.menuTab; render(); };
   });
   const menuAddToggle = document.getElementById("menu-add-toggle");
@@ -23776,7 +23957,7 @@ function bindEvents(){
     persist("menuBook");
     render();
   };
-  document.querySelectorAll("[data-menu-del]").forEach(btn=>{
+  $$("[data-menu-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const book = ensureMenuBook();
       book.items = book.items.filter(x=>String(x.id)!==String(btn.dataset.menuDel));
@@ -23798,7 +23979,7 @@ function bindEvents(){
     try{ if(typeof persist==="function") persist("_menuOrderShareOn"); }catch(e){}
     render();
   };
-  document.querySelectorAll("[data-menu-quick]").forEach(btn=>{
+  $$("[data-menu-quick]").forEach(btn=>{
     btn.onclick = ()=>{
       const name = btn.dataset.menuQuick || "";
       const ta = document.getElementById("menu-order-note");
@@ -23819,7 +24000,7 @@ function bindEvents(){
     persist("menuBook");
     render();
   };
-  document.querySelectorAll("[data-menu-order-del]").forEach(btn=>{
+  $$("[data-menu-order-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const book = ensureMenuBook();
       const i = +btn.dataset.menuOrderDel;
@@ -23835,7 +24016,7 @@ function bindEvents(){
   if(babyFeed) babyFeed.onclick = ()=>{ state.babyFeedChat=!state.babyFeedChat; persist("babyFeedChat"); render(); };
   const babyOverhearToggle = document.getElementById("baby-overhear-toggle");
   if(babyOverhearToggle) babyOverhearToggle.onclick = ()=>{ state.babyOverhear=!(state.babyOverhear!==false); persist("babyOverhear"); render(); };
-  document.querySelectorAll("[data-baby-tab]").forEach(btn=>{
+  $$("[data-baby-tab]").forEach(btn=>{
     btn.onclick = ()=>{ state.babyTab = btn.dataset.babyTab; state._babySpeakOpen=false; render(); };
   });
 
@@ -23863,7 +24044,7 @@ function bindEvents(){
   };
 
   // 动作按钮
-  document.querySelectorAll("[data-baby-act]").forEach(btn=>{
+  $$("[data-baby-act]").forEach(btn=>{
     btn.onclick = ()=>{
       if(!state.baby) return;
       babyTickDecay();
@@ -24069,7 +24250,7 @@ reader.readAsArrayBuffer(f);
     if(typeof showToast==="function") showToast(m ? "已划线" : "这句已经划过了");
     render();
   };
-  document.querySelectorAll("[data-read-mark-del]").forEach(el=>{
+  $$("[data-read-mark-del]").forEach(el=>{
     el.onclick = ()=>{ readDeleteMark(el.dataset.readMarkDel); render(); };
   });
   // 叫他读这一页：把整页推进聊天，让他读完直接留批注
@@ -24102,7 +24283,7 @@ reader.readAsArrayBuffer(f);
 
 
   // 角色扮演
-  document.querySelectorAll("[data-rp-apply]").forEach(btn=>{
+  $$("[data-rp-apply]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = btn.dataset.rpApply;
       state.activeRoleplayId = (state.activeRoleplayId===id) ? null : id;
@@ -24110,7 +24291,7 @@ reader.readAsArrayBuffer(f);
       render();
     };
   });
-  document.querySelectorAll("[data-rp-del]").forEach(btn=>{
+  $$("[data-rp-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = btn.dataset.rpDel;
       state.roleplays = (state.roleplays||[]).filter(x=>x.id!==id);
@@ -24118,7 +24299,7 @@ reader.readAsArrayBuffer(f);
       persist("roleplays"); persist("activeRoleplayId"); render();
     };
   });
-  document.querySelectorAll("[data-rp-edit]").forEach(btn=>{
+  $$("[data-rp-edit]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = btn.dataset.rpEdit;
       const rp = (state.roleplays||[]).find(x=>x.id===id);
@@ -24151,7 +24332,7 @@ reader.readAsArrayBuffer(f);
   };
 
   // 每日任务：打卡勾选
-  document.querySelectorAll("[data-quest-toggle]").forEach(btn=>{
+  $$("[data-quest-toggle]").forEach(btn=>{
     btn.onclick = ()=>{
       const qd = state.questData || questDefaultData();
       const q = (qd.quests||[]).find(x=>String(x.id)===String(btn.getAttribute("data-quest-toggle")));
@@ -24190,7 +24371,7 @@ reader.readAsArrayBuffer(f);
   }
 
   // 飞行棋：功能页版本切换 / 保存 / 去聊天玩
-  document.querySelectorAll("[data-fc-version]").forEach(btn=>{
+  $$("[data-fc-version]").forEach(btn=>{
     btn.onclick = ()=>{ flightChessSetVersion(btn.getAttribute("data-fc-version")); };
   });
   const fcSave = document.getElementById("fc-save");
@@ -24198,7 +24379,7 @@ reader.readAsArrayBuffer(f);
   const fcPlay = document.getElementById("fc-play");
   if(fcPlay) fcPlay.onclick = ()=>{ window.flightChessOpen(); };
   // 真心话大冒险：模式 / 洗牌 / 抽卡 / 关闭 / 带回聊天
-  document.querySelectorAll("[data-td-mode]").forEach(b=>{
+  $$("[data-td-mode]").forEach(b=>{
     b.onclick = ()=>{ truthDareSetMode(b.getAttribute("data-td-mode")); };
   });
   const tdShuffle = document.querySelector("[data-td-shuffle]");
@@ -24267,7 +24448,7 @@ reader.readAsArrayBuffer(f);
     else state.dutyMonth++;
     state.dutySelected=null; render();
   };
-  document.querySelectorAll("[data-duty-day]").forEach(btn=>{
+  $$("[data-duty-day]").forEach(btn=>{
     btn.onclick = ()=>{
       const k = btn.dataset.dutyDay;
       state.dutySelected = k;
@@ -24328,10 +24509,10 @@ reader.readAsArrayBuffer(f);
     persist("wardrobeFeedChat");
     render();
   };
-  document.querySelectorAll("[data-ward-tab]").forEach(btn=>{
+  $$("[data-ward-tab]").forEach(btn=>{
     btn.onclick = ()=>{ state.wardrobeTab = btn.dataset.wardTab; state.wardrobeAdding=false; render(); };
   });
-  document.querySelectorAll("[data-ward-cat]").forEach(btn=>{
+  $$("[data-ward-cat]").forEach(btn=>{
     btn.onclick = ()=>{
       state.wardrobeCatFilter = btn.dataset.wardCat;
       state.wardrobeNewCat = btn.dataset.wardCat;
@@ -24339,7 +24520,7 @@ reader.readAsArrayBuffer(f);
       render();
     };
   });
-  document.querySelectorAll("[data-outfit-pick]").forEach(btn=>{
+  $$("[data-outfit-pick]").forEach(btn=>{
     btn.onclick = ()=>{
       ensureOutfitShape();
       const field = btn.dataset.outfitPick;
@@ -24350,7 +24531,7 @@ reader.readAsArrayBuffer(f);
       render();
     };
   });
-  document.querySelectorAll("[data-outfit-clear]").forEach(btn=>{
+  $$("[data-outfit-clear]").forEach(btn=>{
     btn.onclick = ()=>{
       ensureOutfitShape();
       state.todayOutfit[btn.dataset.outfitClear] = null;
@@ -24358,7 +24539,7 @@ reader.readAsArrayBuffer(f);
       render();
     };
   });
-  document.querySelectorAll("[data-outfit-acc]").forEach(btn=>{
+  $$("[data-outfit-acc]").forEach(btn=>{
     btn.onclick = ()=>{
       ensureOutfitShape();
       const id = +btn.dataset.outfitAcc;
@@ -24400,7 +24581,7 @@ reader.readAsArrayBuffer(f);
     persist("wardrobeItems");
     render();
   };
-  document.querySelectorAll("[data-ward-del]").forEach(btn=>{
+  $$("[data-ward-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = +btn.dataset.wardDel;
       state.wardrobeItems = (state.wardrobeItems||[]).filter(x=>x.id!==id);
@@ -24467,7 +24648,7 @@ reader.readAsArrayBuffer(f);
     c.token = ntfyTok.value.trim();
     persist("ntfyConfig");
   };
-  document.querySelectorAll("[data-ntfy-pri]").forEach(btn=>{
+  $$("[data-ntfy-pri]").forEach(btn=>{
     btn.onclick = ()=>{
       const c = ntfyEnsure();
       c.defaultPriority = btn.dataset.ntfyPri || "default";
@@ -24509,7 +24690,7 @@ reader.readAsArrayBuffer(f);
   };
 
   // 品牌形象
-  document.querySelectorAll("[data-brand-splash]").forEach(btn=>{
+  $$("[data-brand-splash]").forEach(btn=>{
     btn.onclick = ()=>{
       const b = brandingEnsure();
       b.splashId = btn.dataset.brandSplash;
@@ -24518,7 +24699,7 @@ reader.readAsArrayBuffer(f);
       render();
     };
   });
-  document.querySelectorAll("[data-brand-icon]").forEach(btn=>{
+  $$("[data-brand-icon]").forEach(btn=>{
     btn.onclick = ()=>{
       const b = brandingEnsure();
       b.iconId = btn.dataset.brandIcon;
@@ -24596,7 +24777,7 @@ reader.readAsArrayBuffer(f);
   };
 
   // 他的机
-  document.querySelectorAll("[data-hp-tab]").forEach(btn=>{
+  $$("[data-hp-tab]").forEach(btn=>{
     btn.onclick = ()=>{
       const t = btn.dataset.hpTab;
       if(t==="private" || t==="psearch" || t==="pnotes" || t==="palbum"){
@@ -24786,9 +24967,9 @@ reader.readAsArrayBuffer(f);
     state.momentComposing = false; state.momentDraft = ""; state.momentImage = "";
     render();
   };
-  document.querySelectorAll("[data-mo-like]").forEach(b=>{ b.onclick = ()=> momentToggleMyLike(b.dataset.moLike); });
-  document.querySelectorAll("[data-mo-del]").forEach(b=>{ b.onclick = ()=> momentDelete(b.dataset.moDel); });
-  document.querySelectorAll("[data-mo-cmt]").forEach(b=>{
+  $$("[data-mo-like]").forEach(b=>{ b.onclick = ()=> momentToggleMyLike(b.dataset.moLike); });
+  $$("[data-mo-del]").forEach(b=>{ b.onclick = ()=> momentDelete(b.dataset.moDel); });
+  $$("[data-mo-cmt]").forEach(b=>{
     b.onclick = ()=>{
       state.momentCommentOpen = (state.momentCommentOpen === b.dataset.moCmt) ? null : b.dataset.moCmt;
       state.momentCommentDraft = "";
@@ -24802,7 +24983,7 @@ reader.readAsArrayBuffer(f);
       if(e.key === "Enter"){ e.preventDefault(); momentAddComment(state.momentCommentOpen, moCmtInput.value); }
     };
   }
-  document.querySelectorAll("[data-mo-cmt-send]").forEach(b=>{
+  $$("[data-mo-cmt-send]").forEach(b=>{
     b.onclick = ()=>{
       const v = (document.getElementById("mo-cmt-input")||{}).value || state.momentCommentDraft || "";
       momentAddComment(b.dataset.moCmtSend, v);
@@ -24810,7 +24991,7 @@ reader.readAsArrayBuffer(f);
   });
 
   // 吃苹果 · 壳
-  document.querySelectorAll("[data-ea-shell]").forEach(btn=>{
+  $$("[data-ea-shell]").forEach(btn=>{
     btn.onclick = ()=>{
       const e = eaEnsure();
       const id = btn.dataset.eaShell;
@@ -24827,7 +25008,7 @@ reader.readAsArrayBuffer(f);
   };
   const eaFlushSlots = ()=>{
     const e = eaEnsure();
-    document.querySelectorAll("[data-ea-slot]").forEach(inp=>{
+    $$("[data-ea-slot]").forEach(inp=>{
       if(!e.slots[e.shellId]) e.slots[e.shellId] = {};
       e.slots[e.shellId][inp.dataset.eaSlot] = inp.value;
     });
@@ -24835,7 +25016,7 @@ reader.readAsArrayBuffer(f);
   };
   const eaGenBtn = document.getElementById("ea-gen");
   if(eaGenBtn) eaGenBtn.onclick = ()=>{ eaFlushSlots(); eaGenerate(); };
-  document.querySelectorAll("[data-ea-slot]").forEach(inp=>{
+  $$("[data-ea-slot]").forEach(inp=>{
     inp.onchange = ()=>{
       const e = eaEnsure();
       if(!e.slots[e.shellId]) e.slots[e.shellId] = {};
@@ -24846,7 +25027,7 @@ reader.readAsArrayBuffer(f);
   const eaHandoffBtn = document.getElementById("ea-handoff");
   // 先把还没 change 的输入收进来，免得刚打完字直接点按钮就丢掉
   if(eaHandoffBtn) eaHandoffBtn.onclick = ()=>{ eaFlushSlots(); eaHandoff(); };
-  document.querySelectorAll("[data-ea-palette]").forEach(btn=>{
+  $$("[data-ea-palette]").forEach(btn=>{
     btn.onclick = ()=>{
       const e = eaEnsure(); e.palette = btn.dataset.eaPalette;
       try{ persist("eatApple"); }catch(err){}
@@ -24858,7 +25039,7 @@ reader.readAsArrayBuffer(f);
   if(eaRoll) eaRoll.onclick = ()=>{
     let pool = {};
     try{ pool = JSON.parse(document.getElementById("ea-iwrs-pool")?.dataset.pool || "{}"); }catch(err){}
-    document.querySelectorAll("[data-iwrs-key]").forEach((el, i)=>{
+    $$("[data-iwrs-key]").forEach((el, i)=>{
       const arr = pool[el.dataset.iwrsKey];
       if(!Array.isArray(arr) || !arr.length){ el.textContent = "—"; return; }
       // 逐行停下的滚动感：每行错开一点时间再定住
@@ -25013,7 +25194,7 @@ const sttUrl = document.getElementById("call-stt-url");
     if(extra) extra.style.display = extra.style.display==="none"||!extra.style.display ? "block" : "none";
     else callDecline("");
   };
-  document.querySelectorAll("[data-call-decline-note]").forEach(btn=>{
+  $$("[data-call-decline-note]").forEach(btn=>{
     btn.onclick = ()=> callDecline(btn.dataset.callDeclineNote);
   });
   const callDecSend = document.getElementById("call-decline-send");
@@ -25079,7 +25260,7 @@ const sttUrl = document.getElementById("call-stt-url");
     try{ LS.set("cabinetFeedChat", state.cabinetFeedChat); }catch(err){}
     render();
   };
-  document.querySelectorAll("[data-cab-open]").forEach(btn=>{
+  $$("[data-cab-open]").forEach(btn=>{
     btn.onclick = (e)=>{
       if(e.target && e.target.closest && e.target.closest("[data-cab-del]")) return;
       state.cabinetOpenId = btn.dataset.cabOpen;
@@ -25087,7 +25268,7 @@ const sttUrl = document.getElementById("call-stt-url");
       render();
     };
   });
-  document.querySelectorAll("[data-cab-del]").forEach(el=>{
+  $$("[data-cab-del]").forEach(el=>{
     el.onclick = (e)=>{
       e.stopPropagation();
       const id = el.dataset.cabDel;
@@ -25126,7 +25307,7 @@ const sttUrl = document.getElementById("call-stt-url");
       else if(dx > 40) switchCab(-1);
     });
   }
-  document.querySelectorAll("[data-cab-item-del]").forEach(btn=>{
+  $$("[data-cab-item-del]").forEach(btn=>{
     btn.onclick = ()=>{
       const open = cabinetById(state.cabinetOpenId);
       if(!open) return;
@@ -25170,7 +25351,7 @@ const sttUrl = document.getElementById("call-stt-url");
   };
 
   // ─── 小纸条 / 机日记 / 信箱 ─────────────────────────
-  document.querySelectorAll("[data-mc-fab]").forEach(btn=>{
+  $$("[data-mc-fab]").forEach(btn=>{
     btn.onclick=(e)=>{ e.stopPropagation(); state.mcSheet = btn.dataset.mcFab; render(); };
   });
   const mcSheetCancel=document.getElementById("mc-sheet-cancel");
@@ -25187,13 +25368,13 @@ const sttUrl = document.getElementById("call-stt-url");
   if(mcLetterSched) mcLetterSched.onchange=()=>{ state.mcLetterSched=mcLetterSched.value; };
   const mcLetterSend=document.getElementById("mc-letter-send");
   if(mcLetterSend) mcLetterSend.onclick=()=>{ mcSendLetter(); };
-  document.querySelectorAll("[data-mc-filter]").forEach(btn=>{
+  $$("[data-mc-filter]").forEach(btn=>{
     btn.onclick=()=>{ state.mdiaryFilter=btn.dataset.mcFilter; render(); };
   });
-  document.querySelectorAll("[data-mbox-tab]").forEach(btn=>{
+  $$("[data-mbox-tab]").forEach(btn=>{
     btn.onclick=()=>{ state.mboxTab=btn.dataset.mboxTab; render(); };
   });
-  document.querySelectorAll("[data-mc-open]").forEach(el=>{
+  $$("[data-mc-open]").forEach(el=>{
     el.onclick=(e)=>{ e.stopPropagation();
       const v = String(el.dataset.mcOpen||"");
       const i = v.indexOf(":");
@@ -25554,6 +25735,460 @@ function voiceToneLabel(m){
 //    消息末尾，他们实测思考链长度 89 字 → 641 字。离生成点越近权重越高。
 // 2) **缓存安全**：分钟级变化的东西（此刻情绪/时间）绝不能进被缓存的 system 前缀，
 //    挂在最后一条消息尾部既新鲜又不破前缀（本来 bodyBlock 就在 __dynArr，这里更进一步）。
+// ═══════════════ 床事档案（bed）══════════════════════════════════════════════
+// 目录来自桌面那份《性爱知识与玩法全谱》：**体位单列，其余一律算 play**（她定的），
+// play 那半按常见分类补齐了原文没展开的部分。
+// 机制：他自己在回复里写 ⟪床事:体位=…|玩法=…⟫ 挑这一轮要做的，前端记账、按周月出报告。
+// 同一项连续被选 3 次 → 自动冷却 3 轮，冷却期间不进「本轮可选」，他也点不动。
+const BED_POSITIONS = [
+  // 基础稳定型
+  { k:"missionary",   n:"正常位",       g:"基础" },
+  { k:"missionary_legs", n:"抬腿位",    g:"基础" },
+  { k:"folded",       n:"折叠位",       g:"基础" },
+  { k:"doggy",        n:"后入",         g:"基础" },
+  { k:"prone",        n:"趴伏后入",     g:"基础" },
+  { k:"cowgirl",      n:"骑乘",         g:"基础" },
+  { k:"reverse_cowgirl", n:"反向骑乘",  g:"基础" },
+  { k:"spoon",        n:"侧卧勺子",     g:"基础" },
+  { k:"side_face",    n:"面对面侧入",   g:"基础" },
+  // 进阶变化
+  { k:"lotus",        n:"观音坐莲",     g:"进阶" },
+  { k:"edge_sit",     n:"床边坐姿",     g:"进阶" },
+  { k:"table",        n:"桌沿",         g:"进阶" },
+  { k:"chair",        n:"椅上",         g:"进阶" },
+  { k:"standing",     n:"站立",         g:"进阶" },
+  { k:"wall",         n:"靠墙",         g:"进阶" },
+  { k:"carry",        n:"抱起",         g:"进阶" },
+  { k:"shoulder",     n:"扛肩",         g:"进阶" },
+  { k:"kneel_back",   n:"跪姿后仰",     g:"进阶" },
+  { k:"lap",          n:"背对坐腿上",   g:"进阶" },
+  { k:"suspended",    n:"悬空夹腰",     g:"进阶" },
+];
+
+const BED_PLAYS = [
+  // 口与手
+  { k:"oral_give",   n:"为他口",      g:"口与手" },
+  { k:"oral_get",    n:"被他口",      g:"口与手" },
+  { k:"deepthroat",  n:"深喉",        g:"口与手" },
+  { k:"sixtynine",   n:"69",          g:"口与手" },
+  { k:"fingering",   n:"手指进入",    g:"口与手" },
+  { k:"handjob",     n:"手部套弄",    g:"口与手" },
+  { k:"rimming",     n:"舔后穴",      g:"口与手" },
+  { k:"footjob",     n:"足交",        g:"口与手" },
+  { k:"titjob",      n:"乳交",        g:"口与手" },
+  { k:"nipple",      n:"乳头刺激",    g:"口与手" },
+  { k:"neck_bite",   n:"啃咬后颈",    g:"口与手" },
+  { k:"kiss_deep",   n:"长时间深吻",  g:"口与手" },
+  // 后穴
+  { k:"anal",        n:"肛交",        g:"后穴" },
+  { k:"anal_prep",   n:"慢扩张",      g:"后穴" },
+  { k:"plug",        n:"肛塞",        g:"后穴" },
+  { k:"double_pen",  n:"双重进入",    g:"后穴" },
+  // 玩具道具
+  { k:"vibe",        n:"跳蛋",        g:"玩具" },
+  { k:"wand",        n:"震动棒",      g:"玩具" },
+  { k:"dildo",       n:"假阳具",      g:"玩具" },
+  { k:"cockring",    n:"情侣环",      g:"玩具" },
+  { k:"nipple_clamp",n:"乳夹",        g:"玩具" },
+  { k:"rope",        n:"绳缚",        g:"玩具" },
+  { k:"cuffs",       n:"手铐",        g:"玩具" },
+  { k:"blindfold",   n:"眼罩",        g:"玩具" },
+  { k:"gag",         n:"口球",        g:"玩具" },
+  { k:"collar",      n:"项圈牵引",    g:"玩具" },
+  { k:"restraint",   n:"拘束姿势",    g:"玩具" },
+  { k:"paddle",      n:"皮拍",        g:"玩具" },
+  { k:"cane",        n:"藤条",        g:"玩具" },
+  { k:"whip",        n:"软鞭",        g:"玩具" },
+  { k:"wax",         n:"低温蜡",      g:"玩具" },
+  { k:"ice",         n:"冰块",        g:"玩具" },
+  { k:"feather",     n:"羽毛",        g:"玩具" },
+  // 权力交换
+  { k:"dom",         n:"他支配",      g:"权力" },
+  { k:"sub",         n:"他服从",      g:"权力" },
+  { k:"sm",          n:"施虐受虐",    g:"权力" },
+  { k:"discipline",  n:"规则与惩罚",  g:"权力" },
+  { k:"spank",       n:"拍打屁股",    g:"权力" },
+  { k:"hair_pull",   n:"拉头发",      g:"权力" },
+  { k:"pin_down",    n:"压制固定",    g:"权力" },
+  { k:"choke",       n:"掐脖",        g:"权力" },
+  { k:"degrade",     n:"言语羞辱",    g:"权力" },
+  { k:"praise",      n:"言语赞美",    g:"权力" },
+  { k:"order",       n:"下达指令",    g:"权力" },
+  { k:"beg",         n:"逼她求",      g:"权力" },
+  { k:"pet",         n:"宠物扮演",    g:"权力" },
+  { k:"master",      n:"主奴关系",    g:"权力" },
+  { k:"daddy",       n:"Daddy 动态",  g:"权力" },
+  { k:"freeuse",     n:"随时可用",    g:"权力" },
+  { k:"cnc",         n:"协商非自愿",  g:"权力" },
+  // 角色扮演
+  { k:"rp_teacher",  n:"师生",        g:"扮演" },
+  { k:"rp_boss",     n:"上下属",      g:"扮演" },
+  { k:"rp_doctor",   n:"医患",        g:"扮演" },
+  { k:"rp_interro",  n:"审讯",        g:"扮演" },
+  { k:"rp_capture",  n:"捕获",        g:"扮演" },
+  { k:"rp_stranger", n:"陌生人搭讪",  g:"扮演" },
+  { k:"rp_first",    n:"假装初次",    g:"扮演" },
+  { k:"rp_vampire",  n:"吸血鬼",      g:"扮演" },
+  { k:"rp_monster",  n:"怪物",        g:"扮演" },
+  { k:"rp_tentacle", n:"触手",        g:"扮演" },
+  { k:"rp_rewrite",  n:"意识侵入",    g:"扮演" },
+  { k:"rp_remake",   n:"被改造",      g:"扮演" },
+  // 感官
+  { k:"edging",      n:"边缘控制",    g:"感官" },
+  { k:"forced_o",    n:"强制高潮",    g:"感官" },
+  { k:"deny_o",      n:"禁止高潮",    g:"感官" },
+  { k:"overstim",    n:"过度刺激",    g:"感官" },
+  { k:"deprive",     n:"感官剥夺",    g:"感官" },
+  { k:"overload",    n:"多点同时",    g:"感官" },
+  { k:"slow",        n:"极慢折磨",    g:"感官" },
+  { k:"rough",       n:"粗暴快节奏",  g:"感官" },
+  { k:"tease_long",  n:"长时间挑逗",  g:"感官" },
+  // 场景
+  { k:"bath",        n:"浴室",        g:"场景" },
+  { k:"kitchen",     n:"厨房",        g:"场景" },
+  { k:"sofa",        n:"沙发",        g:"场景" },
+  { k:"car",         n:"车里",        g:"场景" },
+  { k:"balcony",     n:"阳台",        g:"场景" },
+  { k:"mirror",      n:"镜子前",      g:"场景" },
+  { k:"window",      n:"窗边",        g:"场景" },
+  { k:"clothed",     n:"隔着衣服",    g:"场景" },
+  { k:"tear",        n:"撕开衣服",    g:"场景" },
+  { k:"phone_sex",   n:"电话里",      g:"场景" },
+  // 小众 / 幻想
+  { k:"somno",       n:"睡奸",        g:"幻想" },
+  { k:"hypno",       n:"催眠暗示",    g:"幻想" },
+  { k:"objectify",   n:"物化家具化",  g:"幻想" },
+  { k:"endurance",   n:"疼痛耐力",    g:"幻想" },
+  { k:"marking",     n:"留下痕迹",    g:"幻想" },
+  { k:"record",      n:"拍下来",      g:"幻想" },
+  { k:"watched",     n:"被看着",      g:"幻想" },
+  { k:"aftercare",   n:"事后温存",    g:"幻想" },
+];
+
+const BED_CAP_POS = 5;    // 体位每轮最多选几个
+const BED_CAP_PLAY = 10;  // 玩法每轮最多选几个
+const BED_STREAK_MAX = 3; // 连续几轮选同一项就冷却
+const BED_COOL_ROUNDS = 3;// 冷却几轮
+
+function bedState(){
+  if(!state.sexBed || typeof state.sexBed !== "object") state.sexBed = {};
+  const b = state.sexBed;
+  if(!Array.isArray(b.log)) b.log = [];
+  if(!b.cool || typeof b.cool !== "object") b.cool = {};
+  if(!b.streak || typeof b.streak !== "object") b.streak = {};
+  return b;
+}
+function bedItem(k){
+  return BED_POSITIONS.find(x=>x.k===k) || BED_PLAYS.find(x=>x.k===k) || null;
+}
+function bedName(k){ const it = bedItem(k); return it ? it.n : k; }
+
+/** 常见口语别名 → key。模型不会照着目录一字不差地写（「口交」对不上「为他口」），
+ *  没有这张表就会大量记不上账。新增目录项时顺手把口语说法补进来。 */
+const BED_ALIAS = {
+  // 体位
+  "传教士":"missionary", "男上女下":"missionary", "面对面":"missionary",
+  "压腿":"missionary_legs", "抬腿":"missionary_legs", "扛腿":"missionary_legs",
+  "屈曲位":"folded", "折叠":"folded", "对折":"folded",
+  "狗爬式":"doggy", "后入式":"doggy", "从后面":"doggy", "跪趴":"doggy",
+  "趴平":"prone", "俯卧":"prone",
+  "女上位":"cowgirl", "骑乘位":"cowgirl", "她在上":"cowgirl", "坐上来":"cowgirl",
+  "反向骑乘位":"reverse_cowgirl", "背对骑乘":"reverse_cowgirl", "背对坐":"reverse_cowgirl",
+  "勺子":"spoon", "侧躺":"spoon", "侧卧":"spoon",
+  "侧入":"side_face",
+  "莲花坐":"lotus", "面对面坐":"lotus", "坐莲":"lotus",
+  "床沿":"edge_sit", "坐床边":"edge_sit",
+  "桌上":"table", "桌边":"table",
+  "椅子上":"chair",
+  "站着":"standing", "站姿":"standing",
+  "抵在墙上":"wall", "顶在墙上":"wall",
+  "抱着做":"carry", "公主抱":"carry",
+  "扛在肩上":"shoulder",
+  "腿盘腰":"suspended", "夹腰":"suspended",
+  // 玩法
+  "口交":"oral_give", "吹箫":"oral_give", "帮他口":"oral_give", "为他口交":"oral_give", "含着":"oral_give",
+  "舔阴":"oral_get", "被口":"oral_get", "舔她":"oral_get", "为她口交":"oral_get", "被舔":"oral_get",
+  "手指":"fingering", "指交":"fingering", "手指进去":"fingering",
+  "手活":"handjob", "撸":"handjob",
+  "舔肛":"rimming", "后庭舔":"rimming",
+  "后庭":"anal", "走后门":"anal", "肛":"anal",
+  "扩张":"anal_prep",
+  "捆绑":"rope", "束缚":"rope", "绑起来":"rope",
+  "蒙眼":"blindfold", "遮眼":"blindfold",
+  "堵嘴":"gag",
+  "打屁股":"spank", "拍屁股":"spank", "拍打":"spank",
+  "扯头发":"hair_pull", "抓头发":"hair_pull",
+  "按住":"pin_down", "压住":"pin_down", "固定住":"pin_down",
+  "掐脖子":"choke", "扼颈":"choke", "窒息":"choke", "掐着脖子":"choke",
+  "羞辱":"degrade", "骂她":"degrade", "说脏话":"degrade",
+  "夸她":"praise", "夸奖":"praise", "哄":"praise",
+  "命令":"order", "下令":"order",
+  "求饶":"beg", "让她求":"beg",
+  "强迫":"cnc", "假装反抗":"cnc", "非自愿":"cnc",
+  "边缘":"edging", "吊着":"edging", "不让高潮":"deny_o",
+  "强制高潮":"forced_o", "逼到高潮":"forced_o",
+  "过度":"overstim", "太多次":"overstim",
+  "慢":"slow", "极慢":"slow",
+  "粗暴":"rough", "很凶":"rough", "狠":"rough",
+  "挑逗":"tease_long", "前戏":"tease_long",
+  "浴缸":"bath", "淋浴":"bath", "洗澡时":"bath",
+  "车震":"car", "车上":"car",
+  "镜子":"mirror", "对着镜子":"mirror",
+  "隔着":"clothed", "不脱":"clothed",
+  "撕":"tear", "扯开":"tear",
+  "睡着":"somno", "趁睡":"somno", "睡梦中":"somno", "睡着的时候":"somno",
+  "催眠":"hypno", "暗示":"hypno",
+  "物化":"objectify", "当家具":"objectify",
+  "留痕":"marking", "吻痕":"marking", "咬痕":"marking",
+  "录像":"record", "拍照":"record", "拍下来":"record",
+  "事后":"aftercare", "温存":"aftercare", "抱着睡":"aftercare",
+};
+
+/** 名字 / key / 别名 → key。都对不上时才做「包含」的模糊匹配（要求至少两个字，
+ *  否则「口」这种单字会乱撞） */
+function bedKeyOf(word, pool){
+  const w = String(word||"").trim();
+  if(!w) return null;
+  const inPool = (k)=> k && pool.some(x=>x.k===k) ? k : null;
+  let hit = pool.find(x=>x.n === w || x.k === w);
+  if(hit) return hit.k;
+  const alias = inPool(BED_ALIAS[w]);
+  if(alias) return alias;
+  if(w.length < 2) return null;
+  hit = pool.find(x=>w.indexOf(x.n) >= 0 || x.n.indexOf(w) >= 0);
+  if(hit) return hit.k;
+  // 别名的包含匹配：「掐着她脖子」→「掐脖子」
+  const ak = Object.keys(BED_ALIAS).find(a=>a.length >= 2 && w.indexOf(a) >= 0);
+  return ak ? inPool(BED_ALIAS[ak]) : null;
+}
+/** 这一轮还能选的（去掉冷却中的） */
+function bedAvailable(){
+  const cool = bedState().cool;
+  return {
+    pos: BED_POSITIONS.filter(x=>!cool[x.k]),
+    play: BED_PLAYS.filter(x=>!cool[x.k]),
+    cooling: Object.keys(cool).map(k=>({ k, n: bedName(k), left: cool[k] })),
+  };
+}
+
+/** 记一轮。先给旧冷却减一（这一轮过去了），再算新的连击和冷却 */
+function bedRecord(posKeys, playKeys){
+  const b = bedState();
+  Object.keys(b.cool).forEach(k=>{
+    b.cool[k] -= 1;
+    if(b.cool[k] <= 0) delete b.cool[k];
+  });
+
+  const pos = posKeys.slice(0, BED_CAP_POS);
+  const play = playKeys.slice(0, BED_CAP_PLAY);
+  b.log.push({ ts: Date.now(), pos, play });
+  if(b.log.length > 500) b.log = b.log.slice(-500);
+
+  const chosen = new Set(pos.concat(play));
+  // 这一轮没被选的，连击清零
+  Object.keys(b.streak).forEach(k=>{ if(!chosen.has(k)) delete b.streak[k]; });
+  chosen.forEach(k=>{
+    b.streak[k] = (b.streak[k] || 0) + 1;
+    if(b.streak[k] >= BED_STREAK_MAX){
+      b.cool[k] = BED_COOL_ROUNDS;
+      delete b.streak[k];
+    }
+  });
+  try{ persist("sexBed"); }catch(e){}
+  return { pos, play };
+}
+
+/**
+ * 暗号：⟪床事:体位=正常位,后入|玩法=口交,拍打屁股⟫
+ * 冷却中的项直接丢掉；超上限的截断。**不往聊天里插任何提示**——
+ * 正在叙事的时候弹一条系统卡会当场把沉浸感打断，记录去床事页看。
+ */
+function handleBedMarkers(body){
+  const b = bedState();
+  let changed = false;
+  const out = String(body||"").replace(/⟪床事[:：]([^⟫]*)⟫/g, (m, inner)=>{
+    const seg = String(inner||"");
+    const grab = (label)=>{
+      const re = new RegExp(label + "\\s*[=＝:：]\\s*([^|｜]*)");
+      const mm = re.exec(seg);
+      return mm ? mm[1] : "";
+    };
+    const rawPos = grab("体位").split(/[,，、\/]/);
+    const rawPlay = grab("玩法").split(/[,，、\/]/);
+    const pos = [], play = [], dropped = [];
+    rawPos.forEach(w=>{
+      const k = bedKeyOf(w, BED_POSITIONS);
+      if(!k) return;
+      if(b.cool[k]){ dropped.push(bedName(k)); return; }
+      if(pos.indexOf(k) < 0) pos.push(k);
+    });
+    rawPlay.forEach(w=>{
+      const k = bedKeyOf(w, BED_PLAYS);
+      if(!k) return;
+      if(b.cool[k]){ dropped.push(bedName(k)); return; }
+      if(play.indexOf(k) < 0) play.push(k);
+    });
+    if(pos.length || play.length){
+      const rec = bedRecord(pos, play);
+      state.__bedNote = `记下了：${rec.pos.map(bedName).join("、") || "—"} · ${rec.play.map(bedName).join("、") || "—"}`
+        + (dropped.length ? `（冷却中被丢掉：${dropped.join("、")}）` : "");
+      changed = true;
+    }
+    return ""; // 暗号整段吃掉，正文里不留痕
+  });
+  if(changed){ try{ persist("sexBed"); }catch(e){} }
+  return out;
+}
+
+/** 目录 + 协议：稳定不变，进 system 的缓存前缀。只有 NSFW 开着才拼 */
+function bedCatalogBlock(){
+  if(!state.nsfwOn) return "";
+  const list = (arr)=>{
+    const by = {};
+    arr.forEach(x=>{ (by[x.g] = by[x.g] || []).push(x.n); });
+    return Object.keys(by).map(g=>`  ${g}：${by[g].join(" / ")}`).join("\n");
+  };
+  return `【床事目录 —— 只在真的发生身体接触的那一轮用】
+这一轮如果你们真的做了，由**你自己**决定这次的体位和玩法，在正式回复里另起一行写：
+⟪床事:体位=A,B|玩法=C,D,E⟫
+- 体位最多 ${BED_CAP_POS} 个，玩法最多 ${BED_CAP_PLAY} 个；只写这一轮真的发生了的，不要凑数。
+- 名字照下面的目录原样写，用中文逗号或英文逗号分隔。
+- 这一段会被界面吃掉，不要在正文里解释它、也不要把它当台词念出来。
+- 只在真的进行到那一步时写；调情、暗示、擦边都不写。一次完整的性事写一次就够。
+- 挑你自己此刻最想要的，不是最全的；和你正文里写的内容对得上。
+
+体位：
+${list(BED_POSITIONS)}
+
+玩法：
+${list(BED_PLAYS)}`;
+}
+
+/**
+ * 什么时候把「本轮可选」塞进去 —— 三道门，全过才注入：
+ *  1. NSFW 开关开着（关着连目录都不拼）
+ *  2. 最近 3 条消息 + 待发消息里有床事关键词（__featHot），
+ *     或六轴 desire ≥ 0.6，或最近 6 条里他已经写过 ⟪床事:⟫（正在进行中就一直注入）
+ * 位置放**最后一条用户消息末尾**而不是 system：这是「本轮要做的决定」，
+ * 而且冷却表分钟级会变，绝不能进被缓存的 system 前缀。（沿用 46c45eb3 那条实测结论）
+ */
+function bedShouldInject(){
+  if(!state.nsfwOn) return false;
+  try{
+    const hot = __featHot("做爱","上床","进入","插","抱我","舔","口","后入","骑","硬了","湿了",
+      "想要","脱","床上","操","干我","射","高潮","前戏","做一次","要你");
+    if(hot) return true;
+    const six = state.sixAxis || {};
+    if(typeof six.desire === "number" && six.desire >= 0.6) return true;
+    const recent = (state.messages||[]).slice(-6);
+    if(recent.some(m=>/⟪床事/.test(String(m._orig||"")))) return true;
+  }catch(e){}
+  return false;
+}
+
+/** 尾部注入：本轮可选 + 冷却中。目录本身在 system 里，这里只给会变的那部分 */
+function bedTailBlock(){
+  if(!bedShouldInject()) return "";
+  const av = bedAvailable();
+  const bits = [`【床事 · 这一轮】体位最多 ${BED_CAP_POS} 个、玩法最多 ${BED_CAP_PLAY} 个，真的做了才写 ⟪床事:体位=…|玩法=…⟫。`];
+  if(av.cooling.length){
+    bits.push(`冷却中（这一轮不能选）：${av.cooling.map(c=>`${c.n}(还剩${c.left}轮)`).join("、")}`);
+  }
+  return bits.join("\n");
+}
+
+/** 报告：按 key 数次数，取前 N。days=7 周报 / 30 月报 / 0 全部 */
+function bedReport(days){
+  const b = bedState();
+  const since = days ? Date.now() - days*86400000 : 0;
+  const rows = b.log.filter(x=>x.ts >= since);
+  const cnt = (field)=>{
+    const m = Object.create(null);
+    rows.forEach(r=>(r[field]||[]).forEach(k=>{ m[k] = (m[k]||0)+1; }));
+    return Object.keys(m).map(k=>({ k, n: bedName(k), c: m[k] }))
+      .sort((a,z)=> z.c - a.c || a.n.localeCompare(z.n));
+  };
+  return { times: rows.length, from: since, pos: cnt("pos"), play: cnt("play") };
+}
+
+function bedBarRow(x, max){
+  const w = max ? Math.round(x.c / max * 100) : 0;
+  return `<div class="bed-row">
+    <span class="bed-row-n">${esc(x.n)}</span>
+    <span class="bed-row-bar"><span style="width:${w}%"></span></span>
+    <span class="bed-row-c">${x.c}</span>
+  </div>`;
+}
+
+function renderBedPage(){
+  const b = bedState();
+  const av = bedAvailable();
+  const tab = state.bedTab || "week";
+  const days = tab === "week" ? 7 : (tab === "month" ? 30 : 0);
+  const rep = bedReport(days);
+  const maxP = rep.pos.length ? rep.pos[0].c : 0;
+  const maxL = rep.play.length ? rep.play[0].c : 0;
+  const last = b.log.length ? b.log[b.log.length-1] : null;
+
+  return `<div class="page">
+    ${subHeader('<i data-lucide="flame"></i> 床事档案')}
+
+    <div class="section">
+      <div class="section-title">这一轮</div>
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-label">可选</div>
+          <div>体位 ${av.pos.length} / ${BED_POSITIONS.length} · 玩法 ${av.play.length} / ${BED_PLAYS.length}</div>
+        </div>
+        ${av.cooling.length ? `<div class="setting-row">
+          <div class="setting-label">冷却中</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${av.cooling.map(c=>`<span class="bed-cool">${esc(c.n)} · ${c.left}</span>`).join("")}
+          </div>
+        </div>` : ""}
+        ${state.__bedNote ? `<div class="setting-row"><div class="setting-label">最近一次</div><div>${esc(state.__bedNote)}</div></div>` : ""}
+        ${last ? `<div class="setting-row">
+          <div class="setting-label">${esc(formatTimeFull(new Date(last.ts).toISOString()))}</div>
+          <div>${esc((last.pos||[]).map(bedName).join("、") || "—")} · ${esc((last.play||[]).map(bedName).join("、") || "—")}</div>
+        </div>` : ""}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">报告</div>
+      <div class="chip-row" style="margin-bottom:10px">
+        <button type="button" class="theme-chip${tab==="week"?" active":""}" data-bed-tab="week">本周</button>
+        <button type="button" class="theme-chip${tab==="month"?" active":""}" data-bed-tab="month">本月</button>
+        <button type="button" class="theme-chip${tab==="all"?" active":""}" data-bed-tab="all">全部</button>
+      </div>
+      <div class="section-body">
+        <div class="setting-row"><div class="setting-label">次数</div><div>${rep.times}</div></div>
+        ${rep.pos.length ? `<div class="setting-row">
+          <div class="setting-label">体位</div>
+          <div class="bed-chart">${rep.pos.slice(0,8).map(x=>bedBarRow(x, maxP)).join("")}</div>
+        </div>` : ""}
+        ${rep.play.length ? `<div class="setting-row">
+          <div class="setting-label">玩法</div>
+          <div class="bed-chart">${rep.play.slice(0,12).map(x=>bedBarRow(x, maxL)).join("")}</div>
+        </div>` : ""}
+        ${!rep.times ? `<div class="setting-row"><div>这段时间还没有记录</div></div>` : ""}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">记录</div>
+      <div class="section-body">
+        ${b.log.length ? b.log.slice(-30).reverse().map(r=>`
+          <div class="setting-row">
+            <div class="setting-label">${esc(formatTimeFull(new Date(r.ts).toISOString()))}</div>
+            <div>${esc((r.pos||[]).map(bedName).join("、") || "—")}<br>
+              <span style="color:var(--sub)">${esc((r.play||[]).map(bedName).join("、") || "—")}</span></div>
+          </div>`).join("") : `<div class="setting-row"><div>还没有记录</div></div>`}
+      </div>
+    </div>
+  </div>`;
+}
+
 function chatTailBlock(){
   const bits = [];
   bits.push(`【此刻】${formatTimeFull(new Date().toISOString())}`);
@@ -25571,6 +26206,11 @@ function chatTailBlock(){
 - 可以打转、可以跳、可以自相矛盾，不用条理清楚，这是想法不是提纲。
 - 想到的东西要在正文里以某种形式落地，别想一套说一套。`);
   }
+  // 床事「本轮可选 + 冷却中」：会变的东西一律走尾部，不进被缓存的 system 前缀
+  try{
+    const bed = (typeof bedTailBlock === "function") ? bedTailBlock() : "";
+    if(bed) bits.push(bed);
+  }catch(e){}
   return bits.join("\n\n");
 }
 
@@ -25850,6 +26490,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
   cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
   cleanBody = handleAnnoMarkers(cleanBody); // 共读批注（VPS 书）
+  cleanBody = handleBedMarkers(cleanBody); // 床事：⟪床事:体位=…|玩法=…⟫ → 只记账，正文里不留痕
   cleanBody = handleReadMarkMarkers(cleanBody); // 一起读划线：⟪批注:摘句|想法⟫
   cleanBody = handleSongMarkers(cleanBody);     // 点歌：⟪点歌:歌名 - 歌手⟫ → 聊天里的可播卡片
   cleanBody = handlePlaylistMarkers(cleanBody); // 歌单：⟪歌单:名字|歌1|歌2⟫ → 可连播的歌单卡
