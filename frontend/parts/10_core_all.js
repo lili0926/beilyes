@@ -4254,7 +4254,7 @@ function render(){
   // 而它一幕存一次盘，最多丢当前这一幕。和酒馆一样的代价。
   if(state.subPage==="rewrite"){
     const iframe=document.getElementById("rewrite-iframe");
-    if(iframe){ rewriteSeedGenCfg(); iframe.srcdoc = rewriteHtml(); }
+    if(iframe){ rewriteBridgeInit(); iframe.srcdoc = rewriteHostHtml(); }
   }
 }
 
@@ -13141,22 +13141,77 @@ function rewriteHtml(){
   return __rewriteHtmlCache;
 }
 
-/** 第八天以后剧本没了，往下每天由模型现写，游戏自己要一个 OpenAI 兼容端点。
- *  她在设置里已经填过一套，借给它，省得在游戏里再填一遍 Key。
- *  只在游戏还没有自己那份配置时预填 —— 她在游戏里改过就以她改的为准。
- *  iframe 是 srcdoc + allow-same-origin，和 App 同源，所以这里写的 localStorage 它读得到
- *  （游戏的存档 `rewrite_save` 也落在同一个库里，跟着账号前缀之外，换账号也还在）。 */
-function rewriteSeedGenCfg(){
-  try{
-    if(localStorage.getItem("rewrite_gen")) return;
-    const a = state.apiConfig || {};
-    const ag = (state.agents||[]).find(x=>x.channel==="openai" && x.openaiKey);
-    let cfg = null;
-    if(a.auxOpenaiKey)   cfg = { base:a.auxOpenaiBase||"https://api.openai.com/v1", key:a.auxOpenaiKey, model:a.auxOpenaiModel||"gpt-4o-mini" };
-    else if(ag)          cfg = { base:ag.openaiBase||"https://api.openai.com/v1",   key:ag.openaiKey,   model:ag.openaiModel||"gpt-4o" };
-    else if(a.openaiKey) cfg = { base:a.openaiBase||"https://api.openai.com/v1",    key:a.openaiKey,    model:a.openaiModel||"gpt-4o" };
-    if(cfg && cfg.key) localStorage.setItem("rewrite_gen", JSON.stringify(cfg));
-  }catch(e){ console.warn("[rewrite] seed gen cfg", e); }
+/* 第八天以后剧本没了，往下每天由模型现写。游戏原本是自己 fetch 一个 OpenAI 兼容端点、
+   要在游戏里另填一次 Key —— 她不要填，直接用 App 的聊天模型。
+   做法是**不动游戏源码**（源码要能随时从 VPS 重新拷一份），而是往 iframe 里注一段桥：
+   把 window.fetch 换掉，认出那条 /chat/completions 就转给父窗口，
+   父窗口用 callChatAPI 打真模型，再把结果拼成 OpenAI 的形状还给它。
+   游戏那边拼提示词、剥 ```json、报错的逻辑一行没改，只是换了条运输线。
+   注意 `<\/script>` 必须转义 —— 整个 JS 是被 build.py 塞进 dist 的一个 <script> 里的。 */
+const REWRITE_BRIDGE = `<script>(function(){
+  // 游戏拿 key 是否为空判断「要不要弹填 Key 的框」，这里塞个占位让它别弹
+  try{ localStorage.setItem("rewrite_gen", JSON.stringify({ base:"app", key:"app", model:"聊天模型" })); }catch(e){}
+  var origFetch = window.fetch;
+  window.fetch = function(url){
+    if(String(url).indexOf("/chat/completions") < 0) return origFetch.apply(this, arguments);
+    var opts = arguments[1] || {};
+    var body = {};
+    try{ body = JSON.parse(opts.body || "{}"); }catch(e){}
+    var prompt = (body.messages || []).map(function(m){ return m && m.content; }).filter(Boolean).join("\\n\\n");
+    var id = "rw" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    return new Promise(function(resolve){
+      function onMsg(e){
+        var d = e.data;
+        if(!d || d.__rewrite !== "reply" || d.id !== id) return;
+        window.removeEventListener("message", onMsg);
+        resolve({
+          ok: !d.error,
+          status: d.error ? 500 : 200,
+          json: function(){ return Promise.resolve({ choices:[{ message:{ content: d.text || "" } }] }); },
+          text: function(){ return Promise.resolve(d.error || d.text || ""); }
+        });
+      }
+      window.addEventListener("message", onMsg);
+      parent.postMessage({ __rewrite:"gen", id:id, prompt:prompt }, "*");
+    });
+  };
+})();<\/script>`;
+
+/** 原样的游戏 + 那段桥。桥插在 </head> 前，保证比游戏自己的脚本先跑。 */
+function rewriteHostHtml(){
+  const html = rewriteHtml();
+  return html.includes("</head>")
+    ? html.replace("</head>", REWRITE_BRIDGE + "\n</head>")
+    : REWRITE_BRIDGE + html;
+}
+
+/** 父窗口这一头：收到 iframe 的请求就打聊天模型。只挂一次。 */
+let __rewriteBridgeOn = false;
+function rewriteBridgeInit(){
+  if(__rewriteBridgeOn) return;
+  __rewriteBridgeOn = true;
+  window.addEventListener("message", async (e)=>{
+    const d = e.data;
+    if(!d || d.__rewrite !== "gen") return;
+    const frame = document.getElementById("rewrite-iframe");
+    if(!frame || e.source !== frame.contentWindow) return; // 只认这个 iframe
+    let text = "", error = "";
+    try{
+      // 优先非 CC 的通道；落到 CC 也要带 background，免得这段续写串进聊天
+      // （CC 的回复没有请求 id，见 __ccHubSend）
+      const ag = (typeof bgChatAgent === "function") ? bgChatAgent() : (state.agents||[])[0];
+      if(!ag) throw new Error("还没有配好聊天渠道");
+      const raw = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content:String(d.prompt||"") }], null,
+                                   { background:true, timeoutMs: 240000 });
+      const parsed = (typeof parseThinking === "function") ? parseThinking(raw) : { body: raw };
+      text = String(parsed.body || raw || "").trim();
+      if(!text) throw new Error("模型没有返回内容");
+    }catch(err){
+      error = String((err && err.message) || err).slice(0, 200);
+      console.warn("[rewrite] 续写失败", err);
+    }
+    try{ e.source.postMessage({ __rewrite:"reply", id:d.id, text, error }, "*"); }catch(_){}
+  });
 }
 
 function renderRewrite(){
