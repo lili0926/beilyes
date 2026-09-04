@@ -2387,6 +2387,8 @@ const state = {
     claudeKey:"", openaiKey:"", openaiBase:"https://api.openai.com/v1",
     openaiModel:"gpt-4o", auxOpenaiBase:"", auxOpenaiKey:"", auxOpenaiModel:"gpt-4o-mini",
   }),
+  // 渠道预设：整套 Key/Base/模型存成一张卡，换渠道时点一下切回，不用清空重填
+  apiPresets: LS.get("apiPresets", []),
   // 多 AI：每位独立 Key / 渠道 / 模型（默认 2 位）
   agents: LS.get("agents", null) || null,
   chatTarget: LS.get("chatTarget", "a1"), // "a1" | "a2" | "group"
@@ -3842,7 +3844,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -21121,6 +21123,46 @@ function renderPrompts(){
 }
 
 // ─── 设置 ────────────────────────────────────────────────────────────────────
+/* ─── 渠道预设 ────────────────────────────────────────────────────────────
+   把这位 AI 当前填的整套通道配置（渠道 + Key + Base + 模型）存成一张卡，
+   换渠道时点一下切回来，不用把输入框清空重填。
+   只覆盖下面这几个字段 —— 名字/头像/气泡色/专属思考引导是人设，不跟着换。 */
+const AP_FIELDS = ["channel","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel",
+                   "geminiKey","geminiModel","ccWsUrl","ccPin","ccModel"];
+const AP_CH_LABEL = { claude:"Claude", openai:"OpenAI", gemini:"Gemini", cc:"CC" };
+
+function apSnapshot(ag){
+  const o = {};
+  AP_FIELDS.forEach(k=>{ o[k] = ag[k]==null ? "" : ag[k]; });
+  return o;
+}
+/** 这张预设和当前填的一模一样？用来高亮"正在用的那张" */
+function apMatches(p, ag){
+  return AP_FIELDS.every(k => String(p[k]||"") === String(ag[k]||""));
+}
+/** 存的时候给个默认名字，她可以改 */
+function apAutoName(ag){
+  if(ag.channel==="claude") return "Claude · " + String(claudeModelOf(ag,null)).replace(/^claude-/,"");
+  if(ag.channel==="gemini") return "Gemini · " + (ag.geminiModel||"gemini-2.0-flash");
+  if(ag.channel==="cc")     return "CC · " + (ag.ccModel||"默认");
+  const host = String(ag.openaiBase||"").replace(/^https?:\/\//,"").split("/")[0];
+  return (host||"OpenAI") + " · " + (ag.openaiModel||"gpt-4o");
+}
+function renderApiPresetRow(ag){
+  const list = state.apiPresets || [];
+  return `<div class="setting-row">
+    <span class="setting-label">已存渠道</span>
+    <div class="api-preset-wrap">
+      ${list.map(p=>`<button type="button" class="api-preset${apMatches(p,ag)?" active":""}" data-ap-use="${escAttr(p.id)}" data-ap-ag="${escAttr(ag.id)}">
+        <span class="api-preset-name">${esc(p.name||"未命名")}</span>
+        <span class="api-preset-ch">${esc(AP_CH_LABEL[p.channel]||p.channel||"")}</span>
+        <span class="api-preset-x" data-ap-del="${escAttr(p.id)}">×</span>
+      </button>`).join("")}
+      <button type="button" class="api-preset-add" data-ap-save="${escAttr(ag.id)}">＋ 存下现在这套</button>
+    </div>
+  </div>`;
+}
+
 function renderAgentSettingsBlock(ag, idx){
   const prefix = `ag${idx}`;
   return `<div class="section">
@@ -21136,6 +21178,7 @@ function renderAgentSettingsBlock(ag, idx){
         </div>
         <input id="${prefix}-avatar" value="${escAttr(ag.avatar||"")}" placeholder="或粘贴图片 URL / data URL" style="margin-top:8px"/>
       </div>
+      ${renderApiPresetRow(ag)}
       <div class="setting-row">
         <span class="setting-label">渠道</span>
         <div class="channel-btns">
@@ -21257,7 +21300,7 @@ function backupCollectAllKeys(){
   return data;
 }
 
-/** 深拷贝并剥离 API Key（apiConfig 与 agents） */
+/** 深拷贝并剥离 API Key（apiConfig、agents 与 apiPresets） */
 function backupStripKeys(obj){
   const out = JSON.parse(JSON.stringify(obj));
   const KEY_FIELDS = ["claudeKey","openaiKey","geminiKey","auxOpenaiKey"];
@@ -21268,6 +21311,10 @@ function backupStripKeys(obj){
     }
     if(Array.isArray(out.agents)){
       out.agents.forEach(ag=>{ if(ag && typeof ag==="object") KEY_FIELDS.forEach(k=>{ if(k in ag) ag[k] = ""; }); });
+    }
+    // 渠道预设里存的是同样几把 Key，漏掉这里等于「关了含 Key 开关照样导出」
+    if(Array.isArray(out.apiPresets)){
+      out.apiPresets.forEach(p=>{ if(p && typeof p==="object") KEY_FIELDS.forEach(k=>{ if(k in p) p[k] = ""; }); });
     }
   }
   return out;
@@ -23799,6 +23846,57 @@ function bindEvents(){
       persist("agents");
       // 同步 AI1 到旧 apiConfig，供辅助 API 复用
       if(id==="a1"){ state.apiConfig.channel = val==="gemini"?"openai":val; persist("apiConfig"); }
+      render();
+    };
+  });
+  // 渠道预设：存下现在这套 / 一键切回 / 删除
+  $$("[data-ap-save]").forEach(btn=>{
+    btn.onclick=()=>{
+      const ag = agentById(btn.dataset.apSave);
+      if(!ag) return;
+      const name = String(prompt("预设名称", apAutoName(ag)) || "").trim();
+      if(!name) return;
+      state.apiPresets = state.apiPresets || [];
+      const snap = apSnapshot(ag);
+      const same = state.apiPresets.find(p=>p.name===name);
+      if(same) Object.assign(same, snap);
+      else state.apiPresets.push(Object.assign({ id:"ap"+Date.now().toString(36), name }, snap));
+      if(state.apiPresets.length > 20) state.apiPresets = state.apiPresets.slice(-20);
+      persist("apiPresets");
+      showToast(same ? `已更新「${name}」` : `已存「${name}」`);
+      render();
+    };
+  });
+  $$("[data-ap-use]").forEach(btn=>{
+    btn.onclick=()=>{
+      const p = (state.apiPresets||[]).find(x=>x.id===btn.dataset.apUse);
+      const ag = agentById(btn.dataset.apAg);
+      if(!p || !ag) return;
+      AP_FIELDS.forEach(k=>{ ag[k] = p[k]==null ? "" : p[k]; });
+      persist("agents");
+      // 同步 AI1 到旧 apiConfig（辅助 API 复用）。空值不回写，免得把另一渠道的兜底抹掉
+      if(ag.id==="a1"){
+        state.apiConfig.channel = ag.channel==="gemini" ? "openai" : ag.channel;
+        if(ag.claudeKey)   state.apiConfig.claudeKey   = ag.claudeKey;
+        if(ag.openaiKey)   state.apiConfig.openaiKey   = ag.openaiKey;
+        if(ag.openaiBase)  state.apiConfig.openaiBase  = ag.openaiBase;
+        if(ag.openaiModel) state.apiConfig.openaiModel = ag.openaiModel;
+        persist("apiConfig");
+      }
+      // CC 的 /model 由下一条消息发送前的 ensure 补发，这里不重复发
+      if(ag.channel==="cc") __cc._lastModel = "";
+      showToast(`已切到「${p.name||""}」`);
+      render();
+    };
+  });
+  $$("[data-ap-del]").forEach(el=>{
+    el.onclick=(e)=>{
+      e.stopPropagation();   // 别顺手把这张预设应用上去
+      const p = (state.apiPresets||[]).find(x=>x.id===el.dataset.apDel);
+      if(!p) return;
+      if(!confirm(`删除预设「${p.name||""}」？`)) return;
+      state.apiPresets = state.apiPresets.filter(x=>x.id!==p.id);
+      persist("apiPresets");
       render();
     };
   });
@@ -27733,7 +27831,7 @@ window.reinitState = function(){
   const lsMap = {
     theme:"theme",pattern:"pattern",customWallpaper:"customWallpaper",bubbleStyle:"bubbleStyle",
     bubbleOpacity:"bubbleOpacity",bubbleGrad:"bubbleGrad",bubbleMeColor:"bubbleMeColor",bubbleThemColor:"bubbleThemColor",
-    apiConfig:"apiConfig",agents:"agents",chatTarget:"chatTarget",chatMode:"chatMode",
+    apiConfig:"apiConfig",apiPresets:"apiPresets",agents:"agents",chatTarget:"chatTarget",chatMode:"chatMode",
     chatThreads:"chatThreads",memories:"memories",prompts:"prompts",coupleInfo:"coupleInfo",
     memCheckpoint:"memCheckpoint",memLastAutoAt:"memLastAutoAt",memAutoDisabled:"memAutoDisabled",memRemote:"memRemote",savedChats:"savedChats",savedCats:"savedCats",
     diaryData:"diaryData",albumData:"albumData",htmlGameSrc:"htmlGameSrc",htmlGameName:"htmlGameName",

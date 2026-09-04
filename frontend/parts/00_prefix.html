@@ -2042,6 +2042,28 @@
       border-radius: 16px; padding: 4px 14px; font-size: 11px; cursor: pointer;
     }
     .channel-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+    /* 渠道预设：一整套 Key/Base/模型存成一张卡，点一下切回 */
+    .api-preset-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+    .api-preset {
+      display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+      border: 1px solid var(--border); background: var(--card); color: var(--text);
+      border-radius: 16px; padding: 5px 6px 5px 12px; font-size: 11px; cursor: pointer;
+    }
+    .api-preset.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .api-preset-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+    .api-preset-ch { font-size: 9px; opacity: 0.65; }
+    .api-preset-x {
+      width: 18px; height: 18px; border-radius: 50%; flex: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; line-height: 1; opacity: 0.55;
+      background: color-mix(in srgb, var(--text) 10%, transparent);
+    }
+    .api-preset.active .api-preset-x { background: rgba(255,255,255,0.24); opacity: 0.9; }
+    .api-preset-add {
+      border: 1px dashed var(--border); background: transparent; color: var(--sub);
+      border-radius: 16px; padding: 5px 12px; font-size: 11px; cursor: pointer;
+    }
     .settings-footer { font-size: 11px; color: var(--sub); text-align: center; margin-top: 20px; opacity: 0.5; }
 
     /* 他的机 */
