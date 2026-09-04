@@ -1138,6 +1138,31 @@ function __httpErrCn(status, body){
  * @param {RequestInit} options
  * @param {number} [timeoutMs=60000]
  */
+/** 带超时的裸 fetch：不重试、不改语义，只保证「一定会 settle」。
+ *  上传音频这类请求不能用 __apiFetch —— 它失败会重试 3 次，等于把同一段录音传三遍。
+ *  为什么必须有：语音转写那几跳原来全是裸 fetch，碰上「TCP 连得上但一个字节不回」
+ *  （cc-hub 被 spawnSync 卡死就是这个病征）Promise 永不落地，界面永远停在「转写中」。 */
+async function __fetchTimeout(url, options, timeoutMs){
+  const wait = timeoutMs == null ? 20000 : timeoutMs;
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=> ctrl.abort(), wait);
+  try{
+    return await fetch(url, Object.assign({}, options || {}, { signal: ctrl.signal }));
+  }catch(e){
+    if(e && (e.name === "AbortError" || ctrl.signal.aborted))
+      throw new Error("超时（等了 " + Math.round(wait/1000) + " 秒）");
+    throw e;
+  }finally{ clearTimeout(timer); }
+}
+
+/** 已知「不是语音服务」的地址。3456 是 cc-hub（WebSocket + tmux 桥），
+ *  /upload 和 /api/voice/upload 一律 404 —— 每录一条要先白跑两趟。
+ *  老存档的 callConfig.voceUrl 里存着这个默认值，光改默认值没用
+ *  （LS 里的旧对象会整份覆盖默认值），所以在「用的时候」判。 */
+function __isDeadVoiceHost(url){
+  return /:3456(\/|$|\?)/.test(String(url || ""));
+}
+
 async function __apiFetch(url, options, timeoutMs){
   const ms = timeoutMs == null ? 60000 : timeoutMs;
   const maxTry = 3; // 1 次 + 最多 2 次重试
@@ -2510,7 +2535,9 @@ const state = {
     // STT
     sttUrl: "", // 如 https://vps/stt  → POST multipart file
     sttToken: "",
-    voceUrl: "http://115.29.237.172:3456", // 语音消息 STT（voce /upload + /stt）
+    // 语音消息 STT 的备用出口（voce /upload + /stt）。默认空 —— 以前默认写的是
+    // :3456，那是 cc-hub 不是语音服务，白探两趟 404。正常走网关 /stt 就够了。
+    voceUrl: "",
     // hervoice：单步 POST /api/voice/upload（字段名 file）→ {text, emotion, confidence, hint}
     // 转写之外还给语气（音高/能量/停顿 → LLM 判情绪），填了就优先走它
     hervoiceUrl: "",
@@ -3272,6 +3299,16 @@ function applyThemeVars(){
   } else {
     // 蓝晒壳走的也是这条：T() 已经整份换成了它自带的配色
     ["bg","card","accent","accent2","text","sub","border"].forEach(k=>r.style.setProperty("--"+k,t[k]));
+  }
+  // 玻璃态要拿一份「不透明的原始卡片底色」去 color-mix。
+  // 不能在 CSS 里写 --card: color-mix(..., var(--card), ...) —— 同一个元素上自引用是循环，
+  // 整条声明会被判无效，静默失效。所以单独留一份。
+  if((state.uiShell||"")==="korean"){
+    r.style.setProperty("--card-opaque", "#FFFFFF");
+    r.style.setProperty("--border-opaque", "#E5E5EA");
+  } else {
+    r.style.setProperty("--card-opaque", t.card);
+    r.style.setProperty("--border-opaque", t.border);
   }
   const style = isBp ? "solid" : (state.bubbleStyle || "solid");
   const op = Math.min(1, Math.max(0.15, Number(state.bubbleOpacity)||0.72));
@@ -4598,20 +4635,25 @@ function homeDotsKorean(active){
   </div>`;
 }
 
-function krMiniCalHtml(){
+/** 桌面的「本周」组件：周字母一行 + 日期一行，今天涂黑。
+ *  以前这里画的是整月（6×7），塞进两栏宽的组件里字只能压到 8px。
+ *  手机桌面的日历组件给一周就够 —— 要看整月点进去就是日历页。 */
+function krWeekStripHtml(){
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
-  const first = new Date(y, m, 1).getDay();
-  const days = new Date(y, m + 1, 0).getDate();
-  const monthEn = ["January","February","March","April","May","June","July","August","September","October","November","December"][m];
-  let cells = "";
-  for(let i = 0; i < first; i++) cells += `<span class="kr-cal-empty"></span>`;
-  for(let day = 1; day <= days; day++){
-    cells += `<span class="kr-cal-d${day===d?" on":""}">${day}</span>`;
+  const d = now.getDate();
+  const monthEn = ["January","February","March","April","May","June","July","August","September","October","November","December"][now.getMonth()];
+  const wk = ["일","월","화","수","목","금","토"];
+  const sunday = new Date(now.getFullYear(), now.getMonth(), d - now.getDay());
+  let head = "", cells = "";
+  for(let i = 0; i < 7; i++){
+    const cur = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
+    const isToday = cur.getDate() === d && cur.getMonth() === now.getMonth();
+    head += `<span class="kr-cal-w">${wk[i]}</span>`;
+    cells += `<span class="kr-cal-d${isToday?" on":""}">${cur.getDate()}</span>`;
   }
   return `<div class="kr-cal">
     <div class="kr-cal-hd">${monthEn}</div>
-    <div class="kr-cal-grid">${cells}</div>
+    <div class="kr-cal-grid">${head}${cells}</div>
   </div>`;
 }
 
@@ -4647,26 +4689,52 @@ function renderHomeKorean(){
     }
   }catch(e){}
 
-  const iconBtn = (it) => `
+  // 图标底色：低饱和的六组，按功能分。底色 + 图标色内联挂在外面那个 span 上——
+  // 里面的 <i data-lucide> 必须保持裸的，否则 __ICON_CACHE 的字符串替换会失配。
+  const KR_TINTS = {
+    cream:  ["#F4EAD8","#A8814E"], mist:  ["#DEE7F0","#5E7C9B"],
+    rose:   ["#F3E1E4","#A9707C"], sage:  ["#E0E9E1","#6C8770"],
+    apricot:["#F5E3D6","#B07E5E"], lilac: ["#E7E3F0","#7A6E96"],
+    sand:   ["#EDE7DE","#8C7A64"], slate: ["#E4E6EA","#6F7580"],
+  };
+  const KR_GROUP = {
+    mailbox:"cream", notes:"cream", theme:"cream", branding:"cream", wallet:"cream",
+    mdiary:"rose", diary:"rose", body:"rose", love:"rose", profile:"rose",
+    baby:"rose", eatapple:"rose", pr:"rose",
+    prompts:"mist", project:"mist", sparkvault:"mist", album:"mist",
+    game:"mist", ntfy:"mist",
+    calendar:"sage", duty:"sage", quest:"sage", bisca_cards:"sage", flightchess:"sage",
+    phone:"apricot", wardrobe:"apricot", coupon:"apricot", truthdare:"apricot",
+    tavern:"apricot", cooking:"apricot", menu:"apricot",
+    read:"lilac", music:"lilac", shufang:"lilac", dream:"lilac",
+    roleplay:"lilac", divination:"lilac",
+    watch:"sand", workshop:"sand", cabinets:"sand", savedchat:"sand",
+    vps:"slate", usage:"slate", backup:"slate", mcphall:"slate", hisphone:"slate",
+    sayday:"slate", captivity:"slate", cmdgame:"slate", htmlgame:"slate",
+  };
+  const iconBtn = (it) => {
+    const t = KR_TINTS[KR_GROUP[it.key] || "slate"] || KR_TINTS.slate;
+    return `
     <button type="button" class="feat-card kr-desk-ico" data-sub="${escAttr(it.key)}">
-      <span class="kr-desk-ico-bg"><i data-lucide="${it.icon}"></i></span>
+      <span class="kr-desk-ico-bg" style="background:${t[0]};color:${t[1]}"><i data-lucide="${it.icon}"></i></span>
       <span class="kr-desk-ico-lab">${esc(it.label)}</span>
     </button>`;
+  };
 
-  // 桌面日常入口（图一保留）
+  // 桌面常用入口：8 个，两行。
+  // 为什么是 8 不是 12：她的 S23 Ultra 是 412×883 CSS px，扣掉状态栏/底栏/滚动条内边距，
+  // 桌面这一屏的内容预算约 639px。状态行 36 + 组件区 353 + 页点 24 = 413，
+  // 图标一行约 80px —— 两行 180 正好（余 46px），三行 280 就要溢出 54px 变成滚动。
+  // 桌面本来就该是「最常用的那几个」，其余一律在抽屉（右滑一下）。
   const deskAppDefs = [
     {key:"mailbox", icon:"mail", label:"信箱"},
     {key:"prompts", icon:"sparkles", label:"记忆"},
     {key:"mdiary", icon:"notebook-pen", label:"日记"},
-    {key:"vps", icon:"monitor", label:"工作区"},
-    {key:"usage", icon:"smartphone", label:"屏幕"},
-    {key:"theme", icon:"palette", label:"外观"},
-    {key:"branding", icon:"eye", label:"视觉"},
-    {key:"body", icon:"heart", label:"身体"},
     {key:"calendar", icon:"calendar-days", label:"日历"},
-    {key:"read", icon:"book-open", label:"一起读"},
     {key:"phone", icon:"phone", label:"电话"},
+    {key:"read", icon:"book-open", label:"一起读"},
     {key:"watch", icon:"film", label:"一起看"},
+    {key:"theme", icon:"palette", label:"外观"},
   ];
   const deskApps = deskAppDefs.map(iconBtn).join("");
   const deskKeys = new Set(deskAppDefs.map(it => it.key));
@@ -4731,106 +4799,58 @@ function renderHomeKorean(){
     return true;
   }).map(iconBtn).join("");
 
-  let preview = "";
-  try{
-    const msgs = state.messages || [];
-    for(let i = msgs.length - 1; i >= 0; i--){
-      const m = msgs[i];
-      if(m && m.role === "assistant" && m.content){
-        const t = String(m.content).replace(/<[^>]+>/g,"").trim().slice(0, 56);
-        if(t){ preview = t; break; }
-      }
-    }
-  }catch(e){}
-
-  const scheduleDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-
-  // 打开主页默认大时钟桌面（page0）
+  // 打开主页默认桌面（page0）
   if(state.homePage > 1) state.homePage = 0;
 
-  const dualFrame = `
-    <div class="kr-love-frame" aria-hidden="false">
-      <img class="kr-love-frame-bg" src="love-dual-frame.png" alt=""/>
-      <div class="kr-love-slot me">
-        ${myAv?`<img src="${escAttr(myAv)}" alt="${escAttr(myName)}"/>`:`<span class="kr-love-fb">${esc((myName||"我").slice(0,1))}</span>`}
-      </div>
-      <div class="kr-love-slot them">
-        ${taAv?`<img src="${escAttr(taAv)}" alt="${escAttr(taName)}"/>`:`<span class="kr-love-fb">${esc((taName||"TA").slice(0,1))}</span>`}
-      </div>
-    </div>`;
+  const weekCn = ["周日","周一","周二","周三","周四","周五","周六"][now.getDay()];
+  const dateLine = `${now.getMonth()+1}月${now.getDate()}日 ${weekCn}`;
+  const ampm = now.getHours() < 12 ? "AM" : "PM";
+  const avImg = (src, name) => src
+    ? `<img src="${escAttr(src)}" alt=""/>`
+    : `<span class="kr-wp-fb">${esc(String(name||"·").slice(0,1))}</span>`;
 
-  // Panel 0：锁屏式抬头（日期/大时钟/天气）→ 合照 → 应用格 → 两人卡 + 日历 → 便签/纪念日 → 一起听
+  // Panel 0：一行状态 → 组件拼贴（合照 2×2 / 时钟 2×1 / 本周 2×1 / 一起听 4×1）→ 应用格。
+  // 一屏放下，不滚。
   const desk = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll kr-desk-scroll">
-        <div class="kr-desk-head">
-          <div class="kr-desk-date">${esc(dateTop)}</div>
-          <div class="kr-desk-clock">${hh}:${mm}</div>
-          <div class="kr-desk-weather">${esc(temp)} · ${esc(wText)}</div>
+        <div class="kr-statusline">
+          <span class="kr-sl-date">${esc(dateLine)}</span>
+          <span class="kr-sl-weather">${esc(temp)} ${esc(wText)}</span>
         </div>
-        ${dualFrame}
-        <div class="kr-desk-grid">${deskApps}</div>
-        <div class="kr-desk-row2">
-          <button type="button" class="kr-widget kr-desk-profile feat-card" data-sub="profile">
-            ${taAv?`<img class="kr-desk-av" src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-desk-av kr-desk-av-fb">💬</span>`}
-            <span class="kr-desk-prof-meta">
-              <span class="kr-desk-prof-name">${esc(taName)}</span>
-              <span class="kr-desk-prof-sub">和 ${esc(myName)} 的第 ${esc(String(days))} 天</span>
+        <div class="kr-wgrid">
+          <button type="button" class="kr-w kr-w-photo feat-card" data-sub="profile">
+            <span class="kr-wp-pair">${avImg(taAv, taName)}${avImg(myAv, myName)}</span>
+            <span class="kr-wp-cap">${esc(taName)}<em>第 ${esc(String(days))} 天</em></span>
+          </button>
+          <div class="kr-w kr-w-clock">
+            <span class="kr-wc-t">${hh}:${mm}</span>
+            <span class="kr-wc-s">${ampm} · ${esc(weekCn)}</span>
+          </div>
+          <button type="button" class="kr-w kr-w-week feat-card" data-sub="calendar">
+            ${typeof krWeekStripHtml==="function"?krWeekStripHtml():""}
+          </button>
+          <button type="button" class="kr-w kr-w-music feat-card" data-sub="music">
+            <span class="kr-wm-cover">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</span>
+            <span class="kr-wm-meta">
+              <span class="kr-wm-t">${esc(title)}</span>
+              <span class="kr-wm-s">${esc(artist)}</span>
             </span>
-          </button>
-          <div class="kr-widget kr-desk-cal-mini">${typeof krMiniCalHtml==="function"?krMiniCalHtml():""}</div>
-        </div>
-        <div class="kr-desk-cards">
-          <button type="button" class="kr-widget kr-note-card feat-card" data-sub="notes">
-            <span class="kr-card-lab">Note</span>
-            <span class="kr-note-body">${esc(status)}</span>
-          </button>
-          <button type="button" class="kr-widget kr-sched-card feat-card" data-sub="calendar">
-            <span class="kr-card-lab">Schedule</span>
-            <span class="kr-sched-date">${esc(scheduleDate)}</span>
-            <span class="kr-sched-hint">纪念日 · 计划</span>
+            <span class="kr-wm-bars"><i></i><i></i><i></i><i></i></span>
           </button>
         </div>
-        <button type="button" class="kr-widget kr-desk-music feat-card" data-sub="music">
-          <span class="kr-desk-music-ico">${cover?`<img src="${escAttr(cover)}" alt=""/>`:`<i data-lucide="disc-3"></i>`}</span>
-          <span class="kr-desk-music-meta">
-            <span class="kr-desk-music-title">${esc(title)}</span>
-            <span class="kr-desk-music-sub">${esc(artist)}</span>
-          </span>
-          <span class="kr-desk-music-go">▶</span>
-        </button>
+        <div class="kr-desk-grid">${deskApps}</div>
         ${homeDotsKorean(0)}
-        <div class="kr-home-foot">desk · swipe →</div>
       </div>
     </div>`;
 
-  // Panel 1：更多 + 全应用
+  // Panel 1：应用抽屉。就是图标，不再放天气卡/近况卡/聊天预览
+  // ——底栏已经有「聊天」那一格了，预览卡是重复的一条路。
   const more = `
     <div class="home-panel kr-panel">
       <div class="kr-home-scroll">
-        <div class="kr-more-top-row">
-          <div class="kr-widget kr-weather-card">
-            <div class="kr-weather-temp">${esc(temp)}</div>
-            <div class="kr-weather-text">${esc(wText)}</div>
-            <div class="kr-weather-sub">${esc(hh)}:${esc(mm)} · 今天</div>
-          </div>
-          <button type="button" class="kr-widget kr-status-card feat-card" data-sub="mdiary">
-            <div class="kr-status-lab">近况</div>
-            <div class="kr-status-body">${esc(status)}</div>
-            <div class="kr-status-go">日记 →</div>
-          </button>
-        </div>
-        <div class="kr-desk-grid kr-desk-grid-all">${moreApps}</div>
-        <button type="button" class="kr-widget kr-chat-preview" data-tab-jump="chat">
-          <div class="kr-cp-top">
-            ${taAv?`<img src="${escAttr(taAv)}" alt=""/>`:`<span class="kr-cp-fb">💬</span>`}
-            <div class="kr-cp-name">${esc(taName)}</div>
-            <div class="kr-cp-go">打开聊天</div>
-          </div>
-          <div class="kr-cp-text">${esc(preview || "回到对话")}</div>
-        </button>
+        <div class="kr-desk-grid kr-drawer-grid">${moreApps}</div>
         ${homeDotsKorean(1)}
-        <div class="kr-home-foot">← swipe · more</div>
       </div>
     </div>`;
 
@@ -14529,15 +14549,18 @@ async function callSttUpload(blob){
   const tok = (cfg.sttToken && String(cfg.sttToken).trim()) || callAuthToken();
   if(tok) headers["X-Auth-Token"] = tok;
   let lastStatus = 0;
+  let lastErr = "";
   const attempt = async (url)=>{
     const fd = new FormData();
     fd.append("file", blob, "utterance.webm");
     fd.append("audio", blob, "utterance.webm");
     try{
-      const res = await fetch(url, { method:"POST", headers, body: fd });
+      // 45 秒：服务端 /stt 走 SiliconFlow SenseVoice，实测 0.4–0.6 秒；
+      // 留这么宽只是为了盖住手机弱网下的上传时间，不是给转写留的。
+      const res = await __fetchTimeout(url, { method:"POST", headers, body: fd }, 45000);
       if(!res.ok){ lastStatus = res.status; return null; }
       return await res.json();
-    }catch(e){ return null; }
+    }catch(e){ lastErr = (e && e.message) || String(e); return null; }
   };
   // 优先 /transcribe（SenseVoice：text+emotion+tone），没有就回退 /stt。
   // 网关没部署 /transcribe 时它会一直 404，以前每次说话都白跑一趟；记住一次结果就不再试。
@@ -14555,7 +14578,10 @@ async function callSttUpload(blob){
   if(!data){
     if(lastStatus === 401 || lastStatus === 403)
       throw new Error("网关拒绝（401）：设置 → 主动消息 里的 Token 没填或不对。");
-    throw new Error("STT 识别失败" + (lastStatus ? "（HTTP "+lastStatus+"）" : "（网关连不上）"));
+    if(lastStatus === 501)
+      throw new Error("服务端还没接转写（501）——/stt 的 SILICONFLOW_API_KEY 没配上。");
+    if(lastStatus) throw new Error("STT 识别失败（HTTP " + lastStatus + "）");
+    throw new Error("STT 识别失败（" + (lastErr || "网关连不上") + "）");
   }
   const text = (data.text || data.transcript || data.result || "").trim();
   if(!text) throw new Error("没有识别到内容");
@@ -14922,7 +14948,7 @@ function ensureCallConfig(){
     baseUrl:VPS, token:"", dnd:false, ttsProvider:"minimax", minimaxKey:"", minimaxGroupId:"",
     minimaxVoice:"female-shaonv", minimaxModel:"speech-2.6-turbo",
     minimaxEndpoint:"https://api.minimax.chat/v1/t2a_v2", ttsProxy:VPS, ttsEnabled:true,
-    sttUrl:"", sttToken:"", voceUrl:"http://115.29.237.172:3456", hervoiceUrl:"", invitePollSec:8,
+    sttUrl:"", sttToken:"", voceUrl:"", hervoiceUrl:"", invitePollSec:8,
     wsUrl:"ws://192.168.101.1:8765", httpUrl:"http://192.168.101.1:8080", aicallEnabled:true,
   };
   state.callConfig = Object.assign({}, d, state.callConfig||{});
@@ -22720,20 +22746,57 @@ function bindEvents(){
   }
 
   async function chatVoiceSend(blob, dur, strip){
+    let res=null;
     try{
-      const { text, emotion, hint }=await chatVoiceTranscribe(blob);
+      res=await chatVoiceTranscribe(blob);
+    }catch(e){
+      // 转写失败不再把整条录音丢掉：浮条原地变成「原因 + 重试 + 丢弃」，
+      // blob 还在闭包里，重试不用她再讲一遍。
+      chatVoiceFail(blob, dur, strip, (e&&e.message)||String(e));
+      return;
+    }
+    try{
       const dataUrl=await blobToDataUrl(blob);
-      const now=new Date().toISOString();
-      state.pendingUser.push({ role:"user", content:text||"🎤 语音消息", voice:{ dataUrl, duration:dur, emotion:emotion||"neutral", hint:hint||"" }, time:now });
+      const text=res.text||"";
+      state.pendingUser.push({ role:"user", content:text||"🎤 语音消息", voice:{ dataUrl, duration:dur, emotion:res.emotion||"neutral", hint:res.hint||"" }, time:new Date().toISOString() });
       if(typeof saveActiveThread==="function") saveActiveThread();
       state.needChatScroll=true;
       if(strip&&strip.parentNode) strip.parentNode.removeChild(strip);
       if(typeof postAppEvent==="function") postAppEvent("chat_message",{ text:(text||"🎤 语音消息").slice(0,120) });
       if(typeof triggerAIReply==="function") triggerAIReply(); else render();
     }catch(e){
-      if(strip&&strip.parentNode) strip.parentNode.removeChild(strip);
-      if(typeof showToast==="function") showToast("语音消息发送失败："+(e&&e.message||e));
+      chatVoiceFail(blob, dur, strip, (e&&e.message)||String(e));
     }
+  }
+
+  /** 转写失败：浮条不撤，换成失败态。她要么重试，要么自己丢掉。 */
+  function chatVoiceFail(blob, dur, strip, err){
+    const reason=String(err||"转写失败");
+    if(!strip || !strip.parentNode){
+      if(typeof showToast==="function") showToast("语音转写失败："+reason);
+      return;
+    }
+    strip.classList.add("rec-failed");
+    strip.innerHTML=`
+      <div class="rec-fail-msg" title="${escAttr(reason)}"><b>转写失败</b> · ${esc(reason)}</div>
+      <button type="button" class="rec-retry">重试</button>
+      <button type="button" class="rec-discard" aria-label="丢弃这条录音">×</button>`;
+    const retry=strip.querySelector(".rec-retry");
+    if(retry) retry.onclick=(e)=>{
+      e.stopPropagation();
+      strip.classList.remove("rec-failed");
+      strip.innerHTML=`
+        <div class="rec-dot"></div>
+        <div class="rec-wave"></div>
+        <div class="rec-timer">${fmtDur(dur)}</div>
+        <div class="rec-hint">转写中…</div>`;
+      chatVoiceSend(blob, dur, strip);
+    };
+    const discard=strip.querySelector(".rec-discard");
+    if(discard) discard.onclick=(e)=>{
+      e.stopPropagation();
+      if(strip.parentNode) strip.parentNode.removeChild(strip);
+    };
   }
 
   function blobToDataUrl(blob){
@@ -22751,7 +22814,7 @@ function bindEvents(){
   async function hervoiceUpload(base, blob){
     const fd=new FormData();
     fd.append("file", blob, "voice.webm");
-    const res=await fetch(base.replace(/\/+$/,"")+"/api/voice/upload",{ method:"POST", body:fd });
+    const res=await __fetchTimeout(base.replace(/\/+$/,"")+"/api/voice/upload",{ method:"POST", body:fd }, 30000);
     if(!res.ok) throw new Error("HTTP "+res.status);
     const d=await res.json();
     if(!d||d.error) throw new Error((d&&d.error)||"hervoice 无返回");
@@ -22764,46 +22827,55 @@ function bindEvents(){
     };
   }
 
+  /** 探测顺序 2026-09-04 翻了个个儿。以前是 hervoice → voce → hervoice@voce → 网关，
+   *  而前三跳全是死路：hervoice 那台（:8100）从来没部署过，voceUrl 默认指着 :3456
+   *  ——那是 cc-hub，/upload 和 /api/voice/upload 一律 404。所以每录一条都要先白跑
+   *  三趟 404，才走到唯一活着的网关 /stt。现在网关排第一，另外两条只在她显式配了
+   *  地址、且不是 cc-hub 时才试。 */
   async function chatVoiceTranscribe(blob){
     const cfg=state.callConfig||{};
     const her=(cfg.hervoiceUrl||"").trim();
-    const voce=((cfg.voceUrl||"").trim()||"http://115.29.237.172:3456").replace(/\/+$/,"");
+    const voceRaw=(cfg.voceUrl||"").trim();
+    const voce=__isDeadVoiceHost(voceRaw)?"":voceRaw.replace(/\/+$/,"");
     const errs=[];
-    // 1) hervoice（填了才走）：文字 + 语气一次拿到
-    if(her){
-      try{ return await hervoiceUpload(her, blob); }
-      catch(e){ errs.push("hervoice: "+(e&&e.message||e)); }
-    }
-    // 2) voce 双步 /upload + /stt
-    try{
-      const fd=new FormData();
-      fd.append("audio", blob, "recording.webm");
-      const up=await fetch(voce+"/upload",{ method:"POST", body:fd });
-      if(up.ok){
-        const upj=await up.json();
-        if(upj&&upj.filename){
-          const st=await fetch(voce+"/stt",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({audio_path:upj.filename}) });
-          if(st.ok){
-            const d=await st.json();
-            if(d&&d.text) return { text:d.text, emotion:d.emotion||"neutral", hint:d.hint||"" };
-          }
-        }
-      }
-      errs.push("voce: HTTP "+up.status);
-    }catch(e){ errs.push("voce: "+(e&&e.message||e)); }
-    // 3) hervoice 部署在 voce 同一台上的情况（没单独填 URL 时兜一次）
-    if(!her){
-      try{ return await hervoiceUpload(voce, blob); }
-      catch(e){ errs.push("hervoice@voce: "+(e&&e.message||e)); }
-    }
-    // 4) 最后回退网关 /transcribe | /stt
+    // 1) VPS 网关 /stt —— 唯一实际部署着的那条（服务端已换成 SenseVoice，还给情绪）
     if(typeof callSttUpload==="function"){
       try{
         const text=await callSttUpload(blob);
-        let emotion="neutral";
-        try{ const s=ensureCallSession(); if(s&&s.lastVoiceMeta&&s.lastVoiceMeta.emotion) emotion=s.lastVoiceMeta.emotion; }catch(e){}
-        return { text, emotion, hint:"" };
+        let emotion="neutral", hint="";
+        try{
+          const s=ensureCallSession();
+          if(s&&s.lastVoiceMeta){
+            if(s.lastVoiceMeta.emotion) emotion=s.lastVoiceMeta.emotion;
+            hint=s.lastVoiceMeta.tone||"";
+          }
+        }catch(e){}
+        return { text, emotion, hint };
       }catch(e){ errs.push("网关: "+(e&&e.message||e)); }
+    }
+    // 2) hervoice 单步（只在显式配了非 cc-hub 地址时）
+    if(her && !__isDeadVoiceHost(her)){
+      try{ return await hervoiceUpload(her, blob); }
+      catch(e){ errs.push("hervoice: "+(e&&e.message||e)); }
+    }
+    // 3) voce 双步 /upload + /stt（同上）
+    if(voce){
+      try{
+        const fd=new FormData();
+        fd.append("audio", blob, "recording.webm");
+        const up=await __fetchTimeout(voce+"/upload",{ method:"POST", body:fd }, 30000);
+        if(up.ok){
+          const upj=await up.json();
+          if(upj&&upj.filename){
+            const st=await __fetchTimeout(voce+"/stt",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({audio_path:upj.filename}) }, 30000);
+            if(st.ok){
+              const d=await st.json();
+              if(d&&d.text) return { text:d.text, emotion:d.emotion||"neutral", hint:d.hint||"" };
+            }
+            errs.push("voce/stt: HTTP "+st.status);
+          } else errs.push("voce: 上传没回 filename");
+        } else errs.push("voce: HTTP "+up.status);
+      }catch(e){ errs.push("voce: "+(e&&e.message||e)); }
     }
     throw new Error(errs.join(" / ")||"STT 服务不可用");
   }
@@ -25294,7 +25366,7 @@ const sttUrl = document.getElementById("call-stt-url");
     state.proactiveConfig  = { ...(state.proactiveConfig||{}),  baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN };
     // ttsProxy 以前漏在这儿：一键填入之后 TTS 仍然直连 api.minimax.chat，
     // 用的是 App 里那把过期 Key，于是「invalid api key」+ 没声音
-    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN, ttsProxy: VPS_BASE, ttsEnabled: true, voceUrl: "http://115.29.237.172:3456" };
+    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN, ttsProxy: VPS_BASE, ttsEnabled: true, voceUrl: "" };
     ["musicConfig","usageConfig","proactiveConfig","callConfig"].forEach(k=>{ if(typeof persist==="function") persist(k); });
     render();
   };
@@ -26183,60 +26255,63 @@ function renderBedPage(){
   const maxL = rep.play.length ? rep.play[0].c : 0;
   const last = b.log.length ? b.log[b.log.length-1] : null;
 
+  // 距上一次多久：数字比一串时间戳好读，一眼知道「最近有没有」
+  let sinceTxt = "—";
+  if(last){
+    const d = Math.floor((Date.now() - last.ts) / 86400000);
+    sinceTxt = d <= 0 ? "今天" : (d === 1 ? "昨天" : d + " 天前");
+  }
+  const tagRow = (r) => {
+    const pos = (r.pos||[]).map(k=>`<span class="bed-tag">${esc(bedName(k))}</span>`).join("");
+    const play = (r.play||[]).map(k=>`<span class="bed-tag play">${esc(bedName(k))}</span>`).join("");
+    return `<span class="bed-tags">${pos}${play}</span>`;
+  };
+
   return `<div class="page">
     ${subHeader('<i data-lucide="flame"></i> 床事档案')}
 
-    <div class="section">
-      <div class="section-title">这一轮</div>
-      <div class="section-body">
-        <div class="setting-row">
-          <div class="setting-label">可选</div>
-          <div>体位 ${av.pos.length} / ${BED_POSITIONS.length} · 玩法 ${av.play.length} / ${BED_PLAYS.length}</div>
-        </div>
-        ${av.cooling.length ? `<div class="setting-row">
-          <div class="setting-label">冷却中</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            ${av.cooling.map(c=>`<span class="bed-cool">${esc(c.n)} · ${c.left}</span>`).join("")}
-          </div>
-        </div>` : ""}
-        ${state.__bedNote ? `<div class="setting-row"><div class="setting-label">最近一次</div><div>${esc(state.__bedNote)}</div></div>` : ""}
-        ${last ? `<div class="setting-row">
-          <div class="setting-label">${esc(formatTimeFull(new Date(last.ts).toISOString()))}</div>
-          <div>${esc((last.pos||[]).map(bedName).join("、") || "—")} · ${esc((last.play||[]).map(bedName).join("、") || "—")}</div>
-        </div>` : ""}
-      </div>
+    <div class="bed-hero">
+      <div><b>${b.log.length}</b><span>累计</span></div>
+      <div><b>${esc(sinceTxt)}</b><span>上一次</span></div>
+      <div><b>${av.cooling.length}</b><span>冷却中</span></div>
     </div>
 
     <div class="section">
       <div class="section-title">报告</div>
-      <div class="chip-row" style="margin-bottom:10px">
+      <div class="chip-row" style="margin-bottom:12px">
         <button type="button" class="theme-chip${tab==="week"?" active":""}" data-bed-tab="week">本周</button>
         <button type="button" class="theme-chip${tab==="month"?" active":""}" data-bed-tab="month">本月</button>
         <button type="button" class="theme-chip${tab==="all"?" active":""}" data-bed-tab="all">全部</button>
       </div>
-      <div class="section-body">
-        <div class="setting-row"><div class="setting-label">次数</div><div>${rep.times}</div></div>
-        ${rep.pos.length ? `<div class="setting-row">
-          <div class="setting-label">体位</div>
-          <div class="bed-chart">${rep.pos.slice(0,8).map(x=>bedBarRow(x, maxP)).join("")}</div>
-        </div>` : ""}
-        ${rep.play.length ? `<div class="setting-row">
-          <div class="setting-label">玩法</div>
-          <div class="bed-chart">${rep.play.slice(0,12).map(x=>bedBarRow(x, maxL)).join("")}</div>
-        </div>` : ""}
-        ${!rep.times ? `<div class="setting-row"><div>这段时间还没有记录</div></div>` : ""}
+      <div class="bed-panel">
+        ${rep.times ? `
+          ${rep.pos.length ? `<div class="bed-sub">体位 · ${rep.times} 次里</div>
+            <div class="bed-chart">${rep.pos.slice(0,8).map(x=>bedBarRow(x, maxP)).join("")}</div>` : ""}
+          ${rep.play.length ? `<div class="bed-sub">玩法</div>
+            <div class="bed-chart">${rep.play.slice(0,12).map(x=>bedBarRow(x, maxL)).join("")}</div>` : ""}
+        ` : `<div class="bed-empty">这段时间还没有记录</div>`}
       </div>
     </div>
 
+    ${(av.cooling.length || state.__bedNote) ? `<div class="section">
+      <div class="section-title">这一轮</div>
+      <div class="bed-panel">
+        <div class="bed-sub">可选 · 体位 ${av.pos.length}/${BED_POSITIONS.length} · 玩法 ${av.play.length}/${BED_PLAYS.length}</div>
+        ${av.cooling.length ? `<div class="bed-tags">
+          ${av.cooling.map(c=>`<span class="bed-cool">${esc(c.n)} · ${c.left}</span>`).join("")}
+        </div>` : ""}
+        ${state.__bedNote ? `<div class="bed-sub" style="margin:10px 0 0">${esc(state.__bedNote)}</div>` : ""}
+      </div>
+    </div>` : ""}
+
     <div class="section">
       <div class="section-title">记录</div>
-      <div class="section-body">
+      <div class="bed-panel">
         ${b.log.length ? b.log.slice(-30).reverse().map(r=>`
-          <div class="setting-row">
-            <div class="setting-label">${esc(formatTimeFull(new Date(r.ts).toISOString()))}</div>
-            <div>${esc((r.pos||[]).map(bedName).join("、") || "—")}<br>
-              <span style="color:var(--sub)">${esc((r.play||[]).map(bedName).join("、") || "—")}</span></div>
-          </div>`).join("") : `<div class="setting-row"><div>还没有记录</div></div>`}
+          <div class="bed-log-item">
+            <span class="bed-log-when">${esc(formatTimeFull(new Date(r.ts).toISOString()))}</span>
+            ${tagRow(r)}
+          </div>`).join("") : `<div class="bed-empty">还没有记录</div>`}
       </div>
     </div>
   </div>`;

@@ -318,7 +318,9 @@
       background: var(--card); border-top: 1px solid var(--border);
       z-index: 100;
       padding-bottom: env(safe-area-inset-bottom, 0px);
-      backdrop-filter: blur(12px); box-shadow: 0 -1px 8px rgba(0,0,0,0.05);
+      /* 这里原来有句 backdrop-filter: blur(12px)：底色是不透明的 --card，模糊不到
+         任何东西，只白白多合成一个 GPU 层。真正需要模糊时由下面的 ui-glass-* 规则给。 */
+      box-shadow: 0 -1px 8px rgba(0,0,0,0.05);
     }
     .bottom-nav button {
       flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -1218,56 +1220,80 @@
       background: var(--bubble-them-glass) !important;
       color: var(--bubble-them-fg, var(--text));
     }
-    /* 全局雾/水玻璃：日历格、卡片、功能块等（随外观里的界面材质（气泡/日历/卡片）） */
-    #app.ui-glass-fog .cal-day,
-    #app.ui-glass-fog .duty-day,
-    #app.ui-glass-fog .heat-day,
-    #app.ui-glass-fog .feat-card,
-    #app.ui-glass-fog .status-card,
-    #app.ui-glass-fog .mem-card,
-    #app.ui-glass-fog .nursery-card,
-    #app.ui-glass-fog .vital-card,
-    #app.ui-glass-fog .add-form,
-    #app.ui-glass-fog .diary-editor,
-    #app.ui-glass-fog .game-tab,
-    #app.ui-glass-fog .filter-chip,
-    #app.ui-glass-fog .cab-row,
-    #app.ui-glass-fog .setting-row,
-    #app.ui-glass-fog .body-switch-row,
-    #app.ui-glass-fog .heat-summary,
-    #app.ui-glass-fog .preview-inner {
-      background: rgba(255,255,255,0.38) !important;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border-color: rgba(255,255,255,0.42) !important;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    /* ── 全局雾/水玻璃材质 ────────────────────────────────────────────────
+       2026-09-04 重写。原来这里是一串手打的类名白名单（cal-day / feat-card /
+       mem-card … 一共 21 个）。而全 App 有 117 个类以 var(--card) 为底 ——
+       剩下 96 个在玻璃态下就是一块死白，`.section-body`（几乎每个功能页的外壳）
+       也在里面。「有的功能没美化」就是这么来的：白名单是手打的，后来加的功能
+       没人回去登记，和「六轴表项缺失导致某情绪永不出现」是同一类毛病。
+
+       改成直接把 --card / --border 本身换成半透明：所有卡片自动跟着透，
+       以后新加功能不用再来登记一次，白名单这个维护陷阱直接没了。
+       （--card-opaque / --border-opaque 由 applyThemeVars 另存一份 ——
+       在同一个元素上写 --card: color-mix(…var(--card)…) 是自引用循环，会静默失效。）
+
+       真模糊只留顶栏/子页顶栏/输入条/底栏那几层，见下面 shell-classic 那段。
+       这里一律不加 backdrop-filter：一屏几十个模糊层手机 GPU 扛不住，
+       上一轮撤蓝晒气泡的模糊就是这个原因。半透明 + 壁纸透过来已经够出材质了。 */
+    #app.ui-glass-fog {
+      --card: color-mix(in srgb, var(--card-opaque) 70%, transparent);
+      --border: color-mix(in srgb, #fff 38%, var(--border-opaque));
     }
-    #app.ui-glass-water .cal-day,
-    #app.ui-glass-water .duty-day,
-    #app.ui-glass-water .heat-day,
-    #app.ui-glass-water .feat-card,
-    #app.ui-glass-water .status-card,
-    #app.ui-glass-water .mem-card,
-    #app.ui-glass-water .nursery-card,
-    #app.ui-glass-water .vital-card,
-    #app.ui-glass-water .add-form,
-    #app.ui-glass-water .diary-editor,
-    #app.ui-glass-water .game-tab,
-    #app.ui-glass-water .filter-chip,
-    #app.ui-glass-water .cab-row,
-    #app.ui-glass-water .setting-row,
-    #app.ui-glass-water .body-switch-row,
-    #app.ui-glass-water .heat-summary,
-    #app.ui-glass-water .preview-inner {
-      background: rgba(255,255,255,0.28) !important;
-      backdrop-filter: blur(22px) saturate(1.25);
-      -webkit-backdrop-filter: blur(22px) saturate(1.25);
-      border-color: rgba(255,255,255,0.5) !important;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.35);
+    #app.ui-glass-water {
+      --card: color-mix(in srgb, var(--card-opaque) 56%, transparent);
+      --border: color-mix(in srgb, #fff 52%, var(--border-opaque));
     }
     #app.ui-glass-fog .duty-day.done,
     #app.ui-glass-water .duty-day.done {
       background: color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.35)) !important;
+    }
+
+    /* ── 玻璃气泡时，顶栏 / 底栏 / 输入条跟着变玻璃 ──────────────────────────
+       以前这三条一律 background: var(--card) 实色（.bottom-nav 还写了句
+       backdrop-filter，但底色不透明，那句等于白写）。选了水玻璃之后气泡是透的、
+       壁纸透得过来，只剩这几条 chrome 还是死实色，接缝就特别扎眼。
+       只挂 shell-classic：像素/深渊/韩系/蓝晒各有自己的边框语言，别误伤。
+       模糊层仍然只有这三四条 chrome —— 不是给几十个卡片加的（手机 GPU 很贵）。 */
+    /* 注意底色取的是 --card-opaque 不是 --card：玻璃态下 --card 本身已经是半透明的，
+       再 mix 一次就透过头了。 */
+    body.shell-classic #app.ui-glass-fog .chat-header,
+    body.shell-classic #app.ui-glass-fog .bottom-nav,
+    body.shell-classic #app.ui-glass-fog .chat-input-bar {
+      background: color-mix(in srgb, var(--card-opaque) 62%, transparent);
+      backdrop-filter: blur(14px) saturate(1.2);
+      -webkit-backdrop-filter: blur(14px) saturate(1.2);
+      border-color: color-mix(in srgb, #fff 30%, var(--border-opaque));
+    }
+    body.shell-classic #app.ui-glass-water .chat-header,
+    body.shell-classic #app.ui-glass-water .bottom-nav,
+    body.shell-classic #app.ui-glass-water .chat-input-bar {
+      background: color-mix(in srgb, var(--card-opaque) 45%, transparent);
+      backdrop-filter: blur(22px) saturate(1.6) brightness(1.05);
+      -webkit-backdrop-filter: blur(22px) saturate(1.6) brightness(1.05);
+      border-color: color-mix(in srgb, #fff 45%, var(--border-opaque));
+    }
+    /* 边缘高光：和气泡的 inset 高光同一套语言，让接缝是"一层玻璃"而不是"一条线" */
+    body.shell-classic #app.ui-glass-water .chat-header {
+      box-shadow: 0 1px 12px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+    body.shell-classic #app.ui-glass-water .bottom-nav,
+    body.shell-classic #app.ui-glass-water .chat-input-bar {
+      box-shadow: 0 -1px 12px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+    /* 输入框自己是实色 --bg，玻璃条上一块实心方块又会把接缝拉回来 */
+    body.shell-classic #app.ui-glass-fog .chat-input-bar textarea,
+    body.shell-classic #app.ui-glass-water .chat-input-bar textarea {
+      background: color-mix(in srgb, var(--bg) 55%, transparent);
+      border-color: color-mix(in srgb, #fff 40%, var(--border));
+    }
+    /* 子页顶栏本来就是玻璃，只是 92% 几乎不透明；玻璃态下跟着透一点 */
+    body.shell-classic #app.ui-glass-fog .sub-header {
+      background: color-mix(in srgb, var(--bg) 62%, transparent);
+    }
+    body.shell-classic #app.ui-glass-water .sub-header {
+      background: color-mix(in srgb, var(--bg) 45%, transparent);
+      backdrop-filter: blur(22px) saturate(1.4);
+      -webkit-backdrop-filter: blur(22px) saturate(1.4);
     }
 
     .bubble-time {
@@ -2406,6 +2432,49 @@
       display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
       background: color-mix(in srgb, var(--sub) 18%, transparent); color: var(--sub);
     }
+    /* 床事档案是数据页，不是设置页。原来整页硬塞进 .section-body + .setting-row：
+       柱状图被挤在 72px 的标签列右边、30 条记录是一长串顿号文本 ——
+       设置页骨架在浅色主题下就是白卡片配灰小标签，所以看着就是三块白板。 */
+    .bed-hero {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+      background: var(--border); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden; margin-bottom: 24px;
+    }
+    .bed-hero > div {
+      background: color-mix(in srgb, var(--accent) 8%, var(--card));
+      padding: 15px 10px; text-align: center;
+    }
+    .bed-hero b {
+      display: block; font-size: 22px; font-weight: 600; line-height: 1.15;
+      color: var(--text); font-variant-numeric: tabular-nums;
+    }
+    .bed-hero span { display: block; font-size: 11px; color: var(--sub); margin-top: 5px; }
+    .bed-panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px;
+    }
+    .bed-sub { font-size: 11px; color: var(--sub); letter-spacing: .5px; margin-bottom: 10px; }
+    .bed-sub + .bed-chart { margin-bottom: 18px; }
+    .bed-chart:last-child { margin-bottom: 0; }
+    .bed-log-item {
+      display: grid; grid-template-columns: auto 1fr; gap: 12px;
+      padding: 11px 0; border-bottom: 1px solid var(--border);
+    }
+    .bed-log-item:last-child { border-bottom: none; }
+    .bed-log-item:first-child { padding-top: 0; }
+    .bed-log-when {
+      font-size: 11px; color: var(--sub); white-space: nowrap;
+      font-variant-numeric: tabular-nums; padding-top: 3px;
+    }
+    .bed-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    .bed-tag {
+      font-size: 11px; line-height: 1.5; padding: 3px 9px; border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text);
+    }
+    .bed-tag.play {
+      background: color-mix(in srgb, var(--sub) 13%, transparent); color: var(--sub);
+    }
+    .bed-empty { font-size: 12px; color: var(--sub); text-align: center; padding: 20px 0; }
     .bed-chart { display: grid; gap: 5px; width: 100%; }
     .bed-row { display: grid; grid-template-columns: 72px 1fr 26px; gap: 8px; align-items: center; }
     .bed-row-n { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3236,6 +3305,24 @@
     }
     .chat-voice-strip .rec-stop:active { transform: scale(.92); }
     .chat-voice-strip .rec-stop svg { width: 12px; height: 12px; fill: #fff; }
+    /* 转写失败态：录音不丢，浮条原地变成「原因 + 重试 + 丢弃」 */
+    .chat-voice-strip.rec-failed { border-color: #ff5a6e; }
+    .chat-voice-strip .rec-fail-msg {
+      flex: 1; min-width: 0; font-size: 12px; color: var(--text); line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .chat-voice-strip .rec-fail-msg b { color: #ff5a6e; font-weight: 600; }
+    .chat-voice-strip .rec-retry {
+      flex: none; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      border-radius: 14px; padding: 6px 14px; font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+    .chat-voice-strip .rec-retry:active { opacity: .7; }
+    .chat-voice-strip .rec-discard {
+      width: 32px; height: 32px; border-radius: 50%; border: none;
+      background: var(--border); color: var(--text); font-size: 16px; line-height: 1;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none;
+    }
+    .chat-voice-strip .rec-discard:active { transform: scale(.92); }
 
     /* ═══ UI Shell · 像素农场风（星露谷向，纯 CSS，无额外素材） ═══ */
     body.shell-pixel {
@@ -4559,38 +4646,9 @@
       padding: 12px 16px calc(88px + env(safe-area-inset-bottom, 0px));
       box-sizing: border-box;
     }
-    body.shell-korean .kr-widget {
-      background: rgba(255,255,255,0.72);
-      backdrop-filter: blur(18px) saturate(140%);
-      -webkit-backdrop-filter: blur(18px) saturate(140%);
-      border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.7);
-      box-shadow: 0 8px 28px rgba(0,0,0,0.04);
-    }
-    body.shell-korean .kr-top-row {
-      display: grid;
-      grid-template-columns: 1.4fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    body.shell-korean .kr-time-card,
-    body.shell-korean .kr-weather-card {
-      padding: 16px 14px;
-    }
-    body.shell-korean .kr-clock {
-      font-size: 34px; font-weight: 300; letter-spacing: -0.03em;
-      color: #1C1C1E; line-height: 1.1;
-      font-variant-numeric: tabular-nums;
-    }
-    body.shell-korean .kr-date {
-      margin-top: 6px; font-size: 12px; color: #8E8E93;
-    }
-    body.shell-korean .kr-w-temp {
-      font-size: 28px; font-weight: 300; color: #1C1C1E;
-    }
-    body.shell-korean .kr-w-label {
-      margin-top: 6px; font-size: 12px; color: #8E8E93;
-    }
+    /* kr-widget / kr-top-row / kr-time-card / kr-weather-card / kr-clock / kr-date /
+       kr-w-temp / kr-w-label 这八条 2026-09-04 删了：JS 里一处都不输出（历次改版的残留）。
+       桌面组件现在走下面那套 kr-w*。 */
     body.shell-korean .kr-id-card {
       display: flex; gap: 14px; align-items: center;
       padding: 16px; margin-bottom: 10px;
@@ -4674,10 +4732,6 @@
     body.shell-korean .kr-app-label {
       font-size: 10px; color: #636366;
       text-align: center; line-height: 1.2;
-    }
-    body.shell-korean .kr-home-foot {
-      text-align: center; font-size: 11px; color: #C7C7CC;
-      letter-spacing: 0.12em; padding: 8px 0 16px;
     }
     body.shell-korean .bottom-nav.kr-dock {
       left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
@@ -4973,32 +5027,6 @@
       font-size: 12px; color: #8E8E93;
     }
     body.shell-korean .kr-hearts { letter-spacing: 1px; color: #636366; }
-    body.shell-korean .kr-chat-preview {
-      display: block; width: 100%; text-align: left;
-      padding: 12px 14px; margin-bottom: 10px;
-      cursor: pointer; font-family: inherit;
-      border: none;
-    }
-    body.shell-korean .kr-cp-top {
-      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
-    }
-    body.shell-korean .kr-cp-top img,
-    body.shell-korean .kr-cp-fb {
-      width: 28px; height: 28px; border-radius: 50%;
-      object-fit: cover; background: #E5E5EA;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px;
-    }
-    body.shell-korean .kr-cp-name {
-      flex: 1; font-size: 13px; font-weight: 600; color: #1C1C1E;
-    }
-    body.shell-korean .kr-cp-go {
-      font-size: 11px; color: #AEAEB2;
-    }
-    body.shell-korean .kr-cp-text {
-      font-size: 12px; color: #8E8E93; line-height: 1.4;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
     body.shell-korean .kr-apps-more { padding: 12px 8px 8px; }
     body.shell-korean .kr-apps-grid-8 {
       grid-template-columns: repeat(4, 1fr) !important;
@@ -5161,46 +5189,134 @@
     }
 
 
-    /* ── 韩系桌面（Desk）──────────────────────────────────────────────
-       重写说明：这一段原本有一半是死规则。JS 输出的是 kr-note-lab / kr-sched-lab /
-       kr-note-body / kr-desk-music-ico|meta|title|sub|go / kr-desk-row2 / kr-desk-cal-mini，
-       而 CSS 里写的却是 kr-note-label / kr-note-text / kr-dm-cover|meta|title|sub|play——
-       名字对不上，所以便签卡、纪念日卡、音乐条的内文全是没样式的默认 14px 黑字，
-       三个组件一起塌掉。现在按 JS 实际吐出的类名重写，并顺手收紧版式。 */
+    /* ── 韩系桌面（Desk）────────────────────────────────────────────── */
     body.shell-korean .kr-desk-scroll {
       padding-top: 10px !important;
     }
-    /* 抬头：日期 / 大时钟 / 天气，锁屏式居中 */
-    body.shell-korean .kr-desk-head {
-      text-align: center;
-      padding: 6px 0 20px;
-    }
-    body.shell-korean .kr-desk-date {
-      font-size: 10px;
-      letter-spacing: 0.14em;
-      color: #AEAEB2;
-      text-transform: uppercase;
-      margin-bottom: 2px;
-    }
-    body.shell-korean .kr-desk-clock {
-      font-size: 60px;
-      font-weight: 200;
-      letter-spacing: -0.045em;
-      color: #1C1C1E;
-      line-height: 1;
+    /* 2026-09-04 按手机桌面重排：抬头只留一行，时钟收进组件。
+       以前是「60px 锁屏大时钟居中 + 2.4:1 合照横幅 + 图标 + 一串等宽卡片」往下堆，
+       一屏放不下要滚 1.6 屏 —— 那是网页 landing page 的排法，不是桌面。 */
+    body.shell-korean .kr-statusline {
+      display: flex; align-items: baseline; justify-content: space-between;
+      padding: 2px 2px 16px; font-size: 12px; color: #8E8E93;
       font-variant-numeric: tabular-nums;
     }
-    body.shell-korean .kr-desk-weather {
-      margin-top: 6px;
-      font-size: 12px;
-      color: #8E8E93;
-      font-variant-numeric: tabular-nums;
+    body.shell-korean .kr-sl-date { color: #1C1C1E; font-weight: 500; }
+
+    /* 组件区：4 栏网格，靠 2×2 / 2×1 / 4×1 三种尺寸拉开层级。
+       以前所有卡片同宽同圆角同阴影一条条码下来，那是列表不是桌面。 */
+    /* 行高跟着屏宽走，别写死。她的 S23 Ultra 是 412×883 CSS px（DPR 3.5），
+       25.5vw ≈ 105px；小屏收到 84px、大屏封顶 110px，组件始终接近方的。
+       写死 84px 的话在 412 宽的屏上组件会又扁又宽，底下空一大条。 */
+    body.shell-korean .kr-wgrid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-auto-rows: clamp(84px, 25.5vw, 110px);
+      gap: 9px;
+      margin-bottom: 20px;
     }
+    body.shell-korean .kr-w {
+      background: #fff;
+      border: none;
+      border-radius: 22px;
+      box-shadow: 0 6px 20px rgba(28,28,30,0.05);
+      overflow: hidden;
+      position: relative;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 0;
+      min-width: 0;
+    }
+    body.shell-korean .kr-w:active { transform: scale(.985); }
+
+    /* 合照 2×2：两张头像叠着放，底下压第 N 天。
+       替掉原来那张 love-dual-frame.png 横幅 —— 它占一大块高度只为放两个头像。 */
+    body.shell-korean .kr-w-photo { grid-column: span 2; grid-row: span 2; }
+    body.shell-korean .kr-wp-pair {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(150deg, #EDE6DE, #DFE4EA);
+    }
+    body.shell-korean .kr-wp-pair img,
+    body.shell-korean .kr-wp-fb {
+      width: clamp(56px, 17vw, 74px); height: clamp(56px, 17vw, 74px);
+      border-radius: 50%;
+      object-fit: cover; display: flex; align-items: center; justify-content: center;
+      border: 3px solid rgba(255,255,255,0.92);
+      background: #C9BCAE; color: #fff; font-size: 22px; font-weight: 600;
+      flex-shrink: 0;
+    }
+    body.shell-korean .kr-wp-pair > :first-child { margin-right: -5vw; }
+    body.shell-korean .kr-wp-pair > :last-child { margin-top: 7vw; background: #AEBAC8; }
+    body.shell-korean .kr-wp-cap {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 12px 14px; text-align: left;
+      background: linear-gradient(transparent, rgba(255,255,255,0.9) 42%);
+      font-size: 12px; font-weight: 500; color: #1C1C1E;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.shell-korean .kr-wp-cap em {
+      display: block; font-style: normal; font-size: 10px;
+      color: #8E8E93; font-weight: 400;
+    }
+
+    /* 时钟 2×1 */
+    body.shell-korean .kr-w-clock {
+      grid-column: span 2;
+      padding: 13px 15px; cursor: default;
+      display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    }
+    body.shell-korean .kr-wc-t {
+      font-size: clamp(30px, 9vw, 40px); font-weight: 200; letter-spacing: -0.04em;
+      line-height: 1; color: #1C1C1E; font-variant-numeric: tabular-nums;
+    }
+    body.shell-korean .kr-wc-s {
+      font-size: 11px; color: #AEAEB2; margin-top: 7px; letter-spacing: 0.06em;
+    }
+
+    /* 本周 2×1：整月塞进 2 栏太挤，桌面组件给一周就够 */
+    body.shell-korean .kr-w-week { grid-column: span 2; padding: 11px 12px; text-align: left; }
+
+    /* 一起听 4×1 */
+    body.shell-korean .kr-w-music {
+      grid-column: span 4;
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 15px; text-align: left;
+    }
+    body.shell-korean .kr-wm-cover {
+      width: 50px; height: 50px; border-radius: 15px; flex-shrink: 0;
+      background: linear-gradient(140deg, #D5C7BB, #B8A99C);
+      overflow: hidden; display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.85);
+    }
+    body.shell-korean .kr-wm-cover img { width: 100%; height: 100%; object-fit: cover; }
+    body.shell-korean .kr-wm-cover svg { width: 19px; height: 19px; }
+    body.shell-korean .kr-wm-meta {
+      flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+    }
+    body.shell-korean .kr-wm-t {
+      font-size: 13px; font-weight: 600; color: #1C1C1E;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-wm-s {
+      font-size: 11px; color: #8E8E93;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.shell-korean .kr-wm-bars {
+      display: flex; align-items: flex-end; gap: 2px; height: 16px; flex-shrink: 0;
+    }
+    body.shell-korean .kr-wm-bars i {
+      width: 2px; border-radius: 1px; background: #1C1C1E; display: block;
+    }
+    body.shell-korean .kr-wm-bars i:nth-child(1) { height: 6px; }
+    body.shell-korean .kr-wm-bars i:nth-child(2) { height: 14px; }
+    body.shell-korean .kr-wm-bars i:nth-child(3) { height: 9px; }
+    body.shell-korean .kr-wm-bars i:nth-child(4) { height: 16px; }
     /* 应用格：4 列，图标大一号、标签给足宽度，不再挤成 6 列小字 */
     body.shell-korean .kr-desk-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 16px 8px;
+      gap: 20px 8px;
       margin-bottom: 20px;
       padding: 0 4px;
     }
@@ -5210,123 +5326,45 @@
       box-shadow: none !important; padding: 0;
       cursor: pointer; font-family: inherit;
     }
+    /* 底色和图标色由 JS 按功能分组内联给（KR_TINTS/KR_GROUP）——一屏一模一样的
+       白块灰线条等于逼她每次都读字；形状和颜色应该先于文字被认出来。
+       尺寸跟屏宽走：她的 412 宽屏上 ≈ 60px（One UI 的图标就是这个量级），
+       写死 52px 在这块屏上会显得很小气。 */
     body.shell-korean .kr-desk-ico-bg {
-      width: 56px; height: 56px; border-radius: 18px;
+      width: clamp(50px, 14.5vw, 62px); height: clamp(50px, 14.5vw, 62px);
+      border-radius: clamp(16px, 4.6vw, 20px);
       background: rgba(255,255,255,0.9);
-      box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+      box-shadow: 0 3px 10px rgba(28,28,30,0.05);
       display: flex; align-items: center; justify-content: center;
       color: #3A3A3C;
       transition: transform .12s ease;
     }
     body.shell-korean .kr-desk-ico:active .kr-desk-ico-bg { transform: scale(.93); }
-    body.shell-korean .kr-desk-ico-bg svg { width: 22px; height: 22px; }
+    body.shell-korean .kr-desk-ico-bg svg { width: 24px; height: 24px; }
     body.shell-korean .kr-desk-ico-lab {
-      font-size: 10px; color: #8E8E93; text-align: center;
-      line-height: 1.2; max-width: 72px;
+      font-size: 11px; color: #8E8E93; text-align: center;
+      line-height: 1.2; max-width: 80px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    /* 两人卡 + 迷你日历：并排两个独立组件（以前日历是硬塞进两人卡里的） */
-    body.shell-korean .kr-desk-row2 {
-      display: grid; grid-template-columns: 1fr 124px;
-      gap: 8px; margin-bottom: 8px;
-    }
-    body.shell-korean .kr-desk-profile {
-      display: flex; align-items: center; gap: 11px;
-      padding: 12px; min-width: 0;
-      cursor: pointer; font-family: inherit; text-align: left;
-    }
-    body.shell-korean .kr-desk-av {
-      width: 46px; height: 46px; border-radius: 50%;
-      object-fit: cover; background: #E5E5EA; flex-shrink: 0;
-    }
-    body.shell-korean .kr-desk-av-fb {
-      display: flex; align-items: center; justify-content: center; font-size: 19px;
-    }
-    body.shell-korean .kr-desk-prof-meta {
-      flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
-    }
-    body.shell-korean .kr-desk-prof-name {
-      font-size: 14px; font-weight: 600; color: #1C1C1E;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    body.shell-korean .kr-desk-prof-sub {
-      font-size: 11px; color: #AEAEB2;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    body.shell-korean .kr-desk-cal-mini { padding: 10px 11px; }
+    /* 本周条（kr-w-week 里面）：周字母一行 + 日期一行，今天涂黑 */
     body.shell-korean .kr-cal { width: 100%; }
-    body.shell-korean .kr-cal-empty { visibility: hidden; }
     body.shell-korean .kr-cal-hd {
-      font-size: 9px; color: #8E8E93; margin-bottom: 5px;
-      text-align: center; letter-spacing: 0.06em; text-transform: uppercase;
+      font-size: 9px; color: #AEAEB2; margin-bottom: 7px;
+      letter-spacing: 0.1em; text-transform: uppercase;
     }
     body.shell-korean .kr-cal-grid {
       display: grid; grid-template-columns: repeat(7, 1fr);
-      gap: 1px; font-size: 8px; color: #AEAEB2; text-align: center;
-      font-variant-numeric: tabular-nums;
+      gap: 2px; text-align: center; font-variant-numeric: tabular-nums;
+    }
+    body.shell-korean .kr-cal-w {
+      font-size: 9px; color: #C7C7CC; line-height: 1.6;
     }
     body.shell-korean .kr-cal-d {
-      line-height: 1.5; border-radius: 4px;
+      font-size: 11px; color: #8E8E93; line-height: 1.9;
+      border-radius: 7px;
     }
     body.shell-korean .kr-cal-d.on {
-      color: #fff; font-weight: 700;
-      background: #1C1C1E;
-    }
-    /* 便签 / 纪念日 */
-    body.shell-korean .kr-desk-cards {
-      display: grid; grid-template-columns: 1.25fr 1fr;
-      gap: 8px; margin-bottom: 8px;
-    }
-    body.shell-korean .kr-note-card,
-    body.shell-korean .kr-sched-card {
-      display: flex; flex-direction: column; gap: 6px;
-      padding: 13px; text-align: left;
-      font-family: inherit; cursor: pointer; min-width: 0;
-    }
-    body.shell-korean .kr-card-lab {
-      font-size: 9px; letter-spacing: 0.14em; color: #AEAEB2;
-      text-transform: uppercase;
-    }
-    body.shell-korean .kr-note-body {
-      font-size: 12px; color: #3A3A3C; line-height: 1.45;
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    body.shell-korean .kr-sched-date {
-      font-size: 13px; font-weight: 600; color: #1C1C1E;
-      font-variant-numeric: tabular-nums;
-    }
-    body.shell-korean .kr-sched-hint {
-      font-size: 10px; color: #8E8E93;
-    }
-    /* 一起听 */
-    body.shell-korean .kr-desk-music {
-      display: flex; align-items: center; gap: 12px;
-      padding: 11px 13px; margin-bottom: 10px;
-      width: 100%; border: none; cursor: pointer; font-family: inherit;
-    }
-    body.shell-korean .kr-desk-music-ico {
-      width: 42px; height: 42px; border-radius: 50%;
-      background: #EFEFF1; overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
-      color: #8E8E93; flex-shrink: 0;
-    }
-    body.shell-korean .kr-desk-music-ico img { width: 100%; height: 100%; object-fit: cover; }
-    body.shell-korean .kr-desk-music-ico svg { width: 19px; height: 19px; }
-    body.shell-korean .kr-desk-music-meta {
-      flex: 1; min-width: 0; text-align: left;
-      display: flex; flex-direction: column; gap: 2px;
-    }
-    body.shell-korean .kr-desk-music-title {
-      font-size: 13px; font-weight: 600; color: #1C1C1E;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    body.shell-korean .kr-desk-music-sub {
-      font-size: 11px; color: #8E8E93;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    body.shell-korean .kr-desk-music-go {
-      color: #C7C7CC; font-size: 13px; flex-shrink: 0; padding-right: 2px;
+      color: #fff; font-weight: 700; background: #1C1C1E;
     }
 
 
@@ -5365,89 +5403,13 @@
     body.shell-korean .kr-home .home-track.page0 { transform: translateX(0) !important; }
     body.shell-korean .kr-home .home-track.page1 { transform: translateX(-50%) !important; }
     body.shell-korean .kr-home .home-track.page2 { transform: translateX(-50%) !important; }
-    body.shell-korean .kr-desk-grid-all {
-      grid-template-columns: repeat(6, 1fr) !important;
-      gap: 10px 6px !important;
-    }
-
-    body.shell-korean .kr-more-top-row {
+    /* 第二页 = 应用抽屉。以前是 6 列 + 9px 字，密到点不准；现在和第一页同一套
+       图标尺寸，4 列往下滚 —— 应用抽屉本来就该滚，不用再分第三页。 */
+    body.shell-korean .kr-drawer-grid {
       display: grid;
-      grid-template-columns: 1fr 1.2fr;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    body.shell-korean .kr-weather-card {
-      padding: 16px 14px;
-      border-radius: 18px;
-      background: #fff;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-    }
-    body.shell-korean .kr-weather-temp {
-      font-size: 32px; font-weight: 300; letter-spacing: -0.03em; color: #1C1C1E;
-    }
-    body.shell-korean .kr-weather-text {
-      font-size: 13px; color: #8E8E93; margin-top: 2px;
-    }
-    body.shell-korean .kr-weather-sub {
-      font-size: 11px; color: #C7C7CC; margin-top: 8px;
-    }
-    body.shell-korean .kr-status-card {
-      padding: 14px;
-      border-radius: 18px;
-      background: #fff;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-      text-align: left;
-      border: none;
-      font-family: inherit;
-      cursor: pointer;
-    }
-    body.shell-korean .kr-status-lab {
-      font-size: 10px; letter-spacing: 0.08em; color: #AEAEB2; text-transform: uppercase;
-    }
-    body.shell-korean .kr-status-body {
-      font-size: 13px; color: #1C1C1E; line-height: 1.4; margin: 8px 0;
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    body.shell-korean .kr-status-go {
-      font-size: 11px; color: #8E8E93;
-    }
-
-    /* 大时钟下双人头像框 */
-    body.shell-korean .kr-love-frame {
-      position: relative;
-      width: min(92%, 340px);
-      margin: 6px auto 14px;
-      aspect-ratio: 2.4 / 1;
-    }
-    body.shell-korean .kr-love-frame-bg {
-      width: 100%; height: 100%;
-      object-fit: contain;
-      display: block;
-      pointer-events: none;
-      user-select: none;
-    }
-    body.shell-korean .kr-love-slot {
-      position: absolute;
-      top: 52%;
-      width: 28%;
-      aspect-ratio: 1;
-      transform: translateY(-50%);
-      border-radius: 42% / 38%;
-      overflow: hidden;
-      background: #1a1a1a;
-    }
-    body.shell-korean .kr-love-slot.me { left: 10.5%; }
-    body.shell-korean .kr-love-slot.them { right: 10.5%; left: auto; }
-    body.shell-korean .kr-love-slot img {
-      width: 100%; height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    body.shell-korean .kr-love-fb {
-      width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-size: 18px; font-weight: 600;
-      background: #3a3a3c;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px 8px;
+      padding: 6px 4px 4px;
     }
 
     
