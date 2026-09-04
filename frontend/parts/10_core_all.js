@@ -3288,6 +3288,32 @@ function contrastFg(hex){
     return L > 0.62 ? "#3a2f2f" : "#ffffff";
   }catch(e){ return "#ffffff"; }
 }
+/** 三款日系血统的中文字体（OFL 开源，都是日文名作的简体中文化）。
+ *  值是 [显示名, 字体表 URL]。字体表走 jsdelivr 的 cn-fontsource 包。 */
+const CN_FONT_CDN = {
+  wenkai:  ["霞鹜文楷 Screen", "https://cdn.jsdelivr.net/npm/cn-fontsource-lxgw-wen-kai-screen/font.css"],
+  xiaolai: ["小赖",           "https://cdn.jsdelivr.net/npm/cn-fontsource-xiaolai-sc-regular/font.css"],
+  yozai:   ["悠哉",           "https://cdn.jsdelivr.net/npm/cn-fontsource-yozai-regular/font.css"],
+};
+
+/** 选中才去拉字体表，拉过就不再拉（按 id 认）。
+ *  三个包的 font.css 各有几百条 @font-face，全 @import 进来会拖慢每次冷启动，
+ *  而同一时刻只会用一个。woff2 本身按 unicode-range 分片，用到哪个字才下哪片。
+ *  没网时 link 加载失败，CSS 里的 fallback（PingFang/雅黑）照常兜住，不白屏。 */
+function ensureCnFont(key){
+  const it = CN_FONT_CDN[key];
+  if(!it) return;
+  const id = "cnfont-" + key;
+  try{
+    if(document.getElementById(id)) return;
+    const l = document.createElement("link");
+    l.id = id;
+    l.rel = "stylesheet";
+    l.href = it[1];
+    document.head.appendChild(l);
+  }catch(e){}
+}
+
 function applyThemeVars(){
   const t=T();
   const isBp = (state.uiShell||"")==="blueprint";
@@ -3384,11 +3410,13 @@ function applyThemeVars(){
   }
   document.body.style.background=t.bg;
   // 自定义字体
-  document.body.classList.remove("font-nail","font-angel","font-kitten","font-noto-kr","font-noto-sc");
+  document.body.classList.remove("font-nail","font-angel","font-kitten","font-noto-kr","font-noto-sc",
+    "font-wenkai","font-xiaolai","font-yozai");
   const uf = state.uiFont || "";
   if(uf==="nail") document.body.classList.add("font-nail");
   else if(uf==="angel") document.body.classList.add("font-angel");
   else if(uf==="kitten") document.body.classList.add("font-kitten");
+  else if(CN_FONT_CDN[uf]){ ensureCnFont(uf); document.body.classList.add("font-"+uf); }
   else if(uf==="noto-kr") document.body.classList.add("font-noto-kr");
   else if(uf==="noto-sc") document.body.classList.add("font-noto-sc");
   // UI 壳：经典 / 像素农场
@@ -4590,14 +4618,21 @@ function homeDots(active){
   </div>`;
 }
 
+/** 首页有几页。韩系是「桌面 + 四个主题页」共 5 页，其它壳仍是 3 页。
+ *  轨道宽度、每页宽度、拖拽跟手的步长、圆点数量全都从这一个数推出来——
+ *  以前 100/3 是写死的，韩系明明只有 2 页也按 1/3 算，拖的时候跟手是错的
+ *  （松手 snap 回正确位置，所以一直没被发现）。 */
+function homePageCount(){ return (state.uiShell === "korean") ? 5 : 3; }
+
 /** 点小圆点切页：与手势划页一致，只更新轨道位置与圆点高亮，不整页重渲染（保留滚动位置） */
 function setHomePage(n){
-  const maxP = (state.uiShell === "korean") ? 1 : 2;
+  const maxP = homePageCount() - 1;
   n = Math.max(0, Math.min(maxP, n|0));
   state.homePage = n;
   const track = document.getElementById("home-track");
   if(track){
-    track.classList.remove("page0","page1","page2");
+    // 0..7 全清一遍：切壳时页数会变，残留的 page3/page4 会把轨道钉在错的位置
+    for(let i = 0; i < 8; i++) track.classList.remove("page"+i);
     track.classList.add("page"+n);
     track.style.transform="";
   }
@@ -4627,12 +4662,154 @@ function renderHomeSwipe(){
 }
 
 /** 韩系桌面式主页：黑白灰毛玻璃组件 */
+const KR_PAGE_NAMES = ["桌面", "日子", "一起", "他", "机房"];
 function homeDotsKorean(active){
-  // 韩系两面：0 大时钟桌面 · 1 更多（原一起听页改版）
   return `<div class="swipe-dots kr-dots">
-    <div class="swipe-dot${active===0?" on":""}" onclick="setHomePage(0)" title="桌面"></div>
-    <div class="swipe-dot${active===1?" on":""}" onclick="setHomePage(1)" title="更多"></div>
+    ${KR_PAGE_NAMES.map((n, i) =>
+      `<div class="swipe-dot${active===i?" on":""}" onclick="setHomePage(${i})" title="${esc(n)}"></div>`
+    ).join("")}
   </div>`;
+}
+
+// ─── 桌面小组件的取数 ───────────────────────────────────────────────────────
+// 约定：读不到就回 null，调用处据此**整块不渲染** —— 那一格让给下一个组件。
+// 不留空卡、不写「暂无数据」：桌面上一块写着"暂无"的卡片比没有这块卡片更吵。
+// 每个都自带 try/catch —— 这几个函数跑在 render() 里，抛一个就是整页白屏。
+
+/** 最近的一个未来纪念日。calAllEvents() 已经把自动纪念日和手记事件合过了。 */
+function krWAnniv(){
+  try{
+    if(typeof calAllEvents !== "function") return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    let best = null, bestD = Infinity;
+    calAllEvents().forEach(e=>{
+      if(!e || !e.date || e.type !== "anniversary") return;
+      const d = new Date(e.date + "T00:00:00");
+      if(isNaN(d.getTime())) return;
+      const diff = Math.round((d - today) / 86400000);
+      if(diff >= 0 && diff < bestD){ bestD = diff; best = e; }
+    });
+    if(!best) return null;
+    const dt = new Date(best.date + "T00:00:00");
+    const wk = ["周日","周一","周二","周三","周四","周五","周六"][dt.getDay()];
+    return {
+      days: bestD,
+      title: best.title || "纪念日",
+      sub: `${dt.getMonth()+1}月${dt.getDate()}日 · ${wk}`,
+    };
+  }catch(e){ return null; }
+}
+
+/** 恋爱值。默认 50，所以这块一直在。 */
+function krWLove(){
+  try{
+    const v = (state.loveScore && state.loveScore.value != null) ? +state.loveScore.value : null;
+    if(v == null || !isFinite(v)) return null;
+    return { v: Math.max(0, Math.min(100, Math.round(v))) };
+  }catch(e){ return null; }
+}
+
+/** 钱包余额。钱包没初始化过就不显示（ensureWallet 还没跑过的老存档）。 */
+function krWWallet(){
+  try{
+    const w = state.wallet;
+    if(!w || typeof w.balance !== "number" || !isFinite(w.balance)) return null;
+    return {
+      v: Math.round(w.balance),
+      unit: (typeof walletUnit === "function") ? walletUnit() : (w.name || "小鱼干"),
+      sym: w.symbol || "",
+    };
+  }catch(e){ return null; }
+}
+
+/** 在读的书。没在读就退成书单条数；书单也空才整块不显示。 */
+function krWBook(){
+  try{
+    const r = state.readingNow;
+    if(r && r.title) return { title: r.title, sub: r.chapterTitle || "在读", reading: true };
+    const n = (state.books || []).length;
+    if(!n) return null;
+    return { title: n + " 本", sub: "书架", reading: false };
+  }catch(e){ return null; }
+}
+
+/** 一起看。 */
+function krWWatch(){
+  try{
+    const w = state.watchNow;
+    if(!w || !w.title) return null;
+    const t = +w.t || 0;
+    const hh = Math.floor(t/3600), mm = Math.floor((t%3600)/60), ss = Math.floor(t%60);
+    const pad = (x)=> String(x).padStart(2,"0");
+    return { title: w.title, sub: t > 0 ? `看到 ${pad(hh)}:${pad(mm)}:${pad(ss)}` : "在看" };
+  }catch(e){ return null; }
+}
+
+/** 身体六轴。没连 VPS 就整块不显示（missing 是数字才算连上，和 renderBody 同一个判据）。 */
+function krWSix(){
+  try{
+    const six = state.sixAxis;
+    if(!six || typeof six.missing !== "number") return null;
+    if(typeof SIX_AXIS_META === "undefined" || !SIX_AXIS_META.length) return null;
+    return SIX_AXIS_META.map(a=>({
+      name: a.name,
+      v: Math.max(0, Math.min(1, +six[a.key] || 0)),
+    }));
+  }catch(e){ return null; }
+}
+
+/** 他的日记：他主动开锁给她看的篇数。总篇数在 VPS，本地没有，所以不显示分母。 */
+function krWMcDiary(){
+  try{
+    const n = (state.mcUnlocked || []).length;
+    return { n: n, sub: n ? "他开锁给你看的" : "还全锁着" };
+  }catch(e){ return null; }
+}
+
+/** 对戏：当前在演的世界。没在戏里就不显示。 */
+function krWPr(){
+  try{
+    const a = (state.pr || {}).active;
+    if(!a) return null;
+    const world = a.world || "进行中";
+    const stages = Array.isArray(a.stages) ? a.stages : [];
+    const si = (typeof a.stageIdx === "number") ? a.stageIdx : -1;
+    const cur = (si >= 0 && stages[si]) ? (stages[si].name || stages[si].title || "") : "";
+    return {
+      title: world,
+      sub: si >= 0 ? `第 ${si+1} 阶段${cur ? " · " + cur : ""}` : "在演",
+    };
+  }catch(e){ return null; }
+}
+
+/** 记忆库：本地条数 + 上一轮自动沉淀的状态（__memNote 是那条闸门说明）。 */
+function krWMem(){
+  try{
+    const n = (state.memories || []).length;
+    const note = String(state.__memNote || "").trim();
+    return { n: n, sub: note ? note.slice(0, 14) : "本地" };
+  }catch(e){ return null; }
+}
+
+/** 备份：多久没备了。超过 14 天标红 —— 和 bpMeta 里蓝晒壳那盏灯同一个阈值。 */
+function krWBackup(){
+  try{
+    const at = (state.backupRemind || {}).lastBackupAt || 0;
+    if(!at) return { txt: "没备过", sub: "一次都没有", warn: true };
+    const d = Math.floor((Date.now() - at) / 86400000);
+    return {
+      txt: d <= 0 ? "今天" : d + " 天前",
+      sub: "上次备份",
+      warn: d > 14,
+    };
+  }catch(e){ return null; }
+}
+
+/** 牌室：三个房间是代码里的固定目录（BISCA_URLS），不是网络查来的桌数。 */
+function krWCards(){
+  try{
+    return { n: 3, sub: "牌室 · 大富豪 · 大富翁" };
+  }catch(e){ return null; }
 }
 
 /** 桌面的「本周」组件：周字母一行 + 日期一行，今天涂黑。
@@ -4791,16 +4968,28 @@ function renderHomeKorean(){
     {key:"sparkvault", icon:"vault", label:"火花"},
     {key:"pr", icon:"swords", label:"对戏"},
   ];
-  const seen = {};
-  const moreApps = allAppDefs.filter(it => {
-    if(deskKeys.has(it.key)) return false; // 与桌面重复的不放更多
-    if(seen[it.key]) return false;
-    seen[it.key] = true;
-    return true;
-  }).map(iconBtn).join("");
+  // 图标按主题分页，不是「桌面放不下的按原顺序倒进抽屉」。
+  // 日子（记录）／一起（玩）／他（里间）／机房（工具）—— 和蓝晒壳那四层楼同一套分法，
+  // 两个壳的心智模型一致，找东西不用重新学。
+  const KR_PAGE_KEYS = [
+    [], // page0 = 桌面，用上面的 deskAppDefs
+    ["duty","quest","wallet","coupon","album","diary","profile","love","notes","sayday","cabinets"],
+    ["cooking","menu","bisca_cards","flightchess","game","tavern","truthdare","divination","baby","shufang"],
+    ["body","dream","pr","roleplay","eatapple","wardrobe","captivity","branding","ntfy","savedchat"],
+    ["vps","usage","backup","mcphall","hisphone","project","workshop","cmdgame","htmlgame","sparkvault"],
+  ];
+  const byKey = {};
+  allAppDefs.forEach(it => { if(!byKey[it.key]) byKey[it.key] = it; });
+  const pageIcons = (n) => (KR_PAGE_KEYS[n] || [])
+    .map(k => byKey[k]).filter(Boolean).map(iconBtn).join("");
+
+  // 分组里漏掉的（以后往 allAppDefs 加了新功能但忘了登记进 KR_PAGE_KEYS）
+  // 一律兜到最后一页，不会凭空消失。
+  const placed = new Set([].concat(...KR_PAGE_KEYS).concat([...deskKeys]));
+  const orphanApps = allAppDefs.filter(it => !placed.has(it.key)).map(iconBtn).join("");
 
   // 打开主页默认桌面（page0）
-  if(state.homePage > 1) state.homePage = 0;
+  if(state.homePage > 4 || state.homePage < 0) state.homePage = 0;
 
   const weekCn = ["周日","周一","周二","周三","周四","周五","周六"][now.getDay()];
   const dateLine = `${now.getMonth()+1}月${now.getDate()}日 ${weekCn}`;
@@ -4844,23 +5033,130 @@ function renderHomeKorean(){
       </div>
     </div>`;
 
-  // Panel 1：应用抽屉。就是图标，不再放天气卡/近况卡/聊天预览
-  // ——底栏已经有「聊天」那一格了，预览卡是重复的一条路。
-  const more = `
+  // ── Panel 1–4：每页一组自己的小组件 + 本页的图标 ──────────────────────
+  // 四页的 2×2 主组件形态各不相同（大数字倒数 / 书封 / 六条横杠 / 大数字），
+  // 翻页时变的是形状不只是内容 —— 这是「像手机桌面」和「四页一样的图标格」的区别。
+  // 每块都可能是 null（读不到），null 就整块不渲染，后面的组件靠 grid 自动流顶上来。
+  const krW = (cls, sub, inner) => sub
+    ? `<button type="button" class="kr-w ${cls} feat-card" data-sub="${escAttr(sub)}">${inner}</button>`
+    : `<div class="kr-w ${cls}">${inner}</div>`;
+  const krLab = (t) => `<span class="kr-w-lab">${esc(t)}</span>`;
+  // 读不到数据时的占位。位置是固定的 —— 组件在哪一格是记忆，有没有数据是状态，
+  // 两件事分开（和蓝晒壳的房间/灯是同一个道理）。破折号占住数字的位置，
+  // 底下一句空状态说明去哪儿填，卡片照样点得进对应功能页。
+  const krWNull = (cls, sub, lab, hint) => krW(cls, sub,
+    `${krLab(lab)}<span class="kr-w-big kr-w-dash">—</span>
+     <span class="kr-w-sub">${esc(hint)}</span>`);
+
+  // 第 2 页 · 日子
+  // loveW 不叫 love：函数开头已经有个 love（state.loveScore 的原始值）
+  const anniv = krWAnniv(), loveW = krWLove(), wal = krWWallet();
+  const wgrid2 = [
+    anniv ? krW("kr-w-sq", "calendar",
+      `${krLab("纪念日")}
+       ${anniv.days === 0
+          ? `<span class="kr-w-big">今天</span>`
+          : `<span class="kr-w-big">${anniv.days}<small>天后</small></span>`}
+       <span class="kr-w-name">${esc(anniv.title)}</span>
+       <span class="kr-w-sub">${esc(anniv.sub)}</span>`)
+      : krWNull("kr-w-sq", "calendar", "纪念日", "还没记过日子"),
+    loveW ? krW("kr-w-half", "love",
+      `${krLab("恋爱值")}
+       <span class="kr-w-big">${loveW.v}<small>/100</small></span>
+       <span class="kr-meter"><i style="width:${loveW.v}%"></i></span>`)
+      : krWNull("kr-w-half", "love", "恋爱值", "还没开始记"),
+    wal ? krW("kr-w-half", "wallet",
+      `${krLab(wal.unit)}
+       <span class="kr-w-big">${wal.v}</span>`)
+      : krWNull("kr-w-half", "wallet", "钱包", "还没开钱包"),
+  ].join("");
+
+  // 第 3 页 · 一起
+  const bk = krWBook(), wt = krWWatch(), cd = krWCards();
+  const wgrid3 = [
+    // 书这块空态保留书封的形状，只是灰的 —— 空着也还是一本书立在那儿
+    bk ? krW("kr-w-sq kr-w-book", "read",
+      `<span class="kr-bk-face"><b></b></span>
+       <span class="kr-wp-cap">${esc(bk.title)}<em>${esc(bk.sub)}</em></span>`)
+      : krW("kr-w-sq kr-w-book kr-w-book-empty", "read",
+      `<span class="kr-bk-face"><b></b></span>
+       <span class="kr-wp-cap">书架<em>还是空的</em></span>`),
+    wt ? krW("kr-w-half", "watch",
+      `${krLab("一起看")}
+       <span class="kr-w-name kr-w-name-top">${esc(wt.title)}</span>
+       <span class="kr-w-sub">${esc(wt.sub)}</span>`)
+      : krWNull("kr-w-half", "watch", "一起看", "没在看"),
+    cd ? krW("kr-w-half", "bisca_cards",
+      `${krLab("牌室")}
+       <span class="kr-w-big">${cd.n}<small>个房间</small></span>
+       <span class="kr-w-sub">${esc(cd.sub)}</span>`)
+      : krWNull("kr-w-half", "bisca_cards", "牌室", "连不上"),
+  ].join("");
+
+  // 第 4 页 · 他
+  const six = krWSix(), mcd = krWMcDiary(), pra = krWPr();
+  const wgrid4 = [
+    // 六轴没连时六条杠还在，只是都是空的 —— 形状本身就是信息
+    six ? krW("kr-w-sq", "body",
+      `${krLab("身体")}
+       <span class="kr-axes">${six.map(a=>`
+         <span class="kr-ax"><span>${esc(a.name)}</span><i><b style="width:${Math.round(a.v*100)}%"></b></i></span>
+       `).join("")}</span>`)
+      : krW("kr-w-sq", "body",
+      `${krLab("身体")}
+       <span class="kr-axes">${(typeof SIX_AXIS_META !== "undefined" ? SIX_AXIS_META : []).map(a=>`
+         <span class="kr-ax"><span>${esc(a.name)}</span><i></i></span>
+       `).join("")}</span>
+       <span class="kr-w-sub">六轴未连</span>`),
+    mcd ? krW("kr-w-half", "mdiary",
+      `${krLab("他的日记")}
+       <span class="kr-w-big">${mcd.n}<small>篇解锁</small></span>
+       <span class="kr-w-sub">${esc(mcd.sub)}</span>`)
+      : krWNull("kr-w-half", "mdiary", "他的日记", "还全锁着"),
+    pra ? krW("kr-w-half", "pr",
+      `${krLab("对戏")}
+       <span class="kr-w-name kr-w-name-top">${esc(pra.title)}</span>
+       <span class="kr-w-sub">${esc(pra.sub)}</span>`)
+      : krWNull("kr-w-half", "pr", "对戏", "没在戏里"),
+  ].join("");
+
+  // 第 5 页 · 机房
+  const mem = krWMem(), bak = krWBackup();
+  const sixOn = !!(state.sixAxis && typeof state.sixAxis.missing === "number");
+  const wgrid5 = [
+    mem ? krW("kr-w-sq", "prompts",
+      `${krLab("记忆库")}
+       <span class="kr-w-big">${mem.n}<small>条</small></span>
+       <span class="kr-w-sub">${esc(mem.sub)}</span>`)
+      : krWNull("kr-w-sq", "prompts", "记忆库", "还没沉淀过"),
+    bak ? krW("kr-w-half" + (bak.warn ? " kr-w-warn" : ""), "backup",
+      `${krLab("备份")}
+       <span class="kr-w-name kr-w-name-top">${esc(bak.txt)}</span>
+       <span class="kr-w-sub">${esc(bak.sub)}</span>`)
+      : krWNull("kr-w-half", "backup", "备份", "没备过"),
+    krW("kr-w-half", "vps",
+      `${krLab("六轴")}
+       <span class="kr-w-name kr-w-name-top">${sixOn ? "在跑" : "未连"}</span>
+       <span class="kr-w-sub">${sixOn ? "VPS 欲望引擎" : "点进去看原因"}</span>`),
+  ].join("");
+
+  const krPage = (n, wgrid) => `
     <div class="home-panel kr-panel">
-      <div class="kr-home-scroll">
-        <div class="kr-desk-grid kr-drawer-grid">${moreApps}</div>
-        ${homeDotsKorean(1)}
+      <div class="kr-home-scroll kr-desk-scroll">
+        <div class="kr-wgrid">${wgrid}</div>
+        <div class="kr-desk-grid">${pageIcons(n)}${n === 4 ? orphanApps : ""}</div>
+        ${homeDotsKorean(n)}
       </div>
     </div>`;
 
-  // 强制默认展示桌面（大时钟）
-  const pageIdx = state.homePage === 1 ? 1 : 0;
-  const p = pageIdx === 1 ? "page1" : "page0";
+  const p = "page" + (state.homePage | 0);
   return `<div class="home-swipe-wrap kr-home" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
       ${desk}
-      ${more}
+      ${krPage(1, wgrid2)}
+      ${krPage(2, wgrid3)}
+      ${krPage(3, wgrid4)}
+      ${krPage(4, wgrid5)}
     </div>
   </div>`;
 }
@@ -14596,7 +14892,7 @@ async function callSttUpload(blob){
 async function callHoldStart(){
   const s = ensureCallSession();
   callCancelLinger(); // 赖床窗：按住说话即留住
-  if(s.phase!=="active" || s.loading || s.muted) return;
+  if(s.phase!=="active" || s.loading || s.muted){ s.holdPending = false; return; }
   if(__callMediaRecorder && __callMediaRecorder.state==="recording") return;
   try{
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -14609,7 +14905,11 @@ async function callHoldStart(){
     s.recording = true;
     s.sttError = "";
     callHoldPaint();
+    // 开麦是异步的（几十到几百毫秒）。如果这期间手已经松开了、而且是「按住」不是「点一下」，
+    // 那一下的 callHoldEnd 当时没东西可停，只留下这个标记 —— 现在补收。
+    if(s.holdWantEnd){ s.holdWantEnd = false; await callHoldEnd(); }
   }catch(e){
+    s.holdPending = false; s.holdLocked = false; s.holdWantEnd = false;
     s.sttError = "麦克风失败："+e.message;
     render();
   }
@@ -14631,6 +14931,8 @@ async function callHoldEnd(){
   const s = ensureCallSession();
   s.recording = false;
   s.holdLocked = false;
+  s.holdPending = false;
+  s.holdWantEnd = false;
   callHoldPaint();
   if(!__callMediaRecorder) return;
   const rec = __callMediaRecorder;
@@ -20676,6 +20978,11 @@ function renderTheme(){
         <button type="button" class="font-chip${state.uiFont==="noto-kr"?" active":""}" data-ui-font="noto-kr">Noto韩</button>
         <button type="button" class="font-chip${state.uiFont==="noto-sc"?" active":""}" data-ui-font="noto-sc">Noto中</button>
       </div>
+      <div class="font-switch-row" style="margin-top:8px">
+        <button type="button" class="font-chip${state.uiFont==="wenkai"?" active":""}" data-ui-font="wenkai" style="font-family:'LXGW WenKai Screen',serif">霞鹜文楷</button>
+        <button type="button" class="font-chip${state.uiFont==="xiaolai"?" active":""}" data-ui-font="xiaolai" style="font-family:'Xiaolai SC',sans-serif">小赖</button>
+        <button type="button" class="font-chip${state.uiFont==="yozai"?" active":""}" data-ui-font="yozai" style="font-family:'Yozai',sans-serif">悠哉</button>
+      </div>
     </div>
     <div style="margin-top:24px">
       <div class="theme-group-label">预览</div>
@@ -25181,6 +25488,12 @@ reader.readAsArrayBuffer(f);
 
   // 说话按钮：按住 = 对讲机（松手就发）；快点一下 = 免提锁定（再点一下才结束）。
   // 以前只有「按住」，长句子要一直摁着手，很难受。
+  //
+  // 这里的判定**不能看 s.recording**：callHoldStart() 是 async，`recording = true`
+  // 在 await getUserMedia() 之后才置位，而开麦要几十到几百毫秒。快点一下时松手那一刻
+  // recording 还是 false，旧代码 `if(!s.recording) return` 直接跳出 —— holdLocked
+  // 永远设不上，免提从来没生效过，只有按住超过 TAP_MS 才走得通。
+  // 改成看 holdPending：按下那一刻**同步**置位，不等麦克风。
   const holdBtn = document.getElementById("call-hold");
   if(holdBtn){
     const TAP_MS = 350; // 低于这个时长算「点一下」
@@ -25189,28 +25502,42 @@ reader.readAsArrayBuffer(f);
       e.preventDefault();
       const s = ensureCallSession();
       if(s.holdLocked){ callHoldEnd(); return; }  // 锁定中，这一下是「结束并发送」
+      if(s.holdPending) return;                   // 已经按下了，忽略重复事件
       downAt = Date.now();
+      s.holdPending = true;
+      s.holdWantEnd = false;
       callHoldStart();
     };
     const end = e=>{
       e.preventDefault();
       const s = ensureCallSession();
-      if(!s.recording) return;
+      if(!s.holdPending) return;   // 这一下不是我们发起的（比如锁定中那次按下已经处理完了）
       if(Date.now() - downAt < TAP_MS){
         // 快点一下：留在录音状态，松手也继续录
         s.holdLocked = true;
         callHoldPaint();
         return;
       }
-      callHoldEnd();
+      s.holdPending = false;
+      // 麦克风可能还没开好 —— 那就留个标记，callHoldStart 开好后立刻收
+      if(s.recording) callHoldEnd();
+      else s.holdWantEnd = true;
+    };
+    // 取消/移开：不做点按判定，直接收掉（锁定中不受影响）
+    const abort = ()=>{
+      const s = ensureCallSession();
+      if(s.holdLocked || !s.holdPending) return;
+      s.holdPending = false;
+      if(s.recording) callHoldEnd();
+      else s.holdWantEnd = true;
     };
     holdBtn.ontouchstart = start;
     holdBtn.ontouchend = end;
-    holdBtn.ontouchcancel = e=>{ e.preventDefault(); const s=ensureCallSession(); if(s.recording && !s.holdLocked) callHoldEnd(); };
+    holdBtn.ontouchcancel = e=>{ e.preventDefault(); abort(); };
     holdBtn.onmousedown = start;
     holdBtn.onmouseup = end;
     // 免提锁定时把指针移开不该中断录音
-    holdBtn.onmouseleave = ()=>{ const s=ensureCallSession(); if(s.recording && !s.holdLocked) callHoldEnd(); };
+    holdBtn.onmouseleave = abort;
     callHoldPaint();
   }
   
@@ -25532,11 +25859,13 @@ function _swipeDoMove(curX, curY){
   const wrap = document.getElementById("home-swipe");
   const track = document.getElementById("home-track");
   if(!wrap || !track) return false;
-  // 三页：每页占 track 的 1/3，对应容器宽度 100% → track 位移 -n * 33.333%
+  // 每页占 track 的 1/n，对应容器宽度 100% → track 位移 -homePage * (100/n)
+  const n = homePageCount();
+  const step = 100 / n;
   const pageW = wrap.offsetWidth || 1;
-  const base = -state.homePage * (100/3);
-  const pct = base + (w.dx / pageW) * (100/3);
-  const clamped = Math.max(-200/3, Math.min(0, pct));
+  const base = -state.homePage * step;
+  const pct = base + (w.dx / pageW) * step;
+  const clamped = Math.max(-(n - 1) * step, Math.min(0, pct));
   track.style.transform=`translateX(${clamped}%)`;
   return true;
 }
@@ -25547,10 +25876,10 @@ function _swipeCommit(){
   const track = document.getElementById("home-track");
   if(!track) return;
   track.style.transition="";
-  const maxP = (state.uiShell === "korean") ? 1 : 2;
+  const maxP = homePageCount() - 1;
   if(w.dx < -50) state.homePage = Math.min(maxP, state.homePage + 1);
   else if(w.dx > 50) state.homePage = Math.max(0, state.homePage - 1);
-  track.classList.remove("page0","page1","page2");
+  for(let i = 0; i < 8; i++) track.classList.remove("page"+i);
   track.classList.add("page"+state.homePage);
   track.style.transform="";
   updateHomeDots();

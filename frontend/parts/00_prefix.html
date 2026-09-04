@@ -35,6 +35,19 @@
     body.font-noto-sc, body.font-noto-sc * { font-family: "Noto Sans SC", "Noto Sans KR", -apple-system, sans-serif !important; }
     body.font-kitten { font-family: 'NaiKitten', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
 
+    /* 三款日系血统的中文字体（都是 OFL 开源，日文名作的简体中文化）：
+         霞鹜文楷 Screen ← Klee One，屏幕加粗版（原版 Regular 在安卓上偏细）
+         小赖 ← 濑户字体，44246 字，三个里字最全
+         悠哉 ← Y.OzFont
+       字体表走 jsdelivr 的 cn-fontsource 包，**选中时才由 ensureCnFont() 插 link**——
+       每个包的 font.css 有几百条 @font-face，三个一起 @import 会拖慢每次冷启动，
+       而她同时只可能用一个。woff2 本身按 unicode-range 分片，用到哪个字才下哪片。
+       故意不写 `body.font-xxx *`：那样会连书房的批注手写体、蓝晒壳的等宽字一起盖掉。
+       只设 body 让子元素自己继承，自带字体的地方保持原样。 */
+    body.font-wenkai  { font-family: 'LXGW WenKai Screen', 'PingFang SC', 'Microsoft YaHei', serif; }
+    body.font-xiaolai { font-family: 'Xiaolai SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    body.font-yozai   { font-family: 'Yozai', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+
     .font-switch-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
     .font-chip {
       border: 1px solid var(--border); background: var(--card); color: var(--sub);
@@ -1246,6 +1259,28 @@
     #app.ui-glass-fog .duty-day.done,
     #app.ui-glass-water .duty-day.done {
       background: color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.35)) !important;
+    }
+
+    /* ── 玻璃的例外：思考链 / 收藏记录 ────────────────────────────────────
+       上面那条「直接换掉 --card」是按卡片设计的：卡片底下是壁纸，透一点出材质。
+       但这两处底下压着聊天正文，半透明又没有 backdrop-filter（有意不加，见上），
+       于是下层的字直接透上来和上层的字叠在一起 —— 不是材质，是没法读。
+       浮层和长文区一律要实底。改法是在容器自己身上把变量改回不透明：
+       内部所有 var(--card) / var(--border) 一起跟着回来，不用逐条属性去改，
+       以后这两块加新元素也不会再漏。（--card: var(--card-opaque) 是两个不同的
+       变量名，不构成上面注释里说的那种自引用循环。） */
+    #app.ui-glass-fog .think-modal,
+    #app.ui-glass-water .think-modal,
+    #app.ui-glass-fog .saved-modal,
+    #app.ui-glass-water .saved-modal,
+    #app.ui-glass-fog .saved-item,
+    #app.ui-glass-water .saved-item,
+    #app.ui-glass-fog .saved-search-box,
+    #app.ui-glass-water .saved-search-box,
+    #app.ui-glass-fog .msg-bar button,
+    #app.ui-glass-water .msg-bar button {
+      --card: var(--card-opaque);
+      --border: var(--border-opaque);
     }
 
     /* ── 玻璃气泡时，顶栏 / 底栏 / 输入条跟着变玻璃 ──────────────────────────
@@ -5367,6 +5402,97 @@
       color: #fff; font-weight: 700; background: #1C1C1E;
     }
 
+    /* ── 第 2–5 页的组件 ────────────────────────────────────────────────
+       和第一页共用 .kr-wgrid / .kr-w 的底子（白卡片、22 圆角、同一套阴影），
+       只多两种尺寸壳：2×2 主组件 kr-w-sq、2×1 副组件 kr-w-half。
+       .kr-w 自己 padding:0（第一页那几个是绝对定位的），这里要自己给回来。 */
+    body.shell-korean .kr-w-sq,
+    body.shell-korean .kr-w-half {
+      grid-column: span 2;
+      padding: 13px 14px;
+      display: flex; flex-direction: column; align-items: flex-start;
+      text-align: left;
+    }
+    body.shell-korean .kr-w-sq { grid-row: span 2; }
+
+    /* 标签在顶、数字贴底：margin-bottom:auto 把后面所有东西推到卡片下沿，
+       这样 2×2 和 2×1 混排时基线是齐的。 */
+    body.shell-korean .kr-w-lab {
+      font-size: 10px; color: #B4B4BA; letter-spacing: 0.08em;
+      margin-bottom: auto;
+    }
+    body.shell-korean .kr-w-big {
+      font-size: clamp(30px, 8.5vw, 38px); font-weight: 200; letter-spacing: -0.04em;
+      line-height: 1; color: #1C1C1E; font-variant-numeric: tabular-nums;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.shell-korean .kr-w-big small {
+      font-size: 11px; font-weight: 400; letter-spacing: 0;
+      color: #8E8E93; margin-left: 3px;
+    }
+    body.shell-korean .kr-w-name {
+      font-size: 12px; font-weight: 600; color: #1C1C1E; margin-top: 6px;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* 没有大数字的卡（一起看／对戏／备份）：标题就是主角，不用再空一行 */
+    body.shell-korean .kr-w-name-top { margin-top: 0; font-size: 13px; }
+    body.shell-korean .kr-w-sub {
+      font-size: 10px; color: #8E8E93; margin-top: 4px;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.shell-korean .kr-w-warn .kr-w-name-top { color: #B4644F; }
+    /* 读不到数据时的破折号：占住数字的位置，让组件的位置固定下来 */
+    body.shell-korean .kr-w-dash { color: #D1D1D6; }
+
+    /* 恋爱值那条 */
+    body.shell-korean .kr-meter {
+      width: 100%; height: 3px; border-radius: 2px;
+      background: #EDEDF0; overflow: hidden; margin-top: 7px; display: block;
+    }
+    body.shell-korean .kr-meter i {
+      display: block; height: 100%; border-radius: 2px; background: #A9707C;
+    }
+
+    /* 六轴：六条横杠。数值条本身就是形状，不写数字也不写「思念 0.62」 */
+    body.shell-korean .kr-axes {
+      display: flex; flex-direction: column; gap: 5px;
+      width: 100%; margin-top: 8px;
+    }
+    body.shell-korean .kr-ax { display: flex; align-items: center; gap: 6px; width: 100%; }
+    body.shell-korean .kr-ax > span {
+      font-size: 9px; color: #8E8E93; width: 30px; flex-shrink: 0;
+    }
+    body.shell-korean .kr-ax > i {
+      flex: 1; height: 3px; border-radius: 2px; background: #EDEDF0;
+      display: block; position: relative; overflow: hidden; min-width: 0;
+    }
+    body.shell-korean .kr-ax > i > b {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      border-radius: 2px; background: #7A6E96; display: block;
+    }
+
+    /* 在读的书：2×2 里立一本书，底下压书名 —— 和合照那块是同一个版式 */
+    body.shell-korean .kr-w-book { padding: 0; }
+    body.shell-korean .kr-bk-face {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(145deg, #E7DFD3, #CFC3B4);
+    }
+    body.shell-korean .kr-bk-face b {
+      width: clamp(44px, 13vw, 58px); height: clamp(60px, 18vw, 80px);
+      border-radius: 3px 7px 7px 3px; display: block;
+      background: linear-gradient(120deg, #A9707C, #8C5C68);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.16);
+    }
+    /* 书架空着的时候书还立在那儿，只是褪成灰的 */
+    body.shell-korean .kr-w-book-empty .kr-bk-face {
+      background: linear-gradient(145deg, #EFEFF1, #E2E2E6);
+    }
+    body.shell-korean .kr-w-book-empty .kr-bk-face b {
+      background: linear-gradient(120deg, #DCDCE1, #CACAD0);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+    }
+
 
     /* 工作间 */
     .ws-page { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 0 !important; }
@@ -5393,26 +5519,21 @@
     .ws-input-bar button { flex-shrink: 0; padding: 0 16px; border-radius: 12px; }
 
 
-    /* 韩系主页仅两面：桌面 | 空间 */
+    /* 韩系主页五面：桌面 | 日子 | 一起 | 他 | 机房。
+       每页 20%，轨道 500%。步长和 JS 的 homePageCount() 是同一个数，改页数要一起改。 */
     body.shell-korean .kr-home .home-track {
-      width: 200% !important;
+      width: 500% !important;
     }
     body.shell-korean .kr-home .home-panel {
-      width: 50% !important;
+      width: 20% !important;
     }
     body.shell-korean .kr-home .home-track.page0 { transform: translateX(0) !important; }
-    body.shell-korean .kr-home .home-track.page1 { transform: translateX(-50%) !important; }
-    body.shell-korean .kr-home .home-track.page2 { transform: translateX(-50%) !important; }
-    /* 第二页 = 应用抽屉。以前是 6 列 + 9px 字，密到点不准；现在和第一页同一套
-       图标尺寸，4 列往下滚 —— 应用抽屉本来就该滚，不用再分第三页。 */
-    body.shell-korean .kr-drawer-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 18px 8px;
-      padding: 6px 4px 4px;
-    }
+    body.shell-korean .kr-home .home-track.page1 { transform: translateX(-20%) !important; }
+    body.shell-korean .kr-home .home-track.page2 { transform: translateX(-40%) !important; }
+    body.shell-korean .kr-home .home-track.page3 { transform: translateX(-60%) !important; }
+    body.shell-korean .kr-home .home-track.page4 { transform: translateX(-80%) !important; }
 
-    
+
     /* ========== Kakao 图气泡皮肤 ==========
        水色(suisei) 的四张图是「云朵铺满整张画布」，9-slice（border-image）切得干净，保留原做法。
        轻松熊/鱼饼熊/彩虹熊 的素材不是 9-patch：本体是圆形/圆角块 + 挂件(熊)蹲在角上，
