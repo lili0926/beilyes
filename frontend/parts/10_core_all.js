@@ -9583,6 +9583,84 @@ async function memPushToCloud(list){
   if(failed) window.__memPushErr = `${failed} 条没上去：${lastErr}`;
   return n;
 }
+/** 正文归一化：只用来比对「云端有没有这条」，不改存下去的内容 */
+function _memNormText(s){ return String(s||"").replace(/\s+/g," ").trim(); }
+
+/** 全量备份：把本地记忆里云端还没有的那些一条条补上去。
+ *
+ * 为什么不复用 memPushToCloud：那个有 `slice(0, 30)` 上限，是给「刚提炼出来的一小批」用的，
+ * 一千多条的历史补传会被它默默截成 30 条。
+ *
+ * **去重靠正文比对**：服务端 `/add` 不查重（save_memory 直接写），`/memories` 也不回 id ——
+ * 所以先把云端那份整个拉下来做成集合，再挑差集。因此**重跑是安全的**：
+ * 已经上去的会被跳过，中途断了再点一次就接着传。
+ *
+ * 进度不走 render()：一千多条要整页重绘一千多次，手机直接跪。只改那一行文本。 */
+async function memCloudBackupAll(){
+  const B = state.__memBackup || (state.__memBackup = {});
+  if(B.running){ B.stop = true; return; }   // 正在跑时再点一次 = 停下
+  if(!memRemoteOn()){
+    state.__memNote = { text: (state.memRemote||{}).enabled===false
+      ? "云端开关是关的，先打开它" : "没配置云端地址（设置 → VPS 那格是空的）" };
+    render(); return;
+  }
+  Object.assign(B, { running:true, stop:false, ok:0, fail:0, skip:0, done:0, total:0, err:"", text:"" });
+  render();
+  const say = (t)=>{
+    B.text = t;
+    const el = document.getElementById("mem-backup-note");
+    if(el) el.textContent = t;
+  };
+  try{
+    say("正在读云端已有的…");
+    const res = await memRemoteFetch("/memories");
+    if(!res || !Array.isArray(res.memories)) throw new Error(window.__memCloudErr || "云端列表读不到");
+    const have = new Set(res.memories.map(m=>_memNormText(m && m.content)));
+    const todo = [];
+    (state.memories||[]).forEach(m=>{
+      const t = _memNormText(m && m.content);
+      if(!t) return;
+      if(have.has(t)) B.skip++; else todo.push(m);
+    });
+    B.total = todo.length;
+    if(!todo.length){
+      state.__memNote = { text: `云端已经有全部 ${res.total} 条，没有要补的` };
+      return;
+    }
+    say(`要补 ${todo.length} 条…`);
+    let miss = 0, lastErr = "";   // 连着失败就停，别白刷几百次
+    for(const m of todo){
+      if(B.stop){ B.err = "手动停了"; break; }
+      const r = await memRemotePost("/add", {
+        content: String(m.content).trim(),
+        type: _layerToMemType(m.layer),
+        importance: (m.importance>=8) ? "high" : ((m.importance<=3) ? "low" : "medium"),
+      });
+      B.done++;
+      if(r && r.ok){ B.ok++; miss = 0; }
+      else{
+        B.fail++; miss++;
+        // 原因当场记下来：__memCloudErr 是全局的，memRemoteRefresh 成功一次就会把它清空
+        lastErr = window.__memCloudErr || lastErr;
+        if(miss >= 5){ B.err = "连着 5 条没上去（" + (lastErr||"原因不明") + "），先停了"; break; }
+      }
+      if(B.done % 5 === 0 || B.done === B.total) say(`备份中 ${B.done}/${B.total}…`);
+    }
+    state.__memNote = { text:
+      `备份完成：上传 ${B.ok} 条` +
+      (B.skip ? `，云端已有 ${B.skip} 条跳过` : "") +
+      (B.fail ? `，${B.fail} 条失败` : "") +
+      (B.err ? `（${B.err}，再点一次可接着传）` : "") };
+  }catch(e){
+    state.__memNote = { text: "备份失败：" + String((e&&e.message)||e).slice(0,120) };
+  }finally{
+    B.running = false; B.text = "";
+    state.memCloudCheckedAt = 0;   // 绕开 30s 节流，立刻把云端计数刷新成新的
+    try{ if(typeof memRemoteRefresh==="function") memRemoteRefresh(); }catch(_){}
+    render();
+  }
+}
+
 function _memTypeToLayer(type){
   if(type==="promise") return "handoff";   // 承诺/约定 → 待办
   if(type==="preference") return "daily";  // 偏好 → 日常
@@ -20676,9 +20754,11 @@ function renderMemory(){
           ${state.memMergeLoading?"整理中...":'<i data-lucide="message-circle"></i> 从聊天整理'}
         </button>
         <button id="mem-auto-now" class="btn-ghost">${state.memAutoRunning?"沉淀中…":"立刻沉淀"}</button>
+        ${(()=>{const B=state.__memBackup||{};return `<button id="mem-cloud-backup" class="btn-ghost">${B.running?`停止（${B.done}/${B.total||"…"}）`:"☁️ 全部备份到云端"}</button>`;})()}
         ${selN>=2?`<button id="mem-merge" class="btn-ghost">合并选中(${selN})</button>`:""}
         <button id="mem-add-toggle" class="btn-accent">+ 添加</button>
       </div>
+      ${(state.__memBackup&&state.__memBackup.running)?`<div id="mem-backup-note" style="font-size:11px;color:var(--sub);margin-top:6px">${esc(state.__memBackup.text||"")}</div>`:""}
     </div>
     <div class="filter-row">
       ${layers.map(l=>`<button class="filter-chip${state.memFilter===l?" active":""}" data-mem-filter="${l}">${l==="all"?"全部":(LAYER_LABELS[l]||l)}</button>`).join("")}
@@ -21803,6 +21883,13 @@ if(!window.__mpDelegated){
       if(raw.closest && raw.closest("#mem-auto-now")){
         e.preventDefault(); e.stopImmediatePropagation();
         if(typeof memAutoIntegrate==="function") memAutoIntegrate({ force:true });
+        return;
+      }
+      // 记忆库「全部备份到云端」：一千多条的历史补传，跑起来要好几分钟，
+      // 中途再点一次就是停。同样接在兜底委托里
+      if(raw.closest && raw.closest("#mem-cloud-backup")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof memCloudBackupAll==="function") memCloudBackupAll();
         return;
       }
       // 蓝晒壳：换楼层 / 平面上点房间 / 中庭进聊天。
