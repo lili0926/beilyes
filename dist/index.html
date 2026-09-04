@@ -8369,7 +8369,7 @@ const state = {
   // music
   musicConfig: LS.get("musicConfig", {
     baseUrl: "http://115.29.237.172:9090",
-    token: "898a3f1256966ed013351feaadb3532892a67eec90d63bad603d906af7ada0de",
+    token: "",
     source: "netease", // netease | spotify
     // gateway = 自建 /music/* 网关；duetto = Duetto /api/ncm/*（官方可扫码）
     backend: "auto", // auto | gateway | duetto
@@ -8395,7 +8395,7 @@ const state = {
   musicBrowseTitle: "",  // 当前浏览列表标题（歌单名/每日推荐…）
   musicLoading: false,
   // screen time / app usage (VPS)
-  usageConfig: LS.get("usageConfig", { baseUrl: "http://115.29.237.172:9090", token: "898a3f1256966ed013351feaadb3532892a67eec90d63bad603d906af7ada0de" }),
+  usageConfig: LS.get("usageConfig", { baseUrl: "http://115.29.237.172:9090", token: "" }),
   usageToday: LS.get("usageToday", null), // {date, total_minutes, apps:[], updated_at, ...}
   usageDays: [],
   usageLoading: false,
@@ -8406,7 +8406,8 @@ const state = {
   // todayOutfit: { top:id|null, bottom, shoes, underwear, accessories:[id,id,id] }
   todayOutfit: LS.get("todayOutfit", { top:null, bottom:null, shoes:null, underwear:null, accessories:[] }),
   // 主动消息（本地触发 + 可选 VPS 拉取）
-  proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "Vhr48f7FgU3mZ9XS", pollMin: 15 }),
+  // token 一律空：仓库是 public，默认值里写 token 等于公开发布。去设置 → VPS 填一次。
+  proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
   guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 3 }),
@@ -8499,7 +8500,7 @@ const state = {
 
   // 电话（Callhome 风格 · 文字通话 + 可选 VPS）
   callConfig: LS.get("callConfig", {
-    baseUrl: "http://115.29.237.172:9090", token: "Vhr48f7FgU3mZ9XS", dnd: false,
+    baseUrl: "http://115.29.237.172:9090", token: "", dnd: false,
     // AIcall 语音网关（WebSocket/HTTP，本地局域网）；来电轮询走上面的 baseUrl(VPS)
     wsUrl: "ws://192.168.101.1:8765",
     httpUrl: "http://192.168.101.1:8080",
@@ -21840,7 +21841,33 @@ function renderVps(){
   const c = state.callConfig || {};
   return `<div class="page">
     ${subHeader("VPS")}
-    <button type="button" id="vps-quickfill" class="btn-accent" style="width:100%;padding:12px;margin-bottom:14px"><i data-lucide="zap"></i> 一键填入我的 VPS（统一网关）</button>
+    <button type="button" id="vps-quickfill" class="btn-accent" style="width:100%;padding:12px;margin-bottom:10px"><i data-lucide="zap"></i> 一键填入我的 VPS（只填地址）</button>
+    ${(()=>{
+      const gwOk = !!((p.token||"").trim() || (c.token||"").trim());
+      const muOk = !!((m.token||"").trim() || (u.token||"").trim());
+      const row = (id, ok, label, hint) => `
+        <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <span class="setting-label" style="display:flex;align-items:center;gap:6px">
+            <i data-lucide="${ok?"check-circle-2":"alert-circle"}" style="width:14px;height:14px"></i>
+            ${label} ${ok?"已填":"没填"}
+          </span>
+          <div style="display:flex;gap:8px">
+            <input id="${id}-inp" type="password" placeholder="${hint}" style="flex:1"/>
+            <button type="button" id="${id}-fill" class="btn-ghost" style="flex-shrink:0;padding:8px 14px">填入</button>
+          </div>
+        </div>`;
+      return `<div class="section">
+        <div class="section-title"><i data-lucide="key-round"></i> 网关 Token</div>
+        <div class="section-body">
+          ${row("vps-token", gwOk, "网关（电话 / 主动消息 / 转写 / 后台模型）", "粘贴网关 Token")}
+          ${row("vps-music-token", muOk, "音乐 / 屏幕时间", "粘贴音乐 Token")}
+          <div class="setting-row" style="font-size:11px;color:var(--sub);line-height:1.7;display:block">
+            Token 不再写在代码里 —— 这个仓库是公开的，写进去等于贴到网上。
+            现在只存在这台手机上，填一次就行。
+          </div>
+        </div>
+      </div>`;
+    })()}
     <div class="section">
       <div class="section-title"><i data-lucide="music"></i> 一起听</div>
       <div class="section-body">
@@ -31679,18 +31706,43 @@ const sttUrl = document.getElementById("call-stt-url");
   if(cfgCallTok) cfgCallTok.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.token=cfgCallTok.value.trim(); persist("callConfig"); };
 
   // ── VPS 一键填入（统一网关 9090）──────────────────────────────────
+  // 只填地址，**不再往代码里写 token**：这个仓库是 public，写进来的 token
+  // 等于公开发布（之前那两把就是这么泄露的）。地址不是秘密，token 由她自己填一次，
+  // 存在手机的 localStorage 里。
   const vpsQuickfill = document.getElementById("vps-quickfill");
   if(vpsQuickfill) vpsQuickfill.onclick = ()=>{
     const VPS_BASE = "http://115.29.237.172:9090";
-    const VPS_MUSIC_TOKEN = "898a3f1256966ed013351feaadb3532892a67eec90d63bad603d906af7ada0de";
-    const VPS_WAKE_TOKEN = "Vhr48f7FgU3mZ9XS";
-    state.musicConfig      = { ...(state.musicConfig||{}),      baseUrl: VPS_BASE, token: VPS_MUSIC_TOKEN };
-    state.usageConfig      = { ...(state.usageConfig||{}),      baseUrl: VPS_BASE, token: VPS_MUSIC_TOKEN };
-    state.proactiveConfig  = { ...(state.proactiveConfig||{}),  baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN };
+    state.musicConfig      = { ...(state.musicConfig||{}),      baseUrl: VPS_BASE };
+    state.usageConfig      = { ...(state.usageConfig||{}),      baseUrl: VPS_BASE };
+    state.proactiveConfig  = { ...(state.proactiveConfig||{}),  baseUrl: VPS_BASE };
     // ttsProxy 以前漏在这儿：一键填入之后 TTS 仍然直连 api.minimax.chat，
     // 用的是 App 里那把过期 Key，于是「invalid api key」+ 没声音
-    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, token: VPS_WAKE_TOKEN, sttToken: VPS_WAKE_TOKEN, ttsProxy: VPS_BASE, ttsEnabled: true, voceUrl: "" };
+    state.callConfig       = { ...(state.callConfig||{}),       baseUrl: VPS_BASE, ttsProxy: VPS_BASE, ttsEnabled: true, voceUrl: "" };
     ["musicConfig","usageConfig","proactiveConfig","callConfig"].forEach(k=>{ if(typeof persist==="function") persist(k); });
+    render();
+  };
+
+  // 网关 Token 一次填四处（proactive / call / stt 都用同一把）
+  const vpsTokFill = document.getElementById("vps-token-fill");
+  if(vpsTokFill) vpsTokFill.onclick = ()=>{
+    const inp = document.getElementById("vps-token-inp");
+    const t = inp ? inp.value.trim() : "";
+    if(!t){ if(typeof showToast==="function") showToast("先把 Token 粘进来"); return; }
+    state.proactiveConfig = { ...(state.proactiveConfig||{}), token: t };
+    state.callConfig      = { ...(state.callConfig||{}),      token: t, sttToken: t };
+    ["proactiveConfig","callConfig"].forEach(k=>{ if(typeof persist==="function") persist(k); });
+    if(typeof showToast==="function") showToast("网关 Token 已填入 ✓");
+    render();
+  };
+  const vpsMusicTokFill = document.getElementById("vps-music-token-fill");
+  if(vpsMusicTokFill) vpsMusicTokFill.onclick = ()=>{
+    const inp = document.getElementById("vps-music-token-inp");
+    const t = inp ? inp.value.trim() : "";
+    if(!t){ if(typeof showToast==="function") showToast("先把 Token 粘进来"); return; }
+    state.musicConfig = { ...(state.musicConfig||{}), token: t };
+    state.usageConfig = { ...(state.usageConfig||{}), token: t };
+    ["musicConfig","usageConfig"].forEach(k=>{ if(typeof persist==="function") persist(k); });
+    if(typeof showToast==="function") showToast("音乐/屏幕 Token 已填入 ✓");
     render();
   };
 
