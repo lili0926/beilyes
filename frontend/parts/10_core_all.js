@@ -2150,8 +2150,35 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
   return { text: "（MCP 工具调用未收敛，已停止）", toolEvents };
 }
 
+/** 后台任务（压缩摘要 / 记忆提炼）用哪个便宜模型。
+ *  优先她自己填的 aux；没填就走 VPS 上的 /aux 转发口 —— DeepSeek 的 key 在服务器的
+ *  .env 里，不在这份代码里（仓库是 public，密钥写进来等于公开发布）。
+ *  照 ttsProxyBase() 那套「用的时候回落」写：老存档的 apiConfig 是整份覆盖默认值的，
+ *  后加的格子在老存档上永远是 undefined，指望默认值必然落空。 */
+function auxProxyBase(){
+  const cfg = state.callConfig || {};
+  const p = (cfg.baseUrl || "").trim()
+    || (typeof wakeBase === "function" ? (wakeBase()||"") : "");
+  return String(p||"").replace(/\/$/,"");
+}
+function auxEndpoint(apiConfig){
+  const c = apiConfig || {};
+  // 她自己配齐了就听她的
+  if((c.auxOpenaiBase||"").trim() && (c.auxOpenaiKey||"").trim()){
+    return { base: c.auxOpenaiBase.trim().replace(/\/$/,""), key: c.auxOpenaiKey.trim(),
+             model: (c.auxOpenaiModel||"").trim() || "deepseek-chat", via: "aux" };
+  }
+  // 否则走服务端转发口（鉴权用网关 token，模型由服务端定）
+  const vps = auxProxyBase();
+  const tok = (typeof callAuthToken === "function") ? callAuthToken() : "";
+  if(vps && tok) return { base: vps + "/aux", key: tok, model: "", via: "vps" };
+  // 最后才回落到主通道那把 key（老行为）
+  return { base: (c.openaiBase||"").replace(/\/$/,""), key: c.openaiKey||"",
+           model: (c.auxOpenaiModel||c.openaiModel||"gpt-4o-mini"), via: "main" };
+}
+
 async function callAuxAPI(apiConfig, prompt) {
-  const { auxChannel, claudeKey, openaiKey, openaiBase, openaiModel, auxOpenaiBase, auxOpenaiKey, auxOpenaiModel } = apiConfig;
+  const { auxChannel, claudeKey } = apiConfig;
   if (auxChannel === "claude") {
     const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
@@ -2161,13 +2188,14 @@ async function callAuxAPI(apiConfig, prompt) {
     const data = await res.json();
     return data.content?.[0]?.text || "";
   } else {
-    const res = await __apiFetch(`${auxOpenaiBase||openaiBase}/chat/completions`, {
+    const ep = auxEndpoint(apiConfig);
+    if(!ep.base || !ep.key) throw new Error("没有可用的后台模型（既没配 aux，也没填网关地址/token）");
+    const body = { messages:[{ role:"user", content:prompt }] };
+    if(ep.model) body.model = ep.model;   // 走 VPS 时不指定，由服务端选
+    const res = await __apiFetch(`${ep.base}/chat/completions`, {
       method:"POST",
-      headers:{ "Content-Type":"application/json","Authorization":`Bearer ${auxOpenaiKey||openaiKey}` },
-      body: JSON.stringify({
-        model: auxOpenaiModel||openaiModel||"gpt-4o-mini",
-        messages:[{ role:"user", content:prompt }],
-      }),
+      headers:{ "Content-Type":"application/json","Authorization":`Bearer ${ep.key}` },
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     return data.choices?.[0]?.message?.content || "";
@@ -9471,27 +9499,42 @@ function memRemotePost(path, body){
     })
     .catch(e=>{ window.__memCloudErr = "POST "+path+" 失败："+String((e&&e.message)||e); return null; });
 }
-/** 记忆整理/合并统一走**聊天模型**，DeepSeek(aux) 只当兜底。
- * 原来顺序是反的：aux 优先、聊天模型只在返回空串时兜底 —— 而 DeepSeek 欠费报 402
- * 时抛的是异常不是空串，兜底那一层根本走不到，于是自动沉淀整个哑掉，还只 console.warn。 */
+/** 记忆整理/合并：**先 aux（便宜模型），聊天模型只当兜底**。
+ *
+ * 这个顺序来回翻过两次，两次都有理由，记一下免得再翻回去：
+ *  - 最早是 aux 优先。DeepSeek 欠费报 402 抛的是异常不是空串，而兜底那层只在
+ *    「返回空串」时才走 —— 于是自动沉淀整个哑掉，还只 console.warn。
+ *  - 于是改成聊天模型优先。能用了，但聊天模型是官方订阅：压缩摘要 + 记忆提炼
+ *    这些后台杂活一直在啃那 5 小时额度，聊到一半就没了。
+ *  - 现在改回 aux 优先，但**两层都按异常处理**（try/catch 各包各的），
+ *    aux 挂了照样落到聊天模型，不会再出现「静默哑掉」。
+ * aux 现在默认指向 VPS 的 /aux 转发口，key 在服务器上，见 auxEndpoint()。 */
 async function memModelCall(prompt){
   let result = "";
   state.__memErr = ""; // 每次重算，否则上一轮的旧错误会挂在界面上误导
+  // 第一层：便宜模型
   try{
-    // 记忆提炼是后台任务：优先走非 CC 的通道，落到 CC 时也标 background，
-    // 免得提炼出来的 LAYER|… 串到聊天里去（CC 的回复没有请求 id，见 __ccHubSend）
-    const ag = (typeof bgChatAgent==="function") ? bgChatAgent() : (state.agents||[])[0];
-    if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
-      const raw = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, { background:true });
-      const parsed = (typeof parseThinking==="function") ? parseThinking(raw) : { body: raw };
-      result = parsed.body || raw || "";
-    }
+    result = await callAuxAPI(state.apiConfig, prompt);
   }catch(e){
-    state.__memErr = "聊天模型整理失败：" + String((e&&e.message)||e).slice(0,80);
+    state.__memErr = "后台模型失败：" + String((e&&e.message)||e).slice(0,80);
   }
+  // 第二层：聊天模型兜底（要花订阅额度，所以只在上面没成的时候走）
   if(!result || !result.trim()){
-    try{ result = await callAuxAPI(state.apiConfig, prompt); }
-    catch(e){ state.__memErr = (state.__memErr ? state.__memErr+"；" : "") + "aux 也失败：" + String((e&&e.message)||e).slice(0,60); }
+    try{
+      // 优先非 CC 的通道，落到 CC 时也标 background，免得提炼出来的 LAYER|…
+      // 串到聊天里去（CC 的回复没有请求 id，见 __ccHubSend）
+      const ag = (typeof bgChatAgent==="function") ? bgChatAgent() : (state.agents||[])[0];
+      if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
+        const raw = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, { background:true });
+        const parsed = (typeof parseThinking==="function") ? parseThinking(raw) : { body: raw };
+        result = parsed.body || raw || "";
+        if(result && result.trim() && state.__memErr){
+          state.__memErr += "（已用聊天模型兜底，这次花了订阅额度）";
+        }
+      }
+    }catch(e){
+      state.__memErr = (state.__memErr ? state.__memErr+"；" : "") + "聊天模型也失败：" + String((e&&e.message)||e).slice(0,60);
+    }
   }
   return String(result||"");
 }
