@@ -13278,7 +13278,7 @@ function rewriteHtml(){
    localStorage 的，postMessage 来不及，只能在它的脚本跑之前就写好。 */
 function rewriteBridge(){
   // JSON.stringify 出来就是合法的 JS 字符串字面量。"<" 必须转义：第八天以后的
-  // 剧情是模型现写的，正文里但凡出现 </script> 就会把整段桥提前闭合。
+  // 剧情是模型现写的，正文里但凡出现 <\/script> 就会把整段桥提前闭合。
   const seed = JSON.stringify(state.rewriteSave || "").replace(/</g, "\\u003c");
   return `<script>(function(){
   var SEED = ${seed};
