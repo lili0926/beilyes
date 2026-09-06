@@ -2204,7 +2204,7 @@ async function callAuxAPI(apiConfig, prompt) {
 
 
 // ─── 智能记忆检索（词频向量余弦相似度） ─────────────────────────────────────
-function retrieveRelevantMemories(query, topK = 5) {
+function retrieveRelevantMemories(query, topK = 10) {
   const memories = state.memories;
   // 云端向量记忆优先：发消息前已异步预热到 memRemoteCache（60s 内有效），VPS 无结果自动回退本地
   if(typeof memRemoteOn==="function" && memRemoteOn()
@@ -2410,6 +2410,11 @@ const state = {
   }),
   // 吃苹果 · 壳系统（壳内容写死在 EA_SHELLS，这里只存选了哪个壳 + 上次生成的数据）
   eatApple: LS.get("eatApple", null) || { shellId:null, data:null, palette:"paper", loading:false, err:"" },
+
+  // 意识改写 · 存档（游戏 G 的 JSON 原文）。游戏本来自己写 iframe 里的 localStorage，
+  // 但 srcdoc + sandbox 的存储不保证跨 iframe 重建存活 —— 她那边的表现就是「一刷新就是新的」。
+  // 存在这儿：既跨重绘活着，也跟着 App 备份走。
+  rewriteSave: LS.get("rewriteSave", null),
 
   // 碎星 Spark Vault · 灵感收集
   sparkVault: LS.get("sparkVault", null),
@@ -9673,6 +9678,49 @@ function _memImpToNum(imp){
   if(imp==="low") return 3;
   return 6;
 }
+/** 用云端覆盖本地。云端做过一次大整合（1801→158）之后两边就对不上了：
+ *  检索走云端是干净的，记忆库页看到的却还是本地那一大堆旧的。
+ *  这是**覆盖不是合并** —— 所以覆盖前把本地整份存进 __memLocalBak，反悔捞得回来。 */
+async function memPullFromCloud(){
+  if(state.__memPulling) return;
+  if(typeof memRemoteOn === "function" && !memRemoteOn()){
+    __memNote("云端没连上，先去设置里配好 VPS");
+    if(state.subPage==="memory") render();
+    return;
+  }
+  const before = (state.memories||[]).length;
+  if(!confirm(`用云端的记忆覆盖本地这 ${before} 条？\n\n本地会被整份替换。旧的会留一份备份。`)) return;
+  state.__memPulling = true;
+  __memNote("正在拉云端…");
+  if(state.subPage==="memory") render();
+  try{
+    const res = await memRemoteFetch("/memories");
+    if(res && res.ok === false) throw new Error("云端请求失败");
+    const rows = (res && Array.isArray(res.memories)) ? res.memories : null;
+    if(!rows) throw new Error("云端没有返回记忆列表");
+    // 空的绝不覆盖 —— 清空了本地又没拿到东西是最坏的结果
+    if(!rows.length) throw new Error("云端是空的，没有覆盖");
+    state.__memLocalBak = { at: Date.now(), list: state.memories || [] };
+    try{ LS.set("__memLocalBak", state.__memLocalBak); }catch(_){}
+    state.memories = rows.map((m, i)=>({
+      id: Date.now() + i,
+      content: String((m && m.content) || ""),
+      layer: _memTypeToLayer(m && m.type),
+      importance: _memImpToNum(m && m.importance),
+      valence: 0,
+      arousal: 0.5,
+      createdAt: (m && m.created_at) || new Date().toISOString(),
+      fromRemote: true,
+    })).filter(m=>m.content);
+    persist("memories");
+    __memNote(`已用云端覆盖本地：${before} → ${state.memories.length} 条`);
+  }catch(e){
+    __memNote("拉取失败：" + String((e && e.message) || e));
+  }finally{
+    state.__memPulling = false;
+    if(state.subPage==="memory") render();
+  }
+}
 /** 发消息前预热云端检索 → 缓存（retrieveRelevantMemories 同步读缓存，VPS 失败自动回退本地） */
 async function memRemoteWarmup(q){
   if(!memRemoteOn()) return;
@@ -13226,9 +13274,34 @@ function rewriteHtml(){
    父窗口用 callChatAPI 打真模型，再把结果拼成 OpenAI 的形状还给它。
    游戏那边拼提示词、剥 ```json、报错的逻辑一行没改，只是换了条运输线。
    注意 `<\/script>` 必须转义 —— 整个 JS 是被 build.py 塞进 dist 的一个 <script> 里的。 */
-const REWRITE_BRIDGE = `<script>(function(){
+/* 桥是拼出来的不是常量，因为要把存档原文种进去 —— 游戏的 init() 是同步读
+   localStorage 的，postMessage 来不及，只能在它的脚本跑之前就写好。 */
+function rewriteBridge(){
+  // JSON.stringify 出来就是合法的 JS 字符串字面量。"<" 必须转义：第八天以后的
+  // 剧情是模型现写的，正文里但凡出现 </script> 就会把整段桥提前闭合。
+  const seed = JSON.stringify(state.rewriteSave || "").replace(/</g, "\\u003c");
+  return `<script>(function(){
+  var SEED = ${seed};
   // 游戏拿 key 是否为空判断「要不要弹填 Key 的框」，这里塞个占位让它别弹
-  try{ localStorage.setItem("rewrite_gen", JSON.stringify({ base:"app", key:"app", model:"聊天模型" })); }catch(e){}
+  try{
+    if(SEED) localStorage.setItem("rewrite_save", SEED);
+    localStorage.setItem("rewrite_gen", JSON.stringify({ base:"app", key:"app", model:"聊天模型" }));
+  }catch(e){}
+  // 游戏每次存盘都回传父窗口。改的是 Storage.prototype 不是实例 ——
+  // 往 localStorage 实例上赋值会被当成写一条同名存储项，反而把方法弄丢。
+  // 装钩子必须在种存档之后，否则刚种进去的那份会原样回传一次。
+  try{
+    var proto = Object.getPrototypeOf(window.localStorage) || Storage.prototype;
+    var origSet = proto.setItem, origDel = proto.removeItem;
+    proto.setItem = function(k, v){
+      origSet.call(this, k, v);
+      if(k === "rewrite_save") parent.postMessage({ __rewrite:"save", value:String(v) }, "*");
+    };
+    proto.removeItem = function(k){
+      origDel.call(this, k);
+      if(k === "rewrite_save") parent.postMessage({ __rewrite:"save", value:null }, "*");
+    };
+  }catch(e){}
   var origFetch = window.fetch;
   window.fetch = function(url){
     if(String(url).indexOf("/chat/completions") < 0) return origFetch.apply(this, arguments);
@@ -13254,13 +13327,15 @@ const REWRITE_BRIDGE = `<script>(function(){
     });
   };
 })();<\/script>`;
+}
 
 /** 原样的游戏 + 那段桥。桥插在 </head> 前，保证比游戏自己的脚本先跑。 */
 function rewriteHostHtml(){
   const html = rewriteHtml();
+  const bridge = rewriteBridge();
   return html.includes("</head>")
-    ? html.replace("</head>", REWRITE_BRIDGE + "\n</head>")
-    : REWRITE_BRIDGE + html;
+    ? html.replace("</head>", bridge + "\n</head>")
+    : bridge + html;
 }
 
 /** 父窗口这一头：收到 iframe 的请求就打聊天模型。只挂一次。 */
@@ -13270,9 +13345,15 @@ function rewriteBridgeInit(){
   __rewriteBridgeOn = true;
   window.addEventListener("message", async (e)=>{
     const d = e.data;
-    if(!d || d.__rewrite !== "gen") return;
+    if(!d || (d.__rewrite !== "gen" && d.__rewrite !== "save")) return;
     const frame = document.getElementById("rewrite-iframe");
     if(!frame || e.source !== frame.contentWindow) return; // 只认这个 iframe
+    // 游戏存盘 → 落到 App 自己的库里，跨 iframe 重建、也跟着备份走
+    if(d.__rewrite === "save"){
+      state.rewriteSave = (d.value == null) ? null : String(d.value);
+      try{ persist("rewriteSave"); }catch(_){}
+      return;
+    }
     let text = "", error = "";
     try{
       // 优先非 CC 的通道；落到 CC 也要带 background，免得这段续写串进聊天
@@ -20755,6 +20836,7 @@ function renderMemory(){
         </button>
         <button id="mem-auto-now" class="btn-ghost">${state.memAutoRunning?"沉淀中…":"立刻沉淀"}</button>
         ${(()=>{const B=state.__memBackup||{};return `<button id="mem-cloud-backup" class="btn-ghost">${B.running?`停止（${B.done}/${B.total||"…"}）`:"☁️ 全部备份到云端"}</button>`;})()}
+        <button id="mem-cloud-pull" class="btn-ghost">${state.__memPulling?"拉取中…":"⬇️ 用云端覆盖本地"}</button>
         ${selN>=2?`<button id="mem-merge" class="btn-ghost">合并选中(${selN})</button>`:""}
         <button id="mem-add-toggle" class="btn-accent">+ 添加</button>
       </div>
@@ -21878,7 +21960,7 @@ if(!window.__mpDelegated){
         if(typeof render==="function") render();
         return;
       }
-      // 记忆库「立刻沉淀」：绕过 60 条阈值和 20 分钟冷却跑一次，结果写进状态行。
+      // 记忆库「立刻沉淀」：绕过条数阈值和 20 分钟冷却跑一次，结果写进状态行。
       // 接在兜底委托里，bindEvents 半路挂了也点得动（注意：这段在下面 const id 之前，不能引用 id）
       if(raw.closest && raw.closest("#mem-auto-now")){
         e.preventDefault(); e.stopImmediatePropagation();
@@ -21890,6 +21972,12 @@ if(!window.__mpDelegated){
       if(raw.closest && raw.closest("#mem-cloud-backup")){
         e.preventDefault(); e.stopImmediatePropagation();
         if(typeof memCloudBackupAll==="function") memCloudBackupAll();
+        return;
+      }
+      // 记忆库「用云端覆盖本地」：整合之后把本地那份换成云端的干净版
+      if(raw.closest && raw.closest("#mem-cloud-pull")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(typeof memPullFromCloud==="function") memPullFromCloud();
         return;
       }
       // 蓝晒壳：换楼层 / 平面上点房间 / 中庭进聊天。
@@ -26485,7 +26573,7 @@ function buildSysForAgent(ag, extraGroupHint){
   if(extraGroupHint) sys = (sys||"") + "\n\n" + extraGroupHint;
   if(state.memories.length>0){
     const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-    const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
+    const relevant = retrieveRelevantMemories(recentUserMsgs, 10);
     if(relevant.length){
       const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
       sys=(sys?sys+"\n\n":"")+`以下是与当前对话最相关的记忆：\n${memStr}`;
@@ -26505,7 +26593,7 @@ function buildCachedSys(ag){
   if(state.memories.length>0){
     try{
       const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-      const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
+      const relevant = retrieveRelevantMemories(recentUserMsgs, 10);
       if(relevant.length){
         const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
         dynS = (dynS? dynS+"\n\n" : "") + `以下是与当前对话最相关的记忆：\n${memStr}`;
@@ -27540,7 +27628,7 @@ async function regenFromThinking(msgIdx, thinkingText){
     let sys = buildSysForAgent(ag, null);
     if(state.memories.length>0){
       const recentUserMsgs = history.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-      const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
+      const relevant = retrieveRelevantMemories(recentUserMsgs, 10);
       if(relevant.length){
         const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
         sys=(sys?sys+"\n\n":"")+`以下是与当前对话最相关的记忆：\n${memStr}`;
@@ -27812,13 +27900,14 @@ LAYER|重要性1-10|效价-1到1|唤醒0到1|记忆正文
    - daily：日常习惯、小偏好
    - handoff：未完待续、待跟进事项
    - plans：未来计划
-3. 正文用中文，第三人称中性叙述，保留情感与关键细节，每条 40-120 字，不要编号，不要其它说明。
-4. 跳过无意义闲聊；合并重复信息。本段可输出 2-8 条。
+3. 正文用中文，保留情感与关键细节，每条 40-120 字，不要编号，不要其它说明。
+4. 跳过无意义闲聊；合并重复信息。**本段最多 4 条，宁少勿多** —— 只留下值得他记一辈子的，
+   吃了什么、几点睡的这种流水账一律不要。同一件事的不同场次合并成一条。
 5. 人称规则（最重要，务必严格遵守）：
-   - 聊天记录里「用户」指主人的一方，另一方的名字/TA 指恋人一方。
-   - 记忆正文一律第三人称：提到主人写「用户」，提到恋人写 TA 的名字或「TA」。
-   - 严禁出现 user / char / assistant / system 等任何英文或角色标记词。
-   - 聊天里的"我/你"必须转成第三人称。例如用户说"我今天吃了火锅" → 记忆写「用户今天吃了火锅」。绝不要把第一人称"我"原样搬进记忆，也不要以任何一方的视角写记忆。
+   - 记忆是他写给自己看的笔记，一律用**他的第一人称**：他自己写「我」，她写「她」。
+   - 她说"我今天吃了火锅" → 写「她今天吃了火锅」；他说"我也爱你" → 写「她说她爱我，我也跟她说了」。
+   - **严禁出现「用户」二字**，也禁止 user / char / assistant / system 等英文或角色标记词。
+   - 不要写成第三人称旁白，也不要站在她的视角写。
 
 聊天记录：
 ${part}
@@ -27886,8 +27975,11 @@ function __memNote(msg){
 /** 自动沉淀一次要消化的上限。基线一旦被写成 0（冷启动时线程还没 hydrate 就跑了这一轮），
  *  不设上限就会把几千条历史一次性喂给模型 —— 必然超时/超长，然后整条线程永远卡在这。 */
 const MEM_AUTO_MAX_PER_RUN = 200;
+/** 攒够多少条新消息才自动整理一次。原来是 60，出来的记忆太密（60 条能出七八条，
+ *  全是流水账）。提到 200，配合提示词里「本段最多 4 条」，密度降到原来的六分之一。 */
+const MEM_AUTO_MIN_NEW = 200;
 /** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App）
- *  opts.force=true 跳过「攒够 60 条」和 20 分钟冷却（记忆库页的「立刻沉淀」用） */
+ *  opts.force=true 跳过「攒够 MEM_AUTO_MIN_NEW 条」和 20 分钟冷却（记忆库页的「立刻沉淀」用） */
 async function memAutoIntegrate(opts){
   const force = !!(opts && opts.force);
   // 卡死自愈：memAutoRunning 不持久化，但一次 await 永远不 settle（hub 不回、fetch 没超时）
@@ -27912,9 +28004,9 @@ async function memAutoIntegrate(opts){
     const c = memRelevantCount(id);
     let done = cp[id];
     if(done === undefined || done === null || isNaN(+done)){
-      // 首次见到该线程：只消化最近 60 条，更早的历史做基线跳过（避免一次性把积压全部喂 AI、费用爆炸）；
-      // 需要旧记忆可手动「从聊天整理」。
-      done = Math.max(0, c - 60);
+      // 首次见到该线程：只消化最近 MEM_AUTO_MIN_NEW 条，更早的历史做基线跳过
+      // （避免一次性把积压全部喂 AI、费用爆炸）；需要旧记忆可手动「从聊天整理」。
+      done = Math.max(0, c - MEM_AUTO_MIN_NEW);
       cp[id] = done;
       baselineChanged = true;
     } else done = +done || 0;
@@ -27929,7 +28021,7 @@ async function memAutoIntegrate(opts){
     if(n > 0){ newPer[id] = { n, done }; totalNew += n; }
   });
   if(baselineChanged){ state.memCheckpoint = cp; persist("memCheckpoint"); }
-  if(!force && totalNew < 60){ __memNote(`新增 ${totalNew} 条，攒够 60 条才自动整理`); return; }
+  if(!force && totalNew < MEM_AUTO_MIN_NEW){ __memNote(`新增 ${totalNew} 条，攒够 ${MEM_AUTO_MIN_NEW} 条才自动整理`); return; }
   if(totalNew <= 0){ __memNote("没有新的聊天可整理"); return; }
   const now = Date.now();
   const cool = 20*60000 - (now - (state.memLastAutoAt||0));
@@ -28049,7 +28141,8 @@ window.reinitState = function(){
     branding:"branding",hisPhone:"hisPhone",captivityConfig:"captivityConfig",eatApple:"eatApple",
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",moments:"moments",galateaEventId:"galateaEventId",
-    myRemark:"myRemark",remarkEvents:"remarkEvents",sayDay:"sayDay"
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sayDay:"sayDay",
+    rewriteSave:"rewriteSave"
   };
 
   // 迁移：若带前缀的键为空，但无前缀旧键有数据，拷过来（只迁一次）
