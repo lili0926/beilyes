@@ -2206,7 +2206,7 @@ async function callAuxAPI(apiConfig, prompt) {
 
 
 // ─── 智能记忆检索（词频向量余弦相似度） ─────────────────────────────────────
-function retrieveRelevantMemories(query, topK = 10) {
+function retrieveRelevantMemories(query, topK = 5) {
   const memories = state.memories;
   // 云端向量记忆优先：发消息前已异步预热到 memRemoteCache（60s 内有效），VPS 无结果自动回退本地
   if(typeof memRemoteOn==="function" && memRemoteOn()
@@ -27006,7 +27006,7 @@ function buildSysForAgent(ag, extraGroupHint){
   if(extraGroupHint) sys = (sys||"") + "\n\n" + extraGroupHint;
   if(state.memories.length>0){
     const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-    const relevant = retrieveRelevantMemories(recentUserMsgs, 10);
+    const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
     if(relevant.length){
       const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
       sys=(sys?sys+"\n\n":"")+`以下是与当前对话最相关的记忆：\n${memStr}`;
@@ -27026,7 +27026,7 @@ function buildCachedSys(ag){
   if(state.memories.length>0){
     try{
       const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-      const relevant = retrieveRelevantMemories(recentUserMsgs, 10);
+      const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
       if(relevant.length){
         const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
         dynS = (dynS? dynS+"\n\n" : "") + `以下是与当前对话最相关的记忆：\n${memStr}`;
@@ -28061,7 +28061,7 @@ async function regenFromThinking(msgIdx, thinkingText){
     let sys = buildSysForAgent(ag, null);
     if(state.memories.length>0){
       const recentUserMsgs = history.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-      const relevant = retrieveRelevantMemories(recentUserMsgs, 10);
+      const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
       if(relevant.length){
         const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
         sys=(sys?sys+"\n\n":"")+`以下是与当前对话最相关的记忆：\n${memStr}`;
