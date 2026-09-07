@@ -3409,6 +3409,99 @@
       cursor: pointer;
     }
     .msg-card-activity:active { opacity: 0.75; }
+
+    /* ── 外观页（Switch 风格：预览 + 九宫格壁纸 + 分组卡片）──────────────── */
+    .sw-page { padding-bottom: 28px; }
+    .sw-preview {
+      margin: 8px 0 14px; border-radius: 20px; min-height: 168px;
+      border: 1px solid var(--border); overflow: hidden;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.06);
+      display: flex; align-items: flex-end;
+    }
+    .sw-preview-chat {
+      width: 100%; padding: 16px 14px 14px;
+      background: linear-gradient(to top, color-mix(in srgb, var(--bg) 72%, transparent), transparent);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .sw-preview-chat .bubble { max-width: 78%; font-size: 13px; padding: 10px 12px; }
+    .sw-preview-chat .bubble.them { align-self: flex-start; }
+    .sw-preview-chat .bubble.me { align-self: flex-end; }
+    .sw-preview-tag {
+      align-self: center; margin-top: 4px;
+      font-size: 10px; color: var(--sub);
+      background: color-mix(in srgb, var(--card) 80%, transparent);
+      border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+    }
+    .sw-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 18px; padding: 14px 14px 16px; margin-bottom: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.03);
+    }
+    .sw-card-title { font-size: 15px; font-weight: 800; color: var(--text); }
+    .sw-card-sub { font-size: 11px; color: var(--sub); margin: 4px 0 12px; line-height: 1.45; }
+    .sw-sec { margin-top: 10px; }
+    .sw-sec-label { font-size: 11px; color: var(--sub); margin-bottom: 8px; letter-spacing: 0.02em; }
+    .sw-wall-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .sw-wall {
+      border: none; background: transparent; padding: 0; cursor: pointer;
+      display: flex; flex-direction: column; gap: 5px; text-align: left;
+    }
+    .sw-wall-preview {
+      aspect-ratio: 3/4; border-radius: 14px; border: 2px solid var(--border);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .sw-wall.on .sw-wall-preview {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+      transform: scale(1.02);
+    }
+    .sw-wall-name {
+      font-size: 11px; color: var(--sub); line-height: 1.2;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;
+    }
+    .sw-wall.on .sw-wall-name { color: var(--text); font-weight: 700; }
+    .sw-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .sw-chip {
+      border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 65%, var(--card));
+      color: var(--text); border-radius: 999px; padding: 7px 12px; font-size: 12px; cursor: pointer;
+    }
+    .sw-chip.on {
+      border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--card));
+      color: var(--text); font-weight: 700;
+    }
+    .sw-row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .sw-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      border-radius: 12px; padding: 9px 14px; font-size: 12px; cursor: pointer;
+    }
+    .sw-btn.primary {
+      background: var(--accent); border-color: transparent; color: #fff; font-weight: 700;
+    }
+    .sw-slider-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 14px; font-size: 12px; color: var(--sub);
+    }
+    .sw-slider-row strong { color: var(--text); font-size: 13px; }
+    .sw-range {
+      width: 100%; margin-top: 8px; accent-color: var(--accent);
+    }
+    .sw-color-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
+    }
+    .sw-color {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-size: 12px; color: var(--sub);
+      background: color-mix(in srgb, var(--bg) 70%, transparent);
+      border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px;
+    }
+    .sw-color input[type="color"] {
+      width: 36px; height: 28px; border: none; background: transparent; padding: 0; cursor: pointer;
+    }
+
     /* 只写卡、无正文：不显示空气泡框，只留活动胶囊 */
     .bubble.card-only { display: none !important; }
     .msg-row.card-only-row .bubble { display: none !important; }
@@ -9137,7 +9230,7 @@ function openChatIdb(){
   return __chatIdbOpening.then(db=>{ __chatIdbOpening = null; return db; }).catch(e=>{ __chatIdbOpening = null; throw e; });
 }
 
-const CHAT_IDB_MAX_MSGS = 10000; // IDB 热缓存：每线程最多 1 万条；全量只在私有目录
+const CHAT_IDB_MAX_MSGS = 5000; // IDB 热缓存：每线程最多 5 千条，减轻卡顿；全量仍在私有目录
 
 function trimThreadsForIdb(threads){
   if(!threads || typeof threads !== "object") return threads;
@@ -27926,7 +28019,6 @@ function renderTheme(){
   const meCol = (state.bubbleMeColor && state.bubbleMeColor.trim()) || t.bubble_me;
   const themCol = (state.bubbleThemColor && state.bubbleThemColor.trim()) || t.bubble_them;
   const glassCls = bStyle==="fog" ? " glass-fog" : (bStyle==="water" ? " glass-water" : "");
-  // 图片气泡皮肤（水色/轻松熊/鱼饼熊/彩虹熊）：预览直接用真气泡 DOM，让皮肤 CSS 生效
   const imgSkin = (typeof isBubbleImageSkin==="function") && isBubbleImageSkin(bStyle);
   const skinCls = imgSkin ? ((typeof bubbleGlassClass==="function") ? bubbleGlassClass(true) : "") : "";
   const grad = (typeof bubbleGrad==="function") ? bubbleGrad() : null;
@@ -27936,132 +28028,127 @@ function renderTheme(){
     : (bStyle==="solid" ? themCol : (typeof hexToRgba==="function" ? hexToRgba(themCol, Math.min(1,(Number(state.bubbleOpacity)||0.72)+0.08)) : themCol));
   const meFg = grad ? "#3d342c" : (typeof contrastFg==="function" ? contrastFg(meCol) : "#fff");
   const themFg = grad ? "#3d342c" : (typeof contrastFg==="function" ? contrastFg(themCol) : t.text);
-  return `<div class="page">
+  const wallBg = state.customWallpaper
+    ? `url(${state.customWallpaper})`
+    : (PATTERNS[state.pattern] || "none");
+  const wallSize = state.customWallpaper ? "cover" : (PATTERN_SIZES[state.pattern] || "auto");
+  const allThemes = [];
+  groups.forEach(g=> (g.themes||[]).forEach(n=>{ if(!allThemes.includes(n) && THEMES[n]) allThemes.push(n); }));
+
+  const wallTile = (name)=>{
+    const th = THEMES[name] || {};
+    const on = state.theme === name;
+    const bg = `linear-gradient(160deg, ${th.bg||"#f5f5f5"} 0%, ${th.card||"#fff"} 55%, ${th.accent2||th.accent||"#ddd"} 100%)`;
+    return `<button type="button" class="sw-wall${on?" on":""}" data-theme="${escAttr(name)}" title="${escAttr(th.name||name)}">
+      <span class="sw-wall-preview" style="background:${bg}"></span>
+      <span class="sw-wall-name">${esc(th.name||name)}</span>
+    </button>`;
+  };
+
+  return `<div class="page sw-page">
     ${subHeader('<i data-lucide="palette"></i> 外观')}
-    ${groups.map(g=>`
-      <div class="theme-group">
-        <div class="theme-group-label">${g.label}</div>
-        <div class="chip-row">
-          ${g.themes.map(name=>{
-            const acc=THEMES[name]?.accent;
-            const nm=THEMES[name]?.name;
-            return `<button class="theme-chip${state.theme===name?" active":""}" data-theme="${name}" title="${nm||name}" aria-label="${nm||name}">
-              <div class="theme-dot" style="background:${acc||"#ddd"}"></div>
-            </button>`;
-          }).join("")}
-        </div>
-      </div>
-    `).join("")}
-    <div class="theme-group">
-      <div class="theme-group-label">布料纹理</div>
-      <div class="chip-row">
-        ${Object.keys(PATTERNS).map(name=>`
-          <button class="theme-chip${state.pattern===name?" active":""}" data-pattern="${name}">${name}</button>
-        `).join("")}
+
+    <div class="sw-preview" style="background-color:${t.bg};background-image:${wallBg};background-size:${wallSize};background-position:center">
+      <div class="sw-preview-chat">
+        <div class="bubble them${glassCls}${skinCls}" style="${imgSkin?"":`background:${themBg};color:${themFg}`}">今天天气不错呢</div>
+        <div class="bubble me${glassCls}${skinCls}" style="${imgSkin?"":`background:${meBg};color:${meFg}`}">外观可以这样换～</div>
+        <div class="sw-preview-tag">${esc(t.name||state.theme||"")} · ${bStyle}</div>
       </div>
     </div>
-    <div class="theme-group" style="margin-top:8px">
-      <div class="theme-group-label">自定义壁纸</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <label class="btn-accent" style="padding:8px 14px;cursor:pointer;display:inline-block">
-          <i data-lucide="camera"></i> 选择图片
+
+    <div class="sw-card">
+      <div class="sw-card-title">壁纸与配色</div>
+      <div class="sw-card-sub">点选一套主题，底色、强调色和默认气泡会一起翻</div>
+      ${groups.map(g=>`
+        <div class="sw-sec">
+          <div class="sw-sec-label">${esc(g.label)}</div>
+          <div class="sw-wall-grid">${(g.themes||[]).map(wallTile).join("")}</div>
+        </div>
+      `).join("")}
+    </div>
+
+    <div class="sw-card">
+      <div class="sw-card-title">自定义壁纸</div>
+      <div class="sw-card-sub">从相册选图铺满聊天底；清除后回到主题默认</div>
+      <div class="sw-row-actions">
+        <label class="sw-btn primary">
+          <i data-lucide="image-plus"></i> 选择图片
           <input type="file" id="wallpaper-file" accept="image/*" style="display:none"/>
         </label>
-        ${state.customWallpaper?`<button type="button" id="wallpaper-clear" class="btn-ghost">清除壁纸</button>`:""}
+        ${state.customWallpaper?`<button type="button" id="wallpaper-clear" class="sw-btn">清除壁纸</button>`:""}
       </div>
-      ${state.customWallpaper?`<div style="margin-top:12px;border-radius:14px;overflow:hidden;border:1px solid var(--border);height:120px;background:url(${state.customWallpaper}) center/cover"></div>`:""}
-    </div>
-    <div class="theme-group" style="margin-top:16px">
-      <div class="theme-group-label">界面材质（全局）</div>
-      <div class="chip-row" style="margin-bottom:12px">
-        <button type="button" class="theme-chip${bStyle==="solid"?" active":""}" data-bubble-style="solid">实色</button>
-        <button type="button" class="theme-chip${bStyle==="fog"?" active":""}" data-bubble-style="fog">雾玻璃</button>
-        <button type="button" class="theme-chip${bStyle==="water"?" active":""}" data-bubble-style="water">水玻璃</button>
-        <button type="button" class="theme-chip${bStyle==="soft"||bStyle==="suisei"?" active":""}" data-bubble-style="soft">水色</button>
-        <button type="button" class="theme-chip${bStyle==="cool"?" active":""}" data-bubble-style="cool">轻松熊</button>
-        <button type="button" class="theme-chip${bStyle==="fish"?" active":""}" data-bubble-style="fish">鱼饼熊</button>
-        <button type="button" class="theme-chip${bStyle==="rainbow"?" active":""}" data-bubble-style="rainbow">彩虹熊</button>
-      </div>
-      <div style="margin-bottom:10px">
-        <div style="font-size:12px;color:var(--sub);margin-bottom:6px">气泡渐变（浅色色卡）</div>
-        <div class="chip-row">
-          ${BUBBLE_GRADS.map((g,i)=>{const n=i+1;return `<button type="button" class="theme-chip${state.bubbleGrad===n?" active":""}" data-bubble-grad="${n}" title="渐变 ${n}  ${g.c2} → ${g.c3}" style="width:34px;height:28px;background:linear-gradient(135deg, ${g.c1}, ${g.c2}, ${g.c3});border-radius:8px"></button>`;}).join("")}
-          <button type="button" class="theme-chip${state.bubbleGrad===0?" active":""}" data-bubble-grad="0">无渐变</button>
+      <div class="sw-sec" style="margin-top:12px">
+        <div class="sw-sec-label">布料纹理</div>
+        <div class="sw-chip-row">
+          ${Object.keys(PATTERNS).map(name=>`
+            <button type="button" class="sw-chip${state.pattern===name?" on":""}" data-pattern="${escAttr(name)}">${esc(name)}</button>
+          `).join("")}
         </div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span style="font-size:12px;color:var(--sub)">透明度</span>
-          <span style="font-size:12px;color:var(--text);font-weight:600">${bOp}%</span>
-        </div>
-        <input type="range" id="bubble-opacity" min="20" max="100" value="${bOp}" style="width:100%;accent-color:var(--accent)"/>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-          <label style="font-size:11px;color:var(--sub);display:flex;flex-direction:column;gap:6px">
-            我方气泡色
-            <input type="color" id="bubble-me-color" value="${escAttr(meCol)}" style="width:100%;height:36px;border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:2px"/>
-          </label>
-          <label style="font-size:11px;color:var(--sub);display:flex;flex-direction:column;gap:6px">
-            对方气泡色
-            <input type="color" id="bubble-them-color" value="${escAttr(themCol)}" style="width:100%;height:36px;border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:2px"/>
-          </label>
-        </div>
-        <button type="button" id="bubble-color-reset" class="btn-ghost" style="margin-top:10px;width:100%">恢复主题默认色</button>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px solid var(--border);background:${t.bg};background-image:${state.customWallpaper?`url(${state.customWallpaper})`:(PATTERNS[state.pattern]||"none")};background-size:${state.customWallpaper?"cover":(PATTERN_SIZES[state.pattern]||"auto")};background-position:center">
-        ${imgSkin ? `
-        <div class="bubble-row them"><div class="bubble them${skinCls}">好看就留下，不喜欢再调。</div></div>
-        <div class="bubble-row me"><div class="bubble me${skinCls}">嗯，试试新气泡～</div></div>
-        <div class="bubble-row me"><div class="bubble me${skinCls} cont">连着说的第二句长这样。</div></div>
-        ` : `
-        <div style="align-self:flex-end;max-width:78%;padding:9px 14px;border-radius:16px 4px 16px 16px;font-size:13px;line-height:1.5;color:${meFg};background:${meBg};${bStyle!=="solid"?`backdrop-filter:blur(${bStyle==="water"?22:14}px);-webkit-backdrop-filter:blur(${bStyle==="water"?22:14}px);border:1px solid rgba(255,255,255,0.4);box-shadow:0 4px 16px rgba(0,0,0,0.08)`:""}">嗯，试试新气泡～</div>
-        <div style="align-self:flex-start;max-width:78%;padding:9px 14px;border-radius:4px 16px 16px 16px;font-size:13px;line-height:1.5;color:${themFg};background:${themBg};${bStyle!=="solid"?`backdrop-filter:blur(${bStyle==="water"?22:14}px);-webkit-backdrop-filter:blur(${bStyle==="water"?22:14}px);border:1px solid rgba(255,255,255,0.45);box-shadow:0 4px 16px rgba(0,0,0,0.08)`:"border:1px solid "+t.border}">好看就留下，不喜欢再调。</div>
-        `}
       </div>
     </div>
-    <div class="theme-group" style="margin-top:16px">
-      <div class="theme-group-label">界面壳</div>
-      <div class="font-switch-row">
-        <button type="button" class="font-chip${(state.uiShell||"classic")==="classic"?" active":""}" data-ui-shell="classic">经典</button>
-        <button type="button" class="font-chip${state.uiShell==="pixel"?" active":""}" data-ui-shell="pixel">像素农场</button>
-        <button type="button" class="font-chip${state.uiShell==="eldritch"?" active":""}" data-ui-shell="eldritch">深渊</button>
-        <button type="button" class="font-chip${state.uiShell==="claude"?" active":""}" data-ui-shell="claude">纸感 Claude</button>
-        <button type="button" class="font-chip${state.uiShell==="korean"?" active":""}" data-ui-shell="korean">韩系</button>
-        <button type="button" class="font-chip${state.uiShell==="blueprint"?" active":""}" data-ui-shell="blueprint">蓝晒</button>
+
+    <div class="sw-card">
+      <div class="sw-card-title">气泡</div>
+      <div class="sw-card-sub">材质与皮肤；只有真玻璃/真皮肤会改变气泡观感</div>
+      <div class="sw-chip-row">
+        <button type="button" class="sw-chip${bStyle==="solid"?" on":""}" data-bubble-style="solid">实心</button>
+        <button type="button" class="sw-chip${bStyle==="fog"?" on":""}" data-bubble-style="fog">雾玻璃</button>
+        <button type="button" class="sw-chip${bStyle==="water"?" on":""}" data-bubble-style="water">水玻璃</button>
+        <button type="button" class="sw-chip${bStyle==="soft"?" on":""}" data-bubble-style="soft">水色系</button>
+        <button type="button" class="sw-chip${bStyle==="cool"?" on":""}" data-bubble-style="cool">轻松熊</button>
+        <button type="button" class="sw-chip${bStyle==="fish"?" on":""}" data-bubble-style="fish">鱼饼熊</button>
+        <button type="button" class="sw-chip${bStyle==="rainbow"?" on":""}" data-bubble-style="rainbow">彩虹熊</button>
+      </div>
+      <div class="sw-slider-row">
+        <span>气泡透明度</span>
+        <strong>${bOp}%</strong>
+      </div>
+      <input type="range" id="bubble-opacity" min="30" max="100" value="${bOp}" class="sw-range"/>
+      <div class="sw-color-row">
+        <label class="sw-color">我的气泡
+          <input type="color" id="bubble-me-color" value="${escAttr(meCol)}"/>
+        </label>
+        <label class="sw-color">对方气泡
+          <input type="color" id="bubble-them-color" value="${escAttr(themCol)}"/>
+        </label>
+      </div>
+    </div>
+
+    <div class="sw-card">
+      <div class="sw-card-title">界面壳</div>
+      <div class="sw-card-sub">整页布局语言；韩系 / 像素 / 深渊等互不干扰</div>
+      <div class="sw-chip-row">
+        <button type="button" class="sw-chip${(state.uiShell||"classic")==="classic"?" on":""}" data-ui-shell="classic">经典</button>
+        <button type="button" class="sw-chip${state.uiShell==="pixel"?" on":""}" data-ui-shell="pixel">像素</button>
+        <button type="button" class="sw-chip${state.uiShell==="eldritch"?" on":""}" data-ui-shell="eldritch">深渊</button>
+        <button type="button" class="sw-chip${state.uiShell==="claude"?" on":""}" data-ui-shell="claude">Claude</button>
+        <button type="button" class="sw-chip${state.uiShell==="korean"?" on":""}" data-ui-shell="korean">韩系</button>
+        <button type="button" class="sw-chip${state.uiShell==="blueprint"?" on":""}" data-ui-shell="blueprint">蓝晒</button>
       </div>
       ${state.uiShell==="blueprint"?`
-      <div class="font-switch-row" style="margin-top:8px">
-        <button type="button" class="font-chip${!state.bpDiazo?" active":""}" data-bp-neg="0">蓝晒</button>
-        <button type="button" class="font-chip${state.bpDiazo?" active":""}" data-bp-neg="1">白图</button>
+      <div class="sw-chip-row" style="margin-top:8px">
+        <button type="button" class="sw-chip${!state.bpDiazo?" on":""}" data-bp-neg="0">蓝晒</button>
+        <button type="button" class="sw-chip${state.bpDiazo?" on":""}" data-bp-neg="1">白图</button>
       </div>`:""}
     </div>
-    <div class="theme-group" style="margin-top:16px">
-      <div class="theme-group-label">字体</div>
-      <div class="font-switch-row">
-        <button type="button" class="font-chip${!(state.uiFont)?" active":""}" data-ui-font="">默认</button>
-        <button type="button" class="font-chip${state.uiFont==="nail"?" active":""}" data-ui-font="nail">猫猫铃</button>
-        <button type="button" class="font-chip${state.uiFont==="angel"?" active":""}" data-ui-font="angel">天使诊所</button>
-        <button type="button" class="font-chip${state.uiFont==="kitten"?" active":""}" data-ui-font="kitten">奈の小猫</button>
-        <button type="button" class="font-chip${state.uiFont==="noto-kr"?" active":""}" data-ui-font="noto-kr">Noto韩</button>
-        <button type="button" class="font-chip${state.uiFont==="noto-sc"?" active":""}" data-ui-font="noto-sc">Noto中</button>
-      </div>
-      <div class="font-switch-row" style="margin-top:8px">
-        <button type="button" class="font-chip${state.uiFont==="wenkai"?" active":""}" data-ui-font="wenkai" style="font-family:'LXGW WenKai Screen',serif">霞鹜文楷</button>
-        <button type="button" class="font-chip${state.uiFont==="xiaolai"?" active":""}" data-ui-font="xiaolai" style="font-family:'Xiaolai SC',sans-serif">小赖</button>
-        <button type="button" class="font-chip${state.uiFont==="yozai"?" active":""}" data-ui-font="yozai" style="font-family:'Yozai',sans-serif">悠哉</button>
-      </div>
-    </div>
-    <div style="margin-top:24px">
-      <div class="theme-group-label">预览</div>
-      <div class="preview-box" style="background:${t.bg};background-image:${state.customWallpaper?`url(${state.customWallpaper})`:(PATTERNS[state.pattern]||"none")};background-size:${state.customWallpaper?"cover":(PATTERN_SIZES[state.pattern]||"auto")};background-position:center">
-        <div class="preview-inner" style="background:${t.card}">
-          <div style="font-size:13px;color:${t.text};margin-bottom:6px">预览卡片</div>
-          <div style="font-size:11px;color:${t.sub}">这是副标题效果 · 莫兰迪色系</div>
-          <div style="display:inline-block;margin-top:10px;background:${t.accent};color:#fff;border-radius:8px;padding:6px 14px;font-size:12px">按钮效果</div>
-        </div>
+
+    <div class="sw-card">
+      <div class="sw-card-title">字体</div>
+      <div class="sw-chip-row">
+        <button type="button" class="sw-chip${!state.uiFont?" on":""}" data-ui-font="">默认</button>
+        <button type="button" class="sw-chip${state.uiFont==="nail"?" on":""}" data-ui-font="nail">猫猫铃</button>
+        <button type="button" class="sw-chip${state.uiFont==="angel"?" on":""}" data-ui-font="angel">天使诊所</button>
+        <button type="button" class="sw-chip${state.uiFont==="kitten"?" on":""}" data-ui-font="kitten">奈の小猫</button>
+        <button type="button" class="sw-chip${state.uiFont==="noto-kr"?" on":""}" data-ui-font="noto-kr">Noto韩</button>
+        <button type="button" class="sw-chip${state.uiFont==="noto-sc"?" on":""}" data-ui-font="noto-sc">Noto中</button>
+        <button type="button" class="sw-chip${state.uiFont==="wenkai"?" on":""}" data-ui-font="wenkai" style="font-family:'LXGW WenKai Screen',serif">霞鹜文楷</button>
+        <button type="button" class="sw-chip${state.uiFont==="xiaolai"?" on":""}" data-ui-font="xiaolai" style="font-family:'Xiaolai SC',sans-serif">小赖</button>
+        <button type="button" class="sw-chip${state.uiFont==="yozai"?" on":""}" data-ui-font="yozai" style="font-family:'Yozai',sans-serif">悠哉</button>
       </div>
     </div>
   </div>`;
 }
+
 
 // ─── 提示词 ──────────────────────────────────────────────────────────────────
 function renderPrompts(){
