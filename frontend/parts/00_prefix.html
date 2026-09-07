@@ -3410,6 +3410,69 @@
     }
     .msg-card-activity:active { opacity: 0.75; }
 
+    
+    /* ── 卡匣：左右翻牌（洗牌感）─────────────────────────────────────────── */
+    .card-deck-page { padding-bottom: 24px; }
+    .card-deck-meta {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      font-size: 12px; color: var(--sub); margin: 6px 0 12px;
+    }
+    .card-deck-type {
+      background: color-mix(in srgb, var(--accent) 14%, var(--card));
+      border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px;
+      color: var(--text); font-weight: 700;
+    }
+    .card-deck-stage {
+      position: relative;
+      min-height: 280px;
+      margin: 0 auto 10px;
+      max-width: 340px;
+      perspective: 1400px;
+      touch-action: pan-y;
+    }
+    .card-deck-stack { position: absolute; inset: 18px 10px 8px; pointer-events: none; }
+    .card-deck-ghost {
+      position: absolute; inset: 0; border-radius: 18px;
+      background: color-mix(in srgb, #f8d7e6 55%, var(--card));
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    }
+    .card-deck-ghost.g1 { transform: rotate(3deg) translate(6px, 8px); opacity: 0.7; }
+    .card-deck-ghost.g2 { transform: rotate(-4deg) translate(-8px, 12px); opacity: 0.45; }
+    .card-deck-card {
+      position: relative; z-index: 2;
+      cursor: grab;
+      transition: transform 0.28s cubic-bezier(.2,.8,.2,1), opacity 0.28s ease;
+      will-change: transform, opacity;
+      user-select: none;
+    }
+    .card-deck-card:active { cursor: grabbing; }
+    .card-deck-card.swipe-left {
+      transform: translateX(-130%) rotate(-14deg);
+      opacity: 0;
+    }
+    .card-deck-card.swipe-right {
+      transform: translateX(130%) rotate(14deg);
+      opacity: 0;
+    }
+    .card-deck-card.swipe-in {
+      animation: cardDeckIn 0.35s cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes cardDeckIn {
+      from { transform: scale(0.92) translateY(12px); opacity: 0.4; }
+      to { transform: none; opacity: 1; }
+    }
+    .card-deck-card .moment-card { box-shadow: 0 16px 36px rgba(120,70,90,0.18); }
+    .card-deck-hint {
+      text-align: center; font-size: 11px; color: var(--sub); margin-bottom: 12px;
+    }
+    .card-deck-actions {
+      display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+      max-width: 360px; margin: 0 auto;
+    }
+    .card-deck-actions .sw-btn { min-width: 96px; justify-content: center; }
+    .card-deck-actions .sw-btn:disabled { opacity: 0.4; pointer-events: none; }
+
     /* ── 外观页（Switch 风格：预览 + 九宫格壁纸 + 分组卡片）──────────────── */
     .sw-page { padding-bottom: 28px; }
     .sw-preview {

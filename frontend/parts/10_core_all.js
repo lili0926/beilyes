@@ -19841,36 +19841,53 @@ function sbFmtReset(ts){
   try{ return " · 重置 "+new Date(ts).toLocaleString("zh",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; }
 }
 
+function listActiveMomentCards(){
+  return (state.momentCards || []).filter(c => c && !c.deleted);
+}
+
 function renderProject(){
-  const files = Array.isArray(state.chatProjectFiles) ? state.chatProjectFiles : [];
-  let list = "";
-  if(!files.length){
-    list = `<div class="empty-state" style="padding:36px 16px">还没有文件</div>`;
-  } else {
-    list = `<div class="sb-file-list" style="gap:10px">${files.map(f => {
-      const ico = f.dataUrl ? "image" : (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f) ? "globe" : "file-text");
-      const sub = new Date(f.createdAt || Date.now()).toLocaleString() + (f.content ? " · " + sbFmtBytes((f.content||"").length) : "");
-      const run = (typeof sbIsHtmlFile==="function" && sbIsHtmlFile(f))
-        ? `<button type="button" class="btn-accent" data-proj-run="${escAttr(f.id)}" style="padding:6px 10px;font-size:11px;flex-shrink:0">打开</button>` : "";
-      return `<div class="sb-file-item" style="cursor:default">
-        <button type="button" data-sb-file="${escAttr(f.id)}" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:none;background:transparent;padding:0;text-align:left;color:inherit;cursor:pointer">
-          <div class="sb-file-ico"><i data-lucide="${ico}"></i></div>
-          <div class="sb-file-meta">
-            <div class="sb-file-name">${esc(f.name || "未命名")}</div>
-            <div class="sb-file-sub">${esc(sub)}</div>
-          </div>
-        </button>
-        ${run}
-      </div>`;
-    }).join("")}</div>`;
+  // 侧栏入口「卡匣」：小卡片专页（原 Project 文件改由写文件协议/别处承接）
+  const cards = listActiveMomentCards();
+  const n = cards.length;
+  if(!n){
+    return `<div class="page">
+      ${subHeader('<i data-lucide="layers"></i> 卡匣')}
+      <div class="empty-state" style="padding:48px 20px">
+        <div class="empty-emoji"><i data-lucide="sparkles"></i></div>
+        还没有小卡片<br>
+        <span style="font-size:11px;opacity:0.7">聊天里他真正写卡成功后，会出现在这里 · 可左右翻看</span>
+      </div>
+    </div>`;
   }
-  return `<div class="page">
-    ${subHeader('<i data-lucide="folder-open"></i> Project')}
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <button type="button" class="btn-ghost" id="proj-clear" ${files.length?"":"disabled"} style="padding:8px 14px;font-size:12px">清空全部</button>
-      <span style="font-size:12px;color:var(--sub);align-self:center">${files.length} 个文件</span>
+  let idx = Number(state.cardDeckIndex) || 0;
+  if(idx < 0) idx = 0;
+  if(idx >= n) idx = n - 1;
+  state.cardDeckIndex = idx;
+  const card = cards[idx];
+  const typeLabel = card.type === "note" ? "便签" : "碎碎念";
+  const when = card.createdAt ? new Date(card.createdAt).toLocaleString() : "";
+  return `<div class="page card-deck-page">
+    ${subHeader('<i data-lucide="layers"></i> 卡匣')}
+    <div class="card-deck-meta">
+      <span>${idx+1} / ${n}</span>
+      <span class="card-deck-type">${esc(typeLabel)}</span>
+      <span style="opacity:.7">${esc(when)}</span>
     </div>
-    ${list}
+    <div class="card-deck-stage" id="card-deck-stage">
+      <div class="card-deck-stack" aria-hidden="true">
+        <div class="card-deck-ghost g2"></div>
+        <div class="card-deck-ghost g1"></div>
+      </div>
+      <div class="card-deck-card" id="card-deck-card" data-idx="${idx}">
+        ${renderMomentCard(card)}
+      </div>
+    </div>
+    <div class="card-deck-hint">左右滑动 · 像洗牌一样翻看</div>
+    <div class="card-deck-actions">
+      <button type="button" class="sw-btn" id="card-deck-prev" ${idx<=0?"disabled":""}>‹ 上一张</button>
+      <button type="button" class="sw-btn" id="card-deck-del" data-mc-del="${escAttr(card.id)}">删除</button>
+      <button type="button" class="sw-btn primary" id="card-deck-next" ${idx>=n-1?"disabled":""}>下一张 ›</button>
+    </div>
   </div>`;
 }
 
@@ -20022,12 +20039,12 @@ function renderChatSidebar(){
           </button>
         </div>
         <button type="button" class="sb-card" id="sb-project-open" style="width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px">
-          <div class="sb-file-ico" style="width:40px;height:40px;font-size:18px"><i data-lucide="folder-open"></i></div>
+          <div class="sb-file-ico" style="width:40px;height:40px;font-size:18px"><i data-lucide="layers"></i></div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:700;color:var(--text)">Project</div>
-            <div style="font-size:11px;color:var(--sub);margin-top:2px">${files.length ? (files.length + " 个文件 · 点进管理") : "还没有文件 · 点进查看"}</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">卡匣</div>
+            <div style="font-size:11px;color:var(--sub)">${(typeof listActiveMomentCards==="function"?listActiveMomentCards():[]).length} 张小卡片 · 左右翻看</div>
           </div>
-          <span style="color:var(--sub);font-size:16px">›</span>
+          <i data-lucide="chevron-right" style="opacity:.45"></i>
         </button>
         <div class="sb-quota-wrap">
           <div class="sb-section-title" style="display:flex;align-items:center;justify-content:space-between"><span>额度</span><button type="button" class="btn-ghost" id="sb-quota-refresh" style="padding:4px 10px;font-size:11px">刷新</button></div>
@@ -20226,12 +20243,76 @@ function bindChatSidebar(){
     render();
   };
   const projOpen = document.getElementById("sb-project-open");
-  if(projOpen) projOpen.onclick = (e)=>{
-    e.stopPropagation();
+  if(projOpen) projOpen.onclick = ()=>{
     state.chatSidebarOpen = false;
+    state.cardDeckIndex = 0;
     state.subPage = "project";
     render();
   };
+
+  // 卡匣：左右翻牌
+  (function bindCardDeck(){
+    const stage = document.getElementById("card-deck-stage");
+    const cardEl = document.getElementById("card-deck-card");
+    if(!cardEl) return;
+    const cards = typeof listActiveMomentCards==="function" ? listActiveMomentCards() : [];
+    const go = (dir)=>{
+      if(!cards.length) return;
+      let idx = Number(state.cardDeckIndex)||0;
+      const next = idx + dir;
+      if(next < 0 || next >= cards.length) return;
+      cardEl.classList.remove("swipe-left","swipe-right","swipe-in");
+      cardEl.classList.add(dir > 0 ? "swipe-left" : "swipe-right");
+      setTimeout(()=>{
+        state.cardDeckIndex = next;
+        render();
+      }, 280);
+    };
+    const prev = document.getElementById("card-deck-prev");
+    const next = document.getElementById("card-deck-next");
+    if(prev) prev.onclick = ()=> go(-1);
+    if(next) next.onclick = ()=> go(1);
+    // 删除后夹回索引
+    const del = document.getElementById("card-deck-del");
+    if(del){
+      del.onclick = ()=>{
+        const id = del.getAttribute("data-mc-del");
+        if(!id) return;
+        if(typeof deleteMomentCard==="function") deleteMomentCard(id);
+        const left = typeof listActiveMomentCards==="function" ? listActiveMomentCards() : [];
+        if(state.cardDeckIndex >= left.length) state.cardDeckIndex = Math.max(0, left.length-1);
+        render();
+      };
+    }
+    // 触摸 / 鼠标拖拽
+    let x0 = null, dragging = false;
+    const start = (x)=>{ x0 = x; dragging = true; cardEl.style.transition = "none"; };
+    const move = (x)=>{
+      if(!dragging || x0==null) return;
+      const dx = x - x0;
+      cardEl.style.transform = `translateX(${dx}px) rotate(${dx/20}deg)`;
+    };
+    const end = (x)=>{
+      if(!dragging || x0==null) return;
+      const dx = x - x0;
+      dragging = false; x0 = null;
+      cardEl.style.transition = "";
+      cardEl.style.transform = "";
+      if(dx < -56) go(1);
+      else if(dx > 56) go(-1);
+      else cardEl.classList.add("swipe-in");
+    };
+    cardEl.addEventListener("touchstart", e=>{ if(e.touches[0]) start(e.touches[0].clientX); }, {passive:true});
+    cardEl.addEventListener("touchmove", e=>{ if(e.touches[0]) move(e.touches[0].clientX); }, {passive:true});
+    cardEl.addEventListener("touchend", e=>{
+      const t = e.changedTouches && e.changedTouches[0];
+      end(t ? t.clientX : 0);
+    });
+    cardEl.addEventListener("mousedown", e=>{ start(e.clientX); e.preventDefault(); });
+    window.addEventListener("mousemove", e=>{ if(dragging) move(e.clientX); });
+    window.addEventListener("mouseup", e=>{ if(dragging) end(e.clientX); });
+  })();
+;
   document.querySelectorAll("[data-sb-file]").forEach(btn=>{
     btn.onclick = ()=>{
       state.chatProjectPreview = { id: btn.getAttribute("data-sb-file") };
