@@ -26049,6 +26049,48 @@ function listActiveMomentCards(){
   return (state.momentCards || []).filter(c => c && !c.deleted);
 }
 
+/** 把聊天消息上已挂的 card_batch 回填进卡匣（升级前写过的卡也能看见） */
+function salvageMomentCardsFromMessages(){
+  try{
+    const bag = [];
+    const seen = new Set();
+    (state.momentCards || []).forEach(c=>{
+      if(c && c.id) seen.add(c.id);
+    });
+    const ingest = (m)=>{
+      if(!m || !Array.isArray(m.card_batch)) return;
+      m.card_batch.forEach(c=>{
+        if(!c || c.deleted) return;
+        const id = c.id || ("mc_salv_" + (c.turn_id||"") + "_" + String(c.content||"").slice(0,12));
+        if(seen.has(id)) return;
+        seen.add(id);
+        bag.push({
+          id,
+          turn_id: c.turn_id || m.turn_id || "",
+          type: (c.type === "note") ? "note" : "ramble",
+          title: c.title || "",
+          content: c.content || "",
+          createdAt: c.createdAt || m.time || new Date().toISOString(),
+          source: c.source || "salvage",
+          deleted: false
+        });
+      });
+    };
+    (state.messages || []).forEach(ingest);
+    try{
+      Object.keys(state.chatThreads || {}).forEach(tid=>{
+        const th = state.chatThreads[tid];
+        (th && th.messages || []).forEach(ingest);
+      });
+    }catch(e){}
+    if(!bag.length) return 0;
+    state.momentCards = bag.concat(state.momentCards || []).slice(0, 300);
+    try{ if(typeof persistMomentCards==="function") persistMomentCards(); }catch(e){}
+    return bag.length;
+  }catch(e){ return 0; }
+}
+
+
 function renderProject(){
   // 侧栏入口「卡匣」：小卡片专页（原 Project 文件改由写文件协议/别处承接）
   const cards = listActiveMomentCards();
@@ -26450,6 +26492,7 @@ function bindChatSidebar(){
   if(projOpen) projOpen.onclick = ()=>{
     state.chatSidebarOpen = false;
     state.cardDeckIndex = 0;
+    try{ if(typeof salvageMomentCardsFromMessages==="function") salvageMomentCardsFromMessages(); }catch(e){}
     state.subPage = "project";
     render();
   };
@@ -35418,6 +35461,7 @@ async function restoreNativeMirrors(){
     }
     if(changed){
       try{ if(typeof applyThemeVars === "function") applyThemeVars(); }catch(e){}
+try{ if(typeof salvageMomentCardsFromMessages==="function") salvageMomentCardsFromMessages(); }catch(e){}
       if(typeof render === "function") render();
     }
   }catch(e){}
