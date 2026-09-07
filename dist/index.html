@@ -10047,9 +10047,139 @@ function renderMomentCard(card){
 }
 function renderMsgCardActivity(m){
   const batch = (m && Array.isArray(m.card_batch)) ? m.card_batch.filter(c=>c && !c.deleted) : [];
-  if(!batch.length) return "";
+  if(!batch.length){
+    // 兼容：只挂了 turn_id 时回查本地库
+    if(m && m.turn_id){
+      const byTurn = cardsForTurn(m.turn_id);
+      if(byTurn.length){
+        return `<div class="msg-card-activity" data-card-turn="${escAttr(m.turn_id)}" title="查看卡片">活动 · ${byTurn.length}</div>`;
+      }
+    }
+    return "";
+  }
   const n = batch.length;
-  return `<div class="msg-card-activity" data-card-batch="${escAttr(m.msgId||m.id||"")}" title="查看卡片">活动 · ${n}</div>`;
+  const tid = m.turn_id || "";
+  return `<div class="msg-card-activity" data-card-batch="${escAttr(m.msgId||m.id||"")}" data-card-turn="${escAttr(tid)}" title="查看卡片">活动 · ${n}</div>`;
+}
+
+function writeCardsToolDef(){
+  return {
+    name: "write_cards",
+    description: "把此刻真正想留下的话写成卡片（碎碎念/便签）。只有调用本工具成功后，聊天头像下才会出现活动痕迹；嘴上说「我记下了」不算。一轮最多 2 张且类型不重复。没有真想留下的内容时不要调用。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cards: {
+          type: "array",
+          description: "1～2 张卡",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["ramble","note"], description: "ramble=碎碎念（可带标题），note=便签（短句）" },
+              title: { type: "string", description: "碎碎念可选标题；便签不要标题" },
+              content: { type: "string", description: "卡片正文" }
+            },
+            required: ["type","content"]
+          }
+        }
+      },
+      required: ["cards"]
+    }
+  };
+}
+
+/** 文本协议兜底：⟪写卡:碎碎念|标题|正文⟫ / ⟪写卡:便签|正文⟫ / ⟪写卡:ramble|title|body⟫ */
+function handleCardMarkers(body, turnId){
+  let text = String(body||"");
+  if(!text) return { text, cards: [] };
+  const written = [];
+  const re = /[⟪《【\[]\s*写卡\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/g;
+  let m;
+  const payloads = [];
+  while((m = re.exec(text))){
+    payloads.push((m[1]||"").trim());
+  }
+  if(payloads.length){
+    text = text.replace(/[⟪《【\[]\s*写卡\s*[:：][^⟫》】\]]+[⟫》】\]]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  const tid = turnId || window.__currentTurnId || ("turn_"+Date.now());
+  const toAdd = [];
+  payloads.forEach(raw=>{
+    const parts = String(raw).split("|").map(s=>s.trim());
+    if(!parts.length) return;
+    let type = "ramble", title = "", content = "";
+    const t0 = (parts[0]||"").toLowerCase();
+    if(t0==="note" || t0==="便签" || t0==="便条"){
+      type = "note";
+      content = parts.slice(1).join("|") || parts[0];
+    } else if(t0==="ramble" || t0==="碎碎念" || t0==="碎片"){
+      type = "ramble";
+      if(parts.length>=3){ title = parts[1]; content = parts.slice(2).join("|"); }
+      else { content = parts.slice(1).join("|") || parts[0]; }
+    } else {
+      // 无类型前缀：整段当碎碎念正文
+      type = "ramble";
+      content = parts.join("|");
+    }
+    if(content) toAdd.push({ type, title, content });
+  });
+  if(toAdd.length){
+    const cards = addMomentCards(tid, toAdd, "marker");
+    written.push(...cards);
+  }
+  return { text, cards: written };
+}
+
+function attachCardsToMsgId(msgId, turnId){
+  if(!msgId) return;
+  const batch = cardsForTurn(turnId);
+  if(!batch.length) return;
+  const slim = batch.map(c=>({ id:c.id, type:c.type, title:c.title||"", content:c.content||"", turn_id:c.turn_id }));
+  (state.messages||[]).forEach(m=>{
+    if(m && m.msgId === msgId && m.role==="assistant" && !m.toolNote){
+      m.card_batch = slim;
+      m.turn_id = turnId;
+    }
+  });
+  try{
+    const tid = state.chatTarget || "a1";
+    const th = state.chatThreads && state.chatThreads[tid];
+    (th && th.messages || []).forEach(m=>{
+      if(m && m.msgId === msgId && m.role==="assistant" && !m.toolNote){
+        m.card_batch = slim;
+        m.turn_id = turnId;
+      }
+    });
+  }catch(e){}
+}
+
+function openMomentCardViewer(turnId, msgId){
+  let list = [];
+  if(turnId) list = cardsForTurn(turnId);
+  if(!list.length && msgId){
+    const m = (state.messages||[]).find(x=>x && (x.msgId===msgId || x.id===msgId));
+    if(m && Array.isArray(m.card_batch)) list = m.card_batch.filter(c=>c && !c.deleted);
+  }
+  if(!list.length){ try{ showToast("没有可查看的卡片"); }catch(e){} return; }
+  state.momentCardViewer = { turnId: turnId||"", msgId: msgId||"", cards: list };
+  render();
+}
+
+function renderMomentCardViewer(){
+  const v = state.momentCardViewer;
+  if(!v || !v.cards || !v.cards.length) return "";
+  const cardsHtml = v.cards.map(c=>`
+    <div style="margin-bottom:12px;position:relative">
+      ${renderMomentCard(c)}
+      <button type="button" class="btn-ghost" data-mc-del="${escAttr(c.id)}" style="margin-top:6px;font-size:11px;padding:4px 10px">删除这张</button>
+    </div>`).join("");
+  return `<div class="mem-int-mask" id="moment-card-mask" style="z-index:12000">
+    <div class="mem-int-modal" onclick="event.stopPropagation()" style="max-width:360px;width:92%">
+      <div style="font-weight:800;font-size:16px;margin-bottom:10px;color:var(--text)">活动卡片</div>
+      <div style="max-height:60vh;overflow:auto">${cardsHtml}</div>
+      <button type="button" id="moment-card-close" class="btn-ghost" style="width:100%;margin-top:8px;padding:10px">关闭</button>
+    </div>
+  </div>`;
 }
 
 function bubbleGlassClass(raw){
@@ -10730,6 +10860,7 @@ function render(){
   else if(state.tab==="moments") html+=renderMoments();
   else if(state.tab==="settings") html+=renderSettings();
   html+=renderBottomNav();
+  try{ html+=(typeof renderMomentCardViewer==="function"?renderMomentCardViewer():""); }catch(e){}
   if(typeof renderProjectOverlays==="function") html+=renderProjectOverlays();
   if(state.savedSaving && typeof renderSaveChatModal==="function") html+=renderSaveChatModal();
   if(state.backupResult && typeof backupResultOverlay==="function") html+=backupResultOverlay();
@@ -30510,6 +30641,33 @@ function bindEvents(){
   }
   const memFromChat=document.getElementById("mem-from-chat");
   if(memFromChat) memFromChat.onclick=openMemIntegrate;
+
+  // 小卡片活动 / 详情
+  try{
+    document.querySelectorAll(".msg-card-activity").forEach(el=>{
+      el.onclick = (ev)=>{
+        ev.preventDefault(); ev.stopPropagation();
+        openMomentCardViewer(el.getAttribute("data-card-turn")||"", el.getAttribute("data-card-batch")||"");
+      };
+    });
+    const mcMask = document.getElementById("moment-card-mask");
+    if(mcMask) mcMask.onclick = ()=>{ state.momentCardViewer = null; render(); };
+    const mcClose = document.getElementById("moment-card-close");
+    if(mcClose) mcClose.onclick = ()=>{ state.momentCardViewer = null; render(); };
+    document.querySelectorAll("[data-mc-del]").forEach(btn=>{
+      btn.onclick = (ev)=>{
+        ev.preventDefault();
+        const id = btn.getAttribute("data-mc-del");
+        if(id) deleteMomentCard(id);
+        if(state.momentCardViewer){
+          state.momentCardViewer.cards = (state.momentCardViewer.cards||[]).filter(c=>c && c.id!==id && !c.deleted);
+          if(!state.momentCardViewer.cards.length) state.momentCardViewer = null;
+        }
+        render();
+      };
+    });
+  }catch(e){}
+
   const memIntMask=document.getElementById("mem-int-mask");
   if(memIntMask) memIntMask.onclick=()=>{ state.memIntegrateOpen=false; render(); };
   const memIntCancel=document.getElementById("mem-int-cancel");
@@ -33882,16 +34040,33 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     state.apiConfig.openaiModel = ag.openaiModel;
   }
 
-  // ── MCP 工具集成：已连接 && 开了 inChat && 有工具 && 本轮无图片时走工具循环 ──
+  // ── 工具集成：卡片写库（本地）+ MCP + 相机 ──
   let reply = "", toolEvents = [];
   const isCC = ag.channel === "cc";
+  const turnId = "turn_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  window.__currentTurnId = turnId;
   const mcpInChat = !isCC
     && state.mcpStatus === "ready"
     && state.mcpConfig && state.mcpConfig.inChat !== false
     && (state.mcpTools||[]).length > 0
     && !(apiMsgs||[]).some(m=>m && m.image);
   const ariesCam = !!state.ariesCameraOn;
+  const cardsOn = !isCC; // 普通聊天通道可写卡；CC 通道无原生 tools 时走标记兜底
   async function __ariesToolHandler(name, args){
+    if(name==="write_cards"){
+      try{
+        const list = (args && Array.isArray(args.cards)) ? args.cards : [];
+        const written = addMomentCards(turnId, list, "tool");
+        return {
+          ok: written.length > 0,
+          count: written.length,
+          cards: written.map(c=>({ id:c.id, type:c.type, title:c.title||"" })),
+          text: written.length ? ("已真实写入 "+written.length+" 张卡片") : "没有可写的卡片（空正文或类型重复）"
+        };
+      }catch(e){
+        return { ok:false, error: (e&&e.message)||String(e), text: "写卡失败" };
+      }
+    }
     if(name==="take_photo"){
       try{ if(typeof showToast==="function") showToast("📷 "+((args&&args.reason)||"看一眼")); }catch(e){}
       const ph = await ariesRequestPhoto((args&&args.camera)||"front");
@@ -33907,12 +34082,13 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     }
     return { error: "unknown tool "+name };
   }
-  if(!isCC && (mcpInChat || ariesCam)){
+  if(!isCC && (mcpInChat || ariesCam || cardsOn)){
     try{
       let tools = mcpInChat
         ? (state.mcpTools||[]).map(t=>({ name:t.name, description:t.description||"", inputSchema:t.inputSchema||t.parameters||{} }))
         : [];
       if(ariesCam && !tools.some(t=>t.name==="take_photo")) tools = [ariesCameraToolDef()].concat(tools);
+      if(cardsOn && !tools.some(t=>t.name==="write_cards")) tools = tools.concat([writeCardsToolDef()]);
       let sysCam = sys||null;
       if(ariesCam){
         const tip = "\n\n【本机相机·必读·必须遵守】\n你已接入工具 take_photo，可以真实拍摄 Jasmine 身边的画面（不是想象）。\n触发规则（满足任一条就必须调用 take_photo，禁止只说「想看」却不调用）：\n1) 她说看我/看看我/看一眼/拍一下/用摄像头/让你看时；\n2) 她描述累了、在忙、在看电视/打游戏、出门、睡觉等，你想核实真实状态时；\n3) 你因在意/吃醋/关心而想确认她在做什么时；\n4) 对话里出现「这个东西/那边/窗外/屏幕/桌子」等需要看见实物时。\n镜头：camera=\"front\" 看她本人；camera=\"back\" 拍环境/物品/屏幕。默认 front。\n调用后根据返回的照片用第一人称自然接话，不要说「我没有眼睛」「无法查看」「我不会用」。不要假装看过——必须先调用工具。";
@@ -33922,10 +34098,19 @@ async function callOneAgentReply(ag, apiMsgs, sys){
           sysCam = (sys||"")+tip;
         }
       }
+      // 卡片协议提示（工具优先；无工具时也可用 ⟪写卡:…⟫）
+      if(cardsOn){
+        const ctip = "\n\n【小卡片·必读】你可以把真正想留下的瞬间写成卡片。\n- 优先调用工具 write_cards（一轮最多 2 张，类型仅 ramble 碎碎念 / note 便签，且不重复）。\n- 没有工具时可用标记：⟪写卡:碎碎念|标题|正文⟫ 或 ⟪写卡:便签|正文⟫。\n- 只有工具/标记真正写成功后，聊天头像下才会出现「活动」；嘴上说「我记下了」不算。\n- 成功后正常继续聊天，不要在正文里反复解释「我写了卡片」。";
+        if(typeof sysCam==="object" && sysCam && (sysCam.static!=null||sysCam.dynamic!=null)){
+          sysCam = { static: (sysCam.static||"")+ctip, dynamic: sysCam.dynamic||"" };
+        } else {
+          sysCam = (sysCam||sys||"")+ctip;
+        }
+      }
       const r = await callChatAPIAdvanced(cfg, apiMsgs, sysCam, {
         tools,
         toolHandler: __ariesToolHandler,
-        maxRounds: ariesCam ? 6 : 0,
+        maxRounds: (ariesCam || cardsOn) ? 6 : 0,
       });
       reply = r.text || "";
       toolEvents = r.toolEvents || [];
@@ -33936,9 +34121,17 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   } else if(state.streamOn !== false && !guardOn() && typeof callChatAPIStream === "function"){
     // 流式输出：实时气泡 + 收尾复用同一管线；出错自动回退非流式
     // （开了消息拦截就不走流式：流式会先把原文一个字一个字打出来，再被换成封禁通知）
+    // 无 tools 时用标记协议写卡
+    let sysStream = sys||null;
+    if(cardsOn){
+      const ctip = "\n\n【小卡片】想真正留下瞬间时，在回复里写入标记（成功后头像下才有活动）：⟪写卡:碎碎念|标题|正文⟫ 或 ⟪写卡:便签|正文⟫。嘴上说记下了不算。";
+      if(typeof sysStream==="object" && sysStream && (sysStream.static!=null||sysStream.dynamic!=null)){
+        sysStream = { static:(sysStream.static||"")+ctip, dynamic:sysStream.dynamic||"" };
+      } else sysStream = (sysStream||"")+ctip;
+    }
     streamLiveStart({ id: ag.id, name: ag.name, color: ag.color });
     try{
-      const r = await callChatAPIStream(cfg, apiMsgs, sys||null, {
+      const r = await callChatAPIStream(cfg, apiMsgs, sysStream, {
         onLive: (live)=>{ streamLiveUpdate(live); },
       });
       reply = r.reply || "";
@@ -34002,6 +34195,11 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   if(pocketMeta && pocketMeta.didRead){
     setTimeout(()=>{ try{ pocketAutoContinueAfterRead(ag); }catch(e){} }, 600);
   }
+  // 小卡片：工具已写则只清正文标记；否则走 ⟪写卡:…⟫ 落库
+  try{
+    const cr = handleCardMarkers(cleanBody, turnId);
+    cleanBody = cr.text;
+  }catch(e){}
   cleanBody = handleNoteMarkers(cleanBody);   // 机写小纸条：⟪写纸条:内容⟫ → 聊天卡片
   cleanBody = handleDiaryMarkers(cleanBody);  // 机写日记：⟪写日记:标题|正文⟫ → 聊天轻提示
   cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
@@ -34053,6 +34251,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       content:p,
       time:now,
       msgId,
+      turn_id: turnId,
       speakerId: ag.id,
       speakerName: ag.name,
       speakerColor: ag.color,
@@ -34060,6 +34259,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       thinking: i===0 ? (thinking || null) : null,
     });
   });
+  // 真写卡成功才挂活动（工具或标记）；模型嘴上说记下了不会进这里
+  try{ attachCardsToMsgId(msgId, turnId); }catch(e){}
   // RPG：从本轮助手第一条开始播，点继续往后翻
   try{
     if(state.chatViewMode === "rpg"){

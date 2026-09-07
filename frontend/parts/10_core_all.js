@@ -4811,10 +4811,11 @@ function render(){
   let html="";
   if(state.subPage){ html+=renderSubPage(); }
   else if(state.tab==="home") html+=renderHomeSwipe();
-  else if(state.tab==="chat") html+=renderChat(); try{ html+=(typeof renderMomentCardViewer==="function"?renderMomentCardViewer():""); }catch(e){};
+  else if(state.tab==="chat") html+=renderChat();
   else if(state.tab==="moments") html+=renderMoments();
   else if(state.tab==="settings") html+=renderSettings();
   html+=renderBottomNav();
+  try{ html+=(typeof renderMomentCardViewer==="function"?renderMomentCardViewer():""); }catch(e){}
   if(typeof renderProjectOverlays==="function") html+=renderProjectOverlays();
   if(state.savedSaving && typeof renderSaveChatModal==="function") html+=renderSaveChatModal();
   if(state.backupResult && typeof backupResultOverlay==="function") html+=backupResultOverlay();
