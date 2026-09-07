@@ -34180,6 +34180,24 @@ window.reinitState = function(){
   // 登录切用户后也从原生镜像恢复（壁纸/头像等配额满时落到原生的数据）
   try{ if(typeof restoreNativeMirrors === "function") restoreNativeMirrors();
 try{ restorePrNative(); }catch(e){} }catch(e){}
+  // 登录后若可见消息仍空：立刻再跑多源抢救（冷启动时可能还没带对账号前缀）
+  try{
+    const msgCount = (state.messages && state.messages.length) || 0;
+    if(msgCount === 0 && typeof salvageChatThreadsFromDevice === "function"){
+      (async ()=>{
+        try{
+          const res = await salvageChatThreadsFromDevice();
+          window.__chatNativeHydrated = true;
+          if(res && res.ok){
+            try{ if(typeof showToast==="function") showToast((res.msg||"已从本机找回聊天").split("\n")[0]); }catch(e){}
+            try{ render(); }catch(e){}
+          }
+        }catch(e){ window.__chatNativeHydrated = true; }
+      })();
+    } else {
+      window.__chatNativeHydrated = true;
+    }
+  }catch(e){ try{ window.__chatNativeHydrated = true; }catch(_){} }
   // 登录后触发一次记忆自动沉淀（补足 App 关闭期间积攒的聊天）
   setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
   setTimeout(()=>{ if(typeof compressThreadIfNeeded==="function") compressThreadIfNeeded(); }, 9000);
