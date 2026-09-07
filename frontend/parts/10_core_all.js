@@ -1057,6 +1057,8 @@ const LS = {
   get:(k,d)=>{ try{ const v=localStorage.getItem(LS._k(k)); return v?JSON.parse(v):d; }catch{ return d; } },
   set(k,v){
     try{
+      // 聊天整包/分片不再写入 localStorage（防配额挤掉其它键）
+      if(k === "chatThreads" || /^chatThread_/.test(k)) return true;
       localStorage.setItem(LS._k(k),JSON.stringify(v));
       // 写成功但该 key 之前落到过原生镜像 → 同步刷新镜像，保证原生永远是最新（冷启动恢复以原生为准）
       if(__nativeMirrorKeys.has(LS._k(k)) && !__nativeMirrorSkip(k)) __nativeMirrorWrite(k, v);
@@ -3087,13 +3089,28 @@ function openChatIdb(){
   return __chatIdbOpening.then(db=>{ __chatIdbOpening = null; return db; }).catch(e=>{ __chatIdbOpening = null; throw e; });
 }
 
+const CHAT_IDB_MAX_MSGS = 10000; // IDB 热缓存：每线程最多 1 万条；全量只在私有目录
+
+function trimThreadsForIdb(threads){
+  if(!threads || typeof threads !== "object") return threads;
+  const out = {};
+  Object.keys(threads).forEach(tid=>{
+    const th = threads[tid] || {};
+    const msgs = Array.isArray(th.messages) ? th.messages : [];
+    const trimmed = msgs.length > CHAT_IDB_MAX_MSGS ? msgs.slice(-CHAT_IDB_MAX_MSGS) : msgs;
+    out[tid] = Object.assign({}, th, { messages: trimmed, pendingUser: th.pendingUser || [] });
+  });
+  return out;
+}
+
 async function idbPutChatThreads(threads){
   try{
     if(!threads || typeof threads !== "object") return false;
     if(typeof chatThreadsIsEmpty === "function" && chatThreadsIsEmpty(threads)) return false;
     const db = await openChatIdb();
     const id = chatIdbScopeKey();
-    const payload = { id, threads, updatedAt: Date.now(), count: (typeof chatThreadsScore==="function" ? chatThreadsScore(threads).count : 0) };
+    const slim = trimThreadsForIdb(threads);
+    const payload = { id, threads: slim, updatedAt: Date.now(), count: (typeof chatThreadsScore==="function" ? chatThreadsScore(slim).count : 0), fullOnFs: true };
     await new Promise((resolve, reject)=>{
       const tx = db.transaction(CHAT_IDB_STORE, "readwrite");
       tx.oncomplete = ()=> resolve(true);
@@ -3276,9 +3293,135 @@ async function flushChatFsNow(){
   }catch(e){ return false; }
 }
 
-/** 给用户看的私有路径说明（Android） */
 function chatPrivatePathHint(){
   return "/data/data/com.personal.memorypalace/files/" + CHAT_FS_ROOT + "/<账号>/";
+}
+
+// ─── 全量 App 状态主存：私有目录（放弃依赖 localStorage 扛大数据）──────────
+// /data/data/com.personal.memorypalace/files/baileys_data/<账号>/kv/<key>.json
+const DATA_FS_ROOT = "baileys_data";
+let __kvFsTimer = null;
+const __kvFsQueue = new Set();
+const __LS_CHAT_SKIP = new Set(["chatThreads","chatThread_a1","chatThread_a2","chatThread_group"]);
+
+function dataFsDir(){
+  return DATA_FS_ROOT + "/" + chatIdbScopeKey().replace(/[^a-zA-Z0-9._:-]/g, "_") + "/kv";
+}
+
+async function fsWriteKv(key, value){
+  const Fs = __capFs();
+  if(!Fs || !key) return false;
+  try{
+    const dir = dataFsDir();
+    try{ await Fs.mkdir({ path: dir, directory: __fsDirData(), recursive: true }); }catch(e){}
+    await Fs.writeFile({
+      path: dir + "/" + key + ".json",
+      directory: __fsDirData(),
+      data: JSON.stringify({ key, value, updatedAt: Date.now() }),
+      encoding: "utf8",
+      recursive: true
+    });
+    return true;
+  }catch(e){
+    try{ console.warn("[data-fs] write", key, e); }catch(_){}
+    return false;
+  }
+}
+
+async function fsReadKv(key){
+  const Fs = __capFs();
+  if(!Fs || !key) return undefined;
+  try{
+    const r = await Fs.readFile({ path: dataFsDir() + "/" + key + ".json", directory: __fsDirData(), encoding: "utf8" });
+    if(!r || r.data == null) return undefined;
+    const obj = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+    return obj && Object.prototype.hasOwnProperty.call(obj, "value") ? obj.value : obj;
+  }catch(e){ return undefined; }
+}
+
+async function fsLoadAllKvIntoState(){
+  const Fs = __capFs();
+  if(!Fs || typeof PERSIST_MAP === "undefined") return { ok:false, n:0 };
+  let n = 0;
+  try{
+    const dir = dataFsDir();
+    let files = [];
+    try{
+      const list = await Fs.readdir({ path: dir, directory: __fsDirData() });
+      files = (list && list.files) || [];
+    }catch(e){ return { ok:false, n:0 }; }
+    for(const ent of files){
+      const name = (typeof ent === "string") ? ent : (ent.name || "");
+      if(!name || !name.endsWith(".json") || name === "_migrated.json") continue;
+      const key = name.slice(0, -5);
+      if(__LS_CHAT_SKIP.has(key)) continue;
+      try{
+        const val = await fsReadKv(key);
+        if(val === undefined) continue;
+        const sk = Object.keys(PERSIST_MAP).find(s => PERSIST_MAP[s] === key);
+        if(sk && typeof state !== "undefined"){
+          if(sk === "menuShareOn") state._menuShareOn = val;
+          else if(sk === "menuOrderShareOn") state._menuOrderShareOn = val;
+          else state[sk] = val;
+          n++;
+        }
+      }catch(e){}
+    }
+    return { ok: n>0, n };
+  }catch(e){ return { ok:false, n:0 }; }
+}
+
+/** 一次性把 LS/内存里现有数据抄进私有目录（只复制不删除） */
+async function migrateLocalStorageToFs(){
+  const Fs = __capFs();
+  if(!Fs) return { ok:false, msg:"no-fs-plugin" };
+  let n = 0;
+  try{
+    try{
+      const th = (typeof state!=="undefined" && state.chatThreads) || (typeof LS!=="undefined" ? LS.get("chatThreads", null) : null);
+      if(th && typeof th === "object"){ await fsWriteChatThreads(th); n++; }
+    }catch(e){}
+    if(typeof PERSIST_MAP !== "undefined"){
+      for(const sk of Object.keys(PERSIST_MAP)){
+        const key = PERSIST_MAP[sk];
+        if(__LS_CHAT_SKIP.has(key)) continue;
+        try{
+          let val = (typeof state!=="undefined" && state[sk] !== undefined) ? state[sk] : undefined;
+          if(val === undefined && typeof LS!=="undefined") val = LS.get(key, undefined);
+          if(val !== undefined){ await fsWriteKv(key, val); n++; }
+        }catch(e){}
+      }
+    }
+    try{
+      await Fs.writeFile({
+        path: dataFsDir() + "/_migrated.json",
+        directory: __fsDirData(),
+        data: JSON.stringify({ at: Date.now(), n }),
+        encoding: "utf8",
+        recursive: true
+      });
+    }catch(e){}
+    return { ok:true, n };
+  }catch(e){ return { ok:false, msg: String(e&&e.message||e) }; }
+}
+
+function scheduleKvFsPersist(key){
+  if(!key || __LS_CHAT_SKIP.has(key)) return;
+  __kvFsQueue.add(key);
+  if(__kvFsTimer) clearTimeout(__kvFsTimer);
+  __kvFsTimer = setTimeout(async ()=>{
+    __kvFsTimer = null;
+    const keys = Array.from(__kvFsQueue);
+    __kvFsQueue.clear();
+    for(const k of keys){
+      try{
+        const sk = Object.keys(PERSIST_MAP||{}).find(s => PERSIST_MAP[s] === k);
+        if(!sk || typeof state === "undefined") continue;
+        const val = sk==="menuShareOn" ? state._menuShareOn : sk==="menuOrderShareOn" ? state._menuOrderShareOn : state[sk];
+        if(val !== undefined) await fsWriteKv(k, val);
+      }catch(e){}
+    }
+  }, 400);
 }
 
 
@@ -4136,9 +4279,18 @@ const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","al
 function persist(key){
   if(!PERSIST_MAP[key]) return false;
   const storageKey = PERSIST_MAP[key];
-  const ok = LS.set(storageKey, state[key]); // 落盘成败要回传：配额满时 LS.set 是静默 false
-  // 壁纸/头像走手机原生存储：即使 localStorage 没满也镜像一份，冷启动 restoreNativeMirrors 以原生为准
-  if(__NATIVE_IMAGE_KEYS.has(key)) __nativeMirrorWrite(storageKey, state[key]);
+  // 聊天全量：文件 + IDB热缓存 + Preferences，不再塞 localStorage
+  if(storageKey === "chatThreads" || /^chatThread_/.test(storageKey)){
+    try{ if(typeof scheduleChatFsPersist==="function") scheduleChatFsPersist(); }catch(e){}
+    try{ if(typeof scheduleChatIdbPersist==="function") scheduleChatIdbPersist(); }catch(e){}
+    try{ if(typeof scheduleChatNativePersist==="function") scheduleChatNativePersist(); }catch(e){}
+    return true;
+  }
+  // 其它状态：主写私有目录；LS 仅轻量兼容
+  try{ if(typeof scheduleKvFsPersist==="function") scheduleKvFsPersist(storageKey); }catch(e){}
+  let ok = true;
+  try{ ok = LS.set(storageKey, state[key]); }catch(e){ ok = false; }
+  if(typeof __NATIVE_IMAGE_KEYS!=="undefined" && __NATIVE_IMAGE_KEYS.has(key)) __nativeMirrorWrite(storageKey, state[key]);
   return ok;
 }
 
@@ -28486,23 +28638,38 @@ window.reinitState = function(){
   // 登录切用户后也从原生镜像恢复（壁纸/头像等配额满时落到原生的数据）
   try{ if(typeof restoreNativeMirrors === "function") restoreNativeMirrors();
 try{ restorePrNative(); }catch(e){} }catch(e){}
-  // 登录后若可见消息仍空：立刻再跑多源抢救（冷启动时可能还没带对账号前缀）
+  // 登录后：私有目录灌状态 + 空消息再抢救 + 一次性迁移到文件
   try{
-    const msgCount = (state.messages && state.messages.length) || 0;
-    if(msgCount === 0 && typeof salvageChatThreadsFromDevice === "function"){
-      (async ()=>{
-        try{
+    (async ()=>{
+      try{
+        if(typeof fsLoadAllKvIntoState === "function"){
+          const kv = await fsLoadAllKvIntoState();
+          if(kv && kv.ok) try{ render(); }catch(e){}
+        }
+      }catch(e){}
+      try{
+        const msgCount = (state.messages && state.messages.length) || 0;
+        if(msgCount === 0 && typeof salvageChatThreadsFromDevice === "function"){
           const res = await salvageChatThreadsFromDevice();
           window.__chatNativeHydrated = true;
           if(res && res.ok){
             try{ if(typeof showToast==="function") showToast((res.msg||"已从本机找回聊天").split("\n")[0]); }catch(e){}
             try{ render(); }catch(e){}
           }
-        }catch(e){ window.__chatNativeHydrated = true; }
-      })();
-    } else {
-      window.__chatNativeHydrated = true;
-    }
+        } else {
+          window.__chatNativeHydrated = true;
+        }
+      }catch(e){ window.__chatNativeHydrated = true; }
+      try{
+        if(typeof migrateLocalStorageToFs === "function"){
+          const flagKey = (window.__LS_PREFIX||"") + "__fs_migrated_v1";
+          if(!localStorage.getItem(flagKey)){
+            const mig = await migrateLocalStorageToFs();
+            if(mig && mig.ok) localStorage.setItem(flagKey, String(Date.now()));
+          }
+        }
+      }catch(e){}
+    })();
   }catch(e){ try{ window.__chatNativeHydrated = true; }catch(_){} }
   // 登录后触发一次记忆自动沉淀（补足 App 关闭期间积攒的聊天）
   setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
@@ -28547,6 +28714,12 @@ if(!window.__chatFlushBound){
 // 冷启动：多源抢救聊天（原生 Preferences + 分片 + 旧前缀），按「最新消息时间」合并，避免旧库盖住新库
 (async function restoreNativeChat(){
   try{
+    try{
+      if(typeof fsLoadAllKvIntoState === "function"){
+        const kv = await fsLoadAllKvIntoState();
+        if(kv && kv.ok && typeof render === "function") render();
+      }
+    }catch(e){}
     if(typeof salvageChatThreadsFromDevice === "function"){
       const res = await salvageChatThreadsFromDevice();
       window.__chatNativeHydrated = true;
@@ -28557,6 +28730,16 @@ if(!window.__chatFlushBound){
     } else {
       window.__chatNativeHydrated = true;
     }
+    try{
+      if(typeof migrateLocalStorageToFs === "function"){
+        const flagKey = (window.__LS_PREFIX||"") + "__fs_migrated_v1";
+        if(!localStorage.getItem(flagKey)){
+          const mig = await migrateLocalStorageToFs();
+          if(mig && mig.ok) localStorage.setItem(flagKey, String(Date.now()));
+          try{ console.info("[fs-migrate]", mig); }catch(e){}
+        }
+      }
+    }catch(e){}
   }catch(e){
     window.__chatNativeHydrated = true;
   }
