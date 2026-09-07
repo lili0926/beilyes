@@ -34386,8 +34386,8 @@ function __memNote(msg){
  *  不设上限就会把几千条历史一次性喂给模型 —— 必然超时/超长，然后整条线程永远卡在这。 */
 const MEM_AUTO_MAX_PER_RUN = 200;
 /** 聊天记录每新增多少条才自动提炼一次记忆（单位是聊天消息条数，不是记忆条数）。
- *  原 60 → 200：避免过密流水账；手动「立刻沉淀 / 从聊天整理」不受此限制。 */
-const MEM_AUTO_MIN_NEW = 200;
+ *  原 60 → 200 → 100：避免过密流水账；手动「立刻沉淀 / 从聊天整理」不受此限制。 */
+const MEM_AUTO_MIN_NEW = 100;
 /** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App）
  *  opts.force=true 跳过「攒够 MEM_AUTO_MIN_NEW 条」和 20 分钟冷却（记忆库页的「立刻沉淀」用） */
 async function memAutoIntegrate(opts){
