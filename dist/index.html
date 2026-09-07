@@ -3409,6 +3409,9 @@
       cursor: pointer;
     }
     .msg-card-activity:active { opacity: 0.75; }
+    /* 只写卡、无正文：不显示空气泡框，只留活动胶囊 */
+    .bubble.card-only { display: none !important; }
+    .msg-row.card-only-row .bubble { display: none !important; }
 
     .bubble.me .voice-transcript { color: rgba(255,255,255,.75); }
     /* ── 语音消息 · 录音浮条（body 级 overlay，独立于 render）── */
@@ -26751,6 +26754,7 @@ function renderChat(){
       const firstInRun = runKey !== prevKey;
       prevKey = runKey;
       const glassCls = ((typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "") + (firstInRun ? "" : " cont");
+      const cardOnlyMsg = !!(m.cardOnly || (!String(m.content||"").trim() && ((m.card_batch&&m.card_batch.length)||(m.turn_id&&typeof cardsForTurn==="function"&&cardsForTurn(m.turn_id).length))));
       // 头像 + 名字 + 爱心 + 时间 的 meta 条（AI 靠左 / 我靠右，各轮只配第一条）
       const myName = (typeof myDisplayName==="function") ? myDisplayName() : ((state.coupleInfo && state.coupleInfo.myName) || "我");
       const speakerName = isMe ? myName : (m.speakerName || (activeAg && activeAg.name) || "");
@@ -26813,7 +26817,7 @@ function renderChat(){
           const card = typeof choiceCardHtml==="function" ? choiceCardHtml(choice, idx, answered) : "";
           bubbleInner = `${leadHtml?`<div class="bubble them${glassCls}" ${bubbleColor}>${imgHtml}${leadHtml}</div>`:(imgHtml?`<div class="bubble them${glassCls}" ${bubbleColor}>${imgHtml}</div>`:"")}${card}`;
         } else {
-          bubbleInner = `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor}>${imgHtml}${renderInline(stickerTxt, !isMe, !isMe && state.nsfwOn)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
+          bubbleInner = `<div class="bubble ${isMe?"me":"them"}${glassCls}${cardOnlyMsg?" card-only":""}" ${bubbleColor}>${imgHtml}${renderInline(stickerTxt, !isMe, !isMe && state.nsfwOn)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
         }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
@@ -34114,6 +34118,12 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       });
       reply = r.text || "";
       toolEvents = r.toolEvents || [];
+      try{
+        if((toolEvents||[]).some(t=>t && t.name==="write_cards")){
+          const rt = String(reply||"").trim();
+          if(!rt || rt==="（无响应）" || rt==="(无响应)") reply = "";
+        }
+      }catch(e){}
     }catch(e){
       showToast(`工具调用失败，已退化为普通对话：${e.message}`);
       reply = await callChatAPI(cfg, apiMsgs, sys||null);
@@ -34227,18 +34237,29 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   // NSFW 人称兜底：模型老爱用第三人称写自己，这里硬性改成「我/你」
   if(state.nsfwOn) cleanBody = nsfwFirstPersonRewrite(cleanBody);
   // 文章模式 / NSFW：整段显示，不拆成短气泡（NSFW 要一整条沉浸叙事，拆开会打断配色与连贯）
-  const parts = (state.chatMode === "story" || state.nsfwOn)
-    ? ([(cleanBody||"").trim()].filter(Boolean).length ? [(cleanBody||"").trim()] : (projectFilesFromReply.length ? [] : ["……"]))
-    : (String(cleanBody||"").trim() ? splitReply(cleanBody) : []);
+  // 本轮是否已真实写卡（工具/标记）
+  let __turnHasCards = false;
+  try{ __turnHasCards = (typeof cardsForTurn==="function") && cardsForTurn(turnId).length > 0; }catch(e){}
+  let __body = String(cleanBody||"").trim();
+  // 工具只写了卡、模型没吐正文时，API 层常回「（无响应）」——有卡就不当正文
+  if(__turnHasCards && (!__body || __body==="（无响应）" || __body==="……" || __body==="(无响应)")){
+    __body = "";
+  }
+  let parts = (state.chatMode === "story" || state.nsfwOn)
+    ? (__body ? [__body] : (projectFilesFromReply.length ? [] : (__turnHasCards ? ["\u200b"] : ["……"])))
+    : (__body ? splitReply(__body) : []);
+  // 有卡无字：仍推一条载体消息挂活动，正文用零宽字符，渲染时当空气泡处理
+  if(!parts.length && __turnHasCards) parts = ["\u200b"];
   const now = new Date().toISOString();
   const msgId = "m"+Date.now()+"_"+ag.id;
   // 本通回复的 token 用量（__usageLog 最近一条对应这次请求），挂到首条消息供思考链顶端显示
   const lastUsage = (typeof __usageLog !== "undefined" && __usageLog.length) ? __usageLog[__usageLog.length-1] : null;
-  // MCP 工具调用足迹：一行暗色小气泡
-  if(toolEvents.length){
+  // MCP 工具调用足迹：一行暗色小气泡（本地工具 write_cards / take_photo 不刷屏）
+  const publicToolEvents = (toolEvents||[]).filter(t=>t && t.name!=="write_cards" && t.name!=="take_photo");
+  if(publicToolEvents.length){
     state.messages.push({
       role:"assistant",
-      content:"🔧 调用了 MCP 工具："+toolEvents.map(t=>t.name).join("、"),
+      content:"🔧 调用了 MCP 工具："+publicToolEvents.map(t=>t.name).join("、"),
       time:now, msgId:msgId+"_tools",
       speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color,
       toolNote:true,
@@ -34246,9 +34267,11 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   }
   const _rpgBatchStart = state.messages.length;
   parts.forEach((p,i)=>{
+    const bare = String(p||"").replace(/\u200b/g,"").trim();
+    const isCardCarrier = __turnHasCards && !bare;
     state.messages.push({
       role:"assistant",
-      content:p,
+      content: isCardCarrier ? "" : p,
       time:now,
       msgId,
       turn_id: turnId,
@@ -34257,6 +34280,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       speakerColor: ag.color,
       usage: i===0 ? lastUsage : null,
       thinking: i===0 ? (thinking || null) : null,
+      cardOnly: isCardCarrier || undefined,
     });
   });
   // 真写卡成功才挂活动（工具或标记）；模型嘴上说记下了不会进这里

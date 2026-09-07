@@ -3409,6 +3409,9 @@
       cursor: pointer;
     }
     .msg-card-activity:active { opacity: 0.75; }
+    /* 只写卡、无正文：不显示空气泡框，只留活动胶囊 */
+    .bubble.card-only { display: none !important; }
+    .msg-row.card-only-row .bubble { display: none !important; }
 
     .bubble.me .voice-transcript { color: rgba(255,255,255,.75); }
     /* ── 语音消息 · 录音浮条（body 级 overlay，独立于 render）── */
