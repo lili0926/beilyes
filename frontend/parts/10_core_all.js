@@ -28228,12 +28228,13 @@ function openMemIntegrate(){
   const pad = n=>String(n).padStart(2,"0");
   const today = new Date();
   const defTo = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
-  const d3 = new Date(Date.now()-2*86400000);
-  const defFrom = `${d3.getFullYear()}-${pad(d3.getMonth()+1)}-${pad(d3.getDate())}`;
+  // 默认「今天」：手动整理应对准最近发生的事；近 3/7 天用弹窗预设
+  const defFrom = defTo;
   const defaultTh = ((state.agents||[])[0] && (state.agents||[])[0].id) || "a1";
   if(!state.memIntegrateDraft) state.memIntegrateDraft = { threads:[defaultTh], dateFrom: defFrom, dateTo: defTo };
-  if(!state.memIntegrateDraft.dateFrom) state.memIntegrateDraft.dateFrom = defFrom;
-  if(!state.memIntegrateDraft.dateTo) state.memIntegrateDraft.dateTo = defTo;
+  // 每次打开都刷新到今天，避免草稿卡在很早的日期导致反复提炼旧事
+  state.memIntegrateDraft.dateFrom = defFrom;
+  state.memIntegrateDraft.dateTo = defTo;
   state.memIntegrateOpen = true;
   render();
 }
@@ -28285,18 +28286,19 @@ async function integrateMemoriesFromChat(){
   state.memMergeLoading=false; render();
 }
 
-/** AI 生成的记忆正文清洗：剥角色前缀、统一第三人称（主人一律写「用户」） */
+/** AI 生成的记忆正文清洗：剥角色前缀；保持「他」第一人称（我/她），严禁写成「用户」 */
 function sanitizeMemoryContent(raw){
   let s = String(raw||"").trim();
   if(!s) return "";
-  // 去掉行首角色标记（英文 / 中文冒号前缀）
-  s = s.replace(/^\s*(?:\[[^\]]*\]\s*)?(?:user|char|character|assistant|system|bot|human|assistant)[\s\]-]*\s*[:：]\s*/i, "");
-  s = s.replace(/^\s*(?:用户|恋人|TA|角色)\s*[:：]\s*/, "");
-  // 第一人称泄漏 → 第三人称（把主人统一写成「用户」，避免"站在我的视角"）
-  s = s.replace(/我们的/g, "用户和TA的");
-  s = s.replace(/我们/g, "用户和TA");
-  s = s.replace(/我的/g, "用户的");
-  s = s.replace(/我/g, "用户");
+  // 去掉行首角色标记
+  s = s.replace(/^\s*(?:\[[^\]]*\]\s*)?(?:user|char|character|assistant|system|bot|human)[\s\]-]*\s*[:：]\s*/i, "");
+  s = s.replace(/^\s*(?:用户|恋人|TA|角色|主人)\s*[:：]\s*/, "");
+  // 模型偶发第三人称旁白 / 旧规则残留 → 拉回他的第一人称
+  s = s.replace(/用户和TA的/g, "我们的");
+  s = s.replace(/用户和TA/g, "我们");
+  s = s.replace(/用户的/g, "我的");
+  s = s.replace(/用户/g, "我");
+  s = s.replace(/\buser\b/gi, "我");
   s = s.replace(/\s+/g, " ").replace(/\s+([，。！？；：、])/g, "$1").trim();
   return s.slice(0, 400);
 }
@@ -28408,8 +28410,8 @@ function __memNote(msg){
 /** 自动沉淀一次要消化的上限。基线一旦被写成 0（冷启动时线程还没 hydrate 就跑了这一轮），
  *  不设上限就会把几千条历史一次性喂给模型 —— 必然超时/超长，然后整条线程永远卡在这。 */
 const MEM_AUTO_MAX_PER_RUN = 200;
-/** 攒够多少条新消息才自动整理一次。原来是 60，出来的记忆太密（60 条能出七八条，
- *  全是流水账）。提到 200，配合提示词里「本段最多 4 条」，密度降到原来的六分之一。 */
+/** 聊天记录每新增多少条才自动提炼一次记忆（单位是聊天消息条数，不是记忆条数）。
+ *  原 60 → 200：避免过密流水账；手动「立刻沉淀 / 从聊天整理」不受此限制。 */
 const MEM_AUTO_MIN_NEW = 200;
 /** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App）
  *  opts.force=true 跳过「攒够 MEM_AUTO_MIN_NEW 条」和 20 分钟冷却（记忆库页的「立刻沉淀」用） */
@@ -28469,10 +28471,13 @@ async function memAutoIntegrate(opts){
   try{
     for(const [tid, info] of Object.entries(newPer)){
       if(info.n < 4) continue;
-      // 一次最多消化 MEM_AUTO_MAX_PER_RUN 条，剩下的下一轮接着来；检查点只推进到实际消化的位置
+      // 一次最多消化 MEM_AUTO_MAX_PER_RUN 条。
+      // force（立刻沉淀）：在未处理区间里取**最新**一批，避免积压时反复提炼很早以前的聊天。
+      // 自动：仍从检查点顺序往前推进，保证不漏。
       const take = Math.min(info.n, MEM_AUTO_MAX_PER_RUN);
-      const upTo = info.done + take;
-      const transcript = collectChatTranscript({ threadIds:[tid], skip: info.done, limit: take, maxPerThread:0 });
+      const skipStart = force ? (info.done + Math.max(0, info.n - take)) : info.done;
+      const upTo = skipStart + take;
+      const transcript = collectChatTranscript({ threadIds:[tid], skip: skipStart, limit: take, maxPerThread:0 });
       if(!transcript.trim()){ cp[tid] = upTo; state.memCheckpoint = cp; persist("memCheckpoint"); continue; }
       // 提炼一律走**聊天模型**（memDigestTranscript 里已改成聊天模型主力）。
       // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
