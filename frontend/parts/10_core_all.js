@@ -2242,8 +2242,21 @@ function retrieveRelevantMemories(query, topK = 10) {
   const queryTokens = tokenizeZh(query);
   if (!queryTokens.length) return memories.slice(-topK);
 
+  // 记忆分词缓存：避免每次检索对上千条全量 tokenize（13k 级会明显卡）
+  if(!window.__memTokCache) window.__memTokCache = new Map();
+  const tokCache = window.__memTokCache;
   const scores = memories.map(mem => {
-    const memTokens = tokenizeZh(mem.content || '');
+    const raw = mem.content || '';
+    const cacheKey = (mem.id || '') + ":" + raw.length + ":" + (mem.updatedAt || mem.time || "");
+    let memTokens = tokCache.get(cacheKey);
+    if(!memTokens){
+      memTokens = tokenizeZh(raw);
+      tokCache.set(cacheKey, memTokens);
+      if(tokCache.size > 5000){
+        // 简单淘汰：清一半
+        let i=0; for(const k of tokCache.keys()){ tokCache.delete(k); if(++i>2500) break; }
+      }
+    }
     if (!memTokens.length) return { mem, score: 0 };
 
     const tfMem = {}, tfQ = {};
@@ -2251,11 +2264,13 @@ function retrieveRelevantMemories(query, topK = 10) {
     queryTokens.forEach(t => { tfQ[t] = (tfQ[t] || 0) + 1; });
 
     let dot = 0, normMem = 0, normQ = 0;
-    const allT = new Set([...Object.keys(tfMem), ...Object.keys(tfQ)]);
-    allT.forEach(t => {
+    // 只扫 query 侧 token，避免全表 allT 大集合
+    Object.keys(tfQ).forEach(t => {
       const vm = tfMem[t] || 0, vq = tfQ[t] || 0;
-      dot += vm * vq; normMem += vm * vm; normQ += vq * vq;
+      dot += vm * vq;
     });
+    memTokens.forEach(t => { const c=tfMem[t]||0; normMem += c*c; });
+    queryTokens.forEach(t => { const c=tfQ[t]||0; normQ += c*c; });
     const cos = (normMem && normQ) ? dot / (Math.sqrt(normMem) * Math.sqrt(normQ)) : 0;
     const w = (mem.importance || 5) / 10;
     return { mem, score: cos * (0.8 + 0.2 * w) };
@@ -3129,12 +3144,143 @@ function scheduleChatIdbPersist(){
   }, 350);
 }
 
+
 async function flushChatIdbNow(){
   try{
     if(__idbPersistTimer){ clearTimeout(__idbPersistTimer); __idbPersistTimer = null; }
     return await idbPutChatThreads(state.chatThreads || {});
   }catch(e){ return false; }
 }
+
+// ─── 手机私有目录文件落盘（@capacitor/filesystem → Directory.Data）──────────
+// Android 实际路径约：
+//   /data/data/com.personal.memorypalace/files/baileys_chat/<账号>/
+// 内含 a1.json / a2.json / group.json / meta.json
+// 卸载 App 或清「存储空间」会删；普通杀进程不会。
+const CHAT_FS_ROOT = "baileys_chat";
+let __fsPersistTimer = null;
+
+function chatFsDir(){
+  return CHAT_FS_ROOT + "/" + chatIdbScopeKey().replace(/[^a-zA-Z0-9._:-]/g, "_");
+}
+
+function __capFs(){
+  try{
+    const Cap = window.Capacitor;
+    if(Cap && Cap.Plugins && Cap.Plugins.Filesystem) return Cap.Plugins.Filesystem;
+  }catch(e){}
+  return null;
+}
+
+function __fsDirData(){
+  // Capacitor 6：字符串 "DATA" 与 Directory.Data 等价
+  return "DATA";
+}
+
+async function fsWriteChatThreads(threads){
+  const Fs = __capFs();
+  if(!Fs || !threads || typeof threads !== "object") return false;
+  if(typeof chatThreadsIsEmpty === "function" && chatThreadsIsEmpty(threads)) return false;
+  const dir = chatFsDir();
+  try{
+    // 确保目录存在
+    try{ await Fs.mkdir({ path: dir, directory: __fsDirData(), recursive: true }); }catch(e){}
+    const ids = Object.keys(threads);
+    for(const id of ids){
+      const th = threads[id];
+      if(!th) continue;
+      const path = dir + "/" + id + ".json";
+      await Fs.writeFile({
+        path,
+        directory: __fsDirData(),
+        data: JSON.stringify(th),
+        encoding: "utf8",
+        recursive: true
+      });
+    }
+    const meta = {
+      updatedAt: Date.now(),
+      scope: chatIdbScopeKey(),
+      threads: ids,
+      counts: ids.reduce((o,id)=>{ o[id]=((threads[id]&&threads[id].messages)||[]).length; return o; }, {})
+    };
+    await Fs.writeFile({
+      path: dir + "/meta.json",
+      directory: __fsDirData(),
+      data: JSON.stringify(meta),
+      encoding: "utf8",
+      recursive: true
+    });
+    return true;
+  }catch(e){
+    try{ console.warn("[chat-fs] write fail", e); }catch(_){}
+    return false;
+  }
+}
+
+async function fsReadChatThreadsFromDir(dir){
+  const Fs = __capFs();
+  if(!Fs || !dir) return null;
+  try{
+    const bag = {};
+    let any = false;
+    for(const id of ["a1","a2","group"]){
+      try{
+        const r = await Fs.readFile({ path: dir + "/" + id + ".json", directory: __fsDirData(), encoding: "utf8" });
+        if(r && r.data){
+          const th = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+          if(th && typeof th === "object"){ bag[id] = th; any = true; }
+        }
+      }catch(e){}
+    }
+    return any ? bag : null;
+  }catch(e){ return null; }
+}
+
+async function fsListChatThreadBags(){
+  const Fs = __capFs();
+  if(!Fs) return [];
+  const out = [];
+  try{
+    let entries = [];
+    try{
+      const list = await Fs.readdir({ path: CHAT_FS_ROOT, directory: __fsDirData() });
+      entries = (list && list.files) || [];
+    }catch(e){
+      // 根目录不存在
+      return [];
+    }
+    for(const ent of entries){
+      const name = (typeof ent === "string") ? ent : (ent.name || ent.path || "");
+      if(!name || name === "." || name === "..") continue;
+      const dir = CHAT_FS_ROOT + "/" + name;
+      const bag = await fsReadChatThreadsFromDir(dir);
+      if(bag) out.push({ src: "fs:"+name, threads: bag });
+    }
+  }catch(e){}
+  return out;
+}
+
+function scheduleChatFsPersist(){
+  if(__fsPersistTimer) clearTimeout(__fsPersistTimer);
+  __fsPersistTimer = setTimeout(()=>{
+    __fsPersistTimer = null;
+    try{ fsWriteChatThreads(state.chatThreads || {}); }catch(e){}
+  }, 500);
+}
+
+async function flushChatFsNow(){
+  try{
+    if(__fsPersistTimer){ clearTimeout(__fsPersistTimer); __fsPersistTimer = null; }
+    return await fsWriteChatThreads(state.chatThreads || {});
+  }catch(e){ return false; }
+}
+
+/** 给用户看的私有路径说明（Android） */
+function chatPrivatePathHint(){
+  return "/data/data/com.personal.memorypalace/files/" + CHAT_FS_ROOT + "/<账号>/";
+}
+
 
 window.__chatNativeHydrated = false; // 原生/多源恢复完成前，禁止把空快照写进 Preferences
 function saveActiveThread(){
@@ -3178,6 +3324,7 @@ function saveActiveThread(){
   }catch(e){}
   scheduleChatNativePersist();
   try{ scheduleChatIdbPersist(); }catch(e){}
+  try{ scheduleChatFsPersist(); }catch(e){}
   // RPG：用户侧新消息跟到该句；助手侧由 push 回复处定位到本轮第一条
   try{
     if(state.chatViewMode === "rpg" && state.tab === "chat" && state._rpgPreferEnd){
@@ -3258,6 +3405,14 @@ async function salvageChatThreadsFromDevice(){
       if(row && row.threads) pushCand("idb:"+ (row.id||"?"), row.threads);
     });
   }catch(e){ try{ diag.notes.push("idb:"+ (e.message||e)); }catch(_){} }
+  // 私有目录文件
+  try{
+    const curDir = chatFsDir();
+    const curBag = await fsReadChatThreadsFromDir(curDir);
+    if(curBag) pushCand("fs:current", curBag);
+    const listed = await fsListChatThreadBags();
+    (listed || []).forEach(row=>{ if(row && row.threads) pushCand(row.src, row.threads); });
+  }catch(e){ try{ diag.notes.push("fs:"+ (e.message||e)); }catch(_){} }
   try{
     const bag = {};
     ["a1","a2","group"].forEach(id=>{
@@ -3376,6 +3531,7 @@ async function salvageChatThreadsFromDevice(){
   window.__chatNativeHydrated = true;
   try{ persistChatNative(); }catch(e){}
   try{ await idbPutChatThreads(best); }catch(e){}
+  try{ await fsWriteChatThreads(best); }catch(e){}
   const latestStr = after.latest ? new Date(after.latest).toLocaleString() : "—";
   const top = candidates.slice(0,5).map(c=>{
     const ls = c.score.latest ? new Date(c.score.latest).toLocaleDateString() : "?";
@@ -28369,6 +28525,7 @@ function forceFlushChat(){
   try{ if(window.__currentUser) localStorage.setItem("__session_user__", window.__currentUser); }catch(e){}
   try{ persistChatNative(); }catch(e){}
   try{ flushChatIdbNow(); }catch(e){}
+  try{ flushChatFsNow(); }catch(e){}
 }
 if(!window.__chatFlushBound){
   window.__chatFlushBound = true;
