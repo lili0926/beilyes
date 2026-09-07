@@ -5186,7 +5186,7 @@ function renderBottomNav(){
     {key:"moments",icon:"aperture",label:"动态"},
     {key:"settings",icon:"settings",label:"设置"},
   ];
-  return `<div class="bottom-nav${kr? hy-glass" kr-dock":""}">
+  return `<div class="bottom-nav${kr?" hy-glass kr-dock":""}":""}">
     ${items.map(it=>`
       <button data-tab="${it.key}" class="${state.tab===it.key&&!state.subPage?"active":""}">
         <span class="icon"><i data-lucide="${it.icon}"></i></span><span>${it.label}</span>
@@ -20645,7 +20645,7 @@ function renderChat(){
         ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
         ${(isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("me"), "me"):""}
       </div>
-      <div class="msg-bar ${isMe? hy-glass"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
+      <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
         <button type="button" data-msg-copy="${idx}" title="复制消息"><i data-lucide="copy"></i>复制</button>
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
       </div>`;
