@@ -3898,6 +3898,115 @@ function applyThemeVars(){
 }
 /** 聊天气泡额外 class；同时 #app 会挂 ui-glass-* 作用于日历与卡片。
  *  raw=true 时不理会界面壳（外观页的材质预览要看真效果）。 */
+
+// ─── Hyalite 真折射水玻璃（仅 Chromium / APK WebView）────────────────────────
+let __hyaliteWatch = null;
+function syncHyaliteGlass(){
+  try{
+    if(typeof Hyalite === "undefined") return;
+    if(__hyaliteWatch && typeof __hyaliteWatch.stop === "function"){
+      try{ __hyaliteWatch.stop(); }catch(e){}
+      __hyaliteWatch = null;
+    }
+    const app = document.getElementById("app");
+    if(!app || !app.classList.contains("ui-glass-water")) return;
+    if(typeof Hyalite.supported === "function" && !Hyalite.supported()){
+      // 不支持 SVG backdrop 时保留 CSS 模糊回退
+      return;
+    }
+    __hyaliteWatch = Hyalite.watch(app, ".glass-water, .chat-header.hy-glass, .bottom-nav.hy-glass, .msg-bar.hy-glass", {
+      bevel: 14,
+      thickness: 9,
+      blur: 2.2,
+      chromaticAberration: 0.35,
+      highlight: 0.55
+    });
+  }catch(e){
+    try{ console.warn("[hyalite]", e); }catch(_){}
+  }
+}
+
+
+// ─── 小卡片（碎碎念 / 便签）：真写入才显示活动，删除同步 ───────────────────
+// 本地为主；结构兼容教程里的 turn_id + card_batch
+if(!state.momentCards) state.momentCards = LS.get("momentCards", []) || [];
+function persistMomentCards(){
+  try{ LS.set("momentCards", state.momentCards || []); }catch(e){}
+  try{ if(typeof scheduleKvFsPersist==="function") scheduleKvFsPersist("momentCards"); }catch(e){}
+}
+function cardsForTurn(turnId){
+  if(!turnId) return [];
+  return (state.momentCards||[]).filter(c => c && c.turn_id === turnId && !c.deleted);
+}
+function addMomentCards(turnId, cards, source){
+  if(!turnId || !Array.isArray(cards) || !cards.length) return [];
+  const out = [];
+  const types = new Set();
+  for(const raw of cards.slice(0, 2)){
+    const type = (raw && raw.type) === "note" ? "note" : "ramble";
+    if(types.has(type)) continue;
+    types.add(type);
+    const card = {
+      id: "mc_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+      turn_id: turnId,
+      type,
+      title: type === "ramble" ? String((raw && raw.title) || "").slice(0, 40) : "",
+      content: String((raw && raw.content) || "").slice(0, 500),
+      createdAt: new Date().toISOString(),
+      source: source || "chat",
+      deleted: false
+    };
+    if(!card.content.trim()) continue;
+    state.momentCards = [card, ...(state.momentCards||[])].slice(0, 300);
+    out.push(card);
+  }
+  if(out.length) persistMomentCards();
+  return out;
+}
+function deleteMomentCard(id){
+  const list = state.momentCards || [];
+  const hit = list.find(c => c.id === id);
+  if(!hit) return;
+  hit.deleted = true;
+  // 同步清掉消息上的 card_batch 引用
+  try{
+    (state.messages||[]).forEach(m=>{
+      if(Array.isArray(m.card_batch)){
+        m.card_batch = m.card_batch.filter(c => c && c.id !== id);
+        if(!m.card_batch.length) delete m.card_batch;
+      }
+    });
+    Object.keys(state.chatThreads||{}).forEach(tid=>{
+      const th = state.chatThreads[tid];
+      (th && th.messages || []).forEach(m=>{
+        if(Array.isArray(m.card_batch)){
+          m.card_batch = m.card_batch.filter(c => c && c.id !== id);
+          if(!m.card_batch.length) delete m.card_batch;
+        }
+      });
+    });
+  }catch(e){}
+  persistMomentCards();
+  try{ if(typeof saveActiveThread==="function") saveActiveThread(); }catch(e){}
+}
+function renderMomentCard(card){
+  if(!card || card.deleted) return "";
+  const av = (typeof agentById==="function" && agentById(state.chatTarget||"a1")) || {};
+  const avUrl = av.avatar || state.coupleInfo && state.coupleInfo.hisAvatar || "";
+  const avHtml = avUrl ? `<img class="mc-avatar" src="${escAttr(avUrl)}" alt=""/>` : `<div class="mc-avatar" style="display:flex;align-items:center;justify-content:center;background:#f5d0da;color:#fff;font-weight:700">${esc((av.name||"A").slice(0,1))}</div>`;
+  if(card.type === "note"){
+    const t = card.createdAt ? new Date(card.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "";
+    return `<div class="moment-card note" data-mc-id="${escAttr(card.id)}">${avHtml}<div class="mc-body">${esc(card.content)}</div><div class="mc-time">${esc(t)}</div></div>`;
+  }
+  return `<div class="moment-card ramble" data-mc-id="${escAttr(card.id)}">${avHtml}${card.title?`<div class="mc-title">${esc(card.title)}</div>`:""}<div class="mc-body">${esc(card.content)}</div></div>`;
+}
+function renderMsgCardActivity(m){
+  const batch = (m && Array.isArray(m.card_batch)) ? m.card_batch.filter(c=>c && !c.deleted) : [];
+  if(!batch.length) return "";
+  const n = batch.length;
+  return `<div class="msg-card-activity" data-card-batch="${escAttr(m.msgId||m.id||"")}" title="查看卡片">活动 · ${n}</div>`;
+}
+
 function bubbleGlassClass(raw){
   if(!raw && (state.uiShell||"")==="blueprint") return ""; // 蓝晒壳的气泡材质写死在 CSS 里
   const s = state.bubbleStyle || "solid";
@@ -4273,7 +4382,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -4538,6 +4647,8 @@ function harvestIcons(root){
 }
 
 function render(){
+  try{ if(typeof requestAnimationFrame==="function") requestAnimationFrame(()=>{ try{ syncHyaliteGlass(); }catch(e){} }); }catch(e){}
+
   // 重绘会把整个 #app 的 innerHTML 换掉，正在输入的那个框也一起被销毁重建，
   // 焦点随之丢失 —— 手机上就表现为「每发一条消息键盘都收回去」「打着字光标乱跳」。
   // 这里先记住焦点元素和光标位置，重绘完原样放回去。
@@ -5075,7 +5186,7 @@ function renderBottomNav(){
     {key:"moments",icon:"aperture",label:"动态"},
     {key:"settings",icon:"settings",label:"设置"},
   ];
-  return `<div class="bottom-nav${kr?" kr-dock":""}">
+  return `<div class="bottom-nav${kr? hy-glass" kr-dock":""}">
     ${items.map(it=>`
       <button data-tab="${it.key}" class="${state.tab===it.key&&!state.subPage?"active":""}">
         <span class="icon"><i data-lucide="${it.icon}"></i></span><span>${it.label}</span>
@@ -20531,10 +20642,10 @@ function renderChat(){
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
         ${(!isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them"):""}
-        ${bubbleInner}
+        ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
         ${(isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("me"), "me"):""}
       </div>
-      <div class="msg-bar ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
+      <div class="msg-bar ${isMe? hy-glass"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
         <button type="button" data-msg-copy="${idx}" title="复制消息"><i data-lucide="copy"></i>复制</button>
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
       </div>`;
@@ -20619,7 +20730,7 @@ function renderChat(){
   let headerHtml;
   if(isKorean){
     headerHtml = `
-    <div class="chat-header korean-header">
+    <div class="chat-header korean-header hy-glass">
       <button type="button" class="kr-back" id="chat-exit-home" title="返回"><i data-lucide="chevron-left"></i></button>
       <div class="kr-peer">
         ${krAvatar ? `<img class="kr-peer-av" src="${escAttr(krAvatar)}" alt=""/>` : `<div class="kr-peer-av kr-peer-fallback">${esc((chatName||"TA").slice(0,1))}</div>`}
@@ -20635,7 +20746,7 @@ function renderChat(){
     </div>`;
   } else if(isClaude){
     headerHtml = `
-    <div class="chat-header claude-header">
+    <div class="chat-header claude-header hy-glass">
       <button type="button" class="claude-round-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="menu"></i></button>
       <div class="claude-style-chip" title="${escAttr(chatName)}">
         <img src="claude-feather.svg" alt="" class="claude-feather" onerror="this.style.display='none'"/>
@@ -20647,7 +20758,7 @@ function renderChat(){
     </div>`;
   } else {
     headerHtml = `
-    <div class="chat-header chat-header-slim">
+    <div class="chat-header chat-header-slim hy-glass">
       <button type="button" class="back-btn" id="chat-sidebar-open" title="侧栏"><i data-lucide="panel-left"></i></button>
       <button type="button" class="back-btn" id="chat-exit-home" title="回首页"><i data-lucide="chevron-left"></i></button>
       <div class="chat-title-wrap" style="flex:1;min-width:0;pointer-events:none">
