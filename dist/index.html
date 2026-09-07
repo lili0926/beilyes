@@ -8997,6 +8997,120 @@ function chatThreadsIsEmpty(threads){
   const s = chatThreadsScore(threads);
   return s.count === 0;
 }
+
+// ─── IndexedDB 聊天主存（容量远大于 localStorage，作为第一真源）──────────────
+// 设计：写路径 = IndexedDB（主） + localStorage 分片（兼容） + Preferences（原生兜底）
+// 读路径 = salvage 时把 IDB 也当作候选源，按最新消息时间合并
+const CHAT_IDB_NAME = "baileys_chat_v1";
+const CHAT_IDB_STORE = "threads";
+const CHAT_IDB_KV = "kv"; // 预留：以后其它状态也可以整包放这里
+let __chatIdb = null;
+let __chatIdbOpening = null;
+let __idbPersistTimer = null;
+
+function chatIdbScopeKey(){
+  try{
+    if(window.__currentUser) return "u:" + String(window.__currentUser);
+    const p = window.__LS_PREFIX || "";
+    if(p) return "p:" + p;
+  }catch(e){}
+  return "anon";
+}
+
+function openChatIdb(){
+  if(__chatIdb) return Promise.resolve(__chatIdb);
+  if(__chatIdbOpening) return __chatIdbOpening;
+  __chatIdbOpening = new Promise((resolve, reject)=>{
+    try{
+      const req = indexedDB.open(CHAT_IDB_NAME, 1);
+      req.onupgradeneeded = function(){
+        const db = req.result;
+        if(!db.objectStoreNames.contains(CHAT_IDB_STORE)){
+          db.createObjectStore(CHAT_IDB_STORE, { keyPath: "id" });
+        }
+        if(!db.objectStoreNames.contains(CHAT_IDB_KV)){
+          db.createObjectStore(CHAT_IDB_KV, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = function(){
+        __chatIdb = req.result;
+        __chatIdb.onversionchange = function(){ try{ __chatIdb.close(); }catch(e){} __chatIdb = null; };
+        resolve(__chatIdb);
+      };
+      req.onerror = function(){ __chatIdbOpening = null; reject(req.error || new Error("idb open fail")); };
+      req.onblocked = function(){ /* 其它标签页占着旧版本时先等 */ };
+    }catch(e){
+      __chatIdbOpening = null;
+      reject(e);
+    }
+  });
+  return __chatIdbOpening.then(db=>{ __chatIdbOpening = null; return db; }).catch(e=>{ __chatIdbOpening = null; throw e; });
+}
+
+async function idbPutChatThreads(threads){
+  try{
+    if(!threads || typeof threads !== "object") return false;
+    if(typeof chatThreadsIsEmpty === "function" && chatThreadsIsEmpty(threads)) return false;
+    const db = await openChatIdb();
+    const id = chatIdbScopeKey();
+    const payload = { id, threads, updatedAt: Date.now(), count: (typeof chatThreadsScore==="function" ? chatThreadsScore(threads).count : 0) };
+    await new Promise((resolve, reject)=>{
+      const tx = db.transaction(CHAT_IDB_STORE, "readwrite");
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+      tx.objectStore(CHAT_IDB_STORE).put(payload);
+    });
+    return true;
+  }catch(e){
+    try{ console.warn("[chat-idb] put fail", e); }catch(_){}
+    return false;
+  }
+}
+
+async function idbGetChatThreadsForScope(scopeId){
+  try{
+    const db = await openChatIdb();
+    return await new Promise((resolve)=>{
+      const tx = db.transaction(CHAT_IDB_STORE, "readonly");
+      const req = tx.objectStore(CHAT_IDB_STORE).get(scopeId || chatIdbScopeKey());
+      req.onsuccess = ()=> resolve(req.result || null);
+      req.onerror = ()=> resolve(null);
+    });
+  }catch(e){ return null; }
+}
+
+/** 读取本机 IDB 里所有账号的聊天快照（抢救用） */
+async function idbListAllChatThreads(){
+  try{
+    const db = await openChatIdb();
+    return await new Promise((resolve)=>{
+      const tx = db.transaction(CHAT_IDB_STORE, "readonly");
+      const req = tx.objectStore(CHAT_IDB_STORE).getAll();
+      req.onsuccess = ()=> resolve(Array.isArray(req.result) ? req.result : []);
+      req.onerror = ()=> resolve([]);
+    });
+  }catch(e){ return []; }
+}
+
+function scheduleChatIdbPersist(){
+  if(__idbPersistTimer) clearTimeout(__idbPersistTimer);
+  // 比 Preferences 更积极：350ms 落盘，杀进程窗口更小
+  __idbPersistTimer = setTimeout(()=>{
+    __idbPersistTimer = null;
+    try{
+      const threads = state.chatThreads || {};
+      idbPutChatThreads(threads);
+    }catch(e){}
+  }, 350);
+}
+
+async function flushChatIdbNow(){
+  try{
+    if(__idbPersistTimer){ clearTimeout(__idbPersistTimer); __idbPersistTimer = null; }
+    return await idbPutChatThreads(state.chatThreads || {});
+  }catch(e){ return false; }
+}
+
 window.__chatNativeHydrated = false; // 原生/多源恢复完成前，禁止把空快照写进 Preferences
 function saveActiveThread(){
   const t = state.chatTarget || "a1";
@@ -9038,6 +9152,7 @@ function saveActiveThread(){
     });
   }catch(e){}
   scheduleChatNativePersist();
+  try{ scheduleChatIdbPersist(); }catch(e){}
   // RPG：用户侧新消息跟到该句；助手侧由 push 回复处定位到本轮第一条
   try{
     if(state.chatViewMode === "rpg" && state.tab === "chat" && state._rpgPreferEnd){
@@ -9109,6 +9224,15 @@ async function salvageChatThreadsFromDevice(){
   };
   try{ pushCand("state", state.chatThreads); }catch(e){}
   try{ pushCand("LS.chatThreads", LS.get("chatThreads", null)); }catch(e){}
+  // IndexedDB 主存：当前账号 + 本机所有 scope
+  try{
+    const cur = await idbGetChatThreadsForScope(chatIdbScopeKey());
+    if(cur && cur.threads) pushCand("idb:"+chatIdbScopeKey(), cur.threads);
+    const all = await idbListAllChatThreads();
+    (all || []).forEach(row=>{
+      if(row && row.threads) pushCand("idb:"+ (row.id||"?"), row.threads);
+    });
+  }catch(e){ try{ diag.notes.push("idb:"+ (e.message||e)); }catch(_){} }
   try{
     const bag = {};
     ["a1","a2","group"].forEach(id=>{
@@ -9226,6 +9350,7 @@ async function salvageChatThreadsFromDevice(){
   }catch(e){}
   window.__chatNativeHydrated = true;
   try{ persistChatNative(); }catch(e){}
+  try{ await idbPutChatThreads(best); }catch(e){}
   const latestStr = after.latest ? new Date(after.latest).toLocaleString() : "—";
   const top = candidates.slice(0,5).map(c=>{
     const ls = c.score.latest ? new Date(c.score.latest).toLocaleDateString() : "?";
@@ -34218,6 +34343,7 @@ function forceFlushChat(){
   // 每次落盘顺带把登录态也写进 localStorage，降低冷启动丢前缀的概率
   try{ if(window.__currentUser) localStorage.setItem("__session_user__", window.__currentUser); }catch(e){}
   try{ persistChatNative(); }catch(e){}
+  try{ flushChatIdbNow(); }catch(e){}
 }
 if(!window.__chatFlushBound){
   window.__chatFlushBound = true;
