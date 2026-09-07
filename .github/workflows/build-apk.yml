@@ -31,9 +31,19 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+          registry-url: https://registry.npmjs.org
 
       - name: 安装 npm 依赖
-        run: npm ci
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          # 网络抖动时重试；ci 失败再 fallback install
+          for i in 1 2 3; do
+            npm ci && exit 0
+            echo "npm ci attempt $i failed, retry in 15s..."
+            sleep 15
+          done
+          echo "npm ci failed 3x, trying npm install..."
+          npm install --no-audit --no-fund
 
       - name: 从 frontend 源文件重新生成 dist
         run: python3 frontend/build.py
