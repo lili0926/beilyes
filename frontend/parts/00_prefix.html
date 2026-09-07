@@ -2577,6 +2577,21 @@
       width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
       background: #d97757; color: #fff; font-size: 22px; font-weight: 700;
     }
+    
+    .wx-cover-shade {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,.35), transparent 55%);
+      pointer-events: none;
+    }
+    .wx-cover-btn {
+      position: absolute; top: 14px; right: 54px; width: 34px; height: 34px;
+      border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2;
+    }
+    .wx-cover-btn.clear { right: 94px; }
+    .wx-cover-btn svg { width: 15px; height: 15px; }
+    .wx-cover { background-size: cover; background-position: center; }
+
     .wx-compose {
       position: absolute; top: 14px; right: 14px; width: 34px; height: 34px;
       border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;

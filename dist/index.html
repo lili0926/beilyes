@@ -2577,6 +2577,21 @@
       width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
       background: #d97757; color: #fff; font-size: 22px; font-weight: 700;
     }
+    
+    .wx-cover-shade {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,.35), transparent 55%);
+      pointer-events: none;
+    }
+    .wx-cover-btn {
+      position: absolute; top: 14px; right: 54px; width: 34px; height: 34px;
+      border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2;
+    }
+    .wx-cover-btn.clear { right: 94px; }
+    .wx-cover-btn svg { width: 15px; height: 15px; }
+    .wx-cover { background-size: cover; background-position: center; }
+
     .wx-compose {
       position: absolute; top: 14px; right: 14px; width: 34px; height: 34px;
       border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;
@@ -9133,6 +9148,8 @@ const state = {
 
   // 朋友圈：[{id,author,content,contextNote,image,imageDesc,replyDueAt,replyStatus,liked,replyContent,myLiked,comments,createdAt}]
   moments: LS.get("moments", []),
+  momentsCoverPrivate: LS.get("momentsCoverPrivate", "") || "",
+  momentsCoverPublic: LS.get("momentsCoverPublic", "") || "",
   momentComposing: false, momentDraft: "", momentImage: "",
   momentCommentOpen: null, momentCommentDraft: "", momentsScope: "private",
   galateaEventId: LS.get("galateaEventId", 0), // Galatea 桌游 get_my_status 事件游标（轮到机的信号）
@@ -9728,6 +9745,68 @@ async function migrateLocalStorageToFs(){
     return { ok:true, n };
   }catch(e){ return { ok:false, msg: String(e&&e.message||e) }; }
 }
+
+
+// ─── 朋友圈封面：私有目录 baileys_data/<账号>/moments/cover_*.b64 ─────────────
+function momentsCoverFsPath(scope){
+  const sc = (typeof chatIdbScopeKey==="function") ? chatIdbScopeKey() : "default";
+  const which = scope === "public" ? "public" : "private";
+  return (typeof DATA_FS_ROOT!=="undefined"?DATA_FS_ROOT:"baileys_data") + "/" + sc + "/moments/cover_" + which + ".b64";
+}
+async function fsWriteMomentsCover(scope, dataUrl){
+  try{
+    const Fs = typeof __capFs==="function" ? __capFs() : null;
+    if(!Fs || !dataUrl) return false;
+    const path = momentsCoverFsPath(scope);
+    const dir = path.replace(/\/[^/]+$/, "");
+    try{ await Fs.mkdir({ path: dir, directory: __fsDirData(), recursive: true }); }catch(e){}
+    // 只存 dataURL 本体（含前缀），utf8 文本文件
+    await Fs.writeFile({
+      path, directory: __fsDirData(), data: String(dataUrl), encoding: "utf8", recursive: true
+    });
+    return true;
+  }catch(e){ try{ console.warn("[moments cover write]", e); }catch(_){} return false; }
+}
+async function fsReadMomentsCover(scope){
+  try{
+    const Fs = typeof __capFs==="function" ? __capFs() : null;
+    if(!Fs) return "";
+    const path = momentsCoverFsPath(scope);
+    const r = await Fs.readFile({ path, directory: __fsDirData(), encoding: "utf8" });
+    return (r && r.data) ? String(r.data) : "";
+  }catch(e){ return ""; }
+}
+function persistMomentsCover(scope){
+  const key = scope === "public" ? "momentsCoverPublic" : "momentsCoverPrivate";
+  try{ persist(key); }catch(e){}
+  try{ if(typeof scheduleKvFsPersist==="function") scheduleKvFsPersist(key); }catch(e){}
+  try{
+    const url = scope === "public" ? state.momentsCoverPublic : state.momentsCoverPrivate;
+    if(url) fsWriteMomentsCover(scope, url);
+    else {
+      // 清封面：尽量删文件
+      const Fs = typeof __capFs==="function" ? __capFs() : null;
+      if(Fs){
+        const path = momentsCoverFsPath(scope);
+        Fs.deleteFile({ path, directory: __fsDirData() }).catch(()=>{});
+      }
+    }
+  }catch(e){}
+}
+async function hydrateMomentsCoversFromFs(){
+  try{
+    for(const scope of ["private","public"]){
+      const key = scope === "public" ? "momentsCoverPublic" : "momentsCoverPrivate";
+      if(state[key]) continue; // 已有内存/LS
+      const fromFs = await fsReadMomentsCover(scope);
+      if(fromFs){
+        state[key] = fromFs;
+        try{ LS.set(key, fromFs); }catch(e){}
+      }
+    }
+  }catch(e){}
+}
+
 
 function scheduleKvFsPersist(key){
   if(!key || __LS_CHAT_SKIP.has(key)) return;
@@ -10836,7 +10915,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
 function persist(key){
@@ -11653,8 +11732,12 @@ function renderMoments(){
       <button type="button" class="wx-tab${scope==="public"?" active":""}" data-mo-scope="public">公共朋友圈</button>
       <button type="button" class="wx-tab${scope==="private"?" active":""}" data-mo-scope="private">私人朋友圈</button>
     </div>
-    <div class="wx-cover">
+    <div class="wx-cover" id="wx-cover" style="${(scope==="public"?(state.momentsCoverPublic||""):(state.momentsCoverPrivate||""))?`background-image:url(${escAttr(scope==="public"?state.momentsCoverPublic:state.momentsCoverPrivate)});background-size:cover;background-position:center`:""}">
+      <div class="wx-cover-shade"></div>
       <button type="button" id="mo-new" class="wx-compose" title="发动态"><i data-lucide="pen"></i></button>
+      <button type="button" id="mo-cover-pick" class="wx-cover-btn" title="更换封面"><i data-lucide="image"></i></button>
+      ${(scope==="public"?state.momentsCoverPublic:state.momentsCoverPrivate)?`<button type="button" id="mo-cover-clear" class="wx-cover-btn clear" title="清除封面"><i data-lucide="x"></i></button>`:""}
+      <input type="file" id="mo-cover-file" accept="image/*" style="display:none"/>
       <div class="wx-cover-name">${esc(coverName)}</div>
       <div class="wx-cover-avatar">${coverAvHtml}</div>
     </div>
@@ -26652,6 +26735,7 @@ function bindChatSidebar(){
     state.chatSidebarOpen = false;
     state.cardDeckIndex = 0;
     try{ if(typeof salvageMomentCardsFromMessages==="function") salvageMomentCardsFromMessages(); }catch(e){}
+try{ if(typeof hydrateMomentsCoversFromFs==="function") hydrateMomentsCoversFromFs().then(()=>{ try{ if(state.tab==="moments") render(); }catch(e){} }); }catch(e){}
     state.subPage = "project";
     render();
   };
@@ -33032,6 +33116,57 @@ reader.readAsArrayBuffer(f);
       });
     }
   }
+
+  
+  // 朋友圈封面（公共/私人各自一份，落盘私有目录）
+  const moCoverPick = document.getElementById("mo-cover-pick");
+  const moCoverFile = document.getElementById("mo-cover-file");
+  const moCoverClear = document.getElementById("mo-cover-clear");
+  if(moCoverPick && moCoverFile) moCoverPick.onclick = (e)=>{ e.stopPropagation(); moCoverFile.click(); };
+  if(moCoverFile) moCoverFile.onchange = ()=>{
+    const f = moCoverFile.files && moCoverFile.files[0];
+    if(!f) return;
+    const fr = new FileReader();
+    fr.onload = ()=>{
+      let dataUrl = String(fr.result || "");
+      // 过大则压一档（约 1.2MB 以上）
+      const done = (url)=>{
+        const scope = state.momentsScope === "public" ? "public" : "private";
+        if(scope === "public") state.momentsCoverPublic = url;
+        else state.momentsCoverPrivate = url;
+        persistMomentsCover(scope);
+        try{ showToast("封面已保存到本机"); }catch(e){}
+        render();
+      };
+      if(dataUrl.length > 1.2e6 && typeof createImageBitmap === "function"){
+        // 简单 canvas 缩放
+        const img = new Image();
+        img.onload = ()=>{
+          try{
+            const maxW = 1280;
+            const scale = img.width > maxW ? maxW / img.width : 1;
+            const c = document.createElement("canvas");
+            c.width = Math.max(1, Math.round(img.width * scale));
+            c.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = c.getContext("2d");
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            done(c.toDataURL("image/jpeg", 0.82));
+          }catch(e){ done(dataUrl); }
+        };
+        img.onerror = ()=> done(dataUrl);
+        img.src = dataUrl;
+      } else done(dataUrl);
+    };
+    fr.readAsDataURL(f);
+  };
+  if(moCoverClear) moCoverClear.onclick = (e)=>{
+    e.stopPropagation();
+    const scope = state.momentsScope === "public" ? "public" : "private";
+    if(scope === "public") state.momentsCoverPublic = "";
+    else state.momentsCoverPrivate = "";
+    persistMomentsCover(scope);
+    render();
+  };
 
   const moNew = document.getElementById("mo-new");
   if(moNew) moNew.onclick = ()=>{ state.momentComposing = true; render(); };
