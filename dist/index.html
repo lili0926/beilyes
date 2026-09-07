@@ -2540,6 +2540,126 @@
     .bed-row-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
     .bed-row-c { font-size: 11px; color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
 
+    
+    /* ─── 朋友圈微信风 ─────────────────────────────────── */
+    .wx-moments { padding: 0 0 96px; max-width: 480px; margin: 0 auto; }
+    .wx-tabs {
+      display: flex; background: var(--card); position: sticky; top: 0; z-index: 20;
+      border-bottom: 1px solid var(--border);
+    }
+    .wx-tab {
+      flex: 1; text-align: center; padding: 13px 0; font-size: 14px;
+      color: var(--sub); background: transparent; border: none; cursor: pointer;
+      position: relative; font-weight: 500;
+    }
+    .wx-tab.active { color: var(--text); font-weight: 700; }
+    .wx-tab.active::after {
+      content: ""; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 28px; height: 3px; background: var(--accent); border-radius: 2px;
+    }
+    .wx-cover {
+      position: relative; height: 200px; overflow: hidden;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, #2e3b52) 0%, #2e3b52 100%);
+    }
+    .wx-cover-name {
+      position: absolute; right: 16px; bottom: 40px; color: #fff;
+      font-size: 18px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.4);
+    }
+    .wx-cover-avatar {
+      position: absolute; right: 16px; bottom: -20px; width: 64px; height: 64px;
+      border-radius: 8px; overflow: hidden; border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25); background: var(--accent2);
+    }
+    .wx-cover-avatar img, .wx-cover-avatar .bubble-avatar, .wx-cover-avatar > * {
+      width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 6px;
+    }
+    .wx-cover-av-fallback {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      background: #d97757; color: #fff; font-size: 22px; font-weight: 700;
+    }
+    .wx-compose {
+      position: absolute; top: 14px; right: 14px; width: 34px; height: 34px;
+      border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .wx-compose svg { width: 16px; height: 16px; }
+    .wx-feed { padding: 36px 0 20px; background: var(--card); min-height: 40vh; }
+    .wx-composer { margin: 0 12px 12px; }
+    .wx-empty {
+      text-align: center; padding: 56px 20px; color: var(--sub); font-size: 14px; line-height: 1.7;
+    }
+    .wx-post {
+      padding: 14px 16px; border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      background: var(--card);
+    }
+    .wx-post-row { display: flex; gap: 10px; }
+    .wx-av {
+      width: 42px; height: 42px; border-radius: 6px; overflow: hidden; flex-shrink: 0;
+      background: var(--accent2);
+    }
+    .wx-av img, .wx-av .bubble-avatar, .wx-av > * {
+      width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 6px;
+    }
+    .wx-body { flex: 1; min-width: 0; }
+    .wx-author {
+      color: #576b95; font-size: 15px; font-weight: 600; margin-bottom: 4px;
+    }
+    .wx-badge {
+      display: inline-block; font-size: 11px; color: #b08d57; background: #fbf0dd;
+      padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; font-weight: 500;
+    }
+    .wx-text {
+      font-size: 15px; line-height: 1.55; color: var(--text); margin-bottom: 8px;
+      word-break: break-word; white-space: pre-wrap;
+    }
+    .wx-imgs {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+      max-width: 260px; margin-bottom: 8px;
+    }
+    .wx-imgs.single { grid-template-columns: 1fr; max-width: 180px; }
+    .wx-img {
+      width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: block;
+    }
+    .wx-meta {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 2px;
+    }
+    .wx-time { font-size: 12px; color: var(--sub); }
+    .wx-actions { position: relative; }
+    .wx-more {
+      border: none; background: color-mix(in srgb, var(--sub) 12%, transparent);
+      color: var(--sub); border-radius: 4px; padding: 2px 8px; font-size: 14px;
+      letter-spacing: 1px; cursor: pointer; line-height: 1.2;
+    }
+    .wx-panel {
+      display: none; position: absolute; right: 0; top: 26px; z-index: 10;
+      background: #4c4c4c; border-radius: 6px; padding: 6px 4px;
+      white-space: nowrap; gap: 2px;
+    }
+    .wx-panel.show { display: flex; }
+    .wx-panel button {
+      border: none; background: transparent; color: #fff; font-size: 13px;
+      padding: 6px 12px; cursor: pointer;
+    }
+    .wx-panel button:active { opacity: 0.7; }
+    .wx-zone {
+      background: color-mix(in srgb, var(--sub) 8%, var(--card));
+      border-radius: 4px; padding: 6px 10px; margin-top: 8px; font-size: 13px;
+    }
+    .wx-likes { color: #576b95; margin-bottom: 4px; }
+    .wx-cmt { color: var(--text); line-height: 1.45; margin-top: 2px; }
+    .wx-cmt b { color: #576b95; font-weight: 600; margin-right: 4px; }
+    .wx-cmt-box { margin-top: 8px; display: flex; gap: 8px; }
+    .wx-cmt-box input {
+      flex: 1; border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: 13px; background: var(--bg); color: var(--text);
+    }
+    .wx-cmt-box button {
+      border: none; background: var(--accent); color: #fff; border-radius: 8px;
+      padding: 8px 12px; font-size: 12px; cursor: pointer;
+    }
+    /* 兼容旧 mo-page 顶栏隐藏：微信风用 tabs+cover */
+    .wx-moments .mo-top { display: none; }
+
     /* ─── 朋友圈 / Moments ────────────────────────────── */
     .mo-page { padding-bottom: 96px; }
     .mo-top {
@@ -9014,7 +9134,7 @@ const state = {
   // 朋友圈：[{id,author,content,contextNote,image,imageDesc,replyDueAt,replyStatus,liked,replyContent,myLiked,comments,createdAt}]
   moments: LS.get("moments", []),
   momentComposing: false, momentDraft: "", momentImage: "",
-  momentCommentOpen: null, momentCommentDraft: "",
+  momentCommentOpen: null, momentCommentDraft: "", momentsScope: "private",
   galateaEventId: LS.get("galateaEventId", 0), // Galatea 桌游 get_my_status 事件游标（轮到机的信号）
   // book composer
   bookComposer: null,
@@ -11446,10 +11566,20 @@ function renderMoments(){
   const list = ensureMoments();
   const aiName = momentAiName(), myName = momentMyName();
   const composing = !!state.momentComposing;
+  const scope = state.momentsScope === "public" ? "public" : "private";
+  // 封面：私人圈用「我」的名字/头像
+  let coverName = myName;
+  let coverAvHtml = "";
+  try{
+    if(typeof bubbleAvatarHtml === "function") coverAvHtml = bubbleAvatarHtml("me");
+  }catch(e){}
+  if(!coverAvHtml){
+    coverAvHtml = `<div class="wx-cover-av-fallback">${esc((myName||"我").slice(0,1))}</div>`;
+  }
 
   const composer = composing ? `
-    <div class="mo-composer">
-      <textarea id="mo-input" placeholder="想说点什么">${esc(state.momentDraft||"")}</textarea>
+    <div class="mo-composer wx-composer">
+      <textarea id="mo-input" placeholder="这一刻的想法…">${esc(state.momentDraft||"")}</textarea>
       ${state.momentImage?`<img class="mo-compose-img" src="${escAttr(state.momentImage)}" alt=""/>`:""}
       <div class="mo-composer-bar">
         <button type="button" id="mo-pick-img" class="mo-mini"><i data-lucide="image"></i></button>
@@ -11461,48 +11591,77 @@ function renderMoments(){
       <input type="file" id="mo-file" accept="image/*" style="display:none"/>
     </div>` : "";
 
-  const feed = list.length ? list.map(m=>{
-    const isAi = m.author === "ai";
-    const name = isAi ? aiName : myName;
-    // 他对她那条动态的反应：点赞 + 评论，合并成一条「互动栏」
-    const reacted = !isAi && m.replyStatus === "done" && (m.liked || m.replyContent);
-    const waiting = !isAi && m.replyStatus === "pending";
-    const comments = Array.isArray(m.comments) ? m.comments : [];
-    return `<div class="mo-card">
-      <div class="mo-head">
-        <div class="mo-avatar">${momentAvatar(m.author)}</div>
-        <div class="mo-who">
-          <div class="mo-name">${esc(name)}</div>
-          <div class="mo-time">${momentAgo(m.createdAt)}</div>
+  let feed = "";
+  if(scope === "public"){
+    feed = `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">以后留给好友联邦 · 灵感位</span></div>`;
+  } else if(!list.length){
+    feed = `<div class="wx-empty">还没有私人动态<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或等 ${esc(aiName)} 发</span></div>`;
+  } else {
+    feed = list.map(m=>{
+      const isAi = m.author === "ai";
+      const name = isAi ? aiName : myName;
+      const reacted = !isAi && m.replyStatus === "done" && (m.liked || m.replyContent);
+      const waiting = !isAi && m.replyStatus === "pending";
+      const comments = Array.isArray(m.comments) ? m.comments : [];
+      const likes = [];
+      if(m.liked) likes.push(aiName);
+      if(m.myLiked) likes.push(myName);
+      const likeLine = likes.length
+        ? `<div class="wx-likes">♥ ${likes.map(x=>esc(x)).join("、")}</div>` : "";
+      const cmtLines = [];
+      if(m.replyContent) cmtLines.push(`<div class="wx-cmt"><b>${esc(aiName)}</b> ${esc(m.replyContent)}</div>`);
+      comments.forEach(c=>{
+        const an = c.author==="ai" ? aiName : myName;
+        cmtLines.push(`<div class="wx-cmt"><b>${esc(an)}</b> ${esc(c.content||"")}</div>`);
+      });
+      const zone = (likeLine || cmtLines.length)
+        ? `<div class="wx-zone">${likeLine}${cmtLines.join("")}</div>` : "";
+      const imgs = m.image
+        ? `<div class="wx-imgs single"><img class="wx-img" src="${escAttr(m.image)}" alt="" onclick="window.open&&window.open(this.src)"/></div>`
+        : "";
+      return `<div class="wx-post mo-card">
+        <div class="wx-post-row">
+          <div class="wx-av">${momentAvatar(m.author)}</div>
+          <div class="wx-body">
+            <div class="wx-author">${esc(name)}<span class="wx-badge">仅私人可见</span></div>
+            ${m.content?`<div class="wx-text">${esc(m.content)}</div>`:""}
+            ${imgs}
+            <div class="wx-meta">
+              <span class="wx-time">${momentAgo(m.createdAt)}${waiting?` · ${esc(aiName)}还没刷到`:""}</span>
+              <div class="wx-actions">
+                <button type="button" class="wx-more" data-mo-more="${escAttr(m.id)}" aria-label="更多">···</button>
+                <div class="wx-panel${state.momentActionOpen===m.id?" show":""}" data-mo-panel="${escAttr(m.id)}">
+                  ${isAi?`<button type="button" data-mo-like="${escAttr(m.id)}">${m.myLiked?"取消赞":"♥ 赞"}</button>`:""}
+                  <button type="button" data-mo-cmt="${escAttr(m.id)}">💬 评论</button>
+                  <button type="button" data-mo-del="${escAttr(m.id)}">删除</button>
+                </div>
+              </div>
+            </div>
+            ${zone}
+            ${state.momentCommentOpen===m.id?`<div class="mo-cmt-box wx-cmt-box">
+              <input id="mo-cmt-input" value="${escAttr(state.momentCommentDraft||"")}" placeholder="评论…"/>
+              <button type="button" id="mo-cmt-send" data-mo-cmt-send="${escAttr(m.id)}">发送</button>
+            </div>`:""}
+          </div>
         </div>
-        <button type="button" class="mo-del" data-mo-del="${escAttr(m.id)}" title="删除"><i data-lucide="trash-2"></i></button>
-      </div>
-      ${m.content?`<div class="mo-body">${esc(m.content)}</div>`:""}
-      ${m.image?`<img class="mo-img" src="${escAttr(m.image)}" alt="" onclick="window.open&&window.open(this.src)"/>`:""}
-      <div class="mo-acts">
-        ${isAi?`<button type="button" class="mo-act${m.myLiked?" on":""}" data-mo-like="${escAttr(m.id)}"><i data-lucide="heart"></i>${m.myLiked?"已赞":"赞"}</button>`:""}
-        <button type="button" class="mo-act" data-mo-cmt="${escAttr(m.id)}"><i data-lucide="message-square"></i>评论</button>
-        ${waiting?`<span class="mo-wait">${esc(aiName)}还没刷到</span>`:""}
-      </div>
-      ${(reacted||comments.length)?`<div class="mo-zone">
-        ${m.liked?`<div class="mo-likes"><i data-lucide="heart"></i>${esc(aiName)}</div>`:""}
-        ${m.replyContent?`<div class="mo-cmt"><b>${esc(aiName)}</b>${esc(m.replyContent)}</div>`:""}
-        ${comments.map(c=>`<div class="mo-cmt"><b>${esc(c.author==="ai"?aiName:myName)}</b>${esc(c.content)}</div>`).join("")}
-      </div>`:""}
-      ${state.momentCommentOpen===m.id?`<div class="mo-cmt-box">
-        <input id="mo-cmt-input" value="${escAttr(state.momentCommentDraft||"")}" placeholder="说点什么…"/>
-        <button type="button" id="mo-cmt-send" data-mo-cmt-send="${escAttr(m.id)}">发送</button>
-      </div>`:""}
-    </div>`;
-  }).join("") : `<div class="empty-state"><div class="empty-emoji"><i data-lucide="aperture"></i></div>还没有人说话</div>`;
+      </div>`;
+    }).join("");
+  }
 
-  return `<div class="page mo-page">
-    <div class="mo-top">
-      <div class="mo-title">动态</div>
-      <button type="button" id="mo-new" class="mo-new"><i data-lucide="square-pen"></i></button>
+  return `<div class="page mo-page wx-moments">
+    <div class="wx-tabs">
+      <button type="button" class="wx-tab${scope==="public"?" active":""}" data-mo-scope="public">公共朋友圈</button>
+      <button type="button" class="wx-tab${scope==="private"?" active":""}" data-mo-scope="private">私人朋友圈</button>
     </div>
-    ${composer}
-    ${feed}
+    <div class="wx-cover">
+      <button type="button" id="mo-new" class="wx-compose" title="发动态"><i data-lucide="pen"></i></button>
+      <div class="wx-cover-name">${esc(coverName)}</div>
+      <div class="wx-cover-avatar">${coverAvHtml}</div>
+    </div>
+    <div class="wx-feed">
+      ${composer}
+      ${feed}
+    </div>
   </div>`;
 }
 
@@ -32845,6 +33004,35 @@ reader.readAsArrayBuffer(f);
     // 进页面就扫一遍到期的（另一条路是 proactiveTick 的 10 分钟循环）
     try{ if(typeof momentsProcessDue === "function") momentsProcessDue(); }catch(e){}
   }
+  
+  // 朋友圈：公共/私人 + ··· 面板
+  $$("[data-mo-scope]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.momentsScope = btn.getAttribute("data-mo-scope") || "private";
+      state.momentActionOpen = null;
+      render();
+    };
+  });
+  $$("[data-mo-more]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute("data-mo-more");
+      state.momentActionOpen = (state.momentActionOpen === id) ? null : id;
+      render();
+    };
+  });
+  // 点空白关面板
+  if(state.tab === "moments"){
+    const page = document.querySelector(".wx-moments");
+    if(page && !page._moBlankBound){
+      page._moBlankBound = true;
+      page.addEventListener("click", (e)=>{
+        if(e.target.closest && (e.target.closest("[data-mo-more]") || e.target.closest(".wx-panel") || e.target.closest(".mo-cmt-box"))) return;
+        if(state.momentActionOpen){ state.momentActionOpen = null; render(); }
+      });
+    }
+  }
+
   const moNew = document.getElementById("mo-new");
   if(moNew) moNew.onclick = ()=>{ state.momentComposing = true; render(); };
   const moCancel = document.getElementById("mo-cancel");

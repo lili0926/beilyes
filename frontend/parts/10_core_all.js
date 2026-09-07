@@ -2810,7 +2810,7 @@ const state = {
   // 朋友圈：[{id,author,content,contextNote,image,imageDesc,replyDueAt,replyStatus,liked,replyContent,myLiked,comments,createdAt}]
   moments: LS.get("moments", []),
   momentComposing: false, momentDraft: "", momentImage: "",
-  momentCommentOpen: null, momentCommentDraft: "",
+  momentCommentOpen: null, momentCommentDraft: "", momentsScope: "private",
   galateaEventId: LS.get("galateaEventId", 0), // Galatea 桌游 get_my_status 事件游标（轮到机的信号）
   // book composer
   bookComposer: null,
@@ -5242,10 +5242,20 @@ function renderMoments(){
   const list = ensureMoments();
   const aiName = momentAiName(), myName = momentMyName();
   const composing = !!state.momentComposing;
+  const scope = state.momentsScope === "public" ? "public" : "private";
+  // 封面：私人圈用「我」的名字/头像
+  let coverName = myName;
+  let coverAvHtml = "";
+  try{
+    if(typeof bubbleAvatarHtml === "function") coverAvHtml = bubbleAvatarHtml("me");
+  }catch(e){}
+  if(!coverAvHtml){
+    coverAvHtml = `<div class="wx-cover-av-fallback">${esc((myName||"我").slice(0,1))}</div>`;
+  }
 
   const composer = composing ? `
-    <div class="mo-composer">
-      <textarea id="mo-input" placeholder="想说点什么">${esc(state.momentDraft||"")}</textarea>
+    <div class="mo-composer wx-composer">
+      <textarea id="mo-input" placeholder="这一刻的想法…">${esc(state.momentDraft||"")}</textarea>
       ${state.momentImage?`<img class="mo-compose-img" src="${escAttr(state.momentImage)}" alt=""/>`:""}
       <div class="mo-composer-bar">
         <button type="button" id="mo-pick-img" class="mo-mini"><i data-lucide="image"></i></button>
@@ -5257,48 +5267,77 @@ function renderMoments(){
       <input type="file" id="mo-file" accept="image/*" style="display:none"/>
     </div>` : "";
 
-  const feed = list.length ? list.map(m=>{
-    const isAi = m.author === "ai";
-    const name = isAi ? aiName : myName;
-    // 他对她那条动态的反应：点赞 + 评论，合并成一条「互动栏」
-    const reacted = !isAi && m.replyStatus === "done" && (m.liked || m.replyContent);
-    const waiting = !isAi && m.replyStatus === "pending";
-    const comments = Array.isArray(m.comments) ? m.comments : [];
-    return `<div class="mo-card">
-      <div class="mo-head">
-        <div class="mo-avatar">${momentAvatar(m.author)}</div>
-        <div class="mo-who">
-          <div class="mo-name">${esc(name)}</div>
-          <div class="mo-time">${momentAgo(m.createdAt)}</div>
+  let feed = "";
+  if(scope === "public"){
+    feed = `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">以后留给好友联邦 · 灵感位</span></div>`;
+  } else if(!list.length){
+    feed = `<div class="wx-empty">还没有私人动态<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或等 ${esc(aiName)} 发</span></div>`;
+  } else {
+    feed = list.map(m=>{
+      const isAi = m.author === "ai";
+      const name = isAi ? aiName : myName;
+      const reacted = !isAi && m.replyStatus === "done" && (m.liked || m.replyContent);
+      const waiting = !isAi && m.replyStatus === "pending";
+      const comments = Array.isArray(m.comments) ? m.comments : [];
+      const likes = [];
+      if(m.liked) likes.push(aiName);
+      if(m.myLiked) likes.push(myName);
+      const likeLine = likes.length
+        ? `<div class="wx-likes">♥ ${likes.map(x=>esc(x)).join("、")}</div>` : "";
+      const cmtLines = [];
+      if(m.replyContent) cmtLines.push(`<div class="wx-cmt"><b>${esc(aiName)}</b> ${esc(m.replyContent)}</div>`);
+      comments.forEach(c=>{
+        const an = c.author==="ai" ? aiName : myName;
+        cmtLines.push(`<div class="wx-cmt"><b>${esc(an)}</b> ${esc(c.content||"")}</div>`);
+      });
+      const zone = (likeLine || cmtLines.length)
+        ? `<div class="wx-zone">${likeLine}${cmtLines.join("")}</div>` : "";
+      const imgs = m.image
+        ? `<div class="wx-imgs single"><img class="wx-img" src="${escAttr(m.image)}" alt="" onclick="window.open&&window.open(this.src)"/></div>`
+        : "";
+      return `<div class="wx-post mo-card">
+        <div class="wx-post-row">
+          <div class="wx-av">${momentAvatar(m.author)}</div>
+          <div class="wx-body">
+            <div class="wx-author">${esc(name)}<span class="wx-badge">仅私人可见</span></div>
+            ${m.content?`<div class="wx-text">${esc(m.content)}</div>`:""}
+            ${imgs}
+            <div class="wx-meta">
+              <span class="wx-time">${momentAgo(m.createdAt)}${waiting?` · ${esc(aiName)}还没刷到`:""}</span>
+              <div class="wx-actions">
+                <button type="button" class="wx-more" data-mo-more="${escAttr(m.id)}" aria-label="更多">···</button>
+                <div class="wx-panel${state.momentActionOpen===m.id?" show":""}" data-mo-panel="${escAttr(m.id)}">
+                  ${isAi?`<button type="button" data-mo-like="${escAttr(m.id)}">${m.myLiked?"取消赞":"♥ 赞"}</button>`:""}
+                  <button type="button" data-mo-cmt="${escAttr(m.id)}">💬 评论</button>
+                  <button type="button" data-mo-del="${escAttr(m.id)}">删除</button>
+                </div>
+              </div>
+            </div>
+            ${zone}
+            ${state.momentCommentOpen===m.id?`<div class="mo-cmt-box wx-cmt-box">
+              <input id="mo-cmt-input" value="${escAttr(state.momentCommentDraft||"")}" placeholder="评论…"/>
+              <button type="button" id="mo-cmt-send" data-mo-cmt-send="${escAttr(m.id)}">发送</button>
+            </div>`:""}
+          </div>
         </div>
-        <button type="button" class="mo-del" data-mo-del="${escAttr(m.id)}" title="删除"><i data-lucide="trash-2"></i></button>
-      </div>
-      ${m.content?`<div class="mo-body">${esc(m.content)}</div>`:""}
-      ${m.image?`<img class="mo-img" src="${escAttr(m.image)}" alt="" onclick="window.open&&window.open(this.src)"/>`:""}
-      <div class="mo-acts">
-        ${isAi?`<button type="button" class="mo-act${m.myLiked?" on":""}" data-mo-like="${escAttr(m.id)}"><i data-lucide="heart"></i>${m.myLiked?"已赞":"赞"}</button>`:""}
-        <button type="button" class="mo-act" data-mo-cmt="${escAttr(m.id)}"><i data-lucide="message-square"></i>评论</button>
-        ${waiting?`<span class="mo-wait">${esc(aiName)}还没刷到</span>`:""}
-      </div>
-      ${(reacted||comments.length)?`<div class="mo-zone">
-        ${m.liked?`<div class="mo-likes"><i data-lucide="heart"></i>${esc(aiName)}</div>`:""}
-        ${m.replyContent?`<div class="mo-cmt"><b>${esc(aiName)}</b>${esc(m.replyContent)}</div>`:""}
-        ${comments.map(c=>`<div class="mo-cmt"><b>${esc(c.author==="ai"?aiName:myName)}</b>${esc(c.content)}</div>`).join("")}
-      </div>`:""}
-      ${state.momentCommentOpen===m.id?`<div class="mo-cmt-box">
-        <input id="mo-cmt-input" value="${escAttr(state.momentCommentDraft||"")}" placeholder="说点什么…"/>
-        <button type="button" id="mo-cmt-send" data-mo-cmt-send="${escAttr(m.id)}">发送</button>
-      </div>`:""}
-    </div>`;
-  }).join("") : `<div class="empty-state"><div class="empty-emoji"><i data-lucide="aperture"></i></div>还没有人说话</div>`;
+      </div>`;
+    }).join("");
+  }
 
-  return `<div class="page mo-page">
-    <div class="mo-top">
-      <div class="mo-title">动态</div>
-      <button type="button" id="mo-new" class="mo-new"><i data-lucide="square-pen"></i></button>
+  return `<div class="page mo-page wx-moments">
+    <div class="wx-tabs">
+      <button type="button" class="wx-tab${scope==="public"?" active":""}" data-mo-scope="public">公共朋友圈</button>
+      <button type="button" class="wx-tab${scope==="private"?" active":""}" data-mo-scope="private">私人朋友圈</button>
     </div>
-    ${composer}
-    ${feed}
+    <div class="wx-cover">
+      <button type="button" id="mo-new" class="wx-compose" title="发动态"><i data-lucide="pen"></i></button>
+      <div class="wx-cover-name">${esc(coverName)}</div>
+      <div class="wx-cover-avatar">${coverAvHtml}</div>
+    </div>
+    <div class="wx-feed">
+      ${composer}
+      ${feed}
+    </div>
   </div>`;
 }
 
@@ -26641,6 +26680,35 @@ reader.readAsArrayBuffer(f);
     // 进页面就扫一遍到期的（另一条路是 proactiveTick 的 10 分钟循环）
     try{ if(typeof momentsProcessDue === "function") momentsProcessDue(); }catch(e){}
   }
+  
+  // 朋友圈：公共/私人 + ··· 面板
+  $$("[data-mo-scope]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.momentsScope = btn.getAttribute("data-mo-scope") || "private";
+      state.momentActionOpen = null;
+      render();
+    };
+  });
+  $$("[data-mo-more]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute("data-mo-more");
+      state.momentActionOpen = (state.momentActionOpen === id) ? null : id;
+      render();
+    };
+  });
+  // 点空白关面板
+  if(state.tab === "moments"){
+    const page = document.querySelector(".wx-moments");
+    if(page && !page._moBlankBound){
+      page._moBlankBound = true;
+      page.addEventListener("click", (e)=>{
+        if(e.target.closest && (e.target.closest("[data-mo-more]") || e.target.closest(".wx-panel") || e.target.closest(".mo-cmt-box"))) return;
+        if(state.momentActionOpen){ state.momentActionOpen = null; render(); }
+      });
+    }
+  }
+
   const moNew = document.getElementById("mo-new");
   if(moNew) moNew.onclick = ()=>{ state.momentComposing = true; render(); };
   const moCancel = document.getElementById("mo-cancel");

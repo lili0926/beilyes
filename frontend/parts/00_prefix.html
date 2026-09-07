@@ -2540,6 +2540,126 @@
     .bed-row-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
     .bed-row-c { font-size: 11px; color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
 
+    
+    /* ─── 朋友圈微信风 ─────────────────────────────────── */
+    .wx-moments { padding: 0 0 96px; max-width: 480px; margin: 0 auto; }
+    .wx-tabs {
+      display: flex; background: var(--card); position: sticky; top: 0; z-index: 20;
+      border-bottom: 1px solid var(--border);
+    }
+    .wx-tab {
+      flex: 1; text-align: center; padding: 13px 0; font-size: 14px;
+      color: var(--sub); background: transparent; border: none; cursor: pointer;
+      position: relative; font-weight: 500;
+    }
+    .wx-tab.active { color: var(--text); font-weight: 700; }
+    .wx-tab.active::after {
+      content: ""; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 28px; height: 3px; background: var(--accent); border-radius: 2px;
+    }
+    .wx-cover {
+      position: relative; height: 200px; overflow: hidden;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, #2e3b52) 0%, #2e3b52 100%);
+    }
+    .wx-cover-name {
+      position: absolute; right: 16px; bottom: 40px; color: #fff;
+      font-size: 18px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.4);
+    }
+    .wx-cover-avatar {
+      position: absolute; right: 16px; bottom: -20px; width: 64px; height: 64px;
+      border-radius: 8px; overflow: hidden; border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25); background: var(--accent2);
+    }
+    .wx-cover-avatar img, .wx-cover-avatar .bubble-avatar, .wx-cover-avatar > * {
+      width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 6px;
+    }
+    .wx-cover-av-fallback {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      background: #d97757; color: #fff; font-size: 22px; font-weight: 700;
+    }
+    .wx-compose {
+      position: absolute; top: 14px; right: 14px; width: 34px; height: 34px;
+      border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .wx-compose svg { width: 16px; height: 16px; }
+    .wx-feed { padding: 36px 0 20px; background: var(--card); min-height: 40vh; }
+    .wx-composer { margin: 0 12px 12px; }
+    .wx-empty {
+      text-align: center; padding: 56px 20px; color: var(--sub); font-size: 14px; line-height: 1.7;
+    }
+    .wx-post {
+      padding: 14px 16px; border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      background: var(--card);
+    }
+    .wx-post-row { display: flex; gap: 10px; }
+    .wx-av {
+      width: 42px; height: 42px; border-radius: 6px; overflow: hidden; flex-shrink: 0;
+      background: var(--accent2);
+    }
+    .wx-av img, .wx-av .bubble-avatar, .wx-av > * {
+      width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 6px;
+    }
+    .wx-body { flex: 1; min-width: 0; }
+    .wx-author {
+      color: #576b95; font-size: 15px; font-weight: 600; margin-bottom: 4px;
+    }
+    .wx-badge {
+      display: inline-block; font-size: 11px; color: #b08d57; background: #fbf0dd;
+      padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; font-weight: 500;
+    }
+    .wx-text {
+      font-size: 15px; line-height: 1.55; color: var(--text); margin-bottom: 8px;
+      word-break: break-word; white-space: pre-wrap;
+    }
+    .wx-imgs {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+      max-width: 260px; margin-bottom: 8px;
+    }
+    .wx-imgs.single { grid-template-columns: 1fr; max-width: 180px; }
+    .wx-img {
+      width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: block;
+    }
+    .wx-meta {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 2px;
+    }
+    .wx-time { font-size: 12px; color: var(--sub); }
+    .wx-actions { position: relative; }
+    .wx-more {
+      border: none; background: color-mix(in srgb, var(--sub) 12%, transparent);
+      color: var(--sub); border-radius: 4px; padding: 2px 8px; font-size: 14px;
+      letter-spacing: 1px; cursor: pointer; line-height: 1.2;
+    }
+    .wx-panel {
+      display: none; position: absolute; right: 0; top: 26px; z-index: 10;
+      background: #4c4c4c; border-radius: 6px; padding: 6px 4px;
+      white-space: nowrap; gap: 2px;
+    }
+    .wx-panel.show { display: flex; }
+    .wx-panel button {
+      border: none; background: transparent; color: #fff; font-size: 13px;
+      padding: 6px 12px; cursor: pointer;
+    }
+    .wx-panel button:active { opacity: 0.7; }
+    .wx-zone {
+      background: color-mix(in srgb, var(--sub) 8%, var(--card));
+      border-radius: 4px; padding: 6px 10px; margin-top: 8px; font-size: 13px;
+    }
+    .wx-likes { color: #576b95; margin-bottom: 4px; }
+    .wx-cmt { color: var(--text); line-height: 1.45; margin-top: 2px; }
+    .wx-cmt b { color: #576b95; font-weight: 600; margin-right: 4px; }
+    .wx-cmt-box { margin-top: 8px; display: flex; gap: 8px; }
+    .wx-cmt-box input {
+      flex: 1; border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: 13px; background: var(--bg); color: var(--text);
+    }
+    .wx-cmt-box button {
+      border: none; background: var(--accent); color: #fff; border-radius: 8px;
+      padding: 8px 12px; font-size: 12px; cursor: pointer;
+    }
+    /* 兼容旧 mo-page 顶栏隐藏：微信风用 tabs+cover */
+    .wx-moments .mo-top { display: none; }
+
     /* ─── 朋友圈 / Moments ────────────────────────────── */
     .mo-page { padding-bottom: 96px; }
     .mo-top {
