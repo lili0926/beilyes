@@ -3540,25 +3540,22 @@
       -webkit-backdrop-filter: var(--hyalite, blur(16px) saturate(1.4));
     }
 
-    /* ── 小卡片：碎碎念=猫爪无头像；便签=爱心白底有头像；固定尺寸 ── */
+    /* ── 小卡片：碎碎念猫爪；便签=上半绷带+下半浅灰+头像压线；固定 320×200 ── */
     .moment-card {
       position: relative;
       border-radius: 18px;
       overflow: hidden;
       box-sizing: border-box;
-      box-shadow: 0 8px 22px rgba(40,40,50,0.12), inset 0 0 0 1px rgba(255,255,255,0.55);
-    }
-    /* 碎碎念：猫爪底，无头像，固定尺寸 */
-    .moment-card.ramble {
       width: 100%;
       max-width: 320px;
       height: 200px;
       margin: 0 auto;
+      box-shadow: 0 8px 22px rgba(40,40,50,0.14), inset 0 0 0 1px rgba(255,255,255,0.5);
+    }
+    .moment-card.ramble {
       padding: 20px 18px 16px;
       display: flex;
       flex-direction: column;
-      justify-content: flex-start;
-      text-align: left;
       background:
         linear-gradient(180deg, rgba(18,16,20,0.52) 0%, rgba(18,16,20,0.40) 45%, rgba(18,16,20,0.58) 100%),
         url("card-paw-bg.jpg") center/cover no-repeat;
@@ -3580,40 +3577,78 @@
       flex: 1;
       min-height: 0;
     }
-    /* 便签：爱心绑带白底 + 头像，固定高度 */
     .moment-card.note {
-      width: 100%;
-      max-width: 320px;
-      height: 88px;
-      margin: 0 auto;
       display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 14px;
+      flex-direction: column;
+      padding: 0;
+      background: #f3f1f2;
+    }
+    .moment-card.note .mc-hero {
+      position: relative;
+      height: 100px;
+      flex-shrink: 0;
       background:
-        radial-gradient(ellipse 70% 55% at 50% 40%, rgba(255,200,210,0.28) 0%, transparent 65%),
-        linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.70) 100%),
-        url("card-heart-bg.jpg") center 28%/cover no-repeat;
-      color: #4a3a42;
+        radial-gradient(ellipse 70% 60% at 50% 40%, rgba(255,200,210,0.22) 0%, transparent 70%),
+        url("card-heart-bg.jpg") center 30%/cover no-repeat;
+    }
+    .moment-card.note .mc-hero::after {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0; height: 28px;
+      background: linear-gradient(to top, rgba(243,241,242,0.95), transparent);
+      pointer-events: none;
     }
     .moment-card.note .mc-avatar {
-      width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
-      border: 1.5px solid rgba(255,255,255,0.95); flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(180,140,160,0.22);
-      display: block;
+      position: absolute;
+      left: 16px;
+      bottom: -22px;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2.5px solid #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
       background: #f5d0da;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .moment-card.note .mc-foot {
+      flex: 1;
+      min-height: 0;
+      padding: 28px 16px 12px 16px;
+      background: #f7f6f7;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    .moment-card.note .mc-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #2a2a2a;
+      margin-bottom: 4px;
+      flex-shrink: 0;
     }
     .moment-card.note .mc-body {
-      flex: 1; font-size: 13px; line-height: 1.45; min-width: 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #3a3a3a;
       overflow: hidden;
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-      color: #4a3a42;
+      flex: 1;
+      min-height: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
     }
-    .moment-card.note .mc-time {
-      font-size: 11px; color: #a08090; flex-shrink: 0; align-self: flex-start;
+    .moment-card.note .mc-time { display: none; }
+    .card-deck-card .moment-card {
+      max-width: 300px;
+      height: 200px;
     }
-    .card-deck-card .moment-card.ramble { max-width: 300px; height: 220px; }
-    .card-deck-card .moment-card.note { max-width: 300px; height: 96px; }
 
     .msg-card-activity {
       display: inline-flex; align-items: center; gap: 4px;

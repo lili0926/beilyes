@@ -4055,15 +4055,20 @@ function deleteMomentCard(id){
 }
 function renderMomentCard(card){
   if(!card || card.deleted) return "";
-  // 便签：白底爱心 + 头像；碎碎念：猫爪底、无头像
   if(card.type === "note"){
     const av = (typeof agentById==="function" && agentById(state.chatTarget||"a1")) || {};
     const avUrl = av.avatar || (state.coupleInfo && state.coupleInfo.hisAvatar) || "";
+    const nm = av.name || (state.coupleInfo && state.coupleInfo.hisName) || "Aries";
     const avHtml = avUrl
       ? `<img class="mc-avatar" src="${escAttr(avUrl)}" alt=""/>`
-      : `<div class="mc-avatar" style="display:flex;align-items:center;justify-content:center;background:#f5d0da;color:#fff;font-weight:700">${esc((av.name||"A").slice(0,1))}</div>`;
-    const tm = card.createdAt ? new Date(card.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "";
-    return `<div class="moment-card note" data-mc-id="${escAttr(card.id)}">${avHtml}<div class="mc-body">${esc(card.content)}</div><div class="mc-time">${esc(tm)}</div></div>`;
+      : `<div class="mc-avatar">${esc(String(nm).slice(0,1))}</div>`;
+    return `<div class="moment-card note" data-mc-id="${escAttr(card.id)}">
+      <div class="mc-hero">${avHtml}</div>
+      <div class="mc-foot">
+        <div class="mc-name">${esc(nm)}</div>
+        <div class="mc-body">${esc(card.content)}</div>
+      </div>
+    </div>`;
   }
   return `<div class="moment-card ramble" data-mc-id="${escAttr(card.id)}">${card.title?`<div class="mc-title">${esc(card.title)}</div>`:""}<div class="mc-body">${esc(card.content)}</div></div>`;
 }
