@@ -4055,14 +4055,17 @@ function deleteMomentCard(id){
 }
 function renderMomentCard(card){
   if(!card || card.deleted) return "";
-  const av = (typeof agentById==="function" && agentById(state.chatTarget||"a1")) || {};
-  const avUrl = av.avatar || state.coupleInfo && state.coupleInfo.hisAvatar || "";
-  const avHtml = avUrl ? `<img class="mc-avatar" src="${escAttr(avUrl)}" alt=""/>` : `<div class="mc-avatar" style="display:flex;align-items:center;justify-content:center;background:#f5d0da;color:#fff;font-weight:700">${esc((av.name||"A").slice(0,1))}</div>`;
+  // 便签：白底爱心 + 头像；碎碎念：猫爪底、无头像
   if(card.type === "note"){
-    const t = card.createdAt ? new Date(card.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "";
-    return `<div class="moment-card note" data-mc-id="${escAttr(card.id)}">${avHtml}<div class="mc-body">${esc(card.content)}</div><div class="mc-time">${esc(t)}</div></div>`;
+    const av = (typeof agentById==="function" && agentById(state.chatTarget||"a1")) || {};
+    const avUrl = av.avatar || (state.coupleInfo && state.coupleInfo.hisAvatar) || "";
+    const avHtml = avUrl
+      ? `<img class="mc-avatar" src="${escAttr(avUrl)}" alt=""/>`
+      : `<div class="mc-avatar" style="display:flex;align-items:center;justify-content:center;background:#f5d0da;color:#fff;font-weight:700">${esc((av.name||"A").slice(0,1))}</div>`;
+    const tm = card.createdAt ? new Date(card.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "";
+    return `<div class="moment-card note" data-mc-id="${escAttr(card.id)}">${avHtml}<div class="mc-body">${esc(card.content)}</div><div class="mc-time">${esc(tm)}</div></div>`;
   }
-  return `<div class="moment-card ramble" data-mc-id="${escAttr(card.id)}">${avHtml}${card.title?`<div class="mc-title">${esc(card.title)}</div>`:""}<div class="mc-body">${esc(card.content)}</div></div>`;
+  return `<div class="moment-card ramble" data-mc-id="${escAttr(card.id)}">${card.title?`<div class="mc-title">${esc(card.title)}</div>`:""}<div class="mc-body">${esc(card.content)}</div></div>`;
 }
 function renderMsgCardActivity(m){
   const batch = (m && Array.isArray(m.card_batch)) ? m.card_batch.filter(c=>c && !c.deleted) : [];
@@ -5376,7 +5379,7 @@ function renderMoments(){
         <div class="wx-post-row">
           <div class="wx-av">${momentAvatar(m.author)}</div>
           <div class="wx-body">
-            <div class="wx-author">${esc(name)}<span class="wx-badge">仅私人可见</span></div>
+            <div class="wx-author">${esc(name)}</div>
             ${m.content?`<div class="wx-text">${esc(m.content)}</div>`:""}
             ${imgs}
             <div class="wx-meta">
