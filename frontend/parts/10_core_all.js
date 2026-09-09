@@ -5347,18 +5347,31 @@ function renderMoments(){
       if(m.liked) likes.push(aiName);
       if(m.myLiked) likes.push(myName);
       const likeLine = likes.length
-        ? `<div class="wx-likes">♥ ${likes.map(x=>esc(x)).join("、")}</div>` : "";
+        ? `<div class="wx-likes"><span class="wx-heart">♥</span>${likes.map(x=>`<b>${esc(x)}</b>`).join("，")}</div>` : "";
       const cmtLines = [];
-      if(m.replyContent) cmtLines.push(`<div class="wx-cmt"><b>${esc(aiName)}</b> ${esc(m.replyContent)}</div>`);
+      if(m.replyContent) cmtLines.push(`<div class="wx-cmt"><span class="wx-cn">${esc(aiName)}</span>: ${esc(m.replyContent)}</div>`);
       comments.forEach(c=>{
         const an = c.author==="ai" ? aiName : myName;
-        cmtLines.push(`<div class="wx-cmt"><b>${esc(an)}</b> ${esc(c.content||"")}</div>`);
+        const replyTo = c.replyToName || c.replyTo || "";
+        if(replyTo){
+          cmtLines.push(`<div class="wx-cmt"><span class="wx-cn">${esc(an)}</span>回复<span class="wx-reply-to">${esc(replyTo)}</span>: ${esc(c.content||"")}</div>`);
+        } else {
+          cmtLines.push(`<div class="wx-cmt"><span class="wx-cn">${esc(an)}</span>: ${esc(c.content||"")}</div>`);
+        }
       });
       const zone = (likeLine || cmtLines.length)
         ? `<div class="wx-zone">${likeLine}${cmtLines.join("")}</div>` : "";
-      const imgs = m.image
-        ? `<div class="wx-imgs single"><img class="wx-img" src="${escAttr(m.image)}" alt="" onclick="window.open&&window.open(this.src)"/></div>`
-        : "";
+      // 图片：单图 / 多图网格（兼容 image 字符串或 images 数组）
+      const imgList = Array.isArray(m.images) ? m.images.filter(Boolean)
+        : (m.image ? [m.image] : []);
+      let imgs = "";
+      if(imgList.length === 1){
+        imgs = `<div class="wx-imgs single"><img class="wx-img" src="${escAttr(imgList[0])}" alt=""/></div>`;
+      } else if(imgList.length > 1){
+        const n = Math.min(9, imgList.length);
+        const cls = n===2||n===4 ? ` count-${n}` : "";
+        imgs = `<div class="wx-imgs${cls}">${imgList.slice(0,9).map(src=>`<img class="wx-img" src="${escAttr(src)}" alt=""/>`).join("")}</div>`;
+      }
       return `<div class="wx-post mo-card">
         <div class="wx-post-row">
           <div class="wx-av">${momentAvatar(m.author)}</div>
@@ -5371,8 +5384,8 @@ function renderMoments(){
               <div class="wx-actions">
                 <button type="button" class="wx-more" data-mo-more="${escAttr(m.id)}" aria-label="更多">···</button>
                 <div class="wx-panel${state.momentActionOpen===m.id?" show":""}" data-mo-panel="${escAttr(m.id)}">
-                  ${isAi?`<button type="button" data-mo-like="${escAttr(m.id)}">${m.myLiked?"取消赞":"♥ 赞"}</button>`:""}
-                  <button type="button" data-mo-cmt="${escAttr(m.id)}">💬 评论</button>
+                  ${isAi?`<button type="button" data-mo-like="${escAttr(m.id)}">${m.myLiked?"取消":"赞"}</button>`:""}
+                  <button type="button" data-mo-cmt="${escAttr(m.id)}">评论</button>
                   <button type="button" data-mo-del="${escAttr(m.id)}">删除</button>
                 </div>
               </div>
