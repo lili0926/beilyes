@@ -26779,6 +26779,27 @@ reader.readAsArrayBuffer(f);
       render();
     };
   });
+  
+  // 朋友圈禁止左右滑动（只允许上下滚），避免 ··· 被带出视口
+  const wxRoot = document.querySelector(".wx-moments") || document.querySelector(".mo-page");
+  if(wxRoot && !wxRoot._noHSwipe){
+    wxRoot._noHSwipe = true;
+    let sx=0, sy=0, locked=false;
+    wxRoot.addEventListener("touchstart", e=>{
+      if(!e.touches[0]) return;
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; locked = false;
+    }, {passive:true});
+    wxRoot.addEventListener("touchmove", e=>{
+      if(!e.touches[0]) return;
+      const dx = e.touches[0].clientX - sx;
+      const dy = e.touches[0].clientY - sy;
+      if(!locked && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)){
+        locked = true;
+      }
+      if(locked && e.cancelable) e.preventDefault();
+    }, {passive:false});
+  }
+
   $$("[data-mo-more]").forEach(btn=>{
     btn.onclick = (e)=>{
       e.stopPropagation();
