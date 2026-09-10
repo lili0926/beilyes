@@ -240,8 +240,19 @@
 
     // ---- pointer handling ----------------------------------------------------
     function rowAt(target) {
-      const row = target.closest && target.closest(opts.row);
-      return row && container.contains(row) ? row : null;
+      if (!target || !target.closest) return null;
+      let row = target.closest(opts.row);
+      if (row && container.contains(row)) return row;
+      // 头像在消息组上方的 .msg-meta 里时，映射到紧随的 bubble-row
+      const meta = target.closest(".msg-meta");
+      if (meta && container.contains(meta)) {
+        let n = meta.nextElementSibling;
+        while (n) {
+          if (n.matches && n.matches(opts.row)) return n;
+          n = n.nextElementSibling;
+        }
+      }
+      return null;
     }
     function onDown(e) {
       if (st || (e.pointerType === "mouse" && e.button !== 0)) return;

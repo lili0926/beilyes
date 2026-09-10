@@ -2350,7 +2350,38 @@
       margin: 10px 0 3px 2px; font-size: 10px; color: var(--sub);
     }
     .msg-meta.me { justify-content: flex-end; margin: 10px 2px 3px 0; }
-    .msg-meta-avatar { width: 20px; height: 20px; border-radius: 50%; overflow: hidden; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+    .msg-meta-avatar {
+      width: 28px !important; height: 28px !important;
+      border-radius: 50% !important;
+      overflow: hidden !important;
+      flex-shrink: 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,.12);
+      padding: 0 !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+    }
+    .msg-meta-avatar .avatar-link {
+      width: 28px !important; height: 28px !important;
+      border-radius: 50% !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      display: inline-flex !important;
+    }
+    .msg-meta-avatar .bubble-avatar {
+      width: 28px !important; height: 28px !important;
+      border-radius: 50% !important;
+      overflow: hidden !important;
+    }
+    .msg-meta-avatar img {
+      width: 100% !important; height: 100% !important;
+      object-fit: cover !important;
+      border-radius: 50% !important;
+      display: block !important;
+    }
     .msg-meta-avatar .bubble-avatar,
     .msg-meta-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
     .msg-meta-avatar .bubble-avatar { font-size: 9px; }
@@ -11930,19 +11961,19 @@ function render(){
 // 她那侧不带回调，但留着给 ⟪弹飞⟫ 暗号反手弹她一下。
 let __flingThem = null, __flingMe = null;
 function setupAvatarFling(){
-  // 只挂一次：事件绑在 #app 上，render 不会拆掉 #app
   if(__flingThem || __flingMe) return;
   if(typeof AvatarFling === "undefined" || !AvatarFling || typeof AvatarFling.attach !== "function") return;
   const app = document.getElementById("app");
   if(!app) return;
-  // 经典：头像在 .msg-meta 里（消息组上方）；需要把 meta 里的头像映射到紧随的 bubble-row
+  // 经典：头像在 .msg-meta；库已支持从 meta 映射到下一条 bubble-row
   const _afAvatar = (row)=>{
     if(!row) return null;
     let av = row.querySelector(".bubble-avatar");
     if(av) return av;
-    // 上一兄弟是 msg-meta 时，用那里的头像
     let prev = row.previousElementSibling;
-    while(prev && prev.classList && prev.classList.contains("imsg-time-sep")) prev = prev.previousElementSibling;
+    while(prev && prev.classList && !prev.classList.contains("msg-meta") && !prev.classList.contains("bubble-row")){
+      prev = prev.previousElementSibling;
+    }
     if(prev && prev.classList && prev.classList.contains("msg-meta")){
       av = prev.querySelector(".bubble-avatar");
       if(av) return av;
@@ -11967,51 +11998,6 @@ function setupAvatarFling(){
       bubble: ".bubble",
     });
   }catch(e){ try{ console.warn("[avatar-fling me]", e); }catch(_){} }
-
-  // 经典头像在 meta 里：pointerdown 落在 meta 上时，库的 closest(row) 找不到 bubble-row。
-  // 补一层：从 meta 头像落到下一条同侧 bubble-row，再交给库的几何逻辑不够用时，至少保证能开始拖。
-  // 更稳妥：把 meta 头像的事件目标“当作”落在紧随的 bubble-row 上——用透明代理太重，
-  // 这里改为：长按/拖 meta 头像时，找到 next bubble-row 并合成一次对 row 内虚拟命中。
-  // 实际实现：给 msg-meta 头像加 data-fling-proxy，按下时把事件重定向到后续 row。
-  if(!app._afMetaProxy){
-    app._afMetaProxy = true;
-    app.addEventListener("pointerdown", function(e){
-      try{
-        if((state.chatStyleMode||"classic")==="imessage") return;
-        const av = e.target && e.target.closest && e.target.closest(".msg-meta .bubble-avatar, .msg-meta .avatar-link");
-        if(!av) return;
-        const meta = av.closest(".msg-meta");
-        if(!meta) return;
-        let row = meta.nextElementSibling;
-        while(row && !(row.classList && row.classList.contains("bubble-row"))){
-          row = row.nextElementSibling;
-        }
-        if(!row) return;
-        // 若 row 内没有头像节点，临时塞一个隐藏的，供 AvatarFling 的 avatarOf 使用
-        if(!row.querySelector(".bubble-avatar")){
-          const ghost = document.createElement("div");
-          ghost.className = "bubble-avatar af-ghost";
-          ghost.setAttribute("aria-hidden", "true");
-          // 把真头像的图拷进去，弹弹乐才能采色
-          const img = av.querySelector && av.querySelector("img");
-          if(img){
-            const gimg = img.cloneNode(true);
-            ghost.appendChild(gimg);
-          } else {
-            ghost.textContent = (av.textContent||"").trim().slice(0,1) || "•";
-          }
-          // 幽灵头像叠在 meta 真头像位置：用 fixed 对齐，pointer-events 由库接管
-          const r = (av.querySelector(".bubble-avatar")||av).getBoundingClientRect();
-          ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:50%;overflow:hidden;z-index:5;pointer-events:auto;opacity:0.01;margin:0;padding:0;`;
-          row.insertBefore(ghost, row.firstChild);
-          // 松手后清掉幽灵，避免 render 前残留
-          const clean = ()=>{ try{ ghost.remove(); }catch(_){} };
-          window.addEventListener("pointerup", clean, {once:true});
-          window.addEventListener("pointercancel", clean, {once:true});
-        }
-      }catch(err){}
-    }, true);
-  }
 }
 
 function __flingTally(kind, n){
