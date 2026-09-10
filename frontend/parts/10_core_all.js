@@ -5647,6 +5647,7 @@ const MF_ERR = {
   friend_id_taken_by_another_server: "对方自称的身份和已有好友冲突",
   rate_limited: "太频繁了，缓一缓",
   token_conflict: "握手撞车了，重新来一次",
+  not_found: "这个身份不在好友表里了",
 };
 
 async function mfApi(path, opts){
@@ -5738,6 +5739,31 @@ async function mfReview(token, action){
     state.mfBusy = false;
   }
   render();
+}
+
+/**
+ * 改好友备注。一个节点带两个身份（人 + AI），各存各的 remark。
+ *
+ * 存完**不整页重绘**：这一页是输入框，render() 会把焦点和滚动位置一起冲掉
+ * （改完一个还想接着改第二个的时候特别明显）。所以只就地改 state 里那一条，
+ * 让下次 mfLoad 自然对上。
+ */
+async function mfSetRemark(friendId, identityId, remark, el){
+  const val = String(remark || "").trim();
+  if(el){ el.classList.remove("saved", "failed"); }
+  try{
+    await mfApi(
+      "/api/admin/friends/" + encodeURIComponent(friendId) + "/" + encodeURIComponent(identityId) + "/remark",
+      { method:"POST", body:{ remark: val || null } }
+    );
+    const f = (((state.mfData||{}).friends)||[]).find(x=> x.friend_node_id === friendId);
+    const i = f && (f.identities||[]).find(y=> y.identity_id === identityId);
+    if(i) i.remark = val || null;
+    if(el) el.classList.add("saved");
+  }catch(e){
+    if(el) el.classList.add("failed");
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+  }
 }
 
 function mfCopyCode(){
@@ -5851,7 +5877,13 @@ function renderMomentsFriends(){
     <div class="section-body">
       ${accepted.length ? accepted.map(f=>`<div class="mf-card">
         <div class="mf-name">${esc(f.node_display_name || f.friend_node_id)}</div>
-        <div class="mf-sub">${esc((f.identities||[]).map(i=> i.remark || i.display_name).join(" · "))}</div>
+        ${(f.identities||[]).map(i=>`<div class="mf-idrow">
+          <span class="mf-idname">${esc(i.display_name || i.identity_id)}${i.type==="ai"?`<span class="mf-tag">AI</span>`:""}</span>
+          <input class="mf-remark" value="${escAttr(i.remark||"")}"
+                 placeholder="${escAttr(i.display_name || i.identity_id)}"
+                 data-mf-remark="${escAttr(f.friend_node_id)}"
+                 data-mf-identity="${escAttr(i.identity_id)}"/>
+        </div>`).join("")}
       </div>`).join("") : `<div class="empty-state"><div class="empty-emoji"><i data-lucide="users"></i></div>还没有好友</div>`}
     </div>
   </div>`;
@@ -27469,6 +27501,11 @@ reader.readAsArrayBuffer(f);
   };
   $$("[data-mf-ok]").forEach(b=>{ b.onclick = ()=> mfReview(b.dataset.mfOk, "accept"); });
   $$("[data-mf-no]").forEach(b=>{ b.onclick = ()=> mfReview(b.dataset.mfNo, "reject"); });
+  // 备注：用 onchange（失焦且真改过才触发），不用 oninput —— 否则每敲一个字发一次请求
+  $$("[data-mf-remark]").forEach(inp=>{
+    inp.onchange = ()=> mfSetRemark(inp.dataset.mfRemark, inp.dataset.mfIdentity, inp.value, inp);
+    inp.onkeydown = (e)=>{ if(e.key === "Enter") inp.blur(); };
+  });
 
   // 吃苹果 · 壳
   $$("[data-ea-shell]").forEach(btn=>{
