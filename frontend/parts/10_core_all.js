@@ -21677,18 +21677,36 @@ function renderChat(){
       const myName = (typeof myDisplayName==="function") ? myDisplayName() : ((state.coupleInfo && state.coupleInfo.myName) || "我");
       const speakerName = isMe ? myName : (m.speakerName || (activeAg && activeAg.name) || "");
       const showMeta = !!speakerName && firstInRun;
-      const speakerMeta = showMeta ? (isMe ? `
+      const isImStyle = (state.chatStyleMode||"classic")==="imessage" && (state.chatViewMode||"chat")!=="rpg";
+      let speakerMeta = "";
+      if(showMeta){
+        if(isImStyle){
+          const tStr = m.time ? formatTime(m.time) : "";
+          speakerMeta = tStr ? `<div class="imsg-time-sep">${esc(tStr)}</div>` : "";
+          if(!isMe && typeof hasThinking==="function" && hasThinking(m)){
+            speakerMeta += `<div class="imsg-think-row"><button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button></div>`;
+          }
+        } else if(isMe){
+          speakerMeta = `
         <div class="msg-meta me">
           ${m.time?`<span class="msg-meta-time">${formatTime(m.time)}</span><span class="msg-meta-heart">♥</span>`:""}
           <span class="msg-meta-name">${esc(speakerName)}</span>
           <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("me"), "me")}</div>
-        </div>` : `
+        </div>`;
+        } else {
+          speakerMeta = `
         <div class="msg-meta">
           <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them")}</div>
           <span class="msg-meta-name">${esc(speakerName)}</span>
           ${m.time?`<span class="msg-meta-heart">♥</span><span class="msg-meta-time">${formatTime(m.time)}</span>`:""}
-          ${(!isMe && hasThinking(m))?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
-        </div>`) : "";
+          ${(typeof hasThinking==="function" && hasThinking(m))?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
+        </div>`;
+        }
+      }
+      const isLastMsg = idx === ((state.messages||[]).length - 1);
+      const imsgRead = (isImStyle && isMe && isLastMsg && !state.chatLoading)
+        ? `<div class="imsg-read" title="已送达"><span class="imsg-read-dot"></span><span class="imsg-read-dot"></span></div>`
+        : "";
       // 券夹卡片：AI 送出的券面
       if(m.couponId){
         const cc=(state.coupons||[]).find(x=>x.id===m.couponId);
@@ -21746,7 +21764,7 @@ function renderChat(){
       <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
         <button type="button" data-msg-copy="${idx}" title="复制消息"><i data-lucide="copy"></i>复制</button>
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
-      </div>`;
+      ${imsgRead||""}</div>`;
       if(m.time && !showMeta && firstInRun){
         const tIcon = (!isMe && hasThinking(m))?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
         msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}${tIcon}</div>`;
@@ -21930,7 +21948,7 @@ function renderChat(){
       <input type="file" id="chat-file-input" multiple style="display:none"/>
       <div class="chat-input-row letter-input-row">
         <button type="button" id="chat-more-btn" title="更多" class="chat-more-btn${state.chatMoreOpen?" open":""}" aria-label="展开附件面板"><i data-lucide="plus"></i></button>
-        <textarea id="chat-input" placeholder="${state.chatMode==="story"?"写下一句话，TA 会顺着写下去…（如：那我吻你）":"Write a letter…"}" rows="1">${esc(state.chatInput)}</textarea>
+        <textarea id="chat-input" placeholder="${(state.chatStyleMode||"")==="imessage"?"iMessage":(state.chatMode==="story"?"写下一句话，TA 会顺着写下去…（如：那我吻你）":"Write a letter…")}" rows="1">${esc(state.chatInput)}</textarea>
         ${hasPending&&!state.chatLoading?`<button type="button" id="trigger-reply" title="让${(activeAg&&activeAg.name)||"TA"}回复（${state.pendingUser.length}条）" class="input-icon-btn reply-trigger"><i data-lucide="message-circle"></i><b>${state.pendingUser.length}</b></button>`:""}
         <button id="chat-send" class="send-btn${state.chatInput.trim()?" active":""}"><i data-lucide="send"></i></button>
       </div>
