@@ -1239,10 +1239,11 @@
       justify-content: flex-start;
       padding-left: 6px;
     }
-    #app.chat-style-imessage .bubble-row.them > .bubble-avatar,
-    #app.chat-style-imessage .bubble-row.them > a {
-      display: none !important;
+    /* iMessage 仍保留头像供弹弹乐拖拽；略缩小贴近真机 1:1 可选 */
+    #app.chat-style-imessage .bubble-row .bubble-avatar {
+      width: 28px; height: 28px; font-size: 12px;
     }
+
     #app.chat-style-imessage .imsg-read {
       display: flex;
       justify-content: flex-end;
@@ -1344,6 +1345,10 @@
       padding: 4px 8px;
     }
 
+
+    .avatar-link { display: inline-flex; flex-shrink: 0; touch-action: none; }
+    .avatar-link .bubble-avatar { pointer-events: auto; touch-action: none; }
+    .bubble-avatar { touch-action: none; }
 
     .msg-bar { display: none; align-items: center; gap: 2px; padding: 1px 6px 2px; margin: 1px 0 3px; }
     .msg-bar.show { display: flex; }

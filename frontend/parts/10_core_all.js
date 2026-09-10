@@ -5144,12 +5144,15 @@ function setupAvatarFling(){
   if(!app) return;
   // 两个实例监听同一个 container 不打架：各自 closest(row) 匹配不到就直接 return
   try{
+    const _afAvatar = (row)=>{
+      if(!row) return null;
+      return row.querySelector(".bubble-avatar") || row.querySelector(".avatar-link .bubble-avatar") || row.querySelector(".avatar-link");
+    };
     __flingThem = AvatarFling.attach({
       container: app,
-      row: ".bubble-row.them",     // 只有聊天消息用这个类，别的页面不会被误伤
-      avatar: ".bubble-avatar",
+      row: ".bubble-row.them",
+      avatar: _afAvatar,
       bubble: ".bubble",
-      // n 是它按 batchMs(1200ms) 合并之后的次数，不是每帧回调
       onPull(n){ __flingTally("pull", n); },
       onFly(n){ __flingTally("fly", n); },
     });
@@ -5158,7 +5161,7 @@ function setupAvatarFling(){
     __flingMe = AvatarFling.attach({
       container: app,
       row: ".bubble-row.me",
-      avatar: ".bubble-avatar",
+      avatar: _afAvatar,
       bubble: ".bubble",
     });
   }catch(e){ try{ console.warn("[avatar-fling me]", e); }catch(_){} }
@@ -21723,12 +21726,10 @@ function renderChat(){
         <div class="msg-meta me">
           ${m.time?`<span class="msg-meta-time">${formatTime(m.time)}</span><span class="msg-meta-heart">♥</span>`:""}
           <span class="msg-meta-name">${esc(speakerName)}</span>
-          <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("me"), "me")}</div>
         </div>`;
         } else {
           speakerMeta = `
         <div class="msg-meta">
-          <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them")}</div>
           <span class="msg-meta-name">${esc(speakerName)}</span>
           ${m.time?`<span class="msg-meta-heart">♥</span><span class="msg-meta-time">${formatTime(m.time)}</span>`:""}
           ${(typeof hasThinking==="function" && hasThinking(m))?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
@@ -21789,9 +21790,9 @@ function renderChat(){
         }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
-        ${(!isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them"):""}
+        ${(!isMe && firstInRun)?profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them"):""}
         ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
-        ${(isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("me"), "me"):""}
+        ${(isMe && firstInRun)?profileAvatarLink(bubbleAvatarHtml("me"), "me"):""}
       </div>
       ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
       <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
@@ -21838,7 +21839,7 @@ function renderChat(){
   if(state.chatLoading){
     const glassCls = (typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "";
     msgs+=`<div class="bubble-row them">
-      ${bubbleAvatarHtml("them", isGroup?null:target)}
+      ${profileAvatarLink(bubbleAvatarHtml("them", isGroup?null:target), isGroup?"them":(target||"them"))}
       <div class="bubble them${glassCls}"><div class="typing-dots"><span></span><span></span><span></span></div></div>
     </div>`;
   }
