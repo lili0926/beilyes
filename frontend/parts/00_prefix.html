@@ -1179,6 +1179,60 @@
     .bubble-row.me { justify-content: flex-end; }
     .bubble-row.them { justify-content: flex-start; }
     /* 点气泡唤出的收藏/复制操作条（Grok 式） */
+
+    /* ── 经典 / iMessage 对话样式切换 ───────────────────────── */
+    .chat-style-switch {
+      display: inline-flex; align-items: center;
+      background: color-mix(in srgb, var(--border) 65%, transparent);
+      border-radius: 999px; padding: 2px; gap: 2px; flex-shrink: 0;
+    }
+    .chat-style-switch button {
+      border: none; background: transparent; color: var(--sub);
+      font-size: 11px; padding: 4px 8px; border-radius: 999px; cursor: pointer;
+      line-height: 1.2;
+    }
+    .chat-style-switch button.active {
+      background: var(--card); color: var(--text); font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    /* iMessage 风：蓝我 / 灰他、圆角、更轻时间戳 */
+    #app.chat-style-imessage .bubble.me {
+      background: #0A84FF !important;
+      color: #fff !important;
+      border-radius: 18px 18px 4px 18px !important;
+      border: none !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    #app.chat-style-imessage .bubble.them {
+      background: #E9E9EB !important;
+      color: #000 !important;
+      border-radius: 18px 18px 18px 4px !important;
+      border: none !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    #app.chat-style-imessage.dark .bubble.them,
+    #app.chat-style-imessage[data-theme="dark"] .bubble.them {
+      background: #3A3A3C !important;
+      color: #fff !important;
+    }
+    #app.chat-style-imessage .msg-meta {
+      opacity: 0.55; font-size: 11px;
+    }
+    #app.chat-style-imessage .chat-input-bar,
+    #app.chat-style-imessage .composer,
+    #app.chat-style-imessage .chat-compose {
+      /* 输入区轻微贴 iMessage 圆角感 */
+    }
+    #app.chat-style-imessage textarea#chat-input,
+    #app.chat-style-imessage #chat-input {
+      border-radius: 20px !important;
+    }
+
+
     .msg-bar { display: none; align-items: center; gap: 2px; padding: 1px 6px 2px; margin: 1px 0 3px; }
     .msg-bar.show { display: flex; }
     .msg-bar.me { justify-content: flex-end; }

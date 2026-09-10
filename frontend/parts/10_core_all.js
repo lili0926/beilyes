@@ -2491,6 +2491,7 @@ const state = {
   wsLastMeta: null,
   wsError: "",
   chatViewMode: LS.get("chatViewMode", "chat") || "chat", // chat | rpg
+  chatStyleMode: LS.get("chatStyleMode", "classic") || "classic", // classic | imessage
   // RPG 立绘与聊天头像完全独立（头像仍走 coupleInfo.myAvatar / partnerAvatar）
   rpgSprites: LS.get("rpgSprites", { me: "jasmine-sprite.png", them: "aries-sprite.png" }) || { me: "jasmine-sprite.png", them: "aries-sprite.png" },
   rpgLineIndex: null, // RPG 当前演到第几条可展示消息
@@ -4003,6 +4004,10 @@ function applyThemeVars(){
   }
   const app=document.getElementById("app");
   if(app){
+    // 对话样式：经典 / iMessage
+    try{
+      app.classList.toggle("chat-style-imessage", (state.chatStyleMode||"classic")==="imessage");
+    }catch(e){}
     // 「界面材质」（雾玻璃/水玻璃/图片皮肤）会往卡片上刷一层半透明白 !important，
     // 蓝晒壳整套自成体系，这几个 class 一律不挂
     app.classList.remove("ui-glass-fog", "ui-glass-water", "ui-bubble-soft");
@@ -4695,7 +4700,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -21808,11 +21813,17 @@ function renderChat(){
   const isClaude = shell === "claude";
   const isKorean = shell === "korean";
   const chatName = isGroup ? "群聊" : ((activeAg&&activeAg.name)||"聊天");
-  const switchHtml = rpgAllowed ? `
+  const styleMode = (state.chatStyleMode||"classic")==="imessage" ? "imessage" : "classic";
+  const styleSwitchHtml = viewMode==="rpg" ? "" : `
+      <div class="chat-style-switch" title="经典 / iMessage">
+        <button type="button" data-chat-style="classic" class="${styleMode!=="imessage"?"active":""}">经典</button>
+        <button type="button" data-chat-style="imessage" class="${styleMode==="imessage"?"active":""}">iMsg</button>
+      </div>`;
+  const switchHtml = (rpgAllowed ? `
       <div class="chat-view-switch${isClaude?" claude-view-switch":""}" title="聊天 / RPG">
         <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
         <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
-      </div>` : "";
+      </div>` : "") + styleSwitchHtml;
   // 韩系顶栏：左返回+头像+名字/状态，右侧栏开关
   let krAvatar = "";
   try{
@@ -22912,6 +22923,12 @@ function renderTheme(){
     <div class="sw-card">
       <div class="sw-card-title">气泡</div>
       <div class="sw-card-sub">材质与皮肤；只有真玻璃/真皮肤会改变气泡观感</div>
+      <div class="sw-sec-label">对话样式</div>
+      <div class="sw-chip-row" style="margin-bottom:10px">
+        <button type="button" class="sw-chip${(state.chatStyleMode||"classic")!=="imessage"?" on":""}" data-chat-style="classic">经典</button>
+        <button type="button" class="sw-chip${(state.chatStyleMode||"")==="imessage"?" on":""}" data-chat-style="imessage">iMessage</button>
+      </div>
+      <div class="sw-sec-label">气泡材质</div>
       <div class="sw-chip-row">
         <button type="button" class="sw-chip${bStyle==="solid"?" on":""}" data-bubble-style="solid">实心</button>
         <button type="button" class="sw-chip${bStyle==="fog"?" on":""}" data-bubble-style="fog">雾玻璃</button>
@@ -25710,6 +25727,16 @@ function bindEvents(){
     applyThemeVars();
     render();
   };
+  $$("[data-chat-style]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const m = btn.getAttribute("data-chat-style") || "classic";
+      state.chatStyleMode = m === "imessage" ? "imessage" : "classic";
+      try{ persist("chatStyleMode"); }catch(e){}
+      try{ if(typeof scheduleKvFsPersist==="function") scheduleKvFsPersist("chatStyleMode"); }catch(e){}
+      applyThemeVars();
+      render();
+    };
+  });
   $$("[data-bubble-style]").forEach(btn=>{
     btn.onclick = ()=>{
       state.bubbleStyle = btn.dataset.bubbleStyle || "solid";
