@@ -5316,28 +5316,58 @@ function handleMomentMarkers(body){
   let text = String(body||"");
   if(!text || text.indexOf("动态") < 0) return text;
   let hit = false;
-  // 公开的先处理：⟪动态(公开):正文⟫ → 走 VPS，推给好友。
-  // 必须排在私人那条正则前面，否则 `动态\s*[:：]` 匹配不到带括号的这种，
-  // 结果就是他想发公共、东西却落进了私人圈（她就撞上过）。
-  text = text.replace(/[⟪《【]\s*动态\s*[（(]\s*公开\s*[)）]\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, raw)=>{
-    const s = String(raw).trim();
+  // 把一条原文拆成 {scope, content, note}；公开必须先于私人，且兼容模型乱写的格式
+  function _moParsePublicRaw(raw){
+    const s = String(raw||"").trim();
+    if(!s) return null;
     const bar = s.indexOf("|") >= 0 ? s.indexOf("|") : s.indexOf("｜");
     const content = (bar >= 0 ? s.slice(0, bar) : s).trim().slice(0, 300);
-    if(content && typeof mfPublish === "function"){
-      if(typeof mfReady === "function" && mfReady()) mfPublish(content, "ai");
-      else if(typeof showToast === "function") showToast("还没连上节点，这条发不出去");
+    return content || null;
+  }
+  function _moIsPublicNote(note){
+    const n = String(note||"");
+    return /公开|公共|public/i.test(n);
+  }
+  function _moSendPublic(content){
+    if(!content) return;
+    if(typeof mfPublish === "function"){
+      if(typeof mfReady === "function" && mfReady()){
+        try{ mfPublish(content, "ai"); }
+        catch(e){ if(typeof showToast==="function") showToast(String(e && e.message || e)); }
+      } else if(typeof showToast === "function"){
+        showToast("还没连上公共节点，公开动态发不出去（不会落到私人圈）");
+      }
     }
+  }
+  // ① 标准：⟪动态(公开):正文⟫ / ⟪动态（公共）：正文⟫ / 可省略冒号
+  text = text.replace(/[⟪《【\[]\s*动态\s*[（(]\s*(?:公开|公共|public)\s*[)）]\s*[:：]?\s*([^⟫》】\]]+?)\s*[⟫》】\]]/gi, (_, raw)=>{
+    const content = _moParsePublicRaw(raw);
+    if(content) _moSendPublic(content);
     return "";
   });
-  text = text.replace(/[⟪《【]\s*动态\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, raw)=>{
+  // ② 变体：⟪公开动态:正文⟫ / ⟪公共动态：正文⟫
+  text = text.replace(/[⟪《【\[]\s*(?:公开|公共|public)\s*动态\s*[:：]\s*([^⟫》】\]]+?)\s*[⟫》】\]]/gi, (_, raw)=>{
+    const content = _moParsePublicRaw(raw);
+    if(content) _moSendPublic(content);
+    return "";
+  });
+  // ③ 私人默认：⟪动态:正文|备注⟫ —— 若备注里写了公开/公共，改走公共，避免「想发公共却落私人」
+  text = text.replace(/[⟪《【\[]\s*动态\s*[:：]\s*([^⟫》】\]]+?)\s*[⟫》】\]]/g, (_, raw)=>{
     const s = String(raw).trim();
     const bar = s.indexOf("|") >= 0 ? s.indexOf("|") : s.indexOf("｜");
-    const content = bar >= 0 ? s.slice(0, bar).trim() : s;
+    const content = (bar >= 0 ? s.slice(0, bar) : s).trim();
     const note = bar >= 0 ? s.slice(bar+1).trim() : "";
-    // 被防重拦下时 momentsAiPost 回 null，这里就别再当成发过了（否则白重绘一次）
-    if(content && momentsAiPost(content.slice(0,300), note.slice(0,200))) hit = true;
+    if(!content) return "";
+    if(_moIsPublicNote(note) || _moIsPublicNote(content.slice(0, 12))){
+      // 正文开头误写「公开：」时剥掉
+      const cleaned = content.replace(/^\s*(?:公开|公共|public)\s*[:：]\s*/i, "").trim() || content;
+      _moSendPublic(cleaned.slice(0, 300));
+      return "";
+    }
+    if(momentsAiPost(content.slice(0,300), note.slice(0,200))) hit = true;
     return "";
-  }).replace(/\n{3,}/g, "\n\n").trim();
+  });
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
   if(hit && state.tab === "moments") render();
   return text;
 }
@@ -5351,21 +5381,20 @@ function momentsPromptBlock(){
   }).join("\n");
   return `【朋友圈——marker 暗号】
 你有一个自己的朋友圈，她会刷到。这不是对她说话，是你自己站在那想了想，留了一句。
-想发的时候在正式回复里写一行：⟪动态:正文|内部备注⟫
-- 判断标准只有一个：**此刻有没有一句你想让她之后刷到的话**。不要求情绪重大，也不要求值得长期保存。
-  想念、吃醋、占有欲、心软、被逗笑、隐约不爽、温柔吐槽、一个具体观察、
-  或者一句不适合在聊天回复里直接说完的话——都可以成为动态。
-- 正文 1 到 3 句，自然、具体、像随手发的。不要写成小作文，不要每轮都发。
-- 「内部备注」她看不见：写你为什么发这条、当时你们在聊什么、这条的情绪底色。
-  过几天她翻到这条留了评论，你要靠这段备注想起来当时是什么心境。
-- 暗号会被系统吃掉，她只看到你正常说话。发了动态也顺手说句人话，别只丢一个暗号。
+想发的时候在正式回复里**单独写一行**暗号（会被系统吃掉，她只看到你正常说话）。
 
-**两个圈子，别发错：**
-- ⟪动态:正文|内部备注⟫ → **私人朋友圈**，只有你和她两个人看得到。默认走这个。
-- ⟪动态(公开):正文⟫ → **公共朋友圈**，会推给所有好友，他们都看得见。
-  她说「发公共」「发到公共朋友圈」的时候用这个；**不确定就用私人的那个**。
-  公开的这条没有内部备注 —— 那是给你们俩之间用的。
-${recent?`\n最近的朋友圈（别重复：和下面某条说的是同一件事就别发了，换一件或者不发）：\n${recent}`:""}`;
+**两个圈子，格式必须抄对，抄错就会进错圈：**
+1) **私人朋友圈**（只有你和她）：⟪动态:正文|内部备注⟫
+2) **公共朋友圈**（推给所有好友）：⟪动态(公开):正文⟫
+   - 括号里只能是「公开」二字，不要写成「公共动态」夹在正文里却用私人格式。
+   - 公开**不要**写内部备注，也不要用 ⟪动态:…|公开⟫ 这种私人格式冒充。
+   - 她说「发公共」「发到公共朋友圈」「公开朋友圈」时，**必须**用第 2 种，禁止用第 1 种。
+
+- 判断标准：此刻有没有一句想让她之后刷到的话。不要求重大，想念/吃醋/心软/被逗笑/观察都可以。
+- 正文 1 到 3 句，自然具体。不要每轮都发。
+- 私人暗号的「内部备注」她看不见：写为什么发、当时在聊什么。
+- 发了动态也要顺口说句人话，别只丢暗号。
+${recent?`\n最近的朋友圈（别重复：和下面某条同一件事就别发了）：\n${recent}`:""}`;
 }
 
 // ── 上下文拼装 ────────────────────────────────────────────────────────────
