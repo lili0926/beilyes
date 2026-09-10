@@ -20348,6 +20348,38 @@ function streamLiveEnd(){
 
 // ─── 聊天（多 AI / 群聊 / 连发 + 手动触发 + 思考链）──────────────────────────
 // ─── 收藏聊天记录：长按气泡 / 右键 → 选分类收藏 ─────────────────────────
+
+/** iMessage 风格回应（tapback） */
+const IMSG_REACT_EMOJIS = ["❤️","👍","👎","😂","‼","❓","🥰"];
+function getMsgReactions(m){
+  if(!m) return [];
+  if(Array.isArray(m.reactions)) return m.reactions.filter(Boolean);
+  return [];
+}
+function toggleMsgReaction(idx, emoji){
+  const list = state.messages || [];
+  const m = list[idx];
+  if(!m || !emoji) return;
+  let rs = Array.isArray(m.reactions) ? m.reactions.slice() : [];
+  const i = rs.indexOf(emoji);
+  if(i >= 0) rs.splice(i, 1);
+  else {
+    // 同款 iMessage：一人同一时刻一种回应，再点别的就换
+    rs = [emoji];
+  }
+  m.reactions = rs;
+  try{ saveActiveThread(); }catch(e){}
+  try{ if(typeof persistChatNative==="function") persistChatNative(); }catch(e){}
+  state.msgBarIdx = null;
+  state.needChatScroll = false;
+  render();
+}
+function renderMsgReactions(m, isMe){
+  const rs = getMsgReactions(m);
+  if(!rs.length) return "";
+  return `<div class="imsg-reacts ${isMe?"me":"them"}">${rs.map(e=>`<span class="imsg-react-chip">${e}</span>`).join("")}</div>`;
+}
+
 function openSaveChat(idx){
   const m = (state.messages||[])[idx];
   if(!m) return;
@@ -21761,10 +21793,13 @@ function renderChat(){
         ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
         ${(isMe && !showMeta && firstInRun)?profileAvatarLink(bubbleAvatarHtml("me"), "me"):""}
       </div>
+      ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
       <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
+        ${(isImStyle?IMSG_REACT_EMOJIS:[]).map(em=>`<button type="button" class="imsg-react-pick" data-msg-react="${idx}" data-react-emoji="${em}" title="回应">${em}</button>`).join("")}
+        ${isImStyle?`<span class="imsg-react-sep"></span>`:""}
         <button type="button" data-msg-copy="${idx}" title="复制消息"><i data-lucide="copy"></i>复制</button>
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
-      ${imsgRead||""}</div>`;
+      </div>${imsgRead||""}`;
       if(m.time && !showMeta && firstInRun){
         const tIcon = (!isMe && hasThinking(m))?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
         msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}${tIcon}</div>`;
@@ -25632,6 +25667,13 @@ function bindEvents(){
         const copyBtn = t.closest && t.closest("[data-msg-copy]");
         if(copyBtn){ if(typeof copyMessage==="function") copyMessage(+copyBtn.dataset.msgCopy); return; }
         const saveBtn = t.closest && t.closest("[data-msg-save]");
+        const reactBtn = t.closest && t.closest("[data-msg-react]");
+        if(reactBtn){
+          const ridx = +reactBtn.getAttribute("data-msg-react");
+          const emo = reactBtn.getAttribute("data-react-emoji") || "";
+          if(typeof toggleMsgReaction==="function") toggleMsgReaction(ridx, emo);
+          return;
+        }
         if(saveBtn){ state.msgBarIdx=null; if(typeof openSaveChat==="function") openSaveChat(+saveBtn.dataset.msgSave); return; }
         if(state.savedSaving) return; // 收藏分类弹窗开着时不切换操作条
         if(t.closest && t.closest(".msg-bar")) return;
@@ -25745,6 +25787,14 @@ function bindEvents(){
     applyThemeVars();
     render();
   };
+  $$("[data-msg-react]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const idx = +btn.getAttribute("data-msg-react");
+      const emo = btn.getAttribute("data-react-emoji") || "";
+      if(typeof toggleMsgReaction==="function") toggleMsgReaction(idx, emo);
+    };
+  });
   $$("[data-chat-style]").forEach(btn=>{
     btn.onclick = ()=>{
       const m = btn.getAttribute("data-chat-style") || "classic";

@@ -1298,6 +1298,53 @@
       border-radius: 50%;
     }
 
+
+    /* iMessage 回应（tapback） */
+    .imsg-reacts {
+      display: flex; gap: 4px; margin: -6px 10px 4px;
+      position: relative; z-index: 2;
+      pointer-events: none;
+    }
+    .imsg-reacts.me { justify-content: flex-end; }
+    .imsg-reacts.them { justify-content: flex-start; }
+    .imsg-react-chip {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 28px; height: 28px; padding: 0 6px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,.08);
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+      font-size: 14px; line-height: 1;
+    }
+    .msg-bar .imsg-react-pick {
+      border: none; background: transparent;
+      font-size: 18px; line-height: 1;
+      padding: 4px 5px; cursor: pointer;
+      border-radius: 8px;
+    }
+    .msg-bar .imsg-react-pick:active {
+      background: rgba(0,0,0,.06);
+      transform: scale(1.15);
+    }
+    .msg-bar .imsg-react-sep {
+      width: 1px; height: 18px; background: rgba(0,0,0,.12);
+      margin: 0 4px; flex-shrink: 0; align-self: center;
+    }
+    #app.chat-style-imessage .msg-bar {
+      background: rgba(255,255,255,.96);
+      border-radius: 18px;
+      padding: 6px 8px;
+      gap: 2px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.14);
+      border: 1px solid rgba(0,0,0,.06);
+    }
+    #app.chat-style-imessage .msg-bar button[data-msg-copy],
+    #app.chat-style-imessage .msg-bar button[data-msg-save] {
+      font-size: 11px;
+      padding: 4px 8px;
+    }
+
+
     .msg-bar { display: none; align-items: center; gap: 2px; padding: 1px 6px 2px; margin: 1px 0 3px; }
     .msg-bar.show { display: flex; }
     .msg-bar.me { justify-content: flex-end; }
