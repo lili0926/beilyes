@@ -2629,6 +2629,47 @@
       display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 4;
     }
     .wx-compose svg { width: 16px; height: 16px; }
+    /* 好友入口放左上角：右边那三个是 12/52/92px 从右往左排的，
+       而 92px 那个（清除封面）只在有封面时才出现，挤进去会时有时无地错位 */
+    .wx-friends {
+      position: absolute; top: 12px; left: 12px; width: 34px; height: 34px;
+      border-radius: 50%; border: none; background: rgba(0,0,0,.28); color: #fff;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 4;
+    }
+    .wx-friends svg { width: 16px; height: 16px; }
+
+    /* ─── 朋友圈联邦 · 加好友 ─────────────────────────── */
+    .mf-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px; line-height: 1.7; word-break: break-all;
+      user-select: all; -webkit-user-select: all;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 12px;
+    }
+    /* 和 .setting-row 一样的内边距 —— .section-body 自己没有 padding，
+       不写这一行卡片会贴到圆角边上 */
+    .mf-card {
+      display: flex; flex-direction: column; gap: 3px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+    }
+    .mf-card:last-child { border-bottom: none; }
+    .mf-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+    .mf-sub {
+      font-size: 11.5px; color: var(--sub); word-break: break-all; line-height: 1.6;
+    }
+    .mf-msg {
+      font-size: 12.5px; color: var(--text); line-height: 1.7;
+      margin-top: 4px; padding-left: 9px;
+      border-left: 2px solid var(--border);
+    }
+    .mf-btns { display: flex; gap: 8px; margin-top: 9px; }
+    .mf-btns button { flex: 1; padding: 8px 0; font-size: 12.5px; }
+    .mf-err {
+      display: flex; align-items: flex-start; gap: 7px;
+      font-size: 12.5px; line-height: 1.7; color: var(--text); padding: 12px 16px;
+    }
+    .mf-err svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 3px; }
 
     .wx-feed {
       padding: 36px 0 28px; background: #fff; min-height: 50vh;
@@ -3264,6 +3305,38 @@
       width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text);
       border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; font-size: 13px;
     }
+    .sticker-pick-row { display: flex; gap: 10px; align-items: stretch; }
+    .sticker-pick-prev {
+      width: 96px; height: 96px; flex-shrink: 0; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--card); overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* 棋盘格底：透明表情包在纯色底上看不出边界，也就看不出透明有没有被压掉 */
+    .sticker-pick-prev img {
+      width: 100%; height: 100%; object-fit: contain;
+      background-color: var(--card);
+      background-image:
+        linear-gradient(45deg, color-mix(in srgb, var(--border) 55%, transparent) 25%, transparent 25%),
+        linear-gradient(-45deg, color-mix(in srgb, var(--border) 55%, transparent) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--border) 55%, transparent) 75%),
+        linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--border) 55%, transparent) 75%);
+      background-size: 12px 12px;
+      background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+    }
+    .sticker-pick-prev .sticker-noimg { height: 100%; width: 100%; }
+    .sticker-pick-btns { flex: 1; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+    .sticker-pick-btns button {
+      width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .sticker-busy { font-size: 11.5px; color: var(--sub); padding: 2px 2px 0; }
+    /* 模型挑了个库里没有的名字时的占位，免得整条消息是个空气泡 */
+    .sticker-miss {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 11px; border-radius: 10px; font-size: 12px;
+      color: var(--sub); background: var(--card);
+      border: 1px dashed var(--border);
+    }
+    .sticker-miss::before { content: "?"; opacity: .55; font-weight: 700; }
     /* ─── 书房：书架 ─────────────────────────────────────── */
     .shufang-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; padding: 8px 4px 20px; }
     .shufang-card { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
@@ -4115,6 +4188,7 @@
 </head>
 <body>
   <script src="hyalite.js"></script>
+  <script src="avatar-fling.js"></script>
   <script src="lucide.min.js"></script>
 
   <!-- ═══════════════ 开屏层 ═══════════════ -->
@@ -5424,11 +5498,11 @@
     body.shell-korean .msg-meta.me {
       margin: 10px 0 4px !important;
     }
+    /* 这条整块是死规则：下面 body.shell-korean 那段里有同样的选择器，
+       在后面、同特异性，尺寸和圆角都被它覆盖。留着只会让人以为头像是 34px。
+       尺寸以后面那条（28px）为准，这里只保留它没写的 overflow。 */
     body.shell-korean .msg-meta-avatar,
     body.shell-korean .bubble-avatar {
-      width: 34px !important;
-      height: 34px !important;
-      border-radius: 50% !important;
       overflow: hidden;
     }
     body.shell-korean .msg-meta-name {
@@ -5654,7 +5728,9 @@
     body.shell-korean .msg-meta-avatar,
     body.shell-korean .bubble-avatar {
       width: 28px !important; height: 28px !important;
-      border-radius: 8px !important;
+      /* 圆形。KakaoTalk 原样是 8px 圆角方形，但这里跟全 App 其它头像保持一致，
+         avatar-fling 的拉扯效果也是按圆形头像做的（它把真头像换成等半径的 SVG 圆） */
+      border-radius: 50% !important;
     }
     body.shell-korean .msg-meta-name {
       font-size: 10px !important; color: #B0B0B5 !important;

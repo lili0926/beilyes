@@ -344,12 +344,19 @@ function puppyActionPromptBlock(){
 function getStickers(){ return Array.isArray(state.stickers)?state.stickers:[]; }
 function getSticker(name){ return getStickers().find(s=>s.name===name)||null; }
 function addSticker(name,url,descr){
-  if(!name||!url) return {ok:false,msg:"名字和图片直链 URL 都要填"};
+  if(!name) return {ok:false,msg:"给它起个名字"};
+  if(!url) return {ok:false,msg:"先选一张图，或者贴图片直链"};
   const list=getStickers();
   const exist=list.find(s=>s.name===name);
   if(exist){ exist.url=url; exist.descr=descr||""; }
   else list.push({name, url, descr:descr||""});
-  state.stickers=list; persist("stickers"); return {ok:true};
+  state.stickers=list;
+  // 存本地图之后这里是几百 KB 起步，落盘失败要说出来，
+  // 不然她以为存上了、下次冷启动才发现没了
+  let ok=true;
+  try{ ok=persist("stickers"); }catch(e){ ok=false; }
+  if(!ok) return {ok:false,msg:"存不下了（手机存储写满？）"};
+  return {ok:true};
 }
 function delSticker(name){
   state.stickers=getStickers().filter(s=>s.name!==name);
@@ -365,26 +372,101 @@ function stickerPromptBlock(){
 名字要和下面完全一致；别硬塞，一条回复最多 1 个；暗号会被前端识别并从显示文本里擦除、渲染成表情图。你收到 [sticker:名字] 表示对方甩了那张表情，自然地接话。可用表情包：
 ${text}`;
 }
+// 大小写一律不敏感：模型写 [Sticker:] / [STICKER:] 是常事，
+// 少一个 i 就会「标记没被擦掉、图也没渲染」——正文里裸露出一行方括号。
+// （同文件另外三处清标记的正则本来就带 i，这里以前是漏的）
 function extractStickerNames(content){
-  const re=/\[sticker\s*[:：]\s*([^\]\n]+?)\s*\]/g;
+  const re=/\[sticker\s*[:：]\s*([^\]\n]+?)\s*\]/gi;
   const names=[]; let m;
   while((m=re.exec(String(content||"")))!==null){ const n=m[1].trim(); if(n) names.push(n); }
   return names;
 }
 function stickerCleanText(content){
-  return String(content||"").replace(/\[sticker\s*[:：]\s*[^\]\n]+\s*\]/g,"");
+  return String(content||"").replace(/\[sticker\s*[:：]\s*[^\]\n]+\s*\]/gi,"");
 }
 function stickerImgHtml(name){
   const s=getSticker(name);
-  if(!s||!s.url) return "";
+  // 模型挑了个库里没有的名字：标记照样会被擦掉，这里再返回空串的话，
+  // 「只发一张表情」那条消息就渲染成一个完全空的气泡。给个占位。
+  if(!s||!s.url) return `<span class="sticker-miss" title="表情库里没有这张">${esc(name)}</span>`;
   return `<img class="sticker-img" src="${escAttr(s.url)}" alt="${escAttr(s.name)}" title="${escAttr(s.descr||s.name)}" onclick="window.open&&window.open(this.src)" loading="lazy"/>`;
 }
 function sendSticker(name){
   const s=getSticker(name);
   if(!s||state.chatLoading) return;
-  state.chatInput="[sticker:"+name+"]";
+  // 输入框里已经打了字就把表情接在后面一起发，别把她打了一半的话覆盖掉
+  const typed=String(state.chatInput||"").trim();
+  state.chatInput=(typed?typed+"\n":"")+"[sticker:"+name+"]";
   if(typeof sendUserMsg==="function") sendUserMsg();
   if(state.pendingUser && state.pendingUser.length && typeof triggerAIReply==="function") triggerAIReply();
+}
+
+/** 表情包压缩：保住透明和动图。
+ *  通用的 compressImage() 固定吐 JPEG，透明区会被填成黑块，
+ *  而表情包大半是透明 PNG；GIF 更是一进 canvas 只剩第一帧。 */
+function stickerCompress(file){
+  return new Promise((resolve, reject)=>{
+    const type=String(file&&file.type||"");
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("读取图片失败"));
+    reader.onload=()=>{
+      const raw=String(reader.result||"");
+      // GIF 动图：canvas 只会拿到第一帧，所以原样留着
+      if(type==="image/gif"){
+        if(raw.length>2*1024*1024) reject(new Error("这张 GIF 太大了（超过 2MB），换一张小的"));
+        else resolve({ url: raw, mime: type });
+        return;
+      }
+      const img=new Image();
+      img.onerror=()=>reject(new Error("图片解析失败"));
+      img.onload=()=>{
+        const MAX=400;
+        let w=img.width, h=img.height;
+        const ratio=Math.min(1, MAX/w, MAX/h);
+        w=Math.max(1,Math.round(w*ratio)); h=Math.max(1,Math.round(h*ratio));
+        const canvas=document.createElement("canvas");
+        canvas.width=w; canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w,h);
+        // png/webp 可能带透明，转 jpeg 会变黑底，这类保持 png
+        const keepAlpha=(type==="image/png"||type==="image/webp");
+        const out=keepAlpha ? canvas.toDataURL("image/png")
+                            : canvas.toDataURL("image/jpeg",0.88);
+        resolve({ url: out, mime: keepAlpha?"image/png":"image/jpeg" });
+      };
+      img.src=raw;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** 让视觉模型看一眼这张图，写好名字和描述。
+ *  只在入库这一次看图，之后模型挑表情全靠这两行文字。
+ *  走 bgChatAgent()（优先非 CC 通道）+ background:true，
+ *  免得占用 CC 那条长会话、把回调串到正在等的聊天上。 */
+async function stickerAutoDescribe(dataUrl, mime){
+  const ag=(typeof bgChatAgent==="function")?bgChatAgent():null;
+  if(!ag) throw new Error("没有可用的模型通道");
+  const msg={
+    role:"user",
+    content:"这是一张聊天用的表情包。给它起一个 3-6 字的中文短名（当引用暗号用，不要标点符号），再写一句话描述：图上有什么字、什么情绪、什么场合适合发。\n只回一行，严格用这个格式，不要任何多余的话：\n名字 | 描述",
+    image: dataUrl,
+    imageMime: mime || (String(dataUrl).match(/^data:([^;]+);/)||[])[1] || "image/png",
+  };
+  let out=await callChatAPI(agentToApiConfig(ag), [msg], "", { background:true, timeoutMs:60000 });
+  if(typeof parseThinking==="function"){ try{ out=parseThinking(out).body||out; }catch(e){} }
+  const line=String(out||"").split("\n").map(s=>s.trim()).filter(Boolean)[0]||"";
+  if(!line) throw new Error("模型没给出名字");
+  const bar=line.indexOf("|")>=0?"|":(line.indexOf("｜")>=0?"｜":"");
+  let name=bar?line.slice(0,line.indexOf(bar)):line;
+  let descr=bar?line.slice(line.indexOf(bar)+1):"";
+  // 模型爱加引号/书名号/前缀，剥掉
+  name=name.replace(/^["'“”「」『』《》\s]+|["'“”「」『』《》\s]+$/g,"")
+           .replace(/^(名字|短名|名称)\s*[:：]\s*/,"").trim().slice(0,12);
+  descr=descr.replace(/^["'“”「」『』\s]+|["'“”「」『』\s]+$/g,"")
+             .replace(/^(描述|说明)\s*[:：]\s*/,"").trim().slice(0,60);
+  if(!name) throw new Error("模型没给出名字");
+  return { name, descr };
 }
 
 // ─── 桌宠：会随聊天状态变表情的像素宠物（clawd-on-desk 帧）────────────────────
@@ -1059,6 +1141,16 @@ const LS = {
     try{
       // 聊天整包/分片不再写入 localStorage（防配额挤掉其它键）
       if(k === "chatThreads" || /^chatThread_/.test(k)) return true;
+      // 表情包同理：改成能存本机图之后一张就是几百 KB，几十张能把 5MB 配额吃光、
+      // 把别的键一起挤掉。有原生存储时只走「私有目录 + Preferences」，
+      // 冷启动由 fsLoadAllKvIntoState / restoreNativeMirrors 灌回来。
+      // 浏览器预览没有那两条路，仍旧写 LS 兜底。
+      // （不能用 __LS_CHAT_SKIP —— fsLoadAllKvIntoState 会跳过那里面的键，加进去就读不回来了）
+      if(k === "stickers" && typeof __capFs === "function" && __capFs()){
+        // 顺手清掉可能存在的旧副本：它既占着配额，又会在冷启动时先于文件被读到
+        try{ localStorage.removeItem(LS._k(k)); }catch(e){}
+        return true;
+      }
       localStorage.setItem(LS._k(k),JSON.stringify(v));
       // 写成功但该 key 之前落到过原生镜像 → 同步刷新镜像，保证原生永远是最新（冷启动恢复以原生为准）
       if(__nativeMirrorKeys.has(LS._k(k)) && !__nativeMirrorSkip(k)) __nativeMirrorWrite(k, v);
@@ -2480,6 +2572,8 @@ const state = {
   // token 一律空：仓库是 public，默认值里写 token 等于公开发布。去设置 → VPS 填一次。
   proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
+  // 朋友圈联邦：加好友走自己 VPS 的 /api/admin/*，adminToken 等于账号密码，默认空
+  momentsFedConfig: LS.get("momentsFedConfig", { baseUrl: "", adminToken: "" }),
   // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
   guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 3 }),
   guardPeekIdx: null,   // 正在看原文的那条封禁卡（纯 UI，不持久化）
@@ -2713,6 +2807,10 @@ const state = {
   stickers: LS.get("stickers", []), // 表情包库 [{name,url,descr}]
   stickerOpen: false, // 表情面板
   stickerAddOpen: false, // 表情面板内的添加表单
+  // 添加表单的三格：render() 是整页重绘，不存进 state 的话
+  // 一选完图整个表单就被重建、刚打的字全没了
+  stickerDraft: { name:"", url:"", descr:"", mime:"" },
+  stickerBusy: "", // "" | "reading" | "describing"，纯 UI 不持久化
   chatMoreOpen: false, // 输入栏「+」面板开关（不持久化）
   chatSidebarOpen: false, // 聊天侧栏（不持久化）
   uiTimezone: LS.get("uiTimezone", "") || "", // IANA 时区，空=系统
@@ -4489,6 +4587,7 @@ ${guideText}`;
   const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
   const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈：⟪动态:⟫
   const remarkBlock = (typeof remarkPromptBlock === "function") ? remarkPromptBlock() : "";     // 备注：⟪备注:⟫（常驻，很短）
+  const flingBlock = (typeof flingPromptBlock === "function") ? flingPromptBlock() : "";        // 弹头像：⟪弹飞⟫（常驻，很短）
   // 备注被改 / 指令被接被买断：两小时内注一次，让他能自然反应
   const remarkEventBlock = (typeof remarkRecentBlock === "function") ? remarkRecentBlock() : "";
   // 省 token：任务布置暗号仅在聊到任务/惩罚/奖励时注入；关闭状态提示常驻（防止误用）
@@ -4526,7 +4625,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
   // 会变的那半（本轮可选/冷却中）走 bedTailBlock 挂在最后一条消息末尾
   const bedBlock = (typeof bedCatalogBlock === "function") ? bedCatalogBlock() : "";
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, bedBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, bedBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
@@ -4566,6 +4665,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + projectFileBlock
     + puppyActionBlock
     + stickerBlock
+    + flingBlock
     + profileBlock
     + pocketBlock
     + mcBlock
@@ -4584,9 +4684,11 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
-const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem"]);
+// 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
+// stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
+const __NATIVE_IMAGE_KEYS = new Set(["customWallpaper","coupleInfo","agents","albumData","profileMe","profileThem","stickers"]);
 function persist(key){
   if(!PERSIST_MAP[key]) return false;
   const storageKey = PERSIST_MAP[key];
@@ -5008,6 +5110,88 @@ function render(){
     const iframe=document.getElementById("rewrite-iframe");
     if(iframe){ rewriteBridgeInit(); iframe.srcdoc = rewriteHostHtml(); }
   }
+  setupAvatarFling();
+}
+
+// ─── 聊天头像弹弹（avatar-fling）─────────────────────────────────────────────
+// 拽一下气泡旁边的头像，松手会弹回；拉过头就整个弹飞再冒回来。
+// 挂两个实例：他那侧带回调（她拽了他，攒起来下次搭车告诉他），
+// 她那侧不带回调，但留着给 ⟪弹飞⟫ 暗号反手弹她一下。
+let __flingThem = null, __flingMe = null;
+function setupAvatarFling(){
+  // 只挂一次：它的事件全绑在 container 上、靠 target.closest(row) 找行，
+  // 而 render() 是 app.innerHTML=…，#app 这个元素本身不会被重建 ——
+  // 所以委托一直有效，不用每次重绘都重新 attach。
+  if(__flingThem || __flingMe) return;
+  if(typeof AvatarFling === "undefined" || !AvatarFling || typeof AvatarFling.attach !== "function") return;
+  const app = document.getElementById("app");
+  if(!app) return;
+  // 两个实例监听同一个 container 不打架：各自 closest(row) 匹配不到就直接 return
+  try{
+    __flingThem = AvatarFling.attach({
+      container: app,
+      row: ".bubble-row.them",     // 只有聊天消息用这个类，别的页面不会被误伤
+      avatar: ".bubble-avatar",
+      bubble: ".bubble",
+      // n 是它按 batchMs(1200ms) 合并之后的次数，不是每帧回调
+      onPull(n){ __flingTally("pull", n); },
+      onFly(n){ __flingTally("fly", n); },
+    });
+  }catch(e){ try{ console.warn("[avatar-fling them]", e); }catch(_){} }
+  try{
+    __flingMe = AvatarFling.attach({
+      container: app,
+      row: ".bubble-row.me",
+      avatar: ".bubble-avatar",
+      bubble: ".bubble",
+    });
+  }catch(e){ try{ console.warn("[avatar-fling me]", e); }catch(_){} }
+}
+
+/** 攒着她戳了几下。不持久化——这是"刚才"的事，重启就该忘了 */
+function __flingTally(kind, n){
+  const t = state.flingTally = state.flingTally || { pull:0, fly:0 };
+  t[kind] = (t[kind] || 0) + (Number(n) || 1);
+}
+
+/** 搭她下一条消息的车告诉他，不单独调模型 —— 拽着玩不该烧额度。
+ *  读一次就清零，否则往后每一轮都会再提一遍同一件事。 */
+function flingTailBlock(){
+  const t = state.flingTally;
+  if(!t || !(t.pull || t.fly)) return "";
+  const bits = [];
+  if(t.pull) bits.push(`拽了你的头像 ${t.pull} 下又松开`);
+  if(t.fly) bits.push(`把你的头像整个弹飞了 ${t.fly} 次`);
+  state.flingTally = { pull:0, fly:0 };
+  return `【她刚才在戳你】${bits.join("；")}。就是闲着逗你玩，别当正经事说，顺口带一句或者干脆不提都行。`;
+}
+
+/** ⟪弹飞⟫：他反手弹她的头像。
+ *  不传 row 时库会取最后一个匹配行，也就是她最新那条消息旁边的头像。
+ *  延后一拍是等这一轮回复渲染完 —— 否则弹的是上一条。 */
+function flingHerAvatar(){
+  setTimeout(()=>{
+    try{ if(__flingMe && typeof __flingMe.flingAway === "function") __flingMe.flingAway(); }catch(e){}
+  }, 280);
+}
+
+function handleFlingMarkers(body){
+  let text = String(body||"");
+  if(!text) return text;
+  const re = /[⟪《【\[]\s*弹飞\s*[⟫》】\]]/;
+  if(re.test(text)){
+    text = text.replace(re,"").replace(/\n{3,}/g,"\n\n").trim();
+    flingHerAvatar();
+  }
+  return text;
+}
+
+function flingPromptBlock(){
+  return `\n\n【弹头像——marker 暗号】
+她能拽你气泡旁边的头像玩：轻拽会弹回去，拉狠了整个头像飞出去再冒回来。
+你想反手弹她一下时，在正式回复里单独写一行暗号：
+⟪弹飞⟫
+暗号会被前端擦掉，她那边的头像会被弹飞。闹着玩的时候才用，一次回复最多 1 个。`;
 }
 
 // ─── 朋友圈 / Moments ────────────────────────────────────────────────────────
@@ -5416,6 +5600,7 @@ function renderMoments(){
     </div>
     <div class="wx-cover" id="wx-cover" style="${(scope==="public"?(state.momentsCoverPublic||""):(state.momentsCoverPrivate||""))?`background-image:url(${escAttr(scope==="public"?state.momentsCoverPublic:state.momentsCoverPrivate)});background-size:cover;background-position:center`:""}">
       <div class="wx-cover-shade"></div>
+      ${scope==="public"?`<button type="button" id="mo-friends" class="wx-friends" title="好友"><i data-lucide="users"></i></button>`:""}
       <button type="button" id="mo-new" class="wx-compose" title="发动态"><i data-lucide="pen"></i></button>
       <button type="button" id="mo-cover-pick" class="wx-cover-btn" title="更换封面"><i data-lucide="image"></i></button>
       ${(scope==="public"?state.momentsCoverPublic:state.momentsCoverPrivate)?`<button type="button" id="mo-cover-clear" class="wx-cover-btn clear" title="清除封面"><i data-lucide="x"></i></button>`:""}
@@ -5427,6 +5612,257 @@ function renderMoments(){
       ${composer}
       ${feed}
     </div>
+  </div>`;
+}
+
+// ─── 朋友圈联邦 · 加好友 ─────────────────────────────────────────────────────
+// 私人朋友圈是她和他两个人的。公共朋友圈才有「好友」这回事：
+// 两台各自的 VPS 握手换密钥，之后各自的 public 动态互相推。
+// 以前发起申请只能 SSH 上去 curl，现在走自己 VPS 的 /api/admin/*，带 X-Admin-Token。
+
+/** 配置一律用的时候回落，别指望默认值 —— 老存档里这个键整份是旧的 */
+function mfCfg(){
+  const c = state.momentsFedConfig || {};
+  return {
+    baseUrl: String(c.baseUrl || "").trim().replace(/\/+$/, ""),
+    adminToken: String(c.adminToken || "").trim(),
+  };
+}
+function mfReady(){ const c = mfCfg(); return !!(c.baseUrl && c.adminToken); }
+
+const MF_ERR = {
+  admin_not_configured: "VPS 上还没设 ADMIN_TOKEN",
+  bad_admin_token: "管理密钥不对",
+  bad_invite_code: "这串邀请码不对",
+  need_code_or_target_server: "先粘贴邀请码",
+  cannot_add_self: "这是你自己",
+  bad_target_server: "地址不对",
+  peer_unreachable: "对方节点连不上",
+  peer_rate_limited: "对方限流了，过会儿再试",
+  peer_rejected: "对方拒收了这次申请",
+  token_invalid: "这条申请已经过期了",
+  not_an_incoming_request: "这条不是待审申请",
+  callback_failed: "对方确认时出错，可以再试一次",
+  callback_error: "回调对方失败，可以再试一次",
+  friend_id_taken_by_another_server: "对方自称的身份和已有好友冲突",
+  rate_limited: "太频繁了，缓一缓",
+  token_conflict: "握手撞车了，重新来一次",
+};
+
+async function mfApi(path, opts){
+  const c = mfCfg();
+  if(!c.baseUrl || !c.adminToken) throw new Error("还没填 VPS 地址和管理密钥");
+  const o = opts || {};
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=> ctrl.abort(), 20000);
+  let r;
+  try{
+    r = await fetch(c.baseUrl + path, {
+      method: o.method || "GET",
+      headers: Object.assign(
+        { "X-Admin-Token": c.adminToken },
+        o.body ? { "Content-Type": "application/json" } : {}
+      ),
+      body: o.body ? JSON.stringify(o.body) : undefined,
+      signal: ctrl.signal,
+    });
+  }catch(e){
+    clearTimeout(timer);
+    // WebView 里 CORS 被拒和网络不通抛的是同一个 TypeError，分不出来，一起说
+    throw new Error(ctrl.signal.aborted ? "请求超时" : "连不上（网络或 CORS）");
+  }
+  clearTimeout(timer);
+  let j = null;
+  try{ j = await r.json(); }catch(e){}
+  if(!r.ok){
+    const code = (j && j.error) || ("HTTP " + r.status);
+    throw new Error(MF_ERR[code] || code);
+  }
+  return j;
+}
+
+/** 一次把三样都拉回来：我的邀请码 / 待办 / 好友列表 */
+async function mfLoad(silent){
+  if(!mfReady()){ state.mfData = null; return; }
+  state.mfBusy = true;
+  if(!silent) state.mfErr = "";
+  try{
+    const [me, reqs, friends] = await Promise.all([
+      mfApi("/api/admin/me"),
+      mfApi("/api/admin/friends/requests"),
+      mfApi("/api/admin/friends"),
+    ]);
+    state.mfData = {
+      me,
+      incoming: (reqs && reqs.incoming) || [],
+      outgoing: (reqs && reqs.outgoing) || [],
+      friends: Array.isArray(friends) ? friends : [],
+    };
+    state.mfErr = "";
+  }catch(e){
+    state.mfErr = String((e && e.message) || e);
+    state.mfData = null;
+  }
+  state.mfBusy = false;
+  if(state.subPage === "momentsfriends") render();
+}
+
+async function mfInvite(){
+  const code = String(state.mfCodeDraft || "").trim();
+  if(!code){ if(typeof showToast==="function") showToast("先粘贴邀请码"); return; }
+  state.mfBusy = true; render();
+  try{
+    const body = code.startsWith("MF1:") ? { code } : { target_server: code };
+    await mfApi("/api/admin/friends/invite", { method:"POST", body });
+    state.mfCodeDraft = "";
+    if(typeof showToast==="function") showToast("申请已发出，等对方同意");
+    await mfLoad(true);
+  }catch(e){
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+    state.mfBusy = false;
+  }
+  render();
+}
+
+async function mfReview(token, action){
+  state.mfBusy = true; render();
+  try{
+    await mfApi("/api/admin/friends/review", {
+      method:"POST",
+      body:{ request_token: token, action },
+    });
+    if(typeof showToast==="function") showToast(action === "accept" ? "已添加" : "已拒绝");
+    await mfLoad(true);
+  }catch(e){
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+    state.mfBusy = false;
+  }
+  render();
+}
+
+function mfCopyCode(){
+  const code = ((state.mfData||{}).me||{}).invite_code || "";
+  if(!code) return;
+  const done = ()=>{ if(typeof showToast==="function") showToast("已复制"); };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(code).then(done).catch(()=> mfCopyFallback(code, done));
+    }else mfCopyFallback(code, done);
+  }catch(e){ mfCopyFallback(code, done); }
+}
+function mfCopyFallback(text, done){
+  try{
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta);
+    done();
+  }catch(e){ if(typeof showToast==="function") showToast("复制不了，长按选中吧"); }
+}
+
+function renderMomentsFriends(){
+  const c = mfCfg();
+  const d = state.mfData;
+
+  const cfgSection = `<div class="section">
+    <div class="section-title"><i data-lucide="server"></i> 节点</div>
+    <div class="section-body">
+      <div class="setting-row"><span class="setting-label">Base URL</span>
+        <input id="mf-base" value="${escAttr(c.baseUrl)}" placeholder="https://moments.example.com"/></div>
+      <div class="setting-row"><span class="setting-label">管理密钥</span>
+        <input type="password" id="mf-token" value="${escAttr(c.adminToken)}" placeholder="ADMIN_TOKEN"/></div>
+      <div class="setting-row">
+        <button type="button" id="mf-reload" class="btn-ghost"><i data-lucide="refresh-cw"></i> 刷新</button>
+      </div>
+    </div>
+  </div>`;
+
+  if(!mfReady()){
+    return `<div class="page">${subHeader("好友")}${cfgSection}</div>`;
+  }
+
+  if(state.mfErr){
+    return `<div class="page">${subHeader("好友")}
+      ${cfgSection}
+      <div class="section"><div class="section-body">
+        <div class="mf-err"><i data-lucide="alert-circle"></i>${esc(state.mfErr)}</div>
+      </div></div>
+    </div>`;
+  }
+
+  if(!d){
+    return `<div class="page">${subHeader("好友")}
+      ${cfgSection}
+      <div class="empty-state"><div class="empty-emoji"><i data-lucide="loader"></i></div>正在连接</div>
+    </div>`;
+  }
+
+  const me = d.me || {};
+  const codeSection = `<div class="section">
+    <div class="section-title"><i data-lucide="qr-code"></i> 我的邀请码</div>
+    <div class="section-body">
+      <div class="setting-row">
+        <div class="mf-code" id="mf-code">${esc(me.invite_code||"")}</div>
+        <button type="button" id="mf-copy" class="btn-accent"><i data-lucide="copy"></i> 复制</button>
+      </div>
+    </div>
+  </div>`;
+
+  const addSection = `<div class="section">
+    <div class="section-title"><i data-lucide="user-plus"></i> 加好友</div>
+    <div class="section-body">
+      <div class="setting-row">
+        <div style="display:flex;gap:8px">
+          <input id="mf-code-input" value="${escAttr(state.mfCodeDraft||"")}" placeholder="粘贴对方的邀请码" style="flex:1;min-width:0"/>
+          <button type="button" id="mf-add" class="btn-accent" style="flex-shrink:0"${state.mfBusy?" disabled":""}>添加</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  const incoming = d.incoming.length ? `<div class="section">
+    <div class="section-title"><i data-lucide="inbox"></i> 待处理 ${d.incoming.length}</div>
+    <div class="section-body">
+      ${d.incoming.map(r=>`<div class="mf-card">
+        <div class="mf-name">${esc(r.display_name || r.node_id || "未知节点")}</div>
+        <div class="mf-sub">${esc(r.server_url||"")}</div>
+        ${r.message?`<div class="mf-msg">${esc(r.message)}</div>`:""}
+        <div class="mf-btns">
+          <button type="button" class="btn-accent" data-mf-ok="${escAttr(r.request_token)}"${state.mfBusy?" disabled":""}>同意</button>
+          <button type="button" class="btn-ghost" data-mf-no="${escAttr(r.request_token)}"${state.mfBusy?" disabled":""}>拒绝</button>
+        </div>
+      </div>`).join("")}
+    </div>
+  </div>` : "";
+
+  const outgoing = d.outgoing.length ? `<div class="section">
+    <div class="section-title"><i data-lucide="send"></i> 已发出</div>
+    <div class="section-body">
+      ${d.outgoing.map(r=>`<div class="mf-card">
+        <div class="mf-name">${esc(r.display_name || r.server_url || "")}</div>
+        <div class="mf-sub">等对方确认</div>
+      </div>`).join("")}
+    </div>
+  </div>` : "";
+
+  const accepted = d.friends.filter(f=> f.status === "accepted");
+  const friends = `<div class="section">
+    <div class="section-title"><i data-lucide="users"></i> 好友 ${accepted.length}</div>
+    <div class="section-body">
+      ${accepted.length ? accepted.map(f=>`<div class="mf-card">
+        <div class="mf-name">${esc(f.node_display_name || f.friend_node_id)}</div>
+        <div class="mf-sub">${esc((f.identities||[]).map(i=> i.remark || i.display_name).join(" · "))}</div>
+      </div>`).join("") : `<div class="empty-state"><div class="empty-emoji"><i data-lucide="users"></i></div>还没有好友</div>`}
+    </div>
+  </div>`;
+
+  return `<div class="page">${subHeader("好友")}
+    ${codeSection}
+    ${addSection}
+    ${incoming}
+    ${outgoing}
+    ${friends}
+    ${cfgSection}
   </div>`;
 }
 
@@ -9060,6 +9496,7 @@ function renderSubPage(){
     hisphone: renderHisPhone,
     prompts: renderPrompts,
     backup: renderBackup,
+    momentsfriends: renderMomentsFriends,
   };
   return (map[state.subPage]||(()=>""))();
 }
@@ -19087,13 +19524,28 @@ function renderStickerOverlay(){
           <button type="button" class="btn-ghost" data-sticker-close style="padding:4px 10px;font-size:11px">× 关闭</button>
         </span>
       </div>
-      ${state.stickerAddOpen?`
+      ${state.stickerAddOpen?(()=>{
+        const d=state.stickerDraft||{};
+        const busy=state.stickerBusy||"";
+        return `
       <div class="sticker-add-form">
-        <input id="sticker-add-name" placeholder="名字（AI 引用的暗号，如：得意）"/>
-        <input id="sticker-add-url" placeholder="图片直链 URL（https://… 结尾是图片）"/>
-        <input id="sticker-add-descr" placeholder="一句话描述：图上文字/情绪/啥场景发（可选）"/>
-        <button type="button" class="btn-ghost" data-sticker-add-save>保存入库</button>
-      </div>`:""}
+        <div class="sticker-pick-row">
+          <div class="sticker-pick-prev">
+            ${d.url?`<img src="${escAttr(d.url)}" alt=""/>`
+                   :`<div class="sticker-noimg"><i data-lucide="image"></i></div>`}
+          </div>
+          <div class="sticker-pick-btns">
+            <button type="button" class="btn-ghost" data-sticker-pick${busy?" disabled":""}><i data-lucide="image-plus"></i> 选图</button>
+            ${d.url?`<button type="button" class="btn-ghost" data-sticker-redescribe${busy?" disabled":""}><i data-lucide="sparkles"></i> 重认</button>`:""}
+          </div>
+        </div>
+        <input type="file" id="sticker-file" accept="image/*" style="display:none"/>
+        ${busy?`<div class="sticker-busy">${busy==="describing"?"正在看这张图…":"正在读图…"}</div>`:""}
+        <input id="sticker-add-name" value="${escAttr(d.name||"")}" placeholder="名字（AI 引用的暗号，如：得意）"/>
+        <input id="sticker-add-descr" value="${escAttr(d.descr||"")}" placeholder="一句话描述：图上文字/情绪/啥场景发"/>
+        <input id="sticker-add-url" value="${escAttr(/^data:/.test(d.url||"")?"":(d.url||""))}" placeholder="或贴图片直链 https://…"/>
+        <button type="button" class="btn-ghost" data-sticker-add-save${busy?" disabled":""}>保存入库</button>
+      </div>`;})():""}
       ${list.length?`
       <div class="sticker-grid">
         ${list.map(s=>`
@@ -19103,7 +19555,7 @@ function renderStickerOverlay(){
             <button type="button" class="sticker-del" data-sticker-del="${escAttr(s.name)}" title="删除">×</button>
           </div>`).join("")}
       </div>`
-      :`<div class="empty-state" style="padding:18px 0"><div class="empty-emoji"><i data-lucide="sticker"></i></div>还没有表情包<br><span style="font-size:11px;opacity:0.7">点「添加」存一张（名字+图片直链），你和 AI 就都能甩表情了</span></div>`}
+      :`<div class="empty-state" style="padding:18px 0"><div class="empty-emoji"><i data-lucide="sticker"></i></div>还没有表情包</div>`}
       <div class="puppy-overlay-head" style="margin-bottom:0;margin-top:12px">
         <span style="font-size:11px;opacity:.7">点表情直接发出；AI 也会看氛围自己挑一张</span>
       </div>
@@ -19588,7 +20040,7 @@ function __stripMarkersForLive(t){
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
-    .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关)\s*[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关|弹飞)\s*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:真心话|大冒险|混合|抽卡|抽张|翻牌|机抽|我抽|机来抽)\s*[⟫》】]/g,"")
     .replace(/\[(?:sticker|action|pay|buy|buyx|song|playlist)\s*[:：][^\]]*\]/g,"");
 }
@@ -23966,16 +24418,75 @@ function bindEvents(){
     };
   });
   $$("[data-sticker-add-toggle]").forEach(el=>{
-    el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); state.stickerAddOpen=!state.stickerAddOpen; render(); };
+    el.onclick=(ev)=>{
+      ev.preventDefault(); ev.stopPropagation();
+      state.stickerAddOpen=!state.stickerAddOpen;
+      if(state.stickerAddOpen){ state.stickerDraft={name:"",url:"",descr:"",mime:""}; state.stickerBusy=""; }
+      render();
+    };
+  });
+  // 三个输入框随手存进 state：render() 是整页重绘，不存就会在选完图那一下全丢
+  const __stkDraft=()=>(state.stickerDraft=state.stickerDraft||{name:"",url:"",descr:"",mime:""});
+  const stkName=document.getElementById("sticker-add-name");
+  if(stkName) stkName.oninput=()=>{ __stkDraft().name=stkName.value; };
+  const stkDescr=document.getElementById("sticker-add-descr");
+  if(stkDescr) stkDescr.oninput=()=>{ __stkDraft().descr=stkDescr.value; };
+  const stkUrl=document.getElementById("sticker-add-url");
+  if(stkUrl) stkUrl.oninput=()=>{
+    const d=__stkDraft();
+    const v=stkUrl.value.trim();
+    const hasLocal=/^data:/.test(d.url||"");
+    if(v){ d.url=v; d.mime=""; }            // 贴了直链就以直链为准
+    else if(!hasLocal){ d.url=""; d.mime=""; } // 清空直链；本机选的图不受影响
+  };
+  const stkFile=document.getElementById("sticker-file");
+  $$("[data-sticker-pick]").forEach(el=>{
+    el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); if(stkFile) stkFile.click(); };
+  });
+  const __stkDescribe=async ()=>{
+    const d=__stkDraft();
+    if(!d.url || !/^data:/.test(d.url)) return;   // 直链不下载到本地，不送去看
+    state.stickerBusy="describing"; render();
+    try{
+      const r=await stickerAutoDescribe(d.url, d.mime);
+      const cur=__stkDraft();
+      cur.name=r.name; cur.descr=r.descr;
+    }catch(e){
+      // 认不出来不算失败，她自己填就是了
+      if(typeof showToast==="function") showToast("没认出来，自己起个名字吧");
+    }
+    state.stickerBusy=""; render();
+  };
+  if(stkFile) stkFile.onchange=async ()=>{
+    const f=stkFile.files&&stkFile.files[0];
+    if(!f) return;
+    state.stickerBusy="reading"; render();
+    try{
+      const out=await stickerCompress(f);
+      const d=__stkDraft();
+      d.url=out.url; d.mime=out.mime;
+      state.stickerBusy=""; render();
+      await __stkDescribe();      // 入库前看这一次图，之后模型只读文字
+    }catch(e){
+      state.stickerBusy=""; render();
+      if(typeof showToast==="function") showToast(String((e&&e.message)||e),"error");
+    }
+  };
+  $$("[data-sticker-redescribe]").forEach(el=>{
+    el.onclick=(ev)=>{ ev.preventDefault(); ev.stopPropagation(); __stkDescribe(); };
   });
   $$("[data-sticker-add-save]").forEach(el=>{
     el.onclick=()=>{
       const gid=(id)=>document.getElementById(id);
-      const name=(gid("sticker-add-name")||{}).value||"";
-      const url=(gid("sticker-add-url")||{}).value||"";
-      const descr=(gid("sticker-add-descr")||{}).value||"";
-      const r=addSticker(name.trim(),url.trim(),descr.trim());
+      const d=__stkDraft();
+      // 以 DOM 当前值为准（有些输入法不触发 input，靠 draft 会漏最后几个字）
+      const name=((gid("sticker-add-name")||{}).value ?? d.name ?? "").trim();
+      const descr=((gid("sticker-add-descr")||{}).value ?? d.descr ?? "").trim();
+      const typedUrl=((gid("sticker-add-url")||{}).value||"").trim();
+      const url=typedUrl || d.url || "";
+      const r=addSticker(name,url,descr);
       if(!r.ok){ if(typeof showToast==="function") showToast(r.msg,"error"); return; }
+      state.stickerDraft={name:"",url:"",descr:"",mime:""};
       state.stickerAddOpen=false; render();
     };
   });
@@ -26922,6 +27433,43 @@ reader.readAsArrayBuffer(f);
     };
   });
 
+  // 朋友圈联邦 · 加好友
+  const moFriends = document.getElementById("mo-friends");
+  if(moFriends) moFriends.onclick = ()=>{
+    state.subPage = "momentsfriends";
+    state.mfErr = ""; state.mfBusy = false;
+    render();
+    if(typeof mfReady === "function" && mfReady()) mfLoad(false);
+  };
+  const mfBase = document.getElementById("mf-base");
+  if(mfBase) mfBase.onchange = ()=>{
+    state.momentsFedConfig = state.momentsFedConfig || {};
+    state.momentsFedConfig.baseUrl = mfBase.value.trim();
+    persist("momentsFedConfig");
+    if(mfReady()) mfLoad(false);
+  };
+  const mfTok = document.getElementById("mf-token");
+  if(mfTok) mfTok.onchange = ()=>{
+    state.momentsFedConfig = state.momentsFedConfig || {};
+    state.momentsFedConfig.adminToken = mfTok.value.trim();
+    persist("momentsFedConfig");
+    if(mfReady()) mfLoad(false);
+  };
+  const mfReload = document.getElementById("mf-reload");
+  if(mfReload) mfReload.onclick = ()=> mfLoad(false);
+  const mfCopy = document.getElementById("mf-copy");
+  if(mfCopy) mfCopy.onclick = ()=> mfCopyCode();
+  const mfCodeInput = document.getElementById("mf-code-input");
+  if(mfCodeInput) mfCodeInput.oninput = ()=>{ state.mfCodeDraft = mfCodeInput.value; };
+  const mfAdd = document.getElementById("mf-add");
+  if(mfAdd) mfAdd.onclick = ()=>{
+    const el = document.getElementById("mf-code-input");
+    if(el) state.mfCodeDraft = el.value;
+    mfInvite();
+  };
+  $$("[data-mf-ok]").forEach(b=>{ b.onclick = ()=> mfReview(b.dataset.mfOk, "accept"); });
+  $$("[data-mf-no]").forEach(b=>{ b.onclick = ()=> mfReview(b.dataset.mfNo, "reject"); });
+
   // 吃苹果 · 壳
   $$("[data-ea-shell]").forEach(btn=>{
     btn.onclick = ()=>{
@@ -28195,6 +28743,11 @@ function chatTailBlock(){
     const bed = (typeof bedTailBlock === "function") ? bedTailBlock() : "";
     if(bed) bits.push(bed);
   }catch(e){}
+  // 她刚才拽了几下他的头像。同理走尾部；读一次就清零
+  try{
+    const fl = (typeof flingTailBlock === "function") ? flingTailBlock() : "";
+    if(fl) bits.push(fl);
+  }catch(e){}
   return bits.join("\n\n");
 }
 
@@ -28517,6 +29070,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleRemarkMarkers(cleanBody); // 备注：⟪备注:新称呼⟫ → 他给她改称呼，聊天里出一条居中提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
+  cleanBody = handleFlingMarkers(cleanBody); // 弹头像：⟪弹飞⟫ 反手弹她一下
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
   cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
   cleanBody = handleAnnoMarkers(cleanBody); // 共读批注（VPS 书）
