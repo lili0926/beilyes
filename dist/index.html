@@ -12010,11 +12010,104 @@ ${chain}
   return out.replace(/\s+/g, " ").replace(/^[「"']|[」"']$/g, "").trim().slice(0, 120);
 }
 
+// ─── 公共朋友圈：好友发的动态，他要不要接一句 ────────────────────────────────
+// 上面那套是「她发的动态」，全在本地。这套是好友节点推过来的，走 VPS 的两个 admin 口：
+//   GET  /api/admin/feed               时间线（好友的 + 自己发的 public）
+//   POST /api/admin/moments/:id/react  替某个身份点赞或评论
+// **闸门在服务端**：往返上限和「想回复的程度」阈值都在 react 里判，这边只负责问模型要个分。
+let __mfFeedLock = false;
+let __mfFeedAt = 0;
+const __mfRetryAt = {};   // moment_id -> 下次可再试的时间戳（失败退避，不持久化）
+
+async function mfGenerateReaction(item, threshold){
+  const seen = (item.comments||[]).slice(-5)
+    .map(c=>`${c.operator_name}：${String(c.content||"").slice(0,60)}`).join("\n");
+  const prompt = `<system_trigger>
+【公共朋友圈】${item.author_name} 发了一条动态，你刷到了。这不是你和她之间的私人朋友圈，是外面的朋友。
+
+【这条动态】
+作者：${item.author_name}
+正文：${String(item.content||"").slice(0,300)}
+${seen ? `\n底下已经有的评论：\n${seen}` : ""}
+
+【先问你一件事】
+你此刻**有多想在这条底下说句话**？给一个 0 到 100 的数。
+- 真有话想说、跟你或她有关、忍不住要接一句 → 70 以上
+- 看到了，觉得还行，但没什么非说不可的 → 40 上下
+- 跟你没什么关系，说了也是客套 → 20 以下
+低于 ${threshold} 系统只会替你点个赞，不发评论——**所以别为了礼貌硬凑分数**。
+
+只输出 JSON，不要解释，不要 markdown 代码块：
+{"willingness": 0到100的数, "comment": "想说的那句，1到2句、不超过30字；不想说就留空"}
+</system_trigger>`;
+  const raw = await momentCallModel(prompt, null);
+  const j = (typeof eaParseJson === "function") ? eaParseJson(raw) : null;
+  // 解析失败当作不想说：让服务端只点个赞，别硬把一段不知道是什么的文本发出去
+  if(!j) return { willingness: 0, comment: "" };
+  let w = Number(j.willingness);
+  if(!isFinite(w)) w = 0;
+  return {
+    willingness: Math.max(0, Math.min(100, Math.round(w))),
+    comment: String(j.comment||"").trim().slice(0, 120),
+  };
+}
+
+/** 扫一遍好友的公共动态。和 momentsProcessDue 挂在同一批触发点上。 */
+async function mfProcessFeed(){
+  if(__mfFeedLock) return false;
+  if(typeof mfReady !== "function" || !mfReady()) return false;
+  if(Date.now() - __mfFeedAt < 60000) return false;   // 一分钟一次够了，别把额度烧在刷新上
+  __mfFeedLock = true;
+  __mfFeedAt = Date.now();
+  let did = 0;
+  try{
+    // 要知道哪个身份是"他"，才能判断这条他出没出过手（她自己点的赞不算）
+    let aiId = ((((state.mfData||{}).me||{}).identities)||[]).filter(i=> i.type === "ai")[0];
+    aiId = aiId && aiId.identity_id;
+    if(!aiId){
+      const me = await mfApi("/api/admin/me");
+      state.mfData = state.mfData || { incoming:[], outgoing:[], friends:[] };
+      state.mfData.me = me;
+      const f = ((me && me.identities)||[]).filter(i=> i.type === "ai")[0];
+      aiId = f && f.identity_id;
+    }
+    if(!aiId) return false;
+
+    const data = await mfApi("/api/admin/feed?limit=20");
+    const threshold = (data && data.threshold) || 60;
+    const items = ((data && data.items) || []).filter(it=>
+      it.from === "friend" &&
+      !((it.acted_identities||[]).indexOf(aiId) >= 0) &&
+      !(__mfRetryAt[it.moment_id] > Date.now())
+    ).slice(0, 2);                                     // 一轮最多两条，别一次问一堆
+
+    for(const it of items){
+      try{
+        const r = await mfGenerateReaction(it, threshold);
+        await mfApi("/api/admin/moments/" + encodeURIComponent(it.moment_id) + "/react", {
+          method:"POST",
+          body:{ identity_id: aiId, willingness: r.willingness, comment: r.comment },
+        });
+        did++;
+      }catch(e){
+        // 失败退避十分钟：模型调用不便宜，别在同一条上反复烧
+        __mfRetryAt[it.moment_id] = Date.now() + 10*60000;
+      }
+    }
+  }catch(e){ /* VPS 不通就算了，下一轮再说 */ }
+  finally{ __mfFeedLock = false; }
+  return did > 0;
+}
+
 /** 扫一遍到期的待回复。进朋友圈页、以及 proactiveTick 都会调。 */
 async function momentsProcessDue(){
   const list = ensureMoments();
   const now = Date.now();
   let changed = false;
+
+  // 好友那边的公共动态顺带扫一下。不 await：它要走网络 + 调模型，
+  // 卡在这儿会把她自己动态的回复一起拖慢。
+  try{ mfProcessFeed(); }catch(e){}
 
   // 1) 到期的初次回复
   const due = list.filter(m => m.author === "me" && m.replyStatus === "pending" && m.replyDueAt <= now).slice(0, 2);
