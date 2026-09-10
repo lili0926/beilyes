@@ -12052,6 +12052,75 @@ ${seen ? `\n底下已经有的评论：\n${seen}` : ""}
   };
 }
 
+/** 本机某个类型的身份 id（human = 她，ai = 他）。取不到就回空，调用方自己兜。 */
+function mfSelfIdentity(type){
+  const list = (((state.mfData||{}).me||{}).identities) || [];
+  const hit = list.filter(i=> i.type === type)[0];
+  return hit ? hit.identity_id : "";
+}
+
+/** 公共时间线：好友推来的 + 她自己发的。私人朋友圈在本地，这一份只在 VPS 上。 */
+async function mfLoadFeed(silent){
+  if(typeof mfReady !== "function" || !mfReady()){
+    state.mfFeed = null; state.mfFeedErr = "";
+    return;
+  }
+  if(!silent) state.mfFeedBusy = true;
+  try{
+    // 身份表顺带缓存一份：发动态、点赞都要用 identity_id
+    if(!mfSelfIdentity("human")){
+      const me = await mfApi("/api/admin/me");
+      state.mfData = state.mfData || { incoming:[], outgoing:[], friends:[] };
+      state.mfData.me = me;
+    }
+    const d = await mfApi("/api/admin/feed?limit=30");
+    state.mfFeed = (d && d.items) || [];
+    state.mfFeedErr = "";
+  }catch(e){
+    state.mfFeedErr = String((e && e.message) || e);
+  }
+  state.mfFeedBusy = false;
+  if(state.tab === "moments" && state.momentsScope === "public") render();
+}
+
+/** 她在公共朋友圈发一条：落 VPS + 广播给好友。私人圈那条路不走这里。 */
+async function mfPublish(text){
+  const content = String(text||"").trim();
+  if(!content) return;
+  try{
+    const r = await mfApi("/api/admin/publish", {
+      method:"POST",
+      body:{ content, identity_id: mfSelfIdentity("human") || undefined },
+    });
+    const sent = ((r && r.broadcast) || []).filter(x=> x && x.ok).length;
+    if(typeof showToast==="function"){
+      showToast(Array.isArray(r && r.broadcast) && r.broadcast.length ? `已发出，推给了 ${sent} 位好友` : "已发出");
+    }
+    await mfLoadFeed(true);
+  }catch(e){
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+  }
+  render();
+}
+
+/** 她自己对好友的动态点赞/评论。不传 comment 就是点赞。 */
+async function mfReactAsMe(momentId, comment){
+  try{
+    const r = await mfApi("/api/admin/moments/" + encodeURIComponent(momentId) + "/react", {
+      method:"POST",
+      body:{ identity_id: mfSelfIdentity("human") || undefined, comment: String(comment||"") },
+    });
+    if(r && r.did === "nothing" && typeof showToast==="function"){
+      showToast(r.reason === "already_liked" ? "已经赞过了" : "这条底下聊得够多了");
+    }
+    state.mfCmtOpen = null; state.mfCmtDraft = "";
+    await mfLoadFeed(true);
+  }catch(e){
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+  }
+  render();
+}
+
 /** 扫一遍好友的公共动态。和 momentsProcessDue 挂在同一批触发点上。 */
 async function mfProcessFeed(){
   if(__mfFeedLock) return false;
@@ -12220,7 +12289,49 @@ function renderMoments(){
 
   let feed = "";
   if(scope === "public"){
-    feed = `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">以后留给好友联邦 · 灵感位</span></div>`;
+    // 这一份不在本地，在 VPS 上：好友推来的 + 她自己发的 public，见 mfLoadFeed
+    if(typeof mfReady !== "function" || !mfReady()){
+      feed = `<div class="wx-empty">还没连上你的节点<br><span style="font-size:12px;opacity:.75">点上面那个人形按钮，填 Base URL 和管理密钥</span></div>`;
+    } else if(state.mfFeedErr){
+      feed = `<div class="wx-empty">${esc(state.mfFeedErr)}</div>`;
+    } else if(!state.mfFeed){
+      feed = `<div class="wx-empty">正在连接…</div>`;
+    } else if(!state.mfFeed.length){
+      feed = `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或者先加个好友</span></div>`;
+    } else {
+      feed = state.mfFeed.map(it=>{
+        const mine = it.from === "self";
+        const likes = (it.likes||[]).map(a=> String(a.operator_name||""));
+        const likeLine = likes.length
+          ? `<div class="wx-likes"><span class="wx-heart">♥</span>${likes.map(x=>`<b>${esc(x)}</b>`).join("，")}</div>` : "";
+        const cmts = (it.comments||[]).map(c=>
+          `<div class="wx-cmt"><span class="wx-cn">${esc(c.operator_name||"")}</span>: ${esc(c.content||"")}</div>`
+        ).join("");
+        const zone = (likeLine || cmts) ? `<div class="wx-zone">${likeLine}${cmts}</div>` : "";
+        const when = it.created_at ? new Date(it.created_at * 1000).toISOString() : "";
+        return `<div class="wx-post mo-card">
+          <div class="wx-post-row">
+            <div class="wx-av"><div class="wx-cover-av-fallback">${esc(String(it.author_name||"?").slice(0,1))}</div></div>
+            <div class="wx-body">
+              <div class="wx-author">${esc(it.author_name || it.author_id || "")}</div>
+              ${it.content?`<div class="wx-text">${esc(it.content)}</div>`:""}
+              <div class="wx-meta">
+                <span class="wx-time">${when?momentAgo(when):""}</span>
+                ${mine?"":`<div class="wx-actions">
+                  <button type="button" class="wx-more" data-mf-like="${escAttr(it.moment_id)}" aria-label="赞">♥</button>
+                  <button type="button" class="wx-more" data-mf-cmt="${escAttr(it.moment_id)}" aria-label="评论">···</button>
+                </div>`}
+              </div>
+              ${zone}
+              ${state.mfCmtOpen===it.moment_id?`<div class="mo-cmt-box wx-cmt-box">
+                <input id="mf-cmt-input" value="${escAttr(state.mfCmtDraft||"")}" placeholder="评论…"/>
+                <button type="button" data-mf-cmt-send="${escAttr(it.moment_id)}">发送</button>
+              </div>`:""}
+            </div>
+          </div>
+        </div>`;
+      }).join("");
+    }
   } else if(!list.length){
     feed = `<div class="wx-empty">还没有私人动态<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或等 ${esc(aiName)} 发</span></div>`;
   } else {
@@ -34009,16 +34120,50 @@ reader.readAsArrayBuffer(f);
   if(state.tab === "moments"){
     // 进页面就扫一遍到期的（另一条路是 proactiveTick 的 10 分钟循环）
     try{ if(typeof momentsProcessDue === "function") momentsProcessDue(); }catch(e){}
+    // 公共圈那一份在 VPS 上，没拉过就拉一次
+    if(state.momentsScope === "public" && !state.mfFeed && !state.mfFeedBusy){
+      try{ if(typeof mfLoadFeed === "function") mfLoadFeed(false); }catch(e){}
+    }
   }
-  
+
   // 朋友圈：公共/私人 + ··· 面板
   $$("[data-mo-scope]").forEach(btn=>{
     btn.onclick = ()=>{
       state.momentsScope = btn.getAttribute("data-mo-scope") || "private";
       state.momentActionOpen = null;
+      state.mfCmtOpen = null;
+      render();
+      // 切到公共圈就刷一次：好友那边随时可能推新的过来
+      if(state.momentsScope === "public"){
+        try{ if(typeof mfLoadFeed === "function") mfLoadFeed(!!state.mfFeed); }catch(e){}
+      }
+    };
+  });
+
+  // 公共圈：她自己点赞 / 评论（走 /api/admin/moments/:id/react，闸门在服务端）
+  $$("[data-mf-like]").forEach(b=>{
+    b.onclick = (e)=>{ e.stopPropagation(); mfReactAsMe(b.getAttribute("data-mf-like"), ""); };
+  });
+  $$("[data-mf-cmt]").forEach(b=>{
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      const id = b.getAttribute("data-mf-cmt");
+      state.mfCmtOpen = (state.mfCmtOpen === id) ? null : id;
+      state.mfCmtDraft = "";
       render();
     };
   });
+  $$("[data-mf-cmt-send]").forEach(b=>{
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      const el = document.getElementById("mf-cmt-input");
+      const txt = (el ? el.value : state.mfCmtDraft) || "";
+      if(!txt.trim()){ if(typeof showToast==="function") showToast("写点什么再发"); return; }
+      mfReactAsMe(b.getAttribute("data-mf-cmt-send"), txt.trim());
+    };
+  });
+  const mfCmtInput = document.getElementById("mf-cmt-input");
+  if(mfCmtInput) mfCmtInput.oninput = ()=>{ state.mfCmtDraft = mfCmtInput.value; };
   
   // 朋友圈禁止左右滑动（只允许上下滚），避免 ··· 被带出视口
   const wxRoot = document.querySelector(".wx-moments") || document.querySelector(".mo-page");
@@ -34135,7 +34280,15 @@ reader.readAsArrayBuffer(f);
   if(moSend) moSend.onclick = ()=>{
     const txt = (document.getElementById("mo-input")||{}).value || state.momentDraft || "";
     if(!txt.trim() && !state.momentImage){ if(typeof showToast==="function") showToast("写点什么再发"); return; }
-    momentsPost(txt, state.momentImage);
+    if(state.momentsScope === "public"){
+      // 公共圈的动态要落到 VPS 并广播给好友，不能只存本地。
+      // 图片暂时不支持：联邦那边 receive 只收纯文字
+      if(!txt.trim()){ if(typeof showToast==="function") showToast("公共圈暂时只能发文字"); return; }
+      if(state.momentImage && typeof showToast==="function") showToast("公共圈暂时只发文字，图先没带上");
+      mfPublish(txt);
+    } else {
+      momentsPost(txt, state.momentImage);
+    }
     state.momentComposing = false; state.momentDraft = ""; state.momentImage = "";
     render();
   };
