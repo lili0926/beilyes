@@ -27769,7 +27769,12 @@ function renderChatSidebar(){
         <div class="sb-card" id="sb-chat-tools">
           <div class="sb-card-label">聊天</div>
           <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">${esc(_chatName)}</div>
-          <div style="font-size:11px;color:var(--sub);margin-bottom:12px">online · 工具收在这里，顶栏更清爽</div>
+          <div style="font-size:11px;color:var(--sub);margin-bottom:10px">online · 工具收在这里，顶栏更清爽</div>
+          <div style="font-size:11px;color:var(--sub);margin-bottom:6px">对话样式</div>
+          <div class="chat-style-switch" style="width:100%;margin-bottom:12px;justify-content:stretch" title="经典 / iMessage">
+            <button type="button" data-chat-style="classic" class="${(state.chatStyleMode||"classic")!=="imessage"?"active":""}" style="flex:1">经典</button>
+            <button type="button" data-chat-style="imessage" class="${(state.chatStyleMode||"")==="imessage"?"active":""}" style="flex:1">iMessage</button>
+          </div>
           <button type="button" class="btn-ghost" id="love-score-chip" title="情侣计分器" style="width:100%;padding:10px 12px;margin-bottom:8px;text-align:left;display:flex;justify-content:space-between;align-items:center">
             <span>♥ 情侣计分</span><b style="color:var(--accent)">${esc(String(_love))}</b>
           </button>
@@ -28700,17 +28705,12 @@ function renderChat(){
   const isClaude = shell === "claude";
   const isKorean = shell === "korean";
   const chatName = isGroup ? "群聊" : ((activeAg&&activeAg.name)||"聊天");
-  const styleMode = (state.chatStyleMode||"classic")==="imessage" ? "imessage" : "classic";
-  const styleSwitchHtml = viewMode==="rpg" ? "" : `
-      <div class="chat-style-switch" title="经典 / iMessage">
-        <button type="button" data-chat-style="classic" class="${styleMode!=="imessage"?"active":""}">经典</button>
-        <button type="button" data-chat-style="imessage" class="${styleMode==="imessage"?"active":""}">iMsg</button>
-      </div>`;
-  const switchHtml = (rpgAllowed ? `
+  // 经典/iMsg 开关已挪到侧边栏，顶栏只留 RPG（避免挡退出）
+  const switchHtml = rpgAllowed ? `
       <div class="chat-view-switch${isClaude?" claude-view-switch":""}" title="聊天 / RPG">
         <button type="button" data-chat-view="chat" class="${viewMode!=="rpg"?"active":""}">聊</button>
         <button type="button" data-chat-view="rpg" class="${viewMode==="rpg"?"active":""}">RPG</button>
-      </div>` : "") + styleSwitchHtml;
+      </div>` : "";
   // 韩系顶栏：左返回+头像+名字/状态，右侧栏开关
   let krAvatar = "";
   try{
