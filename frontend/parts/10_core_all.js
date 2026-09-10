@@ -5135,19 +5135,26 @@ function render(){
 // 她那侧不带回调，但留着给 ⟪弹飞⟫ 暗号反手弹她一下。
 let __flingThem = null, __flingMe = null;
 function setupAvatarFling(){
-  // 只挂一次：它的事件全绑在 container 上、靠 target.closest(row) 找行，
-  // 而 render() 是 app.innerHTML=…，#app 这个元素本身不会被重建 ——
-  // 所以委托一直有效，不用每次重绘都重新 attach。
+  // 只挂一次：事件绑在 #app 上，render 不会拆掉 #app
   if(__flingThem || __flingMe) return;
   if(typeof AvatarFling === "undefined" || !AvatarFling || typeof AvatarFling.attach !== "function") return;
   const app = document.getElementById("app");
   if(!app) return;
-  // 两个实例监听同一个 container 不打架：各自 closest(row) 匹配不到就直接 return
+  // 经典：头像在 .msg-meta 里（消息组上方）；需要把 meta 里的头像映射到紧随的 bubble-row
+  const _afAvatar = (row)=>{
+    if(!row) return null;
+    let av = row.querySelector(".bubble-avatar");
+    if(av) return av;
+    // 上一兄弟是 msg-meta 时，用那里的头像
+    let prev = row.previousElementSibling;
+    while(prev && prev.classList && prev.classList.contains("imsg-time-sep")) prev = prev.previousElementSibling;
+    if(prev && prev.classList && prev.classList.contains("msg-meta")){
+      av = prev.querySelector(".bubble-avatar");
+      if(av) return av;
+    }
+    return null;
+  };
   try{
-    const _afAvatar = (row)=>{
-      if(!row) return null;
-      return row.querySelector(".bubble-avatar") || row.querySelector(".avatar-link .bubble-avatar") || row.querySelector(".avatar-link");
-    };
     __flingThem = AvatarFling.attach({
       container: app,
       row: ".bubble-row.them",
@@ -5165,9 +5172,53 @@ function setupAvatarFling(){
       bubble: ".bubble",
     });
   }catch(e){ try{ console.warn("[avatar-fling me]", e); }catch(_){} }
+
+  // 经典头像在 meta 里：pointerdown 落在 meta 上时，库的 closest(row) 找不到 bubble-row。
+  // 补一层：从 meta 头像落到下一条同侧 bubble-row，再交给库的几何逻辑不够用时，至少保证能开始拖。
+  // 更稳妥：把 meta 头像的事件目标“当作”落在紧随的 bubble-row 上——用透明代理太重，
+  // 这里改为：长按/拖 meta 头像时，找到 next bubble-row 并合成一次对 row 内虚拟命中。
+  // 实际实现：给 msg-meta 头像加 data-fling-proxy，按下时把事件重定向到后续 row。
+  if(!app._afMetaProxy){
+    app._afMetaProxy = true;
+    app.addEventListener("pointerdown", function(e){
+      try{
+        if((state.chatStyleMode||"classic")==="imessage") return;
+        const av = e.target && e.target.closest && e.target.closest(".msg-meta .bubble-avatar, .msg-meta .avatar-link");
+        if(!av) return;
+        const meta = av.closest(".msg-meta");
+        if(!meta) return;
+        let row = meta.nextElementSibling;
+        while(row && !(row.classList && row.classList.contains("bubble-row"))){
+          row = row.nextElementSibling;
+        }
+        if(!row) return;
+        // 若 row 内没有头像节点，临时塞一个隐藏的，供 AvatarFling 的 avatarOf 使用
+        if(!row.querySelector(".bubble-avatar")){
+          const ghost = document.createElement("div");
+          ghost.className = "bubble-avatar af-ghost";
+          ghost.setAttribute("aria-hidden", "true");
+          // 把真头像的图拷进去，弹弹乐才能采色
+          const img = av.querySelector && av.querySelector("img");
+          if(img){
+            const gimg = img.cloneNode(true);
+            ghost.appendChild(gimg);
+          } else {
+            ghost.textContent = (av.textContent||"").trim().slice(0,1) || "•";
+          }
+          // 幽灵头像叠在 meta 真头像位置：用 fixed 对齐，pointer-events 由库接管
+          const r = (av.querySelector(".bubble-avatar")||av).getBoundingClientRect();
+          ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:50%;overflow:hidden;z-index:5;pointer-events:auto;opacity:0.01;margin:0;padding:0;`;
+          row.insertBefore(ghost, row.firstChild);
+          // 松手后清掉幽灵，避免 render 前残留
+          const clean = ()=>{ try{ ghost.remove(); }catch(_){} };
+          window.addEventListener("pointerup", clean, {once:true});
+          window.addEventListener("pointercancel", clean, {once:true});
+        }
+      }catch(err){}
+    }, true);
+  }
 }
 
-/** 攒着她戳了几下。不持久化——这是"刚才"的事，重启就该忘了 */
 function __flingTally(kind, n){
   const t = state.flingTally = state.flingTally || { pull:0, fly:0 };
   t[kind] = (t[kind] || 0) + (Number(n) || 1);
@@ -21726,10 +21777,12 @@ function renderChat(){
         <div class="msg-meta me">
           ${m.time?`<span class="msg-meta-time">${formatTime(m.time)}</span><span class="msg-meta-heart">♥</span>`:""}
           <span class="msg-meta-name">${esc(speakerName)}</span>
+          <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("me"), "me")}</div>
         </div>`;
         } else {
           speakerMeta = `
         <div class="msg-meta">
+          <div class="msg-meta-avatar">${profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them")}</div>
           <span class="msg-meta-name">${esc(speakerName)}</span>
           ${m.time?`<span class="msg-meta-heart">♥</span><span class="msg-meta-time">${formatTime(m.time)}</span>`:""}
           ${(typeof hasThinking==="function" && hasThinking(m))?`<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:""}
@@ -21790,9 +21843,7 @@ function renderChat(){
         }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
-        ${(!isMe && firstInRun)?profileAvatarLink(bubbleAvatarHtml("them", m.speakerId), m.speakerId || "them"):""}
         ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
-        ${(isMe && firstInRun)?profileAvatarLink(bubbleAvatarHtml("me"), "me"):""}
       </div>
       ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
       <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
@@ -21838,8 +21889,9 @@ function renderChat(){
   }
   if(state.chatLoading){
     const glassCls = (typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "";
+    const _imTyping = (state.chatStyleMode||"classic")==="imessage" && (state.chatViewMode||"chat")!=="rpg";
     msgs+=`<div class="bubble-row them">
-      ${profileAvatarLink(bubbleAvatarHtml("them", isGroup?null:target), isGroup?"them":(target||"them"))}
+      ${_imTyping?"":profileAvatarLink(bubbleAvatarHtml("them", isGroup?null:target), isGroup?"them":(target||"them"))}
       <div class="bubble them${glassCls}"><div class="typing-dots"><span></span><span></span><span></span></div></div>
     </div>`;
   }

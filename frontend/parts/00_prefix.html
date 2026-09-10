@@ -1239,12 +1239,11 @@
       justify-content: flex-start;
       padding-left: 6px;
     }
-    /* iMessage 仍保留头像供弹弹乐拖拽；略缩小贴近真机 1:1 可选 */
+    /* iMessage：对话里不显示头像（1:1 真机也没有） */
     #app.chat-style-imessage .bubble-row .bubble-avatar,
-    #app.chat-style-imessage .bubble-row .avatar-link {
-      width: 28px !important; height: 28px !important;
-      border-radius: 50% !important;
-      overflow: hidden !important;
+    #app.chat-style-imessage .bubble-row .avatar-link,
+    #app.chat-style-imessage .msg-meta-avatar {
+      display: none !important;
     }
 
 
