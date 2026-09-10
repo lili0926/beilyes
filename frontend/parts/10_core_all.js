@@ -5731,21 +5731,42 @@ function renderMoments(){
     } else if(!state.mfFeed.length){
       feed = `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或者先加个好友</span></div>`;
     } else {
+      // 本机两个身份 + 节点 id：用来把「自己发的」认出来。
+      // 服务端回的 author_name 是 .env 里的 SELF_HUMAN_NAME（"Jasmine"），
+      // 和 App 里的称呼是两套；头像那边更明显——自己发的也走了首字母兜底，
+      // 于是整页都是英文字母。这里把自己人换成 App 里的头像和叫法。
+      const selfHumanId = mfSelfIdentity("human");
+      const selfAiId = mfSelfIdentity("ai");
+      const selfNodeId = (((state.mfData||{}).me||{}).node_id) || "";
+      const actorName = (a)=>{
+        if(a && a.operator_id === selfNodeId){
+          if(a.operator_identity_id === selfAiId) return momentAiName();
+          if(a.operator_identity_id === selfHumanId) return momentMyName();
+        }
+        return String((a && a.operator_name) || "");
+      };
       feed = state.mfFeed.map(it=>{
         const mine = it.from === "self";
-        const likes = (it.likes||[]).map(a=> String(a.operator_name||""));
+        const isSelfAi = mine && it.author_identity_id === selfAiId;
+        const isSelfHuman = mine && it.author_identity_id === selfHumanId;
+        // 好友的头像我们没有，只能退回首字母；自己的用真头像
+        const avatar = isSelfAi ? momentAvatar("ai") : isSelfHuman ? momentAvatar("me") : "";
+        const shownName = isSelfAi ? momentAiName()
+          : isSelfHuman ? momentMyName()
+          : (it.author_name || it.author_id || "");
+        const likes = (it.likes||[]).map(actorName).filter(Boolean);
         const likeLine = likes.length
           ? `<div class="wx-likes"><span class="wx-heart">♥</span>${likes.map(x=>`<b>${esc(x)}</b>`).join("，")}</div>` : "";
         const cmts = (it.comments||[]).map(c=>
-          `<div class="wx-cmt"><span class="wx-cn">${esc(c.operator_name||"")}</span>: ${esc(c.content||"")}</div>`
+          `<div class="wx-cmt"><span class="wx-cn">${esc(actorName(c))}</span>: ${esc(c.content||"")}</div>`
         ).join("");
         const zone = (likeLine || cmts) ? `<div class="wx-zone">${likeLine}${cmts}</div>` : "";
         const when = it.created_at ? new Date(it.created_at * 1000).toISOString() : "";
         return `<div class="wx-post mo-card">
           <div class="wx-post-row">
-            <div class="wx-av"><div class="wx-cover-av-fallback">${esc(String(it.author_name||"?").slice(0,1))}</div></div>
+            <div class="wx-av">${avatar || `<div class="wx-cover-av-fallback">${esc(String(shownName||"?").slice(0,1))}</div>`}</div>
             <div class="wx-body">
-              <div class="wx-author">${esc(it.author_name || it.author_id || "")}</div>
+              <div class="wx-author">${esc(shownName)}</div>
               ${it.content?`<div class="wx-text">${esc(it.content)}</div>`:""}
               <div class="wx-meta">
                 <span class="wx-time">${when?momentAgo(when):""}</span>
