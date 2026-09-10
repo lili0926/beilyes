@@ -28550,6 +28550,14 @@ const WINDOW_HARD_CAP = 120;   // 压缩故障保险丝
 const COMPRESS_THRESHOLD = 60; // 未压缩消息超过阈值触发压缩
 const COMPRESS_KEEP_TAIL = 30; // 压缩时保留最近 N 条不压
 
+// 注入上限：一次最多发这么多条。压缩仍然按 COMPRESS_THRESHOLD 走，
+// 这里只管「发多少」，把峰值从 60 条砍到 30 条上下。
+const WINDOW_SEND_CAP = 30;
+// **不能每轮 slice(-30)**：那会让窗口起点每来一条消息就往前挪一格，
+// 前缀每轮都变，整段历史全部 miss —— 请求小了三分之一，账单能涨五倍。
+// 所以起点按 STEP 条一跳，跳完这 STEP 轮里前缀纹丝不动，缓存照样命中。
+const WINDOW_SEND_STEP = 10;
+
 function getWindowedMessages(allMsgs, target){
   // 灵魂：窗口起点 = 压缩游标，而不是「滑动取最后 N 条」。
   // 起点只在压缩推进时移动一次，其余时间前缀纹丝不动 → 缓存前缀稳定。
@@ -28563,6 +28571,13 @@ function getWindowedMessages(allMsgs, target){
     list = list.slice(compressed.upToIndex);
   }
   if(list.length > WINDOW_HARD_CAP) list = list.slice(-WINDOW_HARD_CAP); // 保险丝
+  // 注入上限，阶梯式前进：丢弃条数只随「超出多少个 STEP」变化，
+  // 所以 31~40 条时起点都停在 10、41~50 条时都停在 20 —— 每 STEP 轮才动一次。
+  if(WINDOW_SEND_CAP > 0 && list.length > WINDOW_SEND_CAP){
+    const over = list.length - WINDOW_SEND_CAP;
+    const drop = Math.ceil(over / WINDOW_SEND_STEP) * WINDOW_SEND_STEP;
+    list = list.slice(drop);
+  }
   if(limit > 0) list = list.slice(-limit); // 用户显式设置的上限仍优先
   return { messages: list, summary };
 }
