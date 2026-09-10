@@ -5302,6 +5302,19 @@ function handleMomentMarkers(body){
   let text = String(body||"");
   if(!text || text.indexOf("动态") < 0) return text;
   let hit = false;
+  // 公开的先处理：⟪动态(公开):正文⟫ → 走 VPS，推给好友。
+  // 必须排在私人那条正则前面，否则 `动态\s*[:：]` 匹配不到带括号的这种，
+  // 结果就是他想发公共、东西却落进了私人圈（她就撞上过）。
+  text = text.replace(/[⟪《【]\s*动态\s*[（(]\s*公开\s*[)）]\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, raw)=>{
+    const s = String(raw).trim();
+    const bar = s.indexOf("|") >= 0 ? s.indexOf("|") : s.indexOf("｜");
+    const content = (bar >= 0 ? s.slice(0, bar) : s).trim().slice(0, 300);
+    if(content && typeof mfPublish === "function"){
+      if(typeof mfReady === "function" && mfReady()) mfPublish(content, "ai");
+      else if(typeof showToast === "function") showToast("还没连上节点，这条发不出去");
+    }
+    return "";
+  });
   text = text.replace(/[⟪《【]\s*动态\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, raw)=>{
     const s = String(raw).trim();
     const bar = s.indexOf("|") >= 0 ? s.indexOf("|") : s.indexOf("｜");
@@ -5332,6 +5345,12 @@ function momentsPromptBlock(){
 - 「内部备注」她看不见：写你为什么发这条、当时你们在聊什么、这条的情绪底色。
   过几天她翻到这条留了评论，你要靠这段备注想起来当时是什么心境。
 - 暗号会被系统吃掉，她只看到你正常说话。发了动态也顺手说句人话，别只丢一个暗号。
+
+**两个圈子，别发错：**
+- ⟪动态:正文|内部备注⟫ → **私人朋友圈**，只有你和她两个人看得到。默认走这个。
+- ⟪动态(公开):正文⟫ → **公共朋友圈**，会推给所有好友，他们都看得见。
+  她说「发公共」「发到公共朋友圈」的时候用这个；**不确定就用私人的那个**。
+  公开的这条没有内部备注 —— 那是给你们俩之间用的。
 ${recent?`\n最近的朋友圈（别重复：和下面某条说的是同一件事就别发了，换一件或者不发）：\n${recent}`:""}`;
 }
 
@@ -5454,11 +5473,14 @@ const __mfRetryAt = {};   // moment_id -> 下次可再试的时间戳（失败�
 async function mfGenerateReaction(item, threshold){
   const seen = (item.comments||[]).slice(-5)
     .map(c=>`${c.operator_name}：${String(c.content||"").slice(0,60)}`).join("\n");
+  const hers = item.from === "self";
   const prompt = `<system_trigger>
-【公共朋友圈】${item.author_name} 发了一条动态，你刷到了。这不是你和她之间的私人朋友圈，是外面的朋友。
+【公共朋友圈】${hers
+    ? "**她**在公共朋友圈发了一条，你刷到了。这条不是发给你一个人的，好友也看得见——所以别在底下说太私密的话。"
+    : `${item.author_name} 发了一条动态，你刷到了。这不是你和她之间的私人朋友圈，是外面的朋友。`}
 
 【这条动态】
-作者：${item.author_name}
+作者：${hers ? momentMyName() : item.author_name}
 正文：${String(item.content||"").slice(0,300)}
 ${seen ? `\n底下已经有的评论：\n${seen}` : ""}
 
@@ -5473,8 +5495,17 @@ ${seen ? `\n底下已经有的评论：\n${seen}` : ""}
 {"willingness": 0到100的数, "comment": "想说的那句，1到2句、不超过30字；不想说就留空"}
 </system_trigger>`;
   const raw = await momentCallModel(prompt, null);
-  const j = (typeof eaParseJson === "function") ? eaParseJson(raw) : null;
-  // 解析失败当作不想说：让服务端只点个赞，别硬把一段不知道是什么的文本发出去
+  let j = (typeof eaParseJson === "function") ? eaParseJson(raw) : null;
+  // 兜底：模型经常在 JSON 外面裹一层话，eaParseJson 就回 null。
+  // 以前这种情况一律当 willingness=0 —— 结果就是「他永远只点赞、从不评论」。
+  // 所以解析失败时再用正则捞一次数字和引号里的话。
+  if(!j || j.willingness === undefined){
+    const t = String(raw||"");
+    const wm = t.match(/willingness\D{0,8}(\d{1,3})/i) || t.match(/(\d{1,3})\s*分/);
+    const cm = t.match(/comment\s*[":：]+\s*["“']([^"”']{1,200})["”']/i)
+      || t.match(/["“]([^"”]{2,120})["”]\s*\}?\s*$/);
+    if(wm || cm) j = { willingness: wm ? wm[1] : 0, comment: cm ? cm[1] : "" };
+  }
   if(!j) return { willingness: 0, comment: "" };
   let w = Number(j.willingness);
   if(!isFinite(w)) w = 0;
@@ -5515,14 +5546,15 @@ async function mfLoadFeed(silent){
   if(state.tab === "moments" && state.momentsScope === "public") render();
 }
 
-/** 她在公共朋友圈发一条：落 VPS + 广播给好友。私人圈那条路不走这里。 */
-async function mfPublish(text){
+/** 她在公共朋友圈发一条：落 VPS + 广播给好友。私人圈那条路不走这里。
+ *  who="ai" 时以他的身份发（⟪动态(公开)⟫ 暗号走这条）。 */
+async function mfPublish(text, who){
   const content = String(text||"").trim();
   if(!content) return;
   try{
     const r = await mfApi("/api/admin/publish", {
       method:"POST",
-      body:{ content, identity_id: mfSelfIdentity("human") || undefined },
+      body:{ content, identity_id: mfSelfIdentity(who === "ai" ? "ai" : "human") || undefined },
     });
     const sent = ((r && r.broadcast) || []).filter(x=> x && x.ok).length;
     if(typeof showToast==="function"){
@@ -5576,8 +5608,11 @@ async function mfProcessFeed(){
 
     const data = await mfApi("/api/admin/feed?limit=20");
     const threshold = (data && data.threshold) || 60;
+    // 好友的动态 + **她自己发在公共圈的**（原来只挑 from==="friend"，
+    // 所以她发在公共朋友圈的东西他一句都不会接）。他自己发的当然跳过。
+    const humanId = mfSelfIdentity("human");
     const items = ((data && data.items) || []).filter(it=>
-      it.from === "friend" &&
+      (it.from === "friend" || (it.from === "self" && it.author_identity_id === humanId)) &&
       !((it.acted_identities||[]).indexOf(aiId) >= 0) &&
       !(__mfRetryAt[it.moment_id] > Date.now())
     ).slice(0, 2);                                     // 一轮最多两条，别一次问一堆
@@ -20329,6 +20364,7 @@ function __stripMarkersForLive(t){
   if(!t) return t;
   return String(t)
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*动态\s*[（(]\s*公开\s*[)）]\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关|弹飞)\s*[⟫》】]/g,"")
