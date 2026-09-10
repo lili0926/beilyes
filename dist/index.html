@@ -8323,13 +8323,24 @@ function __ccConnect(wsUrl, pin){
   if(__cc.ws && __cc.wsUrl===wsUrl && (__cc.ws.readyState===WebSocket.OPEN || __cc.ws.readyState===WebSocket.CONNECTING)) return __cc.ws;
   try{ if(__cc.ws){ __cc.ws.onclose=null; __cc.ws.close(); } }catch(e){}
   __cc.wsUrl = wsUrl; __cc.pin = pin||""; __cc.ready = false; __cc.ccAlive = false;
+  __cc.authFail = "";   // 换了地址/PIN 重连，之前那次的失败结论作废
   let ws=null; try{ ws = new WebSocket(wsUrl); }catch(e){ return null; }
   __cc.ws = ws;
   ws.onopen = ()=>{ try{ ws.send(JSON.stringify({ type:"auth", pin: __cc.pin })); }catch(e){} };
   ws.onmessage = (ev)=>{
     let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
     if(!m || !m.type) return;
-    if(m.type==="auth_ok"){ __cc.ready=true; __cc.ccAlive=!!m.cc_alive; __cc._retry=0; __cc._statusCbs.forEach(f=>{try{f(__cc.ccAlive)}catch(e){}}); return; }
+    if(m.type==="auth_ok"){ __cc.ready=true; __cc.authFail=""; __cc.ccAlive=!!m.cc_alive; __cc._retry=0; __cc._statusCbs.forEach(f=>{try{f(__cc.ccAlive)}catch(e){}}); return; }
+    // **PIN 不对时服务端会明说 auth_fail，这里以前一个字都没接**：
+    // ready 永远留在 false，trySend 每 300ms 安静重试，180 秒后报「CC 回复超时」——
+    // 一个跟真实原因毫无关系的错误，她为此查了很久。现在立刻把真话抛出去。
+    if(m.type==="auth_fail"){
+      __cc.ready=false;
+      __cc.authFail = "频道 PIN 不对（设置 → 通话 → 频道 PIN，六位数）" + (m.message?"："+m.message:"");
+      __cc._replyCbs.forEach(f=>{try{ f({ __err: __cc.authFail }) }catch(e){}});
+      return;
+    }
+    if(m.type==="auth_required"){ return; }   // 服务端在要 PIN，正常握手步骤，不是错
     if(m.type==="cc_status"){ __cc.ccAlive=!!m.alive; __cc._statusCbs.forEach(f=>{try{f(__cc.ccAlive)}catch(e){}}); return; }
     if(m.type==="message" && m.role==="assistant"){ __cc._replyCbs.forEach(f=>{try{f(m)}catch(e){}}); return; }
     if(m.type==="edit"){ __cc._editCbs.forEach(f=>{try{f(m)}catch(e){}}); return; }
@@ -8454,8 +8465,11 @@ function __ccHubSend(wsUrl, pin, content, opts){
     };
     __onStatus=()=>{};
     __cc._replyCbs.push(__onReply); __cc._editCbs.push(__onEdit); __cc._statusCbs.push(__onStatus);
+    // 上一次就是 PIN 不对的话，这次别再白等三分钟了，直接说
+    if(__cc.authFail){ fail(new Error(__cc.authFail)); return; }
     const trySend=()=>{
       if(settled) return;
+      if(__cc.authFail){ fail(new Error(__cc.authFail)); return; }
       if(__cc.ready){ if(__cc.ccAlive){ try{ const payload={ type:"message", content }; if(o.model) payload.model=o.model; ws.send(JSON.stringify(payload)); }catch(e){ fail(e); } } else fail(new Error("CC 离线")); }
       else { setTimeout(trySend, 300); }
     };
