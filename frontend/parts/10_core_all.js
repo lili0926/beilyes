@@ -7163,8 +7163,8 @@ function bubbleAvatarHtml(who, speakerId){
   if(who==="me"){
     const src = c.myAvatar || "";
     if(src){
-      return `<div class="bubble-avatar" style="padding:0;overflow:hidden;background:var(--accent2)">
-        <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>
+      return `<div class="bubble-avatar" style="padding:0;overflow:hidden;border-radius:50%;background:var(--accent2)">
+        <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/>
       </div>`;
     }
     return `<div class="bubble-avatar">🙂</div>`;
@@ -7182,8 +7182,8 @@ function bubbleAvatarHtml(who, speakerId){
   }
   if(!src) src = c.partnerAvatar || "";
   if(src){
-    return `<div class="bubble-avatar" style="padding:0;overflow:hidden;background:var(--accent2);${border}">
-      <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>
+    return `<div class="bubble-avatar" style="padding:0;overflow:hidden;border-radius:50%;background:var(--accent2);${border}">
+      <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/>
     </div>`;
   }
   const initial = useAg && useAg.name ? useAg.name.slice(0,1) : "💬";

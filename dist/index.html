@@ -1240,9 +1240,13 @@
       padding-left: 6px;
     }
     /* iMessage 仍保留头像供弹弹乐拖拽；略缩小贴近真机 1:1 可选 */
-    #app.chat-style-imessage .bubble-row .bubble-avatar {
-      width: 28px; height: 28px; font-size: 12px;
+    #app.chat-style-imessage .bubble-row .bubble-avatar,
+    #app.chat-style-imessage .bubble-row .avatar-link {
+      width: 28px !important; height: 28px !important;
+      border-radius: 50% !important;
+      overflow: hidden !important;
     }
+
 
     #app.chat-style-imessage .imsg-read {
       display: flex;
@@ -1346,9 +1350,7 @@
     }
 
 
-    .avatar-link { display: inline-flex; flex-shrink: 0; touch-action: none; }
-    .avatar-link .bubble-avatar { pointer-events: auto; touch-action: none; }
-    .bubble-avatar { touch-action: none; }
+
 
     .msg-bar { display: none; align-items: center; gap: 2px; padding: 1px 6px 2px; margin: 1px 0 3px; }
     .msg-bar.show { display: flex; }
@@ -1361,12 +1363,46 @@
     }
     .msg-bar button svg { width: 12px; height: 12px; }
     .msg-bar button:active { transform: scale(.94); }
-    .bubble-avatar {
-      width: 28px; height: 28px; border-radius: 50%; background: var(--accent2);
-      flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px;
-      overflow: hidden; padding: 0;
+    .avatar-link {
+      display: inline-flex !important;
+      flex-shrink: 0;
+      touch-action: none;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      border-radius: 50% !important;
+      overflow: hidden !important;
+      width: 28px !important;
+      height: 28px !important;
+      line-height: 0 !important;
+      box-shadow: none !important;
     }
-    .bubble-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .avatar-link .bubble-avatar {
+      pointer-events: auto;
+      touch-action: none;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .bubble-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50% !important;
+      background: var(--accent2);
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      overflow: hidden !important;
+      padding: 0 !important;
+      box-sizing: border-box;
+      touch-action: none;
+    }
+    .bubble-avatar img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      display: block !important;
+      border-radius: 50% !important;
+    }
     .bubble {
       max-width: 92%; padding: 6px 10px; font-size: 14px; line-height: 1.6;
       word-break: break-word; white-space: pre-wrap; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
@@ -13923,8 +13959,8 @@ function bubbleAvatarHtml(who, speakerId){
   if(who==="me"){
     const src = c.myAvatar || "";
     if(src){
-      return `<div class="bubble-avatar" style="padding:0;overflow:hidden;background:var(--accent2)">
-        <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>
+      return `<div class="bubble-avatar" style="padding:0;overflow:hidden;border-radius:50%;background:var(--accent2)">
+        <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/>
       </div>`;
     }
     return `<div class="bubble-avatar">🙂</div>`;
@@ -13942,8 +13978,8 @@ function bubbleAvatarHtml(who, speakerId){
   }
   if(!src) src = c.partnerAvatar || "";
   if(src){
-    return `<div class="bubble-avatar" style="padding:0;overflow:hidden;background:var(--accent2);${border}">
-      <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>
+    return `<div class="bubble-avatar" style="padding:0;overflow:hidden;border-radius:50%;background:var(--accent2);${border}">
+      <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/>
     </div>`;
   }
   const initial = useAg && useAg.name ? useAg.name.slice(0,1) : "💬";
