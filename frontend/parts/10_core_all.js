@@ -14931,6 +14931,14 @@ function rewriteBridgeInit(){
       const parsed = (typeof parseThinking === "function") ? parseThinking(raw) : { body: raw };
       text = String(parsed.body || raw || "").trim();
       if(!text) throw new Error("模型没有返回内容");
+      // 模型不肯写的时候回的是一句大白话，不是 JSON。
+      // 以前这种情况 error 是空的、text 照样递给游戏，游戏 JSON.parse 炸了才报错，
+      // 而它的 catch 一律弹「填 Key」的配置框 —— 于是她看到的是「返回的不是 JSON」
+      // 加一个让她填 Key 的框，完全看不出真实原因是模型拒绝了。这里提前认出来。
+      const looksJson = text.indexOf("{") >= 0 && text.lastIndexOf("}") > text.indexOf("{");
+      if(!looksJson){
+        throw new Error("模型这次没有接着写，跟 Key 无关。它说：" + text.slice(0, 80));
+      }
     }catch(err){
       error = String((err && err.message) || err).slice(0, 200);
       console.warn("[rewrite] 续写失败", err);
