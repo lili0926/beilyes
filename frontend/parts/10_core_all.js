@@ -1698,10 +1698,17 @@ function __ccBuildContent(messages, systemPrompt){
   let sys = (systemPrompt && typeof systemPrompt==="object")
     ? ((systemPrompt.static||"") + (systemPrompt.dynamic? "\n\n"+systemPrompt.dynamic:""))
     : (systemPrompt? String(systemPrompt):"");
-  // 人设必须带上：CC 是长会话，消息里没有身份锚点它会退回「我是 Claude 编程助手」。
-  // 设定过长时保头部（身份+规则）+ 尾部（动态记忆），省略中段，控制 token。
-  if(sys && sys.length > 4000){
-    sys = sys.slice(0, 3000) + "\n…（设定中段已省略，完整人设见 VPS CLAUDE.md）…\n" + sys.slice(-800);
+  // 人设**不重发**：VPS 的 /root/cc-work/CLAUDE.md 里已经有完整的一份，那是生效的项目指令。
+  // 这里每条消息重发 4000 字的后果是双份的：既占当轮的量，又因为 CC 是一条不断增长的
+  // 会话——这 4000 字会永久留在上下文里，之后每一轮都要跟着重读一遍。
+  // 留下的只有三样：短身份锚点（没有它 CC 会退回「我是 Claude 编程助手」）、
+  // 必须送到的格式规则（见下面两段）、以及每轮都变的动态段（检索记忆）。
+  const CC_SYS_CAP = 700;
+  if(sys && sys.length > CC_SYS_CAP){
+    const dyn = (systemPrompt && typeof systemPrompt==="object" && systemPrompt.dynamic) || "";
+    sys = sys.slice(0, CC_SYS_CAP)
+      + "\n…（完整人设见 VPS 上的 CLAUDE.md，不重发）…"
+      + (dyn ? "\n" + dyn.slice(0, 600) : "");
   }
   // 回复格式规则紧跟在「身份锚定 + 用户自己的提示词」后面，用户提示词一长
   // 它就整个落进上面被省略的中段 —— CC 通道于是从来没收到过「要写 <thinking>」这条要求，
@@ -28458,7 +28465,26 @@ async function bgGenPollResult(){
   }catch(e){ console.warn("[bg] poll fail", e); }
 }
 
-function buildSysForAgent(ag, extraGroupHint){
+/**
+ * 检索记忆单独取出来，别拼进 system。
+ *
+ * 它是 retrieveRelevantMemories(最近3条user消息) 的结果，**每轮都变**。
+ * 缓存是前缀匹配的：一旦它出现在 system 末尾，后面几万 token 的历史全部从
+ * 缓存里掉出去，每轮按全价重烧。放到最后一条消息末尾就没这个问题
+ * （chatTailBlock 早就是这么做的，这里只是跟上）。
+ */
+function retrievedMemoryBlock(){
+  try{
+    if(!state.memories || !state.memories.length) return "";
+    const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
+    const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
+    if(!relevant.length) return "";
+    return "以下是与当前对话最相关的记忆：\n" + relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
+  }catch(e){ return ""; }
+}
+
+/** opts.skipMemory：把检索记忆留给调用方自己往消息尾部挂，见 retrievedMemoryBlock */
+function buildSysForAgent(ag, extraGroupHint, opts){
   // 每位 AI 使用自己的思考引导
   let sys = systemPrompt(ag || null);
   if(ag && ag.name){
@@ -28468,13 +28494,9 @@ function buildSysForAgent(ag, extraGroupHint){
     sys = `你是 Aries。与你对话的是 Jasmine。\n\n` + (sys||"");
   }
   if(extraGroupHint) sys = (sys||"") + "\n\n" + extraGroupHint;
-  if(state.memories.length>0){
-    const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-    const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
-    if(relevant.length){
-      const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
-      sys=(sys?sys+"\n\n":"")+`以下是与当前对话最相关的记忆：\n${memStr}`;
-    }
+  if(!(opts && opts.skipMemory) && state.memories.length>0){
+    const mem = retrievedMemoryBlock();
+    if(mem) sys = (sys?sys+"\n\n":"") + mem;
   }
   return sys;
 }
@@ -29054,8 +29076,9 @@ function buildMainChatRequest(ag, extraHint){
   const threadMsgs = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || [];
   const allMsgs = threadMsgs.length ? threadMsgs : (state.messages || []);
   // 用 buildSysForAgent 保持与主路径一致的 systemPrompt 拼接顺序（不破坏思考链）；
-  // 摘要作为追加段附在 system 末尾。
-  let sys = buildSysForAgent(ag, extraHint || null);
+  // 摘要作为追加段附在 system 末尾（它只在压缩发生时才变，不像检索记忆每轮都变）。
+  // **skipMemory**：检索记忆改挂到最后一条消息末尾，见下面的尾部注入。
+  let sys = buildSysForAgent(ag, extraHint || null, { skipMemory:true });
   const win = getWindowedMessages(allMsgs, target);
   const keepFull = guardKeepFull(win.messages); // 只有最近两条被拦的给完整措辞
   const apiMsgs = win.messages.map(m=>{
@@ -29070,9 +29093,11 @@ function buildMainChatRequest(ag, extraHint){
   if(win.summary){
     sys = (sys? sys+"\n\n" : "") + "【早前对话摘要（压缩前的逐字记录已不必再看）】\n" + win.summary;
   }
-  // 尾部注入：挂在最后一条消息末尾（不入缓存前缀，离生成点最近）
+  // 尾部注入：挂在最后一条消息末尾（不入缓存前缀，离生成点最近）。
+  // 检索记忆也走这条路 —— 它以前在 system 末尾，每轮一变就把后面整段历史
+  // 从缓存里踢出去；那才是「一条 18000 每轮全价」的真正原因。
   try{
-    const tail = chatTailBlock();
+    const tail = [retrievedMemoryBlock(), chatTailBlock()].filter(Boolean).join("\n\n");
     if(tail && apiMsgs.length){
       const last = apiMsgs[apiMsgs.length - 1];
       if(last && typeof last.content === "string") last.content = last.content + "\n\n" + tail;
