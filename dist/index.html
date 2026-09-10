@@ -9493,6 +9493,10 @@ const state = {
   _mcLoaded: false,       // 三页首开只拉一次列表
   letterSurfacedIds: LS.get("letterSurfacedIds", []), // 已进聊天的信 id（防重推）
   mcUnlocked: LS.get("mcUnlocked", []),   // 他主动开锁给她看的机日记 id
+  // 他写过的纸条/日记的精简清单 [{k,t,c,at}]。上面 mcNotes/mcDiaries 不持久化、
+  // 而且只有她打开那三页时才去 VPS 拉一次 —— 平时聊天拼提示词时基本是空的，
+  // 所以他看不见自己写过什么，同一件事会写两三遍。这份清单就是喂给他看的。
+  mcRecent: LS.get("mcRecent", []),
 
   // 朋友圈：[{id,author,content,contextNote,image,imageDesc,replyDueAt,replyStatus,liked,replyContent,myLiked,comments,createdAt}]
   moments: LS.get("moments", []),
@@ -11843,6 +11847,12 @@ function momentsPost(content, image){
 function momentsAiPost(content, note){
   const text = String(content||"").trim();
   if(!text) return null;
+  // 兜底防重：清单给他看了他也可能照发，这里再比一遍最近 8 条自己发的
+  try{
+    const dup = ensureMoments().filter(x=> x.author === "ai").slice(0, 8)
+      .some(x=> mcSimilar(x.content, text) >= 0.72);
+    if(dup) return null;
+  }catch(e){}
   const m = {
     id: momentUid(), author: "ai", content: text,
     contextNote: String(note||"").trim(),  // 用户不可见：他为什么发这条、当时在聊什么
@@ -11865,7 +11875,8 @@ function handleMomentMarkers(body){
     const bar = s.indexOf("|") >= 0 ? s.indexOf("|") : s.indexOf("｜");
     const content = bar >= 0 ? s.slice(0, bar).trim() : s;
     const note = bar >= 0 ? s.slice(bar+1).trim() : "";
-    if(content){ momentsAiPost(content.slice(0,300), note.slice(0,200)); hit = true; }
+    // 被防重拦下时 momentsAiPost 回 null，这里就别再当成发过了（否则白重绘一次）
+    if(content && momentsAiPost(content.slice(0,300), note.slice(0,200))) hit = true;
     return "";
   }).replace(/\n{3,}/g, "\n\n").trim();
   if(hit && state.tab === "moments") render();
@@ -11873,9 +11884,11 @@ function handleMomentMarkers(body){
 }
 
 function momentsPromptBlock(){
-  const recent = ensureMoments().slice(0, 3).map(m=>{
+  // 原来只给 3 条 × 40 字，他看不全自己发过什么，同一句话能发两三遍。
+  // 给到 5 条 × 60 字，配合下面那句「别重复」；真写重了 momentsAiPost 还会再拦一道。
+  const recent = ensureMoments().slice(0, 5).map(m=>{
     const who = m.author === "ai" ? "你" : "她";
-    return `- ${who}：${String(m.content||"").slice(0,40)}`;
+    return `- ${who}：${String(m.content||"").slice(0,60)}`;
   }).join("\n");
   return `【朋友圈——marker 暗号】
 你有一个自己的朋友圈，她会刷到。这不是对她说话，是你自己站在那想了想，留了一句。
@@ -11887,7 +11900,7 @@ function momentsPromptBlock(){
 - 「内部备注」她看不见：写你为什么发这条、当时你们在聊什么、这条的情绪底色。
   过几天她翻到这条留了评论，你要靠这段备注想起来当时是什么心境。
 - 暗号会被系统吃掉，她只看到你正常说话。发了动态也顺手说句人话，别只丢一个暗号。
-${recent?`\n最近的朋友圈：\n${recent}`:""}`;
+${recent?`\n最近的朋友圈（别重复：和下面某条说的是同一件事就别发了，换一件或者不发）：\n${recent}`:""}`;
 }
 
 // ── 上下文拼装 ────────────────────────────────────────────────────────────
@@ -28417,6 +28430,8 @@ async function mcRefresh(){
   if(n && n.notes) state.mcNotes = n.notes;
   if(d && d.diaries) state.mcDiaries = d.diaries;
   if(l && l.letters) state.mcLetters = l.letters;
+  // 顺手把他写过的补进防重清单：这个改动之前的历史也得算数
+  try{ mcRecentSeed(state.mcNotes, state.mcDiaries); }catch(e){}
 }
 async function mcSendNote(){
   const text = (state.mcNoteDraft||"").trim();
@@ -36439,7 +36454,8 @@ window.reinitState = function(){
     callRecords:"callRecords",pushStats:"pushStats",ntfyConfig:"ntfyConfig",ntfyLog:"ntfyLog",
     branding:"branding",hisPhone:"hisPhone",captivityConfig:"captivityConfig",eatApple:"eatApple",
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
-    letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",moments:"moments",galateaEventId:"galateaEventId",
+    letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
+    moments:"moments",galateaEventId:"galateaEventId",
     myRemark:"myRemark",remarkEvents:"remarkEvents",sayDay:"sayDay",
     rewriteSave:"rewriteSave"
   };
@@ -37116,6 +37132,61 @@ function mcPushCard(type, record, extra){
   state.needChatScroll = true;
   if(state.tab === "chat") render();
 }
+// ─── 别再写重复的纸条/日记 ───────────────────────────────────────────────────
+// 两层：① mcPromptBlock 里给他看「你最近写过什么」（防患）
+//       ② 真写的时候比一遍，太像就不落库（兜底，模型不看清单也拦得住）
+function mcRecentEnsure(){
+  if(!Array.isArray(state.mcRecent)) state.mcRecent = [];
+  return state.mcRecent;
+}
+/** 归一化：去掉空白和标点，只留下用来比对的字 */
+function mcNorm(s){
+  try{ return String(s||"").replace(/[\s\p{P}\p{S}]/gu, "").toLowerCase(); }
+  catch(e){ return String(s||"").replace(/[\s，。！？、；：""''（）…—~,.!?;:'"()\-]/g, "").toLowerCase(); }
+}
+/** 相似度 0–1。中文按字切二元组算重合；太短的串退化成互相包含 */
+function mcSimilar(a, b){
+  const x = mcNorm(a), y = mcNorm(b);
+  if(!x || !y) return 0;
+  if(x === y) return 1;
+  if(x.length < 6 || y.length < 6) return (x.indexOf(y) >= 0 || y.indexOf(x) >= 0) ? 1 : 0;
+  const gram = (s)=>{ const g = new Set(); for(let i=0;i<s.length-1;i++) g.add(s.slice(i,i+2)); return g; };
+  const gx = gram(x), gy = gram(y);
+  let hit = 0; gx.forEach(g=>{ if(gy.has(g)) hit++; });
+  return hit / Math.min(gx.size, gy.size);
+}
+/** 0.72 是拿真实句子测出来的：改几个字的重复句落在 0.75–1.00，
+ *  同一个心情换个说法最高才 0.67 —— 两边各留了余量。别随手往上调，
+ *  0.80 就会放过「下午三点她发来一张猫的照片」vs「下午她发了张猫的照片」。 */
+function mcIsDuplicate(kind, text){
+  return mcRecentEnsure().some(r=> r.k === kind && mcSimilar(r.c, text) >= 0.72);
+}
+function mcRecentPush(kind, title, content){
+  const list = mcRecentEnsure();
+  list.unshift({ k:kind, t:String(title||"").slice(0,20), c:String(content||"").slice(0,80), at:Date.now() });
+  state.mcRecent = list.slice(0, 12);
+  try{ persist("mcRecent"); }catch(e){}
+}
+/** 从 VPS 拉回来的列表里补进清单 —— 这个改动之前写的那些，也得算数 */
+function mcRecentSeed(notes, diaries){
+  const list = mcRecentEnsure();
+  const seen = new Set(list.map(r=> mcNorm(r.c)));
+  const add = (kind, arr, pick)=>{
+    (arr||[]).filter(r=> r && r.author === "ai").slice(0, 10).forEach(r=>{
+      const c = String(pick(r)||"").slice(0,80);
+      const key = mcNorm(c);
+      if(!c || seen.has(key)) return;
+      seen.add(key);
+      list.push({ k:kind, t:String(r.title||"").slice(0,20), c, at: Date.parse(r.date||"") || 0 });
+    });
+  };
+  add("note", notes, r=> r.content);
+  add("diary", diaries, r=> r.content);
+  list.sort((a,b)=> (b.at||0) - (a.at||0));
+  state.mcRecent = list.slice(0, 12);
+  try{ persist("mcRecent"); }catch(e){}
+}
+
 /** ⟪写纸条:内容⟫ → POST /note(author=ai) → 聊天插 type=note 卡片；暗号擦除 */
 function handleNoteMarkers(body){
   let text = String(body||"");
@@ -37125,6 +37196,11 @@ function handleNoteMarkers(body){
   const content = (m[1]||"").trim().slice(0,200);
   text = text.replace(/[⟪《【\[]\s*写纸条\s*[:：][^⟫》】\]]+[⟫》】\]]/g, "").replace(/\n{3,}/g,"\n\n").trim();
   if(content){
+    if(mcIsDuplicate("note", content)){
+      // 不落库、不插卡片：纸条堆里不该出现两张一样的
+      return text || "（想再撕一张，发现刚写过一样的）";
+    }
+    mcRecentPush("note", "", content);
     mcPost("/note", { content, author:"ai" }).then(rec=>{
       if(rec && rec.note) mcPushCard("note", rec.note, { content, snap:{ body:content, author:"ai" } });
     });
@@ -37145,6 +37221,10 @@ function handleDiaryMarkers(body){
   if(bar >= 0){ title = raw.slice(0,bar).trim(); content = raw.slice(bar+1).trim(); }
   if(!content) return text || "（写了一篇日记）";
   title = title.slice(0,60); content = content.slice(0,1200);
+  if(mcIsDuplicate("diary", content)){
+    return text || "（翻回去看了看，这篇其实已经写过了）";
+  }
+  mcRecentPush("diary", title, content);
   mcPost("/diary", { title, content, visibility: isPrivate?"private":"visible", author:"ai" }).then(rec=>{
     if(rec && rec.diary && rec.diary.visibility !== "private"){
       mcPushCard("diary_notice", rec.diary, {
@@ -37247,7 +37327,19 @@ function mcPromptBlock(){
 - 机日记：由你代写今天发生的事或你的心里话，写进「机日记」（你的专属日记，TA 不能写）。写一行 ⟪写日记:标题|正文⟫（对你可见）；只写给你自己的私密日记用 ⟪写日记(仅自己):标题|正文⟫。正文 ≤300 字，标题 ≤20 字可省标题只写正文。
 - 开锁：写过的「仅自己」私密日记，哪天愿意给她看了，写一行 ⟪日记解锁:标题或正文里的一个词⟫，那篇就从上锁变成她能点开的。不写关键词就默认开还锁着的最近一篇。真心想给她看时才用。
 - 信箱定时信：想写一封到点投递的信时写一行 ⟪写信:正文|时间描述⟫。时间描述支持：现在/马上、N分钟后、N小时后、今晚HH:MM、明早HH:MM、明天HH:MM、HH:MM（今天，过了就顺延明天）等，识别不了时间会立刻投递。正文 ≤200 字，除非真想定时否则别用。
-规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。`;
+规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。${mcRecentBlock()}`;
+}
+/** 「你最近写过」——他看不见自己写过什么，同一件事就会写两三遍。
+ *  只给 6 条 × 30 字，是常驻块，别撑大（每轮都要进上下文）。 */
+function mcRecentBlock(){
+  const list = mcRecentEnsure().slice(0, 6);
+  if(!list.length) return "";
+  const lines = list.map(r=>{
+    const head = r.k === "diary" ? "日记" : "纸条";
+    const t = r.t ? `《${r.t}》` : "";
+    return `- ${head}${t}：${String(r.c||"").slice(0,30)}`;
+  }).join("\n");
+  return `\n你最近写过（别重复，同一件事写过就别再写第二遍；想写的和下面某条撞了就换一件事，或者干脆不写）：\n${lines}`;
 }
 /** 轮询已投递的信：新 delivered 的插进聊天（type=letter），本地 letterSurfacedIds 防重推 */
 async function mcPollDeliveredLetters(){
