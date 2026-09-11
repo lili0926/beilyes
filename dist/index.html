@@ -4448,6 +4448,9 @@
     .mf-mode-lab { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--sub); margin-top:6px; width:100%; }
     .mf-mode { padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:12px; }
 
+
+    .mf-refresh-bar { display:flex; justify-content:center; padding:8px 12px 4px; }
+    .mf-refresh-bar .mo-mini { font-size:12px; opacity:.75; }
 </style>
 </head>
 <body>
@@ -9430,6 +9433,7 @@ const state = {
   proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   // 朋友圈联邦：加好友走自己 VPS 的 /api/admin/*，adminToken 等于账号密码，默认空
+  mfInvitePreview: null,
   momentsFedConfig: LS.get("momentsFedConfig", { baseUrl: "", adminToken: "" }),
   // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
   guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 3 }),
@@ -34926,8 +34930,44 @@ reader.readAsArrayBuffer(f);
   if(mfAdd) mfAdd.onclick = ()=>{
     const el = document.getElementById("mf-code-input");
     if(el) state.mfCodeDraft = el.value;
-    mfInvite();
+    state.mfInvitePreview = null;
+    mfParseInvite();
   };
+  const mfInvCancel = document.getElementById("mf-invite-cancel");
+  if(mfInvCancel) mfInvCancel.onclick = ()=>{ state.mfInvitePreview = null; render(); };
+  const mfInvConfirm = document.getElementById("mf-invite-confirm");
+  if(mfInvConfirm) mfInvConfirm.onclick = ()=>{
+    const el = document.getElementById("mf-code-input");
+    if(el) state.mfCodeDraft = el.value;
+    mfInvite(true);
+  };
+  const mfRefresh = document.getElementById("mf-feed-refresh");
+  if(mfRefresh) mfRefresh.onclick = ()=>{ mfLoadFeed(false); };
+  const mfRetry = document.getElementById("mf-feed-retry");
+  if(mfRetry) mfRetry.onclick = ()=>{ mfLoadFeed(false); };
+
+  // 公共圈轻量下拉刷新：在列表顶部下拉超过 56px 松手
+  (function(){
+    const root = document.querySelector(".wx-moments .wx-list") || document.querySelector(".wx-moments");
+    if(!root || state.momentsScope !== "public") return;
+    if(root._mfPullBound) return;
+    root._mfPullBound = true;
+    let startY = 0, pulling = false;
+    root.addEventListener("touchstart", (e)=>{
+      if(root.scrollTop <= 0 && e.touches && e.touches[0]){
+        startY = e.touches[0].clientY; pulling = true;
+      } else pulling = false;
+    }, {passive:true});
+    root.addEventListener("touchend", (e)=>{
+      if(!pulling) return;
+      pulling = false;
+      try{
+        const y = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : startY;
+        if(y - startY > 56 && typeof mfLoadFeed === "function") mfLoadFeed(false);
+      }catch(_){}
+    }, {passive:true});
+  })();
+
   $$("[data-mf-ok]").forEach(b=>{ b.onclick = ()=> mfReview(b.dataset.mfOk, "accept"); });
   $$("[data-mf-no]").forEach(b=>{ b.onclick = ()=> mfReview(b.dataset.mfNo, "reject"); });
   // 备注：用 onchange（失焦且真改过才触发），不用 oninput —— 否则每敲一个字发一次请求
