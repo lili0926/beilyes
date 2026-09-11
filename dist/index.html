@@ -3051,7 +3051,8 @@
     }
     .wx-cmt:first-of-type { margin-top: 0; }
     .wx-cmt .wx-cn { color: #576b95; font-weight: 600; }
-    .wx-cmt .wx-reply-to { color: #576b95; font-weight: 600; }
+    .wx-cmt .wx-cmt-tap{cursor:pointer}.wx-cmt-tap:active{opacity:.7}
+    .wx-reply-to { color: #576b95; font-weight: 600; }
 
     .wx-cmt-box {
       display: flex; gap: 8px; margin-top: 8px; align-items: center;
@@ -34605,6 +34606,27 @@ reader.readAsArrayBuffer(f);
       const id = b.getAttribute("data-mf-cmt");
       state.mfCmtOpen = (state.mfCmtOpen === id) ? null : id;
       state.mfCmtDraft = "";
+      state.mfReplyToName = "";
+      render();
+    };
+  });
+  // 点某条评论 → 变成「回复 TA」
+  $$("[data-mf-reply]").forEach(b=>{
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      const id = b.getAttribute("data-mf-reply");
+      const name = b.getAttribute("data-mf-reply-name") || "";
+      state.mfCmtOpen = id;
+      state.mfReplyToName = name;
+      state.mfCmtDraft = "";
+      render();
+      setTimeout(()=>{ try{ const el=document.getElementById("mf-cmt-input"); if(el) el.focus(); }catch(_){} }, 30);
+    };
+  });
+  $$("[data-mf-reply-clear]").forEach(b=>{
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      state.mfReplyToName = "";
       render();
     };
   });
@@ -34614,7 +34636,8 @@ reader.readAsArrayBuffer(f);
       const el = document.getElementById("mf-cmt-input");
       const txt = (el ? el.value : state.mfCmtDraft) || "";
       if(!txt.trim()){ if(typeof showToast==="function") showToast("写点什么再发"); return; }
-      mfReactAsMe(b.getAttribute("data-mf-cmt-send"), txt.trim());
+      const replyTo = state.mfReplyToName || "";
+      mfReactAsMe(b.getAttribute("data-mf-cmt-send"), txt.trim(), replyTo);
     };
   });
   const mfCmtInput = document.getElementById("mf-cmt-input");
