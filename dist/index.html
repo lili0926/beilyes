@@ -4440,7 +4440,15 @@
       -webkit-backdrop-filter: none !important;
     }
 
-  </style>
+  
+    .wx-cmt-tap { cursor: pointer; }
+    .wx-cmt-tap:active { opacity: .72; }
+    .wx-reply-to { color: #576b95; margin: 0 2px; font-weight: 600; }
+    .wx-cmt .wx-cn { color: #576b95; font-weight: 600; }
+    .mf-mode-lab { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--sub); margin-top:6px; width:100%; }
+    .mf-mode { padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:12px; }
+
+</style>
 </head>
 <body>
   <script src="hyalite.js"></script>
@@ -12438,22 +12446,59 @@ async function mfPublish(text, who){
 }
 
 /** 她自己对好友的动态点赞/评论。不传 comment 就是点赞。 */
-async function mfReactAsMe(momentId, comment){
+async function mfReactAsMe(momentId, comment, replyToName){
   try{
+    const body = {
+      identity_id: mfSelfIdentity("human") || undefined,
+      comment: String(comment||""),
+    };
+    if(replyToName) body.reply_to_name = String(replyToName).slice(0, 40);
     const r = await mfApi("/api/admin/moments/" + encodeURIComponent(momentId) + "/react", {
       method:"POST",
-      body:{ identity_id: mfSelfIdentity("human") || undefined, comment: String(comment||"") },
+      body,
     });
     if(r && r.did === "nothing" && typeof showToast==="function"){
-      showToast(r.reason === "already_liked" ? "已经赞过了" : "这条底下聊得够多了");
+      const why = r.reason || (r.decision && r.decision.reason) || "";
+      showToast(MF_ERR[why] || (why === "already_liked" ? "已经赞过了" : "这条底下聊得够多了"));
     }
-    state.mfCmtOpen = null; state.mfCmtDraft = "";
+    state.mfCmtOpen = null; state.mfCmtDraft = ""; state.mfReplyToName = "";
     await mfLoadFeed(true);
   }catch(e){
     if(typeof showToast==="function") showToast(String((e && e.message) || e));
   }
   render();
 }
+
+/** 删自己的公共动态（软删，推墓碑给好友） */
+async function mfDeleteMoment(momentId){
+  if(!momentId) return;
+  try{
+    await mfApi("/api/admin/moments/" + encodeURIComponent(momentId) + "/delete", { method:"POST", body:{} });
+    if(typeof showToast==="function") showToast("已删除");
+    await mfLoadFeed(true);
+  }catch(e){
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+  }
+  render();
+}
+
+/** 设置好友某身份的回复模式：like_only / llm_decide / always_comment */
+async function mfSetReplyMode(friendId, identityId, mode){
+  try{
+    await mfApi(
+      "/api/admin/friends/" + encodeURIComponent(friendId) + "/" + encodeURIComponent(identityId) + "/reply-mode",
+      { method:"POST", body:{ reply_mode: mode } }
+    );
+    const f = (((state.mfData||{}).friends)||[]).find(x=> x.friend_node_id === friendId);
+    const i = f && (f.identities||[]).find(y=> y.identity_id === identityId);
+    if(i) i.reply_mode = mode;
+    if(typeof showToast==="function") showToast("已保存回复方式");
+  }catch(e){
+    if(typeof showToast==="function") showToast(String((e && e.message) || e));
+  }
+  render();
+}
+
 
 /** 扫一遍好友的公共动态。和 momentsProcessDue 挂在同一批触发点上。 */
 async function mfProcessFeed(){
@@ -12662,11 +12707,25 @@ function renderMoments(){
         const likes = (it.likes||[]).map(actorName).filter(Boolean);
         const likeLine = likes.length
           ? `<div class="wx-likes"><span class="wx-heart">♥</span>${likes.map(x=>`<b>${esc(x)}</b>`).join("，")}</div>` : "";
-        const cmts = (it.comments||[]).map(c=>
-          `<div class="wx-cmt"><span class="wx-cn">${esc(actorName(c))}</span>: ${esc(c.content||"")}</div>`
-        ).join("");
+        const cmts = (it.comments||[]).map(c=>{
+          const who = actorName(c) || "某人";
+          let body = String(c.content||"");
+          let replyTo = c.reply_to_name || "";
+          const mm = body.match(/^回复\s*([^：:：]{1,40})\s*[：:]\s*([\s\S]*)$/);
+          if(mm){ replyTo = mm[1].trim(); body = mm[2]; }
+          const mid = escAttr(it.moment_id);
+          const rname = escAttr(who);
+          if(replyTo){
+            return `<div class="wx-cmt wx-cmt-tap" data-mf-reply="${mid}" data-mf-reply-name="${rname}" role="button">`+
+              `<span class="wx-cn">${esc(who)}</span>回复<span class="wx-reply-to">${esc(replyTo)}</span>：${esc(body)}</div>`;
+          }
+          return `<div class="wx-cmt wx-cmt-tap" data-mf-reply="${mid}" data-mf-reply-name="${rname}" role="button">`+
+            `<span class="wx-cn">${esc(who)}</span>：${esc(body)}</div>`;
+        }).join("");
         const zone = (likeLine || cmts) ? `<div class="wx-zone">${likeLine}${cmts}</div>` : "";
         const when = it.created_at ? new Date(it.created_at * 1000).toISOString() : "";
+        const replyHint = (state.mfCmtOpen===it.moment_id && state.mfReplyToName)
+          ? `回复 ${state.mfReplyToName}` : "评论…";
         return `<div class="wx-post mo-card">
           <div class="wx-post-row">
             <div class="wx-av">${avatar || `<div class="wx-cover-av-fallback">${esc(String(shownName||"?").slice(0,1))}</div>`}</div>
@@ -12675,14 +12734,16 @@ function renderMoments(){
               ${it.content?`<div class="wx-text">${esc(it.content)}</div>`:""}
               <div class="wx-meta">
                 <span class="wx-time">${when?momentAgo(when):""}</span>
-                ${mine?"":`<div class="wx-actions">
+                <div class="wx-actions">
                   <button type="button" class="wx-more" data-mf-like="${escAttr(it.moment_id)}" aria-label="赞">♥</button>
                   <button type="button" class="wx-more" data-mf-cmt="${escAttr(it.moment_id)}" aria-label="评论">···</button>
-                </div>`}
+                  ${mine?`<button type="button" class="wx-more" data-mf-del="${escAttr(it.moment_id)}" aria-label="删除">删除</button>`:""}
+                </div>
               </div>
               ${zone}
               ${state.mfCmtOpen===it.moment_id?`<div class="mo-cmt-box wx-cmt-box">
-                <input id="mf-cmt-input" value="${escAttr(state.mfCmtDraft||"")}" placeholder="评论…"/>
+                <input id="mf-cmt-input" value="${escAttr(state.mfCmtDraft||"")}" placeholder="${escAttr(replyHint)}"/>
+                ${state.mfReplyToName?`<button type="button" class="mo-mini" data-mf-reply-clear="${escAttr(it.moment_id)}" title="取消回复">×</button>`:""}
                 <button type="button" data-mf-cmt-send="${escAttr(it.moment_id)}">发送</button>
               </div>`:""}
             </div>
@@ -12812,6 +12873,19 @@ const MF_ERR = {
   rate_limited: "太频繁了，缓一缓",
   token_conflict: "握手撞车了，重新来一次",
   not_found: "这个身份不在好友表里了",
+  moment_not_found: "这条动态不存在或已删除",
+  cannot_like_own: "不能给自己点赞哦",
+  cannot_react_to_own_identity: "不能给自己点赞哦",
+  not_public_moment: "只能删公共动态",
+  missing_moment_id: "缺少动态 ID",
+  not_a_friend: "还不是好友",
+  content_blocked: "内容未通过安全检查",
+  public_needs_confirmation: "发公共动态需要确认",
+  empty_content: "内容是空的",
+  already_liked: "已经赞过了",
+  max_rounds: "这条底下聊得够多了",
+  bad_reply_mode: "回复模式不对",
+  bad_admin_token: "管理密钥不对",
 };
 
 async function mfApi(path, opts){
@@ -13041,13 +13115,23 @@ function renderMomentsFriends(){
     <div class="section-body">
       ${accepted.length ? accepted.map(f=>`<div class="mf-card">
         <div class="mf-name">${esc(f.node_display_name || f.friend_node_id)}</div>
-        ${(f.identities||[]).map(i=>`<div class="mf-idrow">
+        ${(f.identities||[]).map(i=>{
+          const mode = i.reply_mode || (i.type==="ai" ? "like_only" : "llm_decide");
+          return `<div class="mf-idrow">
           <span class="mf-idname">${esc(i.display_name || i.identity_id)}${i.type==="ai"?`<span class="mf-tag">AI</span>`:""}</span>
           <input class="mf-remark" value="${escAttr(i.remark||"")}"
                  placeholder="${escAttr(i.display_name || i.identity_id)}"
                  data-mf-remark="${escAttr(f.friend_node_id)}"
                  data-mf-identity="${escAttr(i.identity_id)}"/>
-        </div>`).join("")}
+          <label class="mf-mode-lab">他怎么回
+            <select class="mf-mode" data-mf-reply-mode="${escAttr(f.friend_node_id)}" data-mf-identity="${escAttr(i.identity_id)}">
+              <option value="like_only" ${mode==="like_only"?"selected":""}>只点赞</option>
+              <option value="llm_decide" ${mode==="llm_decide"?"selected":""}>模型决定</option>
+              <option value="always_comment" ${mode==="always_comment"?"selected":""}>总是评论</option>
+            </select>
+          </label>
+        </div>`;
+        }).join("")}
       </div>`).join("") : `<div class="empty-state"><div class="empty-emoji"><i data-lucide="users"></i></div>还没有好友</div>`}
     </div>
   </div>`;
@@ -34628,6 +34712,23 @@ reader.readAsArrayBuffer(f);
       e.stopPropagation();
       state.mfReplyToName = "";
       render();
+    };
+  });
+  $$("[data-mf-del]").forEach(b=>{
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      const id = b.getAttribute("data-mf-del");
+      if(!id) return;
+      if(!confirm("删除这条公共动态？好友那边也会看不到。")) return;
+      mfDeleteMoment(id);
+    };
+  });
+  $$("[data-mf-reply-mode]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const friendId = sel.getAttribute("data-mf-reply-mode");
+      const identityId = sel.getAttribute("data-mf-identity");
+      const mode = sel.value;
+      if(friendId && identityId && mode) mfSetReplyMode(friendId, identityId, mode);
     };
   });
   $$("[data-mf-cmt-send]").forEach(b=>{
