@@ -5838,14 +5838,19 @@ function renderMoments(){
   let feed = "";
   if(scope === "public"){
     // 这一份不在本地，在 VPS 上：好友推来的 + 她自己发的 public，见 mfLoadFeed
+    const refreshBar = `<div class="mf-refresh-bar">
+      <button type="button" id="mf-feed-refresh" class="mo-mini"${state.mfFeedBusy?" disabled":""}>${state.mfFeedBusy?"刷新中…":"点此刷新"}</button>
+    </div>`;
     if(typeof mfReady !== "function" || !mfReady()){
       feed = `<div class="wx-empty">还没连上你的节点<br><span style="font-size:12px;opacity:.75">点上面那个人形按钮，填 Base URL 和管理密钥</span></div>`;
     } else if(state.mfFeedErr){
-      feed = `<div class="wx-empty">${esc(state.mfFeedErr)}</div>`;
+      feed = refreshBar + `<div class="wx-empty">${esc(state.mfFeedErr)}<br>
+        <button type="button" id="mf-feed-retry" class="btn-accent" style="margin-top:12px">重试</button>
+      </div>`;
     } else if(!state.mfFeed){
-      feed = `<div class="wx-empty">正在连接…</div>`;
+      feed = refreshBar + `<div class="wx-empty">正在连接…</div>`;
     } else if(!state.mfFeed.length){
-      feed = `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或者先加个好友</span></div>`;
+      feed = refreshBar + `<div class="wx-empty">公共朋友圈还是空的<br><span style="font-size:12px;opacity:.75">点右上角 ✎ 发一条，或者先加个好友</span></div>`;
     } else {
       // 本机两个身份 + 节点 id：用来把「自己发的」认出来。
       // 服务端回的 author_name 是 .env 里的 SELF_HUMAN_NAME（"Jasmine"），
@@ -5861,7 +5866,7 @@ function renderMoments(){
         }
         return String((a && a.operator_name) || "");
       };
-      feed = state.mfFeed.map(it=>{
+      feed = refreshBar + state.mfFeed.map(it=>{
         const mine = it.from === "self";
         const isSelfAi = mine && it.author_identity_id === selfAiId;
         const isSelfHuman = mine && it.author_identity_id === selfHumanId;
