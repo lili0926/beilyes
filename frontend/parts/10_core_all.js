@@ -5588,7 +5588,11 @@ async function mfLoadFeed(silent){
     state.mfFeedErr = String((e && e.message) || e);
   }
   state.mfFeedBusy = false;
-  if(state.tab === "moments" && state.momentsScope === "public") render();
+  if(state.tab === "moments" && state.momentsScope === "public"){
+    const sc = silent ? saveMomentsScroll() : 0;
+    render();
+    if(silent) restoreMomentsScroll(sc);
+  }
 }
 
 /** 她在公共朋友圈发一条：落 VPS + 广播给好友。私人圈那条路不走这里。
@@ -5613,7 +5617,27 @@ async function mfPublish(text, who){
 }
 
 /** 她自己对好友的动态点赞/评论。不传 comment 就是点赞。 */
+
+function momentsScrollEl(){
+  return document.querySelector(".page.mo-page")
+    || document.querySelector(".wx-moments")
+    || document.querySelector(".mo-page");
+}
+function saveMomentsScroll(){
+  try{ const el = momentsScrollEl(); return el ? el.scrollTop : 0; }catch(e){ return 0; }
+}
+function restoreMomentsScroll(top){
+  try{
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        try{ const el = momentsScrollEl(); if(el) el.scrollTop = top||0; }catch(_){}
+      });
+    });
+  }catch(_){}
+}
+
 async function mfReactAsMe(momentId, comment, replyToName){
+  const sc = saveMomentsScroll();
   try{
     const body = {
       identity_id: mfSelfIdentity("human") || undefined,
@@ -5628,25 +5652,29 @@ async function mfReactAsMe(momentId, comment, replyToName){
       const why = r.reason || (r.decision && r.decision.reason) || "";
       showToast(MF_ERR[why] || (why === "already_liked" ? "已经赞过了" : "这条底下聊得够多了"));
     }
-    state.mfCmtOpen = null; state.mfCmtDraft = ""; state.mfReplyToName = "";
+    state.mfCmtOpen = null; state.mfCmtDraft = ""; state.mfReplyToName = ""; state.mfActionOpen = null;
     await mfLoadFeed(true);
   }catch(e){
     if(typeof showToast==="function") showToast(String((e && e.message) || e));
   }
   render();
+  restoreMomentsScroll(sc);
 }
 
 /** 删自己的公共动态（软删，推墓碑给好友） */
 async function mfDeleteMoment(momentId){
   if(!momentId) return;
+  const sc = saveMomentsScroll();
   try{
     await mfApi("/api/admin/moments/" + encodeURIComponent(momentId) + "/delete", { method:"POST", body:{} });
     if(typeof showToast==="function") showToast("已删除");
+    state.mfActionOpen = null;
     await mfLoadFeed(true);
   }catch(e){
     if(typeof showToast==="function") showToast(String((e && e.message) || e));
   }
   render();
+  restoreMomentsScroll(sc);
 }
 
 /** 设置好友某身份的回复模式：like_only / llm_decide / always_comment */
@@ -5907,9 +5935,12 @@ function renderMoments(){
               <div class="wx-meta">
                 <span class="wx-time">${when?momentAgo(when):""}</span>
                 <div class="wx-actions">
-                  <button type="button" class="wx-more" data-mf-like="${escAttr(it.moment_id)}" aria-label="赞">♥</button>
-                  <button type="button" class="wx-more" data-mf-cmt="${escAttr(it.moment_id)}" aria-label="评论">···</button>
-                  ${mine?`<button type="button" class="wx-more" data-mf-del="${escAttr(it.moment_id)}" aria-label="删除">删除</button>`:""}
+                  <button type="button" class="wx-more" data-mf-more="${escAttr(it.moment_id)}" aria-label="更多">···</button>
+                  <div class="wx-panel${state.mfActionOpen===it.moment_id?" show":""}" data-mf-panel="${escAttr(it.moment_id)}">
+                    <button type="button" data-mf-like="${escAttr(it.moment_id)}">赞</button>
+                    <button type="button" data-mf-cmt="${escAttr(it.moment_id)}">评论</button>
+                    ${mine?`<button type="button" data-mf-del="${escAttr(it.moment_id)}">删除</button>`:""}
+                  </div>
                 </div>
               </div>
               ${zone}
@@ -27853,13 +27884,26 @@ reader.readAsArrayBuffer(f);
   });
 
   // 公共圈：她自己点赞 / 评论（走 /api/admin/moments/:id/react，闸门在服务端）
+  $$("[data-mf-more]").forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute("data-mf-more");
+      state.mfActionOpen = (state.mfActionOpen === id) ? null : id;
+      render();
+    };
+  });
   $$("[data-mf-like]").forEach(b=>{
-    b.onclick = (e)=>{ e.stopPropagation(); mfReactAsMe(b.getAttribute("data-mf-like"), ""); };
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      state.mfActionOpen = null;
+      mfReactAsMe(b.getAttribute("data-mf-like"), "");
+    };
   });
   $$("[data-mf-cmt]").forEach(b=>{
     b.onclick = (e)=>{
       e.stopPropagation();
       const id = b.getAttribute("data-mf-cmt");
+      state.mfActionOpen = null;
       state.mfCmtOpen = (state.mfCmtOpen === id) ? null : id;
       state.mfCmtDraft = "";
       state.mfReplyToName = "";
