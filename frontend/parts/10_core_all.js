@@ -2596,6 +2596,7 @@ const state = {
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   // 朋友圈联邦：加好友走自己 VPS 的 /api/admin/*，adminToken 等于账号密码，默认空
   mfInvitePreview: null,
+  mfActionOpen: null,
   momentsFedConfig: LS.get("momentsFedConfig", { baseUrl: "", adminToken: "" }),
   // 消息拦截：他的回复先过一遍 VPS 涉黄检测，命中就原地变成系统封禁通知
   guardConfig: LS.get("guardConfig", { enabled: false, autoContinue: true, autoMax: 3 }),
@@ -27949,8 +27950,11 @@ reader.readAsArrayBuffer(f);
     if(page && !page._moBlankBound){
       page._moBlankBound = true;
       page.addEventListener("click", (e)=>{
-        if(e.target.closest && (e.target.closest("[data-mo-more]") || e.target.closest(".wx-panel") || e.target.closest(".mo-cmt-box"))) return;
-        if(state.momentActionOpen){ state.momentActionOpen = null; render(); }
+        if(e.target.closest && (e.target.closest("[data-mo-more]") || e.target.closest("[data-mf-more]") || e.target.closest(".wx-panel") || e.target.closest(".mo-cmt-box"))) return;
+        let closed = false;
+        if(state.momentActionOpen){ state.momentActionOpen = null; closed = true; }
+        if(state.mfActionOpen){ state.mfActionOpen = null; closed = true; }
+        if(closed) render();
       });
     }
   }
