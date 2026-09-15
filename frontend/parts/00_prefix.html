@@ -2038,6 +2038,15 @@
     .call-bub {
       max-width: 82%; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.5;
     }
+    /* 韩语通话的对照字幕：韩语原文在上、中文翻译在下。
+       韩语那行压小一号、降一点透明度，让眼睛先落在中文上——她是靠中文听懂的，
+       韩语那行是给耳朵对照用的。翻译还没流出来时只有韩语那行，不占位、不抖。 */
+    .cap-pair + .cap-pair { margin-top: 6px; }
+    .cap-ko {
+      font-size: 12px; opacity: .72; line-height: 1.45;
+      font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+    .cap-zh { font-size: 13px; line-height: 1.5; }
     .call-bub.them {
       align-self: flex-start; background: var(--card); border: 1px solid var(--border); color: var(--text);
       border-bottom-left-radius: 4px;
@@ -6830,6 +6839,219 @@
     }
     .bp-idx-st.on { color: var(--accent); }
     .bp-idx-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       微博壳 shell-weibo
+       ══════════════════════════════════════════════════════════════════════
+       和别的壳不一样的地方：这个壳改的是**导航结构**，不只是皮。
+       底栏五格（首页/功能/[发布]/消息/我的），「首页」落在公共圈信息流上。
+       页面一个都没重写 —— tab 重新映射到已有的 moments/home/chat/settings。
+
+       配色不在这里定：applyThemeVars 把 --bg/--card/--text 这些写在 body 的
+       **内联样式**上，优先级压过类选择器。所以整套配色走 JS 的 wbTheme()，
+       这里只写它盖不到的东西（布局、间距、那几个写死颜色的微信类）。
+
+       微博的识别度就三件事：白卡+灰缝的信息流、橙色、底部三件套横条。
+       ---------------------------------------------------------------- */
+    body.shell-weibo {
+      --wb-orange: #ff8140;
+      --wb-ground: #f2f2f5;
+      --wb-card: #ffffff;
+      --wb-ink: #333333;
+      --wb-sub: #939393;
+      --wb-line: #f0f0f0;
+      --wb-name: #333333;
+    }
+    body.shell-weibo.wb-dark {
+      --wb-ground: #0f0f0f;
+      --wb-card: #1b1b1d;
+      --wb-ink: #e6e6e6;
+      --wb-sub: #77777a;
+      --wb-line: #2a2a2c;
+      --wb-name: #e6e6e6;
+    }
+
+    /* ── 底栏：五格，中间是发布 ────────────────────────────────────────── */
+    body.shell-weibo .bottom-nav.wb-nav {
+      background: var(--wb-card);
+      border-top: 1px solid var(--wb-line);
+      box-shadow: none;
+      align-items: center;
+      padding-top: 2px;
+    }
+    body.shell-weibo .wb-nav button {
+      font-size: 10px; color: var(--wb-sub); gap: 2px;
+      padding: 5px 0 3px;
+    }
+    body.shell-weibo .wb-nav button .icon { font-size: 21px; }
+    body.shell-weibo .wb-nav button .icon i,
+    body.shell-weibo .wb-nav button .icon svg { width: 21px; height: 21px; }
+    body.shell-weibo .wb-nav button.active {
+      color: var(--wb-orange); font-weight: 600;
+    }
+    /* 中间那颗：不是 tab，不参与高亮，点了直接开公共圈的编辑器 */
+    body.shell-weibo .wb-nav .wb-plus {
+      flex: 0 0 auto; width: 40px; height: 40px; margin: 0 6px;
+      border-radius: 50%; background: var(--wb-orange); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; box-shadow: 0 2px 8px rgba(255,129,64,.35);
+    }
+    body.shell-weibo .wb-nav .wb-plus .icon { font-size: 22px; }
+    body.shell-weibo .wb-nav .wb-plus .icon i,
+    body.shell-weibo .wb-nav .wb-plus .icon svg { width: 22px; height: 22px; }
+    body.shell-weibo .wb-nav .wb-plus:active { transform: scale(.92); }
+
+    /* ── 信息流：贴边白卡 + 灰缝（微博的骨架就是这个）────────────────── */
+    body.shell-weibo .page.mo-page.wx-moments {
+      padding: 0 0 78px;
+      background: var(--wb-ground);
+    }
+    body.shell-weibo .wx-feed { background: var(--wb-ground); }
+    body.shell-weibo .wx-post {
+      background: var(--wb-card);
+      border-bottom: none;
+      margin-bottom: 8px;            /* 卡片之间的灰缝 */
+      padding: 14px 14px 6px;
+    }
+    body.shell-weibo .wx-post:last-child { margin-bottom: 0; }
+    /* 头像：微博是圆的，微信是圆角方 */
+    body.shell-weibo .wx-av,
+    body.shell-weibo .wx-av img,
+    body.shell-weibo .wx-av .bubble-avatar,
+    body.shell-weibo .wx-av > * {
+      border-radius: 50% !important;
+    }
+    body.shell-weibo .wx-av { width: 40px; height: 40px; }
+    body.shell-weibo .wx-author {
+      color: var(--wb-name); font-size: 15px; font-weight: 600; margin-bottom: 1px;
+    }
+    body.shell-weibo .wx-text {
+      color: var(--wb-ink); font-size: 16px; line-height: 1.65; margin-top: 2px;
+    }
+    /* 时间挪到昵称底下（微博是两行头），并且不跟 ··· 抢同一行 */
+    body.shell-weibo .wx-meta { margin-top: 0; }
+    body.shell-weibo .wx-time { color: var(--wb-sub); font-size: 12px; }
+
+    /* ── 三件套：把「···」那个隐藏面板变成常驻横条 ──────────────────────
+       按钮本身一个都没改（还是 data-mf-like / data-mf-cmt / data-mf-del），
+       所以点击逻辑、服务端闸门、删除确认全是原来那套 —— 这里只换了它的长相。 */
+    body.shell-weibo .wx-more { display: none; }
+    body.shell-weibo .wx-actions { position: static; flex-shrink: 1; width: 100%; }
+    body.shell-weibo .wx-panel {
+      display: flex !important;
+      position: static;
+      transform: none;
+      margin: 8px -14px 0;
+      padding: 0;
+      background: transparent;
+      box-shadow: none;
+      border-top: 1px solid var(--wb-line);
+      border-radius: 0;
+      max-width: none;
+      white-space: normal;
+    }
+    body.shell-weibo .wx-panel button {
+      flex: 1; color: var(--wb-sub); font-size: 13px;
+      padding: 10px 0; text-align: center;
+    }
+    body.shell-weibo .wx-panel button + button {
+      border-left: 1px solid var(--wb-line);
+    }
+    body.shell-weibo .wx-panel button:active { background: var(--wb-line); opacity: 1; }
+    body.shell-weibo .wx-panel button[data-mf-del] { color: #e6162d; }
+
+    /* ── 赞 / 评论区：微博是浅灰块贴在正文下面，不留圆角 ──────────────── */
+    body.shell-weibo .wx-zone {
+      background: color-mix(in srgb, var(--wb-ground) 88%, var(--wb-card));
+      border-radius: 4px; margin-top: 10px; font-size: 13.5px;
+    }
+    body.shell-weibo .wx-likes,
+    body.shell-weibo .wx-likes b,
+    body.shell-weibo .wx-likes .wx-heart,
+    body.shell-weibo .wx-cmt .wx-cn,
+    body.shell-weibo .wx-reply-to { color: var(--wb-orange); }
+    body.shell-weibo .wx-cmt { color: var(--wb-ink); }
+    body.shell-weibo .wx-cmt-box button { background: var(--wb-orange); }
+    /* 评论输入框原来写死 #fafafa 底 + #111 字：夜间壳下就是一条白底黑字，
+       和整页反过来。图片占位的 #f2f2f2 同理，没加载完会亮一块。 */
+    body.shell-weibo .wx-cmt-box input {
+      background: color-mix(in srgb, var(--wb-ground) 80%, var(--wb-card));
+      color: var(--wb-ink); border-color: var(--wb-line);
+    }
+    body.shell-weibo .wx-img {
+      background: color-mix(in srgb, var(--wb-ground) 80%, var(--wb-card));
+    }
+
+    /* ── 顶部：微信那张大封面压成一条工具栏 ────────────────────────────
+       不隐藏 —— 「好友」「发动态」「换封面」三个按钮都在里面，
+       隐藏了功能就没了入口。压扁成 44px 的白条，就是微博的顶栏。 */
+    body.shell-weibo .wx-cover {
+      height: 46px !important; min-height: 0; background-image: none !important;
+      background: var(--wb-card); border-bottom: 1px solid var(--wb-line);
+      display: flex; align-items: center; padding: 0 12px;
+    }
+    body.shell-weibo .wx-cover-shade { display: none; }
+    body.shell-weibo .wx-cover-avatar {
+      position: static; width: 30px; height: 30px; margin: 0 8px 0 0;
+      border: none; border-radius: 50%; box-shadow: none; flex-shrink: 0;
+    }
+    body.shell-weibo .wx-cover-avatar > *,
+    body.shell-weibo .wx-cover-avatar img { border-radius: 50% !important; }
+    body.shell-weibo .wx-cover-name {
+      position: static; color: var(--wb-ink); font-size: 16px; font-weight: 700;
+      text-shadow: none; margin: 0; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.shell-weibo .wx-friends,
+    body.shell-weibo .wx-compose,
+    body.shell-weibo .wx-cover-btn {
+      position: static; background: transparent; color: var(--wb-sub);
+      width: 32px; height: 32px; box-shadow: none; border: none; flex-shrink: 0;
+    }
+    body.shell-weibo .wx-friends:active,
+    body.shell-weibo .wx-compose:active,
+    body.shell-weibo .wx-cover-btn:active { color: var(--wb-orange); }
+
+    /* ── 公共/私人切换：微博式下划线 tab ──────────────────────────────── */
+    body.shell-weibo .wx-tabs {
+      background: var(--wb-card); border-bottom: 1px solid var(--wb-line);
+      padding: 0; gap: 0;
+    }
+    body.shell-weibo .wx-tab {
+      flex: 1; background: transparent; border: none; border-radius: 0;
+      color: var(--wb-sub); font-size: 15px; font-weight: 500; padding: 11px 0;
+      position: relative;
+    }
+    body.shell-weibo .wx-tab.active {
+      color: var(--wb-ink); font-weight: 700; background: transparent;
+    }
+    body.shell-weibo .wx-tab.active::after {
+      content: ""; position: absolute; left: 50%; bottom: 0;
+      transform: translateX(-50%);
+      width: 26px; height: 3px; border-radius: 2px; background: var(--wb-orange);
+    }
+
+    /* ── 编辑器：微博的发布框是白底大字 ────────────────────────────────── */
+    body.shell-weibo .wx-composer {
+      background: var(--wb-card); margin-bottom: 8px; padding: 12px 14px;
+      border-radius: 0; border: none;
+    }
+    body.shell-weibo .wx-composer textarea {
+      font-size: 16px; line-height: 1.6; color: var(--wb-ink); min-height: 84px;
+    }
+    body.shell-weibo .mo-post {
+      background: var(--wb-orange); color: #fff; border-radius: 16px;
+      padding: 6px 18px; font-weight: 600;
+    }
+
+    /* ── 空状态 / 刷新条跟着灰底走，别留一块死白 ───────────────────────── */
+    body.shell-weibo .wx-empty {
+      background: var(--wb-card); color: var(--wb-sub); margin-bottom: 8px;
+    }
+    body.shell-weibo .mf-refresh-bar {
+      background: var(--wb-card); border-bottom: 1px solid var(--wb-line);
+      margin-bottom: 8px; padding: 8px 0; text-align: center;
+    }
 
   </style>
 

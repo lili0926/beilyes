@@ -3042,6 +3042,7 @@ if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
  *  （外观页里显示色卡/预览的地方读的是 THEMES[state.theme]，不受影响。） */
 function T(){
   if((state.uiShell||"")==="blueprint") return bpTheme();
+  if((state.uiShell||"")==="weibo") return wbTheme();
   return THEMES[state.theme]||THEMES["桃气浅春"];
 }
 // 旧布料名 → 新蕾丝（兼容 localStorage 里存过的旧选项）
@@ -4074,12 +4075,17 @@ function applyThemeVars(){
   else if(uf==="noto-kr") document.body.classList.add("font-noto-kr");
   else if(uf==="noto-sc") document.body.classList.add("font-noto-sc");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","bp-diazo","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","shell-weibo","wb-dark","bp-diazo","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
   else if(sh === "claude") document.body.classList.add("shell-claude");
   else if(sh === "korean") document.body.classList.add("shell-korean");
+  else if(sh === "weibo"){
+    document.body.classList.add("shell-weibo");
+    // 夜间那套灰底跟着配色主题的明暗走，和蓝晒的正负片同一个口径
+    if(wbIsDark()) document.body.classList.add("wb-dark");
+  }
   else if(sh === "blueprint"){
     document.body.classList.add("shell-blueprint");
     // 蓝晒（蓝底白线）/ 白图（浅底蓝线）是同一张图的正负片。
@@ -6352,6 +6358,22 @@ function renderMomentsFriends(){
 function renderBottomNav(){
   if(state.subPage) return "";
   if(state.tab==="chat") return "";
+  // 微博壳：五格 —— 首页 / 功能 / [发布] / 消息 / 我的。
+  // 中间那颗是发公共动态，不是 tab，所以没有 data-tab、也不参与高亮。
+  if((state.uiShell||"") === "weibo"){
+    const cur = wbCurrentTabKey();
+    const cell = (it)=>`
+      <button data-wb-tab="${it.key}" class="${cur===it.key?"active":""}">
+        <span class="icon"><i data-lucide="${it.icon}"></i></span><span>${it.label}</span>
+      </button>`;
+    return `<div class="bottom-nav wb-nav">
+      ${WB_TABS.slice(0,2).map(cell).join("")}
+      <button type="button" id="wb-compose" class="wb-plus" aria-label="发布">
+        <span class="icon"><i data-lucide="plus"></i></span>
+      </button>
+      ${WB_TABS.slice(2).map(cell).join("")}
+    </div>`;
+  }
   const kr = (state.uiShell || "") === "korean";
   const items = kr ? [
     {key:"home",icon:"home",label:"主页"},
@@ -7152,6 +7174,87 @@ function renderHomeFeat(){
 // ═══ 蓝晒壳（blueprint）· 首页 = 宫殿平面图 ═══════════════════════════════
 // 蓝晒（暗，蓝底白线）/ 白图（亮，浅底蓝线）是同一张图的正负片。
 // 一键互换，**不跟主题明暗、也不跟昼夜走** —— 开关在首页图签和外观页各有一个。
+/* ─── 微博壳 ──────────────────────────────────────────────────────────────────
+ * 不是换个配色，是换一套导航：底栏变成 首页 / 功能 / [发布] / 消息 / 我的，
+ * 「首页」直接落在公共圈信息流上。页面本身一个都没重写 —— 四个 tab 重新映射到
+ * 已有的 moments / home / chat / settings，所以功能、暗号、持久化全是原来那套。
+ *
+ * 配色走 T()（和蓝晒同一条路）：applyThemeVars 把变量写在 body 内联样式上，
+ * 优先级压过任何 body.shell-xxx 的 CSS 类选择器 —— 只写 CSS 是盖不住的。 */
+function wbIsDark(){
+  // 跟着当前配色主题的明暗走，不新加设置项（和蓝晒那条同样的判断口径）。
+  try{
+    const bg = ((THEMES[state.theme]||{}).bg) || "#ffffff";
+    let h = String(bg).trim().replace("#","");
+    if(h.length===3) h = h.split("").map(c=>c+c).join("");
+    if(h.length!==6) return false;
+    const n = parseInt(h,16);
+    const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    return (0.2126*r + 0.7152*g + 0.0722*b) < 128;
+  }catch(e){ return false; }
+}
+/** 微博自带的整套配色。函数声明（不是 const），避免被 T() 提前调到时 TDZ。 */
+function wbTheme(){
+  return wbIsDark()
+    ? { bg:"#0F0F0F", card:"#1B1B1D", accent:"#FF8140", accent2:"#EB7350",
+        text:"#E6E6E6", sub:"#77777A", border:"#2A2A2C",
+        bubble_me:"#3A2A20", bubble_them:"#1B1B1D" }
+    : { bg:"#F2F2F5", card:"#FFFFFF", accent:"#FF8140", accent2:"#EB7350",
+        text:"#333333", sub:"#939393", border:"#EBEBEB",
+        bubble_me:"#FFE8DC", bubble_them:"#FFFFFF" };
+}
+/** 微博壳下四个 tab 的落点。「首页」= 公共圈信息流（她原话：首页就是朋友圈）。 */
+const WB_TABS = [
+  { key:"home",     tab:"moments",  scope:"public",  icon:"house",          label:"首页" },
+  { key:"feature",  tab:"home",     page:2,          icon:"layout-grid",    label:"功能" },
+  { key:"msg",      tab:"chat",                      icon:"message-square", label:"消息" },
+  { key:"me",       tab:"settings",                  icon:"user",           label:"我的" },
+];
+
+/** 当前落在微博的哪个 tab 上（用来高亮）。「首页」只认公共圈 ——
+ *  在私人圈时不高亮首页，否则她分不清自己在哪一份时间线上。 */
+function wbCurrentTabKey(){
+  const t = state.tab;
+  if(t === "moments") return state.momentsScope === "public" ? "home" : "";
+  if(t === "home") return "feature";
+  if(t === "chat") return "msg";
+  if(t === "settings") return "me";
+  return "";
+}
+
+function wbGoTab(key){
+  const it = WB_TABS.find(x=>x.key === key);
+  if(!it) return;
+  if(state.tab === "chat" && typeof saveActiveThread === "function"){
+    try{ saveActiveThread(); }catch(e){}
+  }
+  // 进聊天要把当前线程装进 state.messages —— 底栏那条委托里做的是同一件事，
+  // 漏了这段聊天页就是空的（消息在 chatThreads 里，渲染读的是 state.messages）
+  if(it.tab === "chat" && state.tab !== "chat"){
+    const tg = state.chatTarget || "a1";
+    const th = (state.chatThreads && state.chatThreads[tg]) || { messages:[], pendingUser:[] };
+    state.messages = th.messages || [];
+    state.pendingUser = th.pendingUser || [];
+    state.needChatScroll = true;
+  }
+  state.tab = it.tab;
+  state.subPage = null;
+  if(it.scope){
+    state.momentsScope = it.scope;
+    state.momentActionOpen = null;
+    state.mfCmtOpen = null;
+  }
+  // 「功能」是首页三页滑动里的第 2 页，不是独立页面
+  if(it.page != null && typeof setHomePage === "function"){
+    try{ setHomePage(it.page); return; }catch(e){}   // setHomePage 自己会 render
+  }
+  render();
+  // 切到公共圈刷一次；没拉过的那次 bindEvents 里也会兜住，这里是「已经有数据时也刷新」
+  if(it.scope === "public" && state.mfFeed){
+    try{ if(typeof mfLoadFeed === "function") mfLoadFeed(true); }catch(e){}
+  }
+}
+
 function bpIsDiazo(){ return !!state.bpDiazo; }
 /** 蓝晒壳自带的整套配色。函数声明（不是 const），避免被 T() 提前调到时 TDZ。 */
 function bpTheme(){
@@ -12357,8 +12460,12 @@ function readBedtimeRadio(){
   }
   const title = `${book?book.title:"书"} · ${ch.title||("第"+(idx+1)+"页")}`;
   const cfg = state.callConfig || {};
-  // 有 TTS 就放声读
-  if(cfg.ttsEnabled && cfg.minimaxKey && typeof callSpeak === "function"){
+  // 有 TTS 就放声读。
+  // 这里原来卡的是 `cfg.minimaxKey` —— 而服务端持 Key 时这一格本来就是空的
+  // （ttsProxy 指向 VPS 的 /tts/minimax，App 不需要填 Key），所以睡前电台
+  // 一直是**不出声**的，而且没有任何提示。判断口径要和 callSpeak 一致：有出口就行。
+  if(cfg.ttsEnabled && cfg.ttsProvider !== "none"
+     && (cfg.minimaxKey || ttsProxyBase()) && typeof callSpeak === "function"){
     callSpeak(passage).then(()=>{ if(state.subPage==="read") render(); }).catch(()=>{});
   }
   // 聊天留痕
@@ -17124,6 +17231,76 @@ function ttsProxyBase(){
     || (typeof wakeBase === "function" ? (wakeBase()||"") : "");
   return String(p||"").replace(/\/$/,"");
 }
+/** 电话 TTS 的音频规格。原来写的是 32kHz / 128kbps —— 那是音乐的规格。
+ *  用在人声上只是让回给手机的包白白大三倍：实测一段四句话的回复，
+ *  128k/32kHz 是 194KB，64k/24kHz 约 80KB，32k/24kHz 只要 47KB。
+ *  而且服务端 output_format 是 "hex"，JSON 里那串十六进制**又是二进制的两倍**，
+ *  所以这个数字对她手机上的等待时间是双倍生效的。
+ *  64k/24kHz 对人声听感基本无损。嫌慢还能再降到 32000 —— 电话本身才 8kHz。 */
+const TTS_BITRATE = 64000;
+const TTS_SAMPLE_RATE = 24000;
+
+/** ElevenLabs 合成。走网关的 /tts/elevenlabs。
+ *  **服务端回的是二进制 audio/mpeg，不是 JSON** —— MiniMax 那口回的是 JSON 里的
+ *  十六进制字符串，体积是音频本身的两倍，白白多传一倍到她手机。这口没背那个债。
+ *  她那把 key 是 free 档（一个月 10000 字符），打满时网关回 402；
+ *  这里抛一个带 __ttsFallback 标记的错，上面那层据此换回 MiniMax ——
+ *  额度满了该是「换个声音继续说」，不是一通哑掉的电话。 */
+async function elevenSynthesize(text){
+  const cfg = state.callConfig || {};
+  const proxy = ttsProxyBase();
+  if(!proxy) throw new Error("ElevenLabs 要走网关：电话页的「TTS 代理」那格不能空");
+  const clean = String(text||"").replace(/\s+/g," ").trim().slice(0, 2000);
+  if(!clean) return null;
+
+  const headers = { "Content-Type": "application/json" };
+  const tok = callAuthToken();
+  if(tok) headers["X-Auth-Token"] = tok;
+  // 「用的时候回落」，别指望默认值 —— 老存档里的 callConfig 是整份覆盖默认值的，
+  // 后加的这两格在她机器上是 undefined（ttsProxy 当年就是这么空掉的）。
+  // 两格都空就用服务端 .env 里的那套。
+  const body = { text: clean };
+  const v = String(cfg.elevenVoice || "").trim(); if(v) body.voice_id = v;
+  const m = String(cfg.elevenModel || "").trim(); if(m) body.model_id = m;
+
+  const res = await fetch(proxy + "/tts/elevenlabs", {
+    method: "POST", headers, body: JSON.stringify(body),
+  });
+  if(res.status === 402){
+    const e = new Error("ElevenLabs 额度用完了");
+    e.__ttsFallback = true;
+    throw e;
+  }
+  if(res.status === 401 || res.status === 403){
+    throw new Error("网关拒绝（401）：设置 → 主动消息 里的 Token 没填或不对。");
+  }
+  if(!res.ok){
+    const t = await res.text().catch(()=>"");
+    throw new Error("ElevenLabs HTTP " + res.status + " " + t.slice(0,120));
+  }
+  const blob = await res.blob();
+  if(!blob || !blob.size) throw new Error("ElevenLabs 没回音频");
+  return { type:"blob", value: blob };
+}
+
+/** TTS 总入口：按 provider 分发。所有要出声的地方都走这里，别再直接调某一家。 */
+async function ttsSynthesize(text){
+  const cfg = state.callConfig || {};
+  if(!cfg.ttsEnabled || cfg.ttsProvider === "none") return null;
+  if(cfg.ttsProvider === "elevenlabs"){
+    try{
+      return await elevenSynthesize(text);
+    }catch(e){
+      if(!e || !e.__ttsFallback) throw e;
+      // 额度打满：从这句起改用 MiniMax，并且把原因写出来 ——
+      // 不写的话她只会发现「声音突然变了」，不知道为什么
+      try{ ensureCallSession().ttsError = "ElevenLabs 额度用完，已换回 MiniMax"; }catch(_){}
+      return await minimaxSynthesize(text);
+    }
+  }
+  return await minimaxSynthesize(text);
+}
+
 async function minimaxSynthesize(text){
   const cfg = state.callConfig || {};
   if(!cfg.ttsEnabled || cfg.ttsProvider === "none") return null;
@@ -17138,7 +17315,9 @@ async function minimaxSynthesize(text){
     model: cfg.minimaxModel || "speech-2.6-turbo",
     text: cleanText,
     stream: false,
-    language_boost: "Chinese",
+    // 跟着通话语言走。写死 Chinese 的话，韩语模式下它会拿中文的音系去念韩文 —— 很怪。
+    // （中文音色念韩语本来就不自然，韩语更该配 ElevenLabs 那把。）
+    language_boost: callLang() === "ko" ? "Korean" : "Chinese",
     output_format: "hex",
     voice_setting: {
       voice_id: cfg.minimaxVoice || "female-shaonv",
@@ -17147,8 +17326,8 @@ async function minimaxSynthesize(text){
       pitch: 0,
     },
     audio_setting: {
-      sample_rate: 32000,
-      bitrate: 128000,
+      sample_rate: TTS_SAMPLE_RATE,
+      bitrate: TTS_BITRATE,
       format: "mp3",
       channel: 1,
     },
@@ -17211,7 +17390,7 @@ async function callSpeak(text){
     return;
   }
   try{
-    const result = await minimaxSynthesize(text);
+    const result = await ttsSynthesize(text);
     if(!result) return;
     const a = ensureCallAudio();
     if(a._objectUrl){ try{ URL.revokeObjectURL(a._objectUrl); }catch(e){} a._objectUrl=null; }
@@ -17233,6 +17412,174 @@ async function callSpeak(text){
     s.ttsError = String(e.message||e).slice(0,160);
     // 不打断通话，仅在界面提示
   }
+}
+
+/* ─── 分句流式播报 ────────────────────────────────────────────────────────────
+ * 原来这条链是**全串行**的：等模型把整段话生成完 → 等整段音频合成完 → 才出第一声。
+ * 实测（2026-09-15，VPS 网关）一句「嗯，我在。」合成 0.75 秒、四句话的整段 1.16 秒，
+ * 模型那头还要几秒 —— 她说完话要干等五六秒才听见人声。
+ *
+ * 改成流水线：模型流式吐字 → 遇到句末标点切一句 → 立刻送去合成 → 播第一句的时候
+ * 后面几句在并行合成。首声延迟 ≈ 第一句的模型时间 + 第一句的合成时间，与整段多长无关。
+ *
+ * 两个必须守住的点：
+ * 1. 合成是乱序回来的，**播放必须严格按序** —— 所以只认队首那一条，没就绪就等着，
+ *    不能跳过去播后面的（跳了就是她听见后半句先出来）。
+ * 2. `gen` 是代数。挂断或开新一轮时 ++，在途的合成结果回来发现代数变了就丢掉，
+ *    否则上一通电话的尾巴会插进这一通里。
+ */
+const __callTts = { items: [], playIdx: 0, playing: false, gen: 0 };
+
+function callTtsReset(){
+  __callTts.gen++;
+  __callTts.items.forEach(it=>{
+    if(it && it.url && !it.external){ try{ URL.revokeObjectURL(it.url); }catch(e){} }
+  });
+  __callTts.items = [];
+  __callTts.playIdx = 0;
+  __callTts.playing = false;
+  try{
+    const a = document.getElementById("call-tts-audio");
+    if(a){ a.pause(); a.onended = null; a.onerror = null; a.removeAttribute("src"); a.load(); }
+  }catch(e){}
+}
+
+/** 把一句话排进播报队列，并**立刻**发起合成（不 await —— 后面几句要并行合成）。 */
+function callTtsPush(text){
+  // 暗号不能念出来（⟪挂断⟫ 这类）。流式切句可能把暗号切在句中，这里统一擦一道。
+  const t = String(text||"")
+    .replace(/[⟪《【\[][^⟫》】\]]{0,20}[⟫》】\]]/g, "")
+    .replace(/\s+/g, " ").trim();
+  if(!t) return;
+  const cfg = state.callConfig || {};
+  if(!cfg.ttsEnabled) return;
+  if(!cfg.minimaxKey && !ttsProxyBase()) return;
+
+  const gen = __callTts.gen;
+  const idx = __callTts.items.length;
+  __callTts.items.push({ status:"pending", url:null, external:false, text:t });
+  ttsSynthesize(t).then(result=>{
+    if(gen !== __callTts.gen) return;            // 这通电话已经过去了
+    const it = __callTts.items[idx];
+    if(!it) return;
+    if(!result){ it.status = "failed"; }
+    else if(result.type === "url"){ it.status = "ready"; it.url = result.value; it.external = true; }
+    else { it.status = "ready"; it.url = URL.createObjectURL(result.value); }
+    callTtsPump();
+  }).catch(e=>{
+    if(gen !== __callTts.gen) return;
+    const it = __callTts.items[idx];
+    if(it) it.status = "failed";
+    // 一句挂了不该让整通电话哑掉，但要让她看见原因（callSpeak 那套同理）
+    try{ ensureCallSession().ttsError = String(e && e.message || e).slice(0,160); }catch(_){}
+    callTtsPump();
+  });
+}
+
+/** 按序播：只看队首，没就绪就等（合成回调会再叫一次）。 */
+function callTtsPump(){
+  if(__callTts.playing) return;
+  const it = __callTts.items[__callTts.playIdx];
+  if(!it) return;
+  if(it.status === "pending") return;             // 等它，别跳过去播后面的
+  if(it.status === "failed"){ __callTts.playIdx++; callTtsPump(); return; }
+
+  const gen = __callTts.gen;
+  const a = ensureCallAudio();
+  __callTts.playing = true;
+  const done = ()=>{
+    if(gen !== __callTts.gen) return;
+    __callTts.playing = false;
+    if(it.url && !it.external){ try{ URL.revokeObjectURL(it.url); }catch(e){} it.url = null; }
+    __callTts.playIdx++;
+    callTtsPump();
+  };
+  a.onended = done;
+  a.onerror = done;
+  // 轻声模式：她语气偏轻/气音时回话音量减半（和 callSpeak 里那条同源）
+  const _tone = (ensureCallSession().lastVoiceMeta || {}).tone || "";
+  a.volume = /轻|气音|耳语|放低|小声|呼吸/.test(_tone) ? 0.5 : 1;
+  a.src = it.url;
+  const p = a.play();
+  if(p && p.catch) p.catch(()=> done());
+}
+
+/** 流式分句器：喂增量文本，吐出能立刻送去合成的整句。
+ *  第一句门槛故意压低（4 字）—— 首声早一秒是她唯一真能感觉到的事。
+ *  后面几句门槛 6 字：一次 TTS 的固定开销实测约 0.45 秒，而 6 个字念出来要一秒多，
+ *  所以这种句子**值得**单独切（切了流水线更顺）；真正不值的是「嗯。」「好。」
+ *  那种两三个字的碎片 —— 播放时间还不够填上一次调用的开销，攒着一起说。
+ *  一句拖太长（28 字还没遇到句号）就在逗号处切，不然又变成干等一整段长句。 */
+function __callSplitter(){
+  let buf = "", n = 0;
+  const END = /[。！？!?…~～]/;
+  const SOFT = /[，,、；;：:]/;
+  return {
+    feed(chunk){
+      const out = [];
+      for(const ch of String(chunk||"")){
+        buf += ch;
+        const min = n === 0 ? 4 : 6;
+        const len = buf.trim().length;
+        if(END.test(ch) && len >= min){ out.push(buf.trim()); buf = ""; n++; }
+        else if(ch === "\n" && len >= min){ out.push(buf.trim()); buf = ""; n++; }
+        else if(SOFT.test(ch) && len >= 28){ out.push(buf.trim()); buf = ""; n++; }
+      }
+      return out;
+    },
+    flush(){ const t = buf.trim(); buf = ""; if(t) n++; return t ? [t] : []; },
+  };
+}
+
+/** 韩语模式的流式解析器。约定模型每句输出 `한국어｜中文`，一句一行。
+ *
+ * **韩语在遇到分隔符那一刻就送去合成，不等中文翻译写完** —— 所以韩语模式的
+ * 首声延迟和中文模式是一样的，翻译是在他已经开口之后才落到屏幕上的。
+ *
+ * 模型会忘记写翻译（直接换行）。那种情况韩语照说、中文那行留空，不卡住 ——
+ * 宁可少一行字幕，也不能让他哑在那儿等一个不会来的翻译。 */
+function __callKoSplitter(){
+  let buf = "", ko = "", mode = "ko";
+  const SEP = /[｜|│/]/;
+  return {
+    feed(chunk){
+      const speak = [], lines = [];
+      for(const ch of String(chunk||"")){
+        if(mode === "ko"){
+          if(SEP.test(ch)){
+            ko = buf.trim(); buf = "";
+            if(ko) speak.push(ko);       // ← 立刻开口，翻译还没写呢
+            mode = "zh";
+          } else if(ch === "\n"){
+            const k = buf.trim(); buf = "";
+            if(k){ speak.push(k); lines.push({ ko:k, zh:"" }); }
+          } else buf += ch;
+        } else {
+          if(ch === "\n"){
+            lines.push({ ko, zh: buf.trim() });
+            buf = ""; ko = ""; mode = "ko";
+          } else buf += ch;
+        }
+      }
+      return { speak, lines };
+    },
+    flush(){
+      const speak = [], lines = [];
+      if(mode === "ko"){
+        const k = buf.trim();
+        if(k){ speak.push(k); lines.push({ ko:k, zh:"" }); }
+      } else if(ko || buf.trim()){
+        lines.push({ ko, zh: buf.trim() });
+      }
+      buf = ""; ko = ""; mode = "ko";
+      return { speak, lines };
+    },
+  };
+}
+
+/** 通话说哪国话。默认中文；「用的时候回落」，别指望老存档里有这一格。 */
+function callLang(){
+  return ((state.callConfig || {}).callLang === "ko") ? "ko" : "zh";
 }
 
 /** 「试听一句」：callSpeak 自己吞掉异常（不打断通话），所以这里靠 session.ttsError 判断成败，
@@ -17364,9 +17711,14 @@ function aicallPushCap(msg){
     source,
     time: msg.time || new Date().toISOString(),
   });
-  // 电话来的 assistant 可触发 TTS
-  if(role === "them" && source === "call" && typeof callSpeak === "function"){
-    try{ callSpeak(content).catch(()=>{}); }catch(e){}
+  // 电话来的 assistant 可触发 TTS。走播报队列而不是直接 callSpeak：
+  // 旧写法连着推两条时会互相打断（同一个 <audio>，后一条 src= 直接盖掉前一条，
+  // 上一句只播了半截就没了）。队列是一条接一条播完的，顺带也享受分句流式。
+  if(role === "them" && source === "call"){
+    try{
+      const sp = __callSplitter();
+      sp.feed(content).concat(sp.flush()).forEach(sent=> callTtsPush(sent));
+    }catch(e){}
   }
   if(state.subPage === "phone") render();
 }
@@ -17514,6 +17866,17 @@ function renderPhone(){
     const st = { cls:"live", text:"通话中 · 语音" };
     const caps = (s.caps||[]).map(c=>{
       const src = c.source ? `<div class="src-tag">${esc(typeof aicallSourceLabel==="function"?aicallSourceLabel(c.source):c.source)}</div>` : "";
+      // 韩语模式：韩语原文在上、中文翻译在下（她挑的）。翻译还没流出来时只显韩语，
+      // 不占位、不抖 —— 他已经在说那句了，字慢半拍是正常的。
+      if(Array.isArray(c.lines) && c.lines.length){
+        const body = c.lines.map(l=>
+          `<div class="cap-pair">`
+          + (l.ko ? `<div class="cap-ko">${esc(l.ko)}</div>` : "")
+          + (l.zh ? `<div class="cap-zh">${esc(l.zh)}</div>` : "")
+          + `</div>`
+        ).join("");
+        return `<div class="call-bub ${c.who}">${src}${body}</div>`;
+      }
       return `<div class="call-bub ${c.who}">${src}<div>${esc(c.text)}</div></div>`;
     }).join("");
     body = `
@@ -17569,7 +17932,7 @@ function renderPhone(){
             <div style="font-size:10px;color:var(--sub);margin-top:4px">${r.time?formatTime(r.time):""}${r.reason?" · "+esc(r.reason):""}</div>
           </div>
         `).join("") : `<div class="empty-state">还没有通话记录</div>`}
-        <div class="feat-section-label"><i data-lucide="volume-2"></i> MiniMax 语音（TTS）</div>
+        <div class="feat-section-label"><i data-lucide="volume-2"></i> 语音合成（TTS）</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span class="setting-label">通话时播放 TA 的声音</span>
@@ -17577,6 +17940,26 @@ function renderPhone(){
               <div class="toggle-knob" style="left:${cfg.ttsEnabled!==false?"18px":"2px"}"></div>
             </div>
           </div>
+          <span class="setting-label">引擎</span>
+          <div class="sw-chip-row" style="margin:4px 0 4px">
+            <button type="button" class="sw-chip${(cfg.ttsProvider||"minimax")==="minimax"?" on":""}" data-tts-prov="minimax">MiniMax</button>
+            <button type="button" class="sw-chip${cfg.ttsProvider==="elevenlabs"?" on":""}" data-tts-prov="elevenlabs">ElevenLabs</button>
+          </div>
+          <span class="setting-label" style="margin-top:8px">通话语言</span>
+          <div class="sw-chip-row" style="margin:4px 0 4px">
+            <button type="button" class="sw-chip${callLang()==="zh"?" on":""}" data-call-lang="zh">中文</button>
+            <button type="button" class="sw-chip${callLang()==="ko"?" on":""}" data-call-lang="ko">韩语</button>
+          </div>
+          ${cfg.ttsProvider === "elevenlabs" ? `
+          <span class="setting-label" style="margin-top:8px">音色 voice_id</span>
+          <input id="call-eleven-voice" value="${escAttr(cfg.elevenVoice||"")}" placeholder="留空用服务端那把"/>
+          <span class="setting-label" style="margin-top:8px">模型</span>
+          <select id="call-eleven-model" style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);font-size:13px">
+            ${[["","服务端默认（flash v2.5）"],["eleven_flash_v2_5","eleven_flash_v2_5"],["eleven_turbo_v2_5","eleven_turbo_v2_5"],["eleven_multilingual_v2","eleven_multilingual_v2"]].map(([v,t])=>
+              `<option value="${v}" ${(cfg.elevenModel||"")===v?"selected":""}>${t}</option>`
+            ).join("")}
+          </select>
+          ` : `
           <span class="setting-label">MiniMax API Key</span>
           <input type="password" id="call-minimax-key" value="${escAttr(cfg.minimaxKey||"")}" placeholder="Bearer 密钥"/>
           <span class="setting-label" style="margin-top:8px">GroupId（可选）</span>
@@ -17596,6 +17979,7 @@ function renderPhone(){
             <option value="https://api.minimax.io/v1/t2a_v2" ${(cfg.minimaxEndpoint||"").includes("minimax.io")&&!(cfg.minimaxEndpoint||"").includes("minimaxi")?"selected":""}>国际 · api.minimax.io</option>
             <option value="https://api-uw.minimax.io/v1/t2a_v2" ${(cfg.minimaxEndpoint||"").includes("api-uw")?"selected":""}>美西 · api-uw.minimax.io</option>
           </select>
+          `}
           <span class="setting-label" style="margin-top:8px">TTS 代理（走后端，默认已指向 VPS）</span>
           <input id="call-tts-proxy" value="${escAttr(cfg.ttsProxy||"")}" placeholder="如 http://115.29.237.172:9090 → 请求 /tts/minimax"/>
           
@@ -17738,6 +18122,19 @@ async function callAiTurn(userText){
   const meta = s.lastVoiceMeta || {};
   const metaLine = (meta.emotion||meta.tone) ? `\n用户语音线索：情绪=${meta.emotion||"?"}，语气=${meta.tone||"?"}` : "";
   let prompt, ccOpts = null, sys = null;
+  const isKo = callLang() === "ko";
+  // 韩语模式的输出约定。分隔符用全角「｜」——它不在正常中韩文本里出现，
+  // 不会和正文抢；而每句一行是为了流式能按行收尾。
+  // 「先韩语后翻译」的顺序是有原因的：解析器一见到分隔符就把韩语送去合成了，
+  // 翻译是在他已经开口之后才写出来的，所以这个顺序**直接决定首声快慢**，不能调换。
+  const KO_RULE = `【这通电话说韩语】
+- 每句写成一行：韩语｜中文翻译。分隔符用全角竖线「｜」。
+- 先写韩语，再写翻译，顺序不能反。
+- 一次 1-3 行，口语，短句。除了这个格式不要写别的（不要注音、不要解释、不要引号）。
+例：
+응, 나 여기 있어.｜嗯，我在。
+오늘 어땠어?｜今天怎么样？`;
+
   if(ag.channel === "cc"){
     // cc 是一条长会话：他自己就记得刚才说过什么，再把 caps 喂一遍纯属重复；
     // 而「只输出你要说的话、不要旁白」这类指令会永久留在同一个会话里，
@@ -17746,6 +18143,8 @@ async function callAiTurn(userText){
     prompt = (userText && userText.startsWith("（"))
       ? `[电话·系统] ${userText}${metaLine}`
       : `[电话] ${userText || ""}${metaLine}`;
+    // CC 通道不塞完整 sys（会污染那条长会话），韩语的格式约定只能跟在这一条里
+    if(isKo) prompt += "\n" + KO_RULE;
     ccOpts = { timeoutMs: 60000 };  // 打电话等 3 分钟没有意义
   } else {
     // 直连通道没有记忆，仍要把背景和历史带上。
@@ -17760,7 +18159,7 @@ async function callAiTurn(userText){
 - 口语、短句，一次说 1-3 句，像真的在打电话；绝对不要写成长文或旁白。
 - 只输出你要说出口的话：不要引号、不要动作描写、不要 <thinking>、不要任何暗号。
 - 匹配对方的能量：她轻你就轻，她急你就跟上。
-- 你的人设、称呼、和她的关系，和聊天里完全一样。`);
+- 你的人设、称呼、和她的关系，和聊天里完全一样。${isKo ? "\n\n" + KO_RULE : ""}`);
     } finally {
       state.nsfwOn = _nsfw;
       state.thoughtOn = _thought;
@@ -17770,17 +18169,90 @@ async function callAiTurn(userText){
 ${hist ? "【刚才说过的】\n"+hist+"\n" : ""}${userText && userText.startsWith("（") ? "【系统】"+userText : "【她刚说】"+(userText||"")}`;
   }
   try{
-    let text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], sys, ccOpts);
-    if(typeof parseThinking==="function") text = parseThinking(text).body || text;
-    text = String(text||"").trim().slice(0,300) || "……我在听。";
+    callTtsReset();      // 上一轮没播完的尾巴不能压到这一轮
+    s.ttsError = "";
+    // CC 通道没有流式（tmux 桥是整段回的），别的通道都有。
+    const isStream = ag.channel !== "cc";
+    let text = "", capIdx = -1;
+
+    const koLines = [];
+    if(isStream){
+      // 边吐字边切句边合成。字幕也跟着长出来 —— 她能先看见他在说什么，不用干等整段。
+      const sp = isKo ? __callKoSplitter() : __callSplitter();
+      capIdx = s.caps.push({ who:"them", text:"", lines: isKo ? [] : null }) - 1;
+      let seen = 0, lastPaint = 0;
+      const r = await callChatAPIStream(agentToApiConfig(ag), [{role:"user",content:prompt}], sys, {
+        onLive: (live)=>{
+          const full = String((live && live.text) || "");
+          if(full.length <= seen) return;
+          const delta = full.slice(seen);
+          seen = full.length;
+          if(isKo){
+            const out = sp.feed(delta);
+            out.speak.forEach(sent=> callTtsPush(sent));
+            if(out.lines.length){
+              koLines.push(...out.lines);
+              s.caps[capIdx].lines = koLines.slice();
+              s.caps[capIdx].text = koLines.map(l=>l.zh).filter(Boolean).join(" ");
+            }
+          } else {
+            sp.feed(delta).forEach(sent=> callTtsPush(sent));
+            s.caps[capIdx].text = full.slice(0, 300);
+          }
+          // render() 是整页重绘，每个 token 刷一次会卡死 —— 节流到 250ms
+          const now = Date.now();
+          if(state.subPage === "phone" && now - lastPaint > 250){ lastPaint = now; render(); }
+        },
+      });
+      text = String((r && r.reply) || "");
+      if(typeof parseThinking==="function") text = parseThinking(text).body || text;
+      text = text.trim().slice(0,300) || "……我在听。";
+      // 最后那截不足一句的也要说
+      if(isKo){
+        const tail = sp.flush();
+        tail.speak.forEach(sent=> callTtsPush(sent));
+        if(tail.lines.length) koLines.push(...tail.lines);
+      } else {
+        sp.flush().forEach(sent=> callTtsPush(sent));
+      }
+    } else {
+      text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], sys, ccOpts);
+      if(typeof parseThinking==="function") text = parseThinking(text).body || text;
+      text = String(text||"").trim().slice(0,300) || "……我在听。";
+    }
+
     // callhome ⟪挂断⟫：说完晚安后留赖床窗，期间用户说话可留住
     if(/[⟪《【\[]\s*挂断\s*[⟫》】\]]/.test(text)){
       text = text.replace(/[⟪《【\[]\s*挂断\s*[⟫》】\]]/g, "").trim();
       callScheduleLinger(15000);
     }
-    s.caps.push({ who:"them", text });
-    s.ttsError = "";
-    callSpeak(text).then(()=>{ if(state.subPage==="phone") render(); }).catch(()=>{});
+
+    if(capIdx >= 0){
+      if(isKo && koLines.length){
+        s.caps[capIdx].lines = koLines.slice();
+        // text 留中文：通话摘要、历史回顾读的都是它，存韩语等于摘要也变韩语
+        s.caps[capIdx].text = koLines.map(l=>l.zh || l.ko).filter(Boolean).join(" ").slice(0,300);
+      } else {
+        s.caps[capIdx].text = text;   // 用清洗过的版本收尾（擦掉暗号）
+      }
+    } else {
+      // CC 那条：整段虽然一次性回来，**仍然分句入队** ——
+      // 第一句合成完就能出声，后面几句在她听第一句的时候并行合成。
+      if(isKo){
+        const sp2 = __callKoSplitter();
+        const a = sp2.feed(text), b = sp2.flush();
+        const lines = a.lines.concat(b.lines);
+        a.speak.concat(b.speak).forEach(sent=> callTtsPush(sent));
+        s.caps.push({
+          who:"them", lines,
+          text: lines.map(l=>l.zh || l.ko).filter(Boolean).join(" ").slice(0,300) || text,
+        });
+      } else {
+        s.caps.push({ who:"them", text });
+        const sp2 = __callSplitter();
+        sp2.feed(text).concat(sp2.flush()).forEach(sent=> callTtsPush(sent));
+      }
+    }
   }catch(e){
     // 标明是**模型**那条出的错。以前只写「信号不好……invalid api key」，
     // 和 TTS 的报错长得一模一样，根本分不清是哪一半坏了
@@ -17813,6 +18285,9 @@ function callHangup(){
   const s = ensureCallSession();
   callClearInviteTimer();
   callCancelLinger();
+  // 挂断要立刻闭嘴：停掉正在播的那句，并把在途的合成结果作废（gen++），
+  // 否则挂了电话他还会继续把剩下几句说完。
+  callTtsReset();
   if(s.phase!=="active"){ s.phase="idle"; render(); return; }
   const dur = s.startAt ? Math.floor((Date.now()-s.startAt)/1000) : 0;
   const caps = (s.caps||[]).slice(); // 下面要清空 s.caps，先留一份给异步摘要
@@ -23246,6 +23721,7 @@ function renderTheme(){
         <button type="button" class="sw-chip${state.uiShell==="claude"?" on":""}" data-ui-shell="claude">Claude</button>
         <button type="button" class="sw-chip${state.uiShell==="korean"?" on":""}" data-ui-shell="korean">韩系</button>
         <button type="button" class="sw-chip${state.uiShell==="blueprint"?" on":""}" data-ui-shell="blueprint">蓝晒</button>
+        <button type="button" class="sw-chip${state.uiShell==="weibo"?" on":""}" data-ui-shell="weibo">微博</button>
       </div>
       ${state.uiShell==="blueprint"?`
       <div class="sw-chip-row" style="margin-top:8px">
@@ -23876,6 +24352,23 @@ if(!window.__mpDelegated){
     try{
       const raw = e.target;
       if(!raw || !raw.closest) return;
+      // 底栏 · 微博壳（五格里那四个 tab 走自己的映射：首页→公共圈、功能→首页第 2 屏…）
+      const wbBtn = raw.closest(".bottom-nav button[data-wb-tab]");
+      if(wbBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        wbGoTab(wbBtn.getAttribute("data-wb-tab") || wbBtn.dataset.wbTab);
+        return;
+      }
+      // 底栏 · 微博壳中间那颗发布键 —— 发的是公共动态（首页那条时间线）
+      if(raw.closest("#wb-compose")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.tab = "moments";
+        state.momentsScope = "public";
+        state.subPage = null;
+        state.momentComposing = true;
+        if(typeof render==="function") render();
+        return;
+      }
       // 底栏
       const tabBtn = raw.closest(".bottom-nav button[data-tab]");
       if(tabBtn){
@@ -28363,6 +28856,27 @@ const sttUrl = document.getElementById("call-stt-url");
   bindCallCfg("call-minimax-model", "minimaxModel");
   bindCallCfg("call-minimax-endpoint", "minimaxEndpoint");
   bindCallCfg("call-tts-proxy", "ttsProxy");
+  bindCallCfg("call-eleven-voice", "elevenVoice");
+  bindCallCfg("call-eleven-model", "elevenModel");
+  // TTS 引擎切换。要 render() —— 两家的字段不一样，不重绘她看不到对应的那几格。
+  $$("[data-tts-prov]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.callConfig = state.callConfig || {};
+      state.callConfig.ttsProvider = btn.getAttribute("data-tts-prov") || "minimax";
+      state.callConfig._ttsTestMsg = "";
+      persist("callConfig");
+      render();
+    };
+  });
+  // 通话语言。切了之后**下一句**才生效（当前这句已经在合成路上了）
+  $$("[data-call-lang]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.callConfig = state.callConfig || {};
+      state.callConfig.callLang = btn.getAttribute("data-call-lang") || "zh";
+      persist("callConfig");
+      render();
+    };
+  });
   // 「试听一句」只由全局委托处理（见 call-tts-test），这里不再重复绑定，否则一次点击会合成两遍
   const cfgMk = document.getElementById("cfg-minimaxKey");
   if(cfgMk) cfgMk.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.minimaxKey=cfgMk.value.trim(); persist("callConfig"); };
