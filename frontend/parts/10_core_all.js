@@ -23025,7 +23025,7 @@ function renderChat(){
         }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
-        ${isMe&&typeof toneChipHtml==="function"?toneChipHtml(m, idx):""}${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
+        ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
       </div>
       ${isMe&&typeof tonePickHtml==="function"?tonePickHtml(idx):""}
       ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
@@ -23034,6 +23034,7 @@ function renderChat(){
         ${isImStyle?`<span class="imsg-react-sep"></span>`:""}
         <button type="button" data-msg-copy="${idx}" title="复制消息"><i data-lucide="copy"></i>复制</button>
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
+        ${isMe&&m.tone&&state.toneOn!==false?`<button type="button" data-tone-pick="${idx}" title="改语气"><i data-lucide="drama"></i>语气</button>`:""}
       </div>${imsgRead||""}`;
       if(m.time && !showMeta && firstInRun){
         const tIcon = (!isMe && hasThinking(m))?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
@@ -30334,8 +30335,14 @@ async function toneRefine(m, text){
   }catch(e){}
 }
 
-/** 气泡旁那个小标。不加解释文案 —— 只有一个 emoji 和「表面→其实」，点一下能改。
- *  平常话（认真·平静）和正事不标：满屏都是标签等于没有标签。 */
+/**
+ * 气泡旁那个小标 —— **她说了不要显示**（2026-09-16：「语气识别能不能别显示，他能看到就行」）。
+ * 所以聊天里不再画它；判定照旧跑、照旧注入给模型，只是她看不见。
+ * 改语气的入口挪到长按气泡那条操作条里（复制/收藏旁边的「语气」）——
+ * 本地词典会判错，删掉纠正的路子比藏起来更糟，所以是藏不是删。
+ * 函数本身留着且是好的 —— **渲染那行已经不再调它**（见 bubble-row）。
+ * 她哪天想看回来，把那行的调用加回去即可，不用重写。
+ */
 function toneChipHtml(m, idx){
   try{
     if(state.toneOn === false) return "";
