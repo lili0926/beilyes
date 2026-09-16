@@ -23791,7 +23791,7 @@ function renderMemory(){
             const from = +r.from || 0, to = +r.to || 0;
             const back = Math.max(0, from - lo), fresh = Math.max(0, c - to);
             const nm = (agentById(id) && agentById(id).name) || id;
-            return `${esc(nm)} ${c}${fresh?` · 待沉淀 ${fresh}`:""}${back?` · 积压 ${back}`:""}`;
+            return `${esc(nm)} ${c}${fresh?` · 待沉淀 ${fresh}`:""}${back?` · 积压 ${back}${MEM_BACKFILL_ON?"":"（补旧账已关）"}`:""}`;
           }).filter(Boolean);
           if(!rows.length) return "";
           const rw = state.memCpRewound ? `<div style="color:var(--accent);margin-top:2px">游标被回夹过：${esc(String(state.memCpRewound).slice(0,80))}</div>` : "";
@@ -31832,6 +31832,13 @@ const MEM_AUTO_MAX_PER_RUN = 200;
 const MEM_AUTO_MIN_NEW = 100;
 /** 每轮顺带补多少条积压（「两头同时跑」的旧端）。比新端小得多：
  *  新的是她现在要用的，旧的只是慢慢补齐，不该跟新的抢预算。 */
+/** 补旧账总开关。**她 2026-09-16 说关掉。**
+ *  她先选的是「两头同时跑」，看到账单之后改主意了 —— 这是这轮最花钱的一条：
+ *  每 20 分钟一批 200 条转写，memDigestTranscript 还会把它切成好几段、每段一次调用。
+ *  关掉之后游标**原地不动、不对齐**：积压一条不少地留着，记忆库页照实显示，
+ *  哪天想补回来把这个改成 true 就接着啃。要的是可逆，不是抹掉。
+ *  （云端那 158 条整合记忆本来就覆盖了历史，旧聊天不提炼并不等于丢了。） */
+const MEM_BACKFILL_ON = false;
 const MEM_BACKFILL_PER_RUN = 200;
 /** 积压小于这个数就不单独跑旧端了（并进新端一次做掉，省一次模型调用） */
 const MEM_BACKFILL_MIN = 8;
@@ -31931,7 +31938,7 @@ async function memAutoIntegrate(opts){
   if(baselineChanged){ persist("memCheckpoint"); persist("memCpRecent"); }
   // 触发只看**新消息**：积压再多也不该让它每 20 分钟自己跑起来
   if(!force && totalNew < MEM_AUTO_MIN_NEW){
-    __memNote(`新增 ${totalNew} 条，攒够 ${MEM_AUTO_MIN_NEW} 条才自动整理${totalBack?`（积压 ${totalBack} 条，跟着新的一起补）`:""}`);
+    __memNote(`新增 ${totalNew} 条，攒够 ${MEM_AUTO_MIN_NEW} 条才自动整理${totalBack?`（积压 ${totalBack} 条${MEM_BACKFILL_ON?"，跟着新的一起补":"，补旧账已关"}）`:""}`);
     return;
   }
   if(totalNew <= 0 && totalBack <= 0){ __memNote("没有新的聊天可整理"); return; }
@@ -32001,7 +32008,7 @@ async function memAutoIntegrate(opts){
 
       // ── 旧端：顺带补一小批积压，不跟新的抢预算 ─────────────────────────
       nBack = Math.max(0, from - lo);
-      if(nBack > 0){
+      if(nBack > 0 && MEM_BACKFILL_ON){
         const take = Math.min(nBack, nBack <= MEM_BACKFILL_MIN ? nBack : MEM_BACKFILL_PER_RUN);
         try{
           // **补旧账只许用便宜模型**（auxOnly）。这一批是三个月前的聊天，
