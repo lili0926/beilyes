@@ -1538,6 +1538,38 @@
       -webkit-backdrop-filter: blur(22px) saturate(1.4);
     }
 
+    /* ── 语气小标：气泡左边那一小块（见 readTone）───────────────────────── */
+    .tone-chip {
+      flex-shrink: 0; align-self: flex-end; margin-bottom: 2px;
+      display: inline-flex; align-items: center; gap: 3px;
+      border: 1px solid var(--border); background: var(--card); color: var(--sub);
+      border-radius: 9px; padding: 1px 6px; font-size: 9px; line-height: 1.5;
+      cursor: pointer; max-width: 40vw; white-space: nowrap; overflow: hidden;
+    }
+    .tone-chip span { overflow: hidden; text-overflow: ellipsis; }
+    .tone-chip.mine { border-color: var(--accent); color: var(--accent); }
+    .tone-chip.hot { font-weight: 700; }
+    .tone-chip:active { transform: scale(.94); }
+    .tone-pick {
+      margin: 2px 4px 6px; padding: 6px 8px;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+    }
+    .tone-pick-row { display: flex; flex-wrap: wrap; gap: 4px; }
+    .tone-pick-row + .tone-pick-row { margin-top: 6px; }
+    .tone-opt {
+      border: 1px solid var(--border); background: var(--bg); color: var(--sub);
+      border-radius: 9px; padding: 3px 9px; font-size: 11px; cursor: pointer;
+    }
+    .tone-opt.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    /* ── 通话记录展开的逐句 ──────────────────────────────────────────── */
+    .call-rec-caps { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .call-rec-cap {
+      font-size: 11px; line-height: 1.5; padding: 4px 8px; border-radius: 9px;
+      max-width: 88%; word-break: break-word;
+    }
+    .call-rec-cap.me   { align-self: flex-end; background: var(--accent2); color: var(--text); }
+    .call-rec-cap.them { align-self: flex-start; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+
     .bubble-time {
       font-size: 9px; color: var(--sub); opacity: 0.6; margin: 0 4px 8px;
       text-align: right;

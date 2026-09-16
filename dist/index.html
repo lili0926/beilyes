@@ -1538,6 +1538,38 @@
       -webkit-backdrop-filter: blur(22px) saturate(1.4);
     }
 
+    /* ── 语气小标：气泡左边那一小块（见 readTone）───────────────────────── */
+    .tone-chip {
+      flex-shrink: 0; align-self: flex-end; margin-bottom: 2px;
+      display: inline-flex; align-items: center; gap: 3px;
+      border: 1px solid var(--border); background: var(--card); color: var(--sub);
+      border-radius: 9px; padding: 1px 6px; font-size: 9px; line-height: 1.5;
+      cursor: pointer; max-width: 40vw; white-space: nowrap; overflow: hidden;
+    }
+    .tone-chip span { overflow: hidden; text-overflow: ellipsis; }
+    .tone-chip.mine { border-color: var(--accent); color: var(--accent); }
+    .tone-chip.hot { font-weight: 700; }
+    .tone-chip:active { transform: scale(.94); }
+    .tone-pick {
+      margin: 2px 4px 6px; padding: 6px 8px;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+    }
+    .tone-pick-row { display: flex; flex-wrap: wrap; gap: 4px; }
+    .tone-pick-row + .tone-pick-row { margin-top: 6px; }
+    .tone-opt {
+      border: 1px solid var(--border); background: var(--bg); color: var(--sub);
+      border-radius: 9px; padding: 3px 9px; font-size: 11px; cursor: pointer;
+    }
+    .tone-opt.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    /* ── 通话记录展开的逐句 ──────────────────────────────────────────── */
+    .call-rec-caps { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .call-rec-cap {
+      font-size: 11px; line-height: 1.5; padding: 4px 8px; border-radius: 9px;
+      max-width: 88%; word-break: break-word;
+    }
+    .call-rec-cap.me   { align-self: flex-end; background: var(--accent2); color: var(--text); }
+    .call-rec-cap.them { align-self: flex-start; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+
     .bubble-time {
       font-size: 9px; color: var(--sub); opacity: 0.6; margin: 0 4px 8px;
       text-align: right;
@@ -8377,11 +8409,88 @@ function claudeModelOf(ag, cfg){
   const pick = (ag && ag.claudeModel) || (cfg && cfg.claudeModel) || "";
   return String(pick).trim() || CLAUDE_DEFAULT_MODEL;
 }
+
+/**
+ * Claude 通道的端点。以前这个 URL 在四个地方写死成官方地址，没有任何 base 入口 ——
+ * 所以中转只能走「OpenAI 兼容」那一格，而那条路发的是 /chat/completions 那套形状，
+ * **cache_control 根本带不过去**。
+ *
+ * 中转普遍同时提供 /v1/messages（Anthropic 形状）。填上 base 就能走原生协议，
+ * 缓存断点、thinking、模型名全都照官方那套来。
+ *
+ * 她会直接把中转文档上那行粘进来，所以三种写法都得认：
+ *   https://x.com                →  https://x.com/v1/messages
+ *   https://x.com/v1             →  https://x.com/v1/messages
+ *   https://x.com/v1/messages    →  原样
+ */
+function claudeEndpoint(ag, cfg){
+  let base = String((ag && ag.claudeBase) || (cfg && cfg.claudeBase) || "").trim();
+  if(!base) return "https://api.anthropic.com/v1/messages";
+  base = base.replace(/\/+$/, "");
+  if(/\/v\d+\/messages$/.test(base)) return base;
+  if(/\/v\d+$/.test(base)) return base + "/messages";
+  return base + "/v1/messages";
+}
 /** 思考链配置。4.6 起 budget_tokens 已废弃（在 Opus 5 / Sonnet 5 上直接 400），
  * 统一用 adaptive；display 必须显式写 summarized —— 5 系默认是 omitted，
  * 那样 thinking 块会回空字符串，聊天里的思考链就全没了。 */
 function claudeThinkingParam(){
   return { type: "adaptive", display: "summarized" };
+}
+
+/**
+ * Claude 通道的缓存断点。
+ *
+ * 背景：`getWindowedMessages` 那一整套「起点锚定在压缩游标、阶梯式前进、绝不 slice(-30)」
+ * 全是为了让前缀稳定、好命中缓存 —— 但**全文件一个 cache_control 都没有**，
+ * 所以那份稳定前缀一次都没被用上，每条请求都是全价。
+ * DeepSeek / OpenAI 是前缀匹配自动命中，Claude 必须显式标记。
+ *
+ * 这个 App 没有用顶层 `system` 字段：人设是塞成「假 user + assistant 确认」放在
+ * messages 最前面的（见 callChatAPI 的 claude 分支），所以断点也打在 messages 上。
+ *
+ * 两个断点（上限是 4）：
+ *   ① messages[0]        人设那条，最稳的一段
+ *   ② messages[len-2]    上一轮结束处 —— 最后一条是这一轮新发的，而且尾部挂着
+ *                        每轮都变的注入（检索记忆/语气说明/此刻），它之前才是稳定前缀
+ *
+ * TTL 用 1 小时：cache read 会把计时器免费续上，所以**连续对话用 5 分钟档更便宜**，
+ * 1 小时档只在「隔 5–60 分钟回一句」那种间隔才回本（写入贵一倍：1.25× → 2×）。
+ * 她的间隔就是那一档 —— VPS 那边实测过 60 分钟是道极陡的悬崖（命中率 86–97% → 2%）。
+ *
+ * ⚠️ 最小可缓存前缀随模型变，而且**不是越新越小**：Opus 5 是 512 token，
+ * 但**默认的 Opus 4.6 要 4096**（Haiku 4.5 也是 4096）。低于这个数不报错、也不建条目，
+ * 只是 cache_creation_input_tokens 一直是 0。所以 ① 在 4.6 上很可能是空转（人设不够长），
+ * 真正吃到缓存的是 ②（人设 + 整段历史，稳稳过线）。
+ */
+const CLAUDE_CACHE_TTL = "1h";
+function __claudeCacheMark(msgs){
+  try{
+    if(state.claudeCacheOn === false) return msgs;
+    if(!Array.isArray(msgs) || msgs.length < 2) return msgs;
+    // ⚠️ 先把**所有**消息统一成 block 数组，再打断点。
+    // 不统一的话会踩一个自己把自己废掉的坑：断点每轮往后挪一格，
+    // 它落在的那条就从 content:"…" 被改写成 content:[{type:"text",…}]，
+    // 下一轮断点挪走、那条又变回字符串 —— 同一条消息两轮的字节不一样。
+    // 缓存是**字节级前缀匹配**，从那个位置往后整段历史全 miss，
+    // 而且不报错、只是账单变贵。（探针 probe3 B 组就是抓这个的。）
+    const out = msgs.map(m=>{
+      const c = m.content;
+      if(typeof c === "string" && c) return Object.assign({}, m, { content:[{ type:"text", text:c }] });
+      if(Array.isArray(c)) return Object.assign({}, m, { content: c.slice() });
+      return Object.assign({}, m);
+    });
+    const mark = (i)=>{
+      const m = out[i];
+      if(!m || !Array.isArray(m.content) || !m.content.length) return;
+      const j = m.content.length - 1;
+      m.content[j] = Object.assign({}, m.content[j], { cache_control:{ type:"ephemeral", ttl: CLAUDE_CACHE_TTL } });
+    };
+    mark(0);
+    // len-2 要真的是「更早的一条」才打：只有三两条时它就贴着 ①，白占一个断点
+    if(out.length >= 4) mark(out.length - 2);
+    return out;
+  }catch(e){ return msgs; }
 }
 
 async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
@@ -8446,14 +8555,16 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
     const body = {
       model: claudeModelOf(ag, apiConfig),
       max_tokens: 16000,
-      messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
+      messages: __claudeCacheMark([...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)]),
       thinking: claudeThinkingParam(),
     };
-    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch(claudeEndpoint(ag, apiConfig), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": claudeKey,
+        // 中转多数认 x-api-key，少数只认 Authorization —— 两个都带，官方会忽略后者
+        "Authorization": "Bearer " + claudeKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(body),
@@ -8885,12 +8996,12 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     const sysMsgs = sysText ? [{ role:"user", content:sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
       model: claudeModelOf(ag, cfg), max_tokens: 16000, stream: true,
-      messages: [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
+      messages: __claudeCacheMark([...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)]),
       thinking: claudeThinkingParam(),
     };
-    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch(claudeEndpoint(ag, cfg), {
       method:"POST",
-      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01" },
+      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "Authorization":"Bearer "+claudeKey, "anthropic-version":"2023-06-01" },
       body: JSON.stringify(body),
     });
     if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
@@ -9070,9 +9181,9 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
       thinking: claudeThinkingParam(),
     };
     if(toolsParam) body.tools = toolsParam;
-    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch(claudeEndpoint(creds._agent || null, creds), {
       method:"POST",
-      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01" },
+      headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "Authorization":"Bearer "+claudeKey, "anthropic-version":"2023-06-01" },
       body: JSON.stringify(body),
     });
     const data = await res.json();
@@ -9355,9 +9466,9 @@ function auxEndpoint(apiConfig){
 async function callAuxAPI(apiConfig, prompt) {
   const { auxChannel, claudeKey } = apiConfig;
   if (auxChannel === "claude") {
-    const res = await __apiFetch("https://api.anthropic.com/v1/messages", {
+    const res = await __apiFetch(claudeEndpoint(null, apiConfig), {
       method:"POST",
-      headers:{ "Content-Type":"application/json","x-api-key":claudeKey,"anthropic-version":"2023-06-01" },
+      headers:{ "Content-Type":"application/json","x-api-key":claudeKey,"Authorization":"Bearer "+claudeKey,"anthropic-version":"2023-06-01" },
       body: JSON.stringify({ model: claudeModelOf(null, apiConfig), max_tokens:1024, messages:[{ role:"user", content:prompt }] }),
     });
     const data = await res.json();
@@ -9654,6 +9765,7 @@ const state = {
   // token 一律空：仓库是 public，默认值里写 token 等于公开发布。去设置 → VPS 填一次。
   proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
+  proactiveLastConflict: LS.get("proactiveLastConflict", ""), // 上一场已经追过的架（按那句气话的时间去重）
   // 朋友圈联邦：加好友走自己 VPS 的 /api/admin/*，adminToken 等于账号密码，默认空
   mfInvitePreview: null,
   mfActionOpen: null,
@@ -9775,9 +9887,17 @@ const state = {
     // 来电轮询
     invitePollSec: 8,
   }),
-  callRecords: LS.get("callRecords", []), // {id, duration, summary, time, reason}
-  callSession: null, // {phase: idle|incoming|active|ended, reason, startAt, caps:[], draft, muted}
+  callRecords: LS.get("callRecords", []), // {id, duration, summary, time, reason, caps:[{w,t}]}
+  callSession: null, // {phase: idle|incoming|active|ended, reason, startAt, caps:[], draft, muted, ctxSent}
   callTimerTick: 0,
+  callOpenRec: null,  // 展开逐句的那条通话记录 id（不持久化）
+
+  // 语气识别（见 readTone）。toneOn 关掉就完全不判、不标、不注入；
+  // toneAi 单独关掉只停 aux 精修，本地词典那份仍在（省钱/断网时用）。
+  toneOn: LS.get("toneOn", true),
+  toneAi: LS.get("toneAi", true),
+  claudeCacheOn: LS.get("claudeCacheOn", true),  // Claude 通道的 cache_control，见 __claudeCacheMark
+  tonePickIdx: null,  // 正在改标的那条（不持久化）
 
   // 日常柜子
   cabinets: LS.get("cabinets", null),
@@ -10052,6 +10172,8 @@ const state = {
   expandedMems: {},
   // 记忆自动沉淀：每线程已整合的消息条数检查点 + 全局冷却 + 运行锁 + 开关
   memCheckpoint: LS.get("memCheckpoint", {}),
+  memCpRecent: LS.get("memCpRecent", {}),      // {tid:{from,to}} 新端已消化区间，见 memCursors
+  memCpRewound: LS.get("memCpRewound", ""),    // 上次游标被回夹的留痕，显示在记忆库页
   memLastAutoAt: LS.get("memLastAutoAt", 0),
   memAutoRunning: false,
   memAutoDisabled: LS.get("memAutoDisabled", false),
@@ -10757,6 +10879,30 @@ function scheduleChatNativePersist(){
   if(__nativePersistTimer) clearTimeout(__nativePersistTimer);
   __nativePersistTimer = setTimeout(()=>{ __nativePersistTimer = null; persistChatNative(); }, 1200);
 }
+/**
+ * 两份同线程快照挑一份。
+ *
+ * 以前是「latest 新的赢，latest 相同才比 count」。问题出在**同一条线程现在有两份长度不同的副本**：
+ * IndexedDB 那份被 trimThreadsForIdb 砍到 CHAT_IDB_MAX_MSGS(5000) 条，私有目录那份是全量。
+ * 两者的 latest 通常相同（同一条末尾消息）→ 比 count → 全量赢，没事。
+ * **但 IDB 是 350ms 落盘、私有目录是 500ms** —— 杀进程若落在这 150ms 里，
+ * IDB 就比私有目录多一条消息、latest 更新 → 5000 那份赢 →
+ * salvage 回写时 fsWriteChatThreads(best) 会**把私有目录那份全量覆盖成 5000 条**，静默丢数据。
+ *
+ * 所以：条数差 10% 以上时一律取长的那份 —— 短的只是「更新」，不代表它更全。
+ * 但加一道 7 天的护栏，免得把很久以前的旧备份捞回来盖住现在的。
+ */
+function __pickFullerThread(a, b){
+  const sa = chatThreadsScore({ x:a }), sb = chatThreadsScore({ x:b });
+  const WEEK = 7*24*60*60*1000;
+  if(sa.count && sb.count){
+    if(sb.count >= sa.count*1.1 && sb.latest >= sa.latest - WEEK) return b;
+    if(sa.count >= sb.count*1.1 && sa.latest >= sb.latest - WEEK) return a;
+  }
+  if(sb.latest !== sa.latest) return sb.latest > sa.latest ? b : a;
+  return sb.count > sa.count ? b : a;
+}
+
 /** 扫描本机所有可能残留的聊天快照，合并成最全的一份 */
 async function salvageChatThreadsFromDevice(){
   const candidates = [];
@@ -10904,8 +11050,7 @@ async function salvageChatThreadsFromDevice(){
       if(!a) merged[id] = b;
       else if(!b) merged[id] = a;
       else {
-        const sa = chatThreadsScore({ x:a }), sb = chatThreadsScore({ x:b });
-        merged[id] = (sb.latest > sa.latest || (sb.latest===sa.latest && sb.count>sa.count)) ? b : a;
+        merged[id] = __pickFullerThread(a, b);
       }
     });
     best = merged;
@@ -11865,7 +12010,7 @@ function thinkModalHtml(){
   const tid = m.msgId || ("t"+idx);
   const editing = state.editingThinkId === tid;
   const u = m.usage || null;
-  const usageTip = u ? `读缓存 ${u.cache_read||0} · 写缓存 ${u.cache_write||0} · 输入 ${u.input||0} · 输出 ${u.output||0}` : "";
+  const usageTip = (typeof __usageLine === "function") ? __usageLine(u) : "";
   const claudeSheet = (state.uiShell || "") === "claude";
   return `<div class="think-modal-mask${claudeSheet?" claude-thought-mask":""}" id="think-modal-mask" data-think-modal-close="1">
     <div class="think-modal${claudeSheet?" claude-thought-sheet":""}" role="dialog" aria-label="Thought process" onclick="event.stopPropagation()">
@@ -18757,6 +18902,17 @@ async function pullWakeMessages(){
 async function pushWakeMessage(m){
   const content = m.content || m.text || "";
   if(!content) return;
+  // 去重。VPS 那个队列是 no_dedup=True 入的，而且现在本地生成的那条为了走原生通知
+  // 也会往队列里过一趟（见 proNotifyNative）—— 不去重的话同一句会在聊天里出现两遍。
+  // 只比最近 10 条：更早的重复多半是她隔了很久又收到同一句，那反而该显示。
+  try{
+    const tid0 = (m.threadId && m.threadId !== "a1") ? m.threadId : (state.chatTarget || "a1");
+    const th0 = (state.chatThreads||{})[tid0];
+    const recent = (th0 && Array.isArray(th0.messages)) ? th0.messages.slice(-10) : [];
+    const norm = s => String(s||"").replace(/\s+/g,"").slice(0,120);
+    const key = norm(content);
+    if(key && recent.some(x => x && x.role === "assistant" && norm(x.content) === key)) return;
+  }catch(e){}
   const needPersona = !!(m.needPersona || m.need_persona) || /^six_axis/.test(m.reason||"");
   let finalContent = content;
   if(needPersona && typeof proactiveGenerateLocal === "function"){
@@ -18765,7 +18921,11 @@ async function pushWakeMessage(m){
     if(persona && String(persona).trim()) finalContent = String(persona).trim();
   }
   if(typeof proactivePushToChat === "function"){
-    proactivePushToChat(finalContent, { from: "wake", reason: m.reason, threadId: m.threadId });
+    // hub 把 threadId 写死成 'a1'（见 VPS 那边）。而正文是 proactiveGenerateLocal 用
+    // **她当前那位**的人设 + Key 生成的 —— 落回当前线程才是对的，不是落回 a1。
+    // 只有 hub 明确指了别的线程时才听它的。
+    const tid = (m.threadId && m.threadId !== "a1") ? m.threadId : (state.chatTarget || "a1");
+    proactivePushToChat(finalContent, { from: "wake", reason: m.reason, threadId: tid });
   }
 }
 async function deliverWakePull(){
@@ -18948,7 +19108,29 @@ function proactiveHoursSinceLastChat(){
   if(!latest) return 999;
   return (Date.now() - latest) / 3600000;
 }
-async function proactiveGenerateLocal(reason){
+/**
+ * 主动消息那一整套「影子请求」：人格 + 真历史 + 临时触发条（不落库）。
+ * 抽出来给两个入口共用 —— 前台的 proactiveGenerateLocal，和切后台时交给安卓后台引擎的
+ * bgGenProactive。两边必须是同一份提示词，否则「锁屏时他说话的口气不一样」这种问题没法查。
+ * 返回 {ag, msgs, sys}；拿不到可用的 agent 时返回 null。
+ */
+function proactiveBuildRequest(reason, opts){
+  const ag = (typeof agentById === "function" ? agentById(state.chatTarget==="group"?"a1":state.chatTarget) : null) || (state.agents||[])[0];
+  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return null;
+  const built = __proShadow(reason, opts);
+  let sys = "";
+  // 主动消息避免 NSFW 长流程抢戏：临时按「非 NSFW」拼系统提示词。
+  // 否则 NSFW 叙事格式那条「写成一整段长文」会和这里的「不超过 80 字」正面打架。
+  // systemPrompt 是同步的，改完立刻还原，不会影响别处。
+  const __nsfwWas = state.nsfwOn;
+  try{
+    state.nsfwOn = false;
+    sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
+  } finally { state.nsfwOn = __nsfwWas; }
+  return { ag, msgs: built.msgs, sys: sys || "" };
+}
+
+async function proactiveGenerateLocal(reason, opts){
   const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
   if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
     const templates = [
@@ -18961,6 +19143,43 @@ async function proactiveGenerateLocal(reason){
     ];
     return templates[Math.floor(Math.random()*templates.length)];
   }
+  const msgs = __proShadow(reason, opts).msgs;
+  try{
+    const built = proactiveBuildRequest(reason, opts);
+    const sys = built ? built.sys : "";
+    state.__proGenErr = "";
+    let out = await callChatAPI(agentToApiConfig(ag), msgs, sys, { timeoutMs: 45000 });
+    if(typeof parseThinking === "function"){
+      const p = parseThinking(out);
+      out = p.body || out;
+    }
+    out = String(out||"").replace(/\s+/g," ").trim();
+    // 去掉可能的引号包裹
+    out = out.replace(/^[「"']|[」"']$/g, "").trim();
+    if(out.length > 120){
+      const head = out.slice(0,120);
+      const m = head.match(/.*[。！？…!?]/);
+      out = m ? m[0] : head;
+    }
+    return out || "有点想你了。";
+  }catch(e){
+    // 以前这里静默吞掉：模型挂了和正常开口长得一模一样，都只看到一句兜底话。
+    state.__proGenErr = String((e && e.message) || e).slice(0, 80);
+    return "有点想你了。";
+  }
+}
+
+/** 影子提示词本体：现在时刻 / 她大致在干嘛 / 屏幕时间 / 相关记忆 / 六轴 / 行动规则。
+ *  opts.conflict = proactiveConflict() 的结果时，换掉「偷看手机活动」那条规则 ——
+ *  刚吵完架还去点评她在刷什么 App，是最糟的一种。 */
+function __proShadow(reason, opts){
+  const cf = opts && opts.conflict;
+  const conflictRule = cf ? [
+    `- **刚才那段没收场**：她上一句是${cf.play === "反话" ? "反话（嘴上说没事，其实" + cf.word + "）" : cf.word}，之后就没声音了。`,
+    `- 你现在是去把她拉回来，不是去赢。别复盘谁对谁错、别讲道理、别要求她先开口。`,
+    `- 可以是一句软的、一句认的、一句没头没尾的日常——只要让她觉得你没走。`,
+    `- 绝对不要说「你还在生气吗」「怎么不理我」这种把球又踢回去的话。`,
+  ].join("\n") : "";
   // 影子路由：同一人格 + 真历史 + 临时触发条（不落库）
   // 参考 ghost-bf：注入手机活动 / 屏幕时间，让 AI 像「偷看过你在干嘛」再决定开口
   const now = new Date();
@@ -18995,7 +19214,15 @@ async function proactiveGenerateLocal(reason){
   }catch(e){}
 
   const hist = (state.messages || []).filter(m => m.role==="user"||m.role==="assistant").slice(-16);
-  const mems = (state.memories||[]).slice(-8).map(m => (m.content||m.text||"").slice(0,120)).filter(Boolean);
+  // 记忆以前取的是 `slice(-8)` —— 那是**最后入库的 8 条**，不是跟这一刻有关的 8 条。
+  // 刚沉淀完一批流水账的话，他开口聊的就是那批流水账。改成按「触发理由 + 她最近说的」检索。
+  let mems = [];
+  try{
+    const q = [reason||"", ...hist.filter(m=>m.role==="user").slice(-3).map(m=>String(m.content||""))].join(" ").slice(0,400);
+    const rel = (typeof retrieveRelevantMemories === "function") ? retrieveRelevantMemories(q, 6) : [];
+    mems = rel.map(m => String(m.content||m.text||"").slice(0,120)).filter(Boolean);
+  }catch(e){}
+  if(!mems.length) mems = (state.memories||[]).slice(-8).map(m => (m.content||m.text||"").slice(0,120)).filter(Boolean);
   const silentH = (typeof proactiveHoursSinceLastChat === "function") ? proactiveHoursSinceLastChat() : 0;
   // 欲望六轴：让 AI 从真实情绪开口，而非凭空惦记
   const six = state.sixAxis || {};
@@ -19014,42 +19241,13 @@ ${sixLine?`\n【此刻欲望六轴】${sixLine}`:""}
 
 【行动规则】
 - 你可以发消息，也可以在心里决定「先不说」——但本接口要求：若开口，只输出最终要对她说的 1～2 句正文。
-- 像真的偷看过她手机活动：可轻点某个 App、总时长、夜深还亮屏；不要列清单，不要说教，不要「怎么不回我」。
+${conflictRule || "- 像真的偷看过她手机活动：可轻点某个 App、总时长、夜深还亮屏；不要列清单，不要说教，不要「怎么不回我」。"}
 - 语气是你本人：可粘、可酸、可低压关心、可一句就停。不要 markdown、不要 emoji、不要分段、不要「作为 AI」。
 - 总长不超过 80 字。只输出要对她说的话，不要解释你的思考过程。
 </system_trigger>`;
   const msgs = hist.map(m => ({ role: m.role, content: String(m.content||"").slice(0,1500) }));
   msgs.push({ role: "user", content: shadow });
-  try{
-    // 主动消息避免 NSFW 长流程抢戏：临时按「非 NSFW」拼系统提示词。
-    // 否则 NSFW 叙事格式那条「写成一整段长文」会和这里的「不超过 80 字」正面打架。
-    // systemPrompt 是同步的，改完立刻还原，不会影响别处。
-    let sys = "";
-    const __nsfwWas = state.nsfwOn;
-    try{
-      state.nsfwOn = false;
-      sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
-    } finally { state.nsfwOn = __nsfwWas; }
-    state.__proGenErr = "";
-    let out = await callChatAPI(agentToApiConfig(ag), msgs, sys, { timeoutMs: 45000 });
-    if(typeof parseThinking === "function"){
-      const p = parseThinking(out);
-      out = p.body || out;
-    }
-    out = String(out||"").replace(/\s+/g," ").trim();
-    // 去掉可能的引号包裹
-    out = out.replace(/^[「"']|[」"']$/g, "").trim();
-    if(out.length > 120){
-      const head = out.slice(0,120);
-      const m = head.match(/.*[。！？…!?]/);
-      out = m ? m[0] : head;
-    }
-    return out || "有点想你了。";
-  }catch(e){
-    // 以前这里静默吞掉：模型挂了和正常开口长得一模一样，都只看到一句兜底话。
-    state.__proGenErr = String((e && e.message) || e).slice(0, 80);
-    return "有点想你了。";
-  }
+  return { msgs, shadow };
 }
 function proactivePushToChat(content, meta={}){
   if(!content) return;
@@ -19069,29 +19267,29 @@ function proactivePushToChat(content, meta={}){
     ...(meta.snap ? { snap: meta.snap } : {}),
   };
   // 写入目标线程（后台生成时可指定 threadId 落回原线程）
+  //
+  // 旧版这里有两个洞，2026-09-06 记下过没查：
+  // ① `state.chatTarget === target || !thread.messages.length` —— 后半个条件是说
+  //    「目标线程是空的就也塞进可见列表」，可**可见列表是当前线程的**。
+  //    她在 a2 上、wake 往空的 a1 推，那条就出现在 a2 的眼前，同时存进 a1 的历史 ——
+  //    串线程，而且两边内容对不上。
+  // ② 反过来，目标线程非空且不是当前线程时，只进历史不进眼睛，**一点提示都没有**
+  //    （15:12 那次拉到 5 条、全被标 delivered 消费掉，正文她一条都没看见）。
+  // 现在只有一条规矩：永远写进目标线程；只有正看着它时才同步可见列表。
   if(typeof saveActiveThread === "function") saveActiveThread();
   const target = meta.threadId || state.chatTarget || "a1";
   state.chatThreads = state.chatThreads || {};
   if(!state.chatThreads[target]) state.chatThreads[target] = { messages: [], pendingUser: [] };
-  // 若当前就在该线程，也推到 state.messages
-  if(state.tab === "chat" || true){
-    state.messages = state.messages || [];
-    // 仅当 chatTarget 匹配时直接插入可见列表
-    if(state.chatTarget === target || !state.chatThreads[target].messages.length){
-      state.messages.push(msg);
-    }
-  }
-  state.chatThreads[target].messages = state.chatThreads[target].messages || [];
-  // 避免重复推两次：若刚才已 push 到 state.messages 且同源，同步写回
   const th = state.chatThreads[target];
+  if(!Array.isArray(th.messages)) th.messages = [];
   const last = th.messages[th.messages.length-1];
-  if(!last || last.msgId !== msg.msgId){
-    // 如果 state.messages 是该线程的活跃副本，以 messages 为准写回
-    if(state.chatTarget === target){
-      th.messages = [...state.messages];
-    } else {
-      th.messages.push(msg);
-    }
+  if(!last || last.msgId !== msg.msgId) th.messages.push(msg);
+  if(state.chatTarget === target){
+    // 同一个数组引用，别留两份各自漂移
+    state.messages = th.messages;
+  } else {
+    // 不在这条线程上：记个未读，否则她永远不知道他说过话
+    th.unread = (th.unread || 0) + 1;
   }
   if(typeof persist === "function"){
     try{ LS.set("chatThreads", state.chatThreads); }catch(e){}
@@ -19099,17 +19297,62 @@ function proactivePushToChat(content, meta={}){
   state.needChatScroll = true;
   // 主动消息 → 手机通知（无需用户口头说「推一下」）
   try{
-    const cfg = typeof ntfyEnsure === "function" ? ntfyEnsure() : null;
     const src = (meta && meta.from) || "";
-    // 来自 VPS 拉取（from=vps/push）的消息，VPS 已在入队时直接 POST ntfy，这里跳过避免重复通知
+    // 来自 VPS 拉取（from=vps/push）的消息，VPS 已在入队时直接推过，这里跳过避免重复通知
     const vpsPushed = src === "vps" || src === "push";
-    if(cfg && cfg.enabled && cfg.autoProactive !== false && !vpsPushed && !meta.quiet){
+    if(!vpsPushed && !meta.quiet && state.chatTarget !== target){
       const who = msg.speakerName || "TA";
       const body = String(msg.content||"").slice(0, 120);
-      if(typeof ntfyMaybeNotify === "function")
-        ntfyMaybeNotify(who, body, { from: "proactive:"+src });
+      // 优先原生（FCM 那套走系统通知栏，和微信长一个样）；ntfy 只当没原生时的兜底。
+      // 她的原话：「我想用原生 而不是 ntfy app 那样推送的有点丑」。
+      const native = (typeof proNotifyNative === "function") ? proNotifyNative(who, body) : false;
+      if(!native){
+        const cfg = typeof ntfyEnsure === "function" ? ntfyEnsure() : null;
+        if(cfg && cfg.enabled && cfg.autoProactive !== false && typeof ntfyMaybeNotify === "function")
+          ntfyMaybeNotify(who, body, { from: "proactive:"+src });
+      }
     }
   }catch(e){}
+}
+
+/**
+ * 原生通知（系统通知栏，和微信长一个样）。她的原话：ntfy app 那样推送的有点丑。
+ *
+ * 这个 App 装的是 @capacitor/push-notifications（FCM），它只负责**收**；发是服务端的事。
+ * 所以本地生成的这条要绕一下 VPS 才能进通知栏 —— 走已有的 `/proactive/push_bg`，
+ * 它本来就是「入 pull 队列 + 补一脚 FCM」。**正文是手机这边用她的 API 写好的，
+ * VPS 只当喇叭**，不再让 CC 重写一遍（那正是她嫌口气不对的原因）。
+ *
+ * 那个接口入队时是 no_dedup=True，所以这条稍后会被 /api/wake/pull 原样拉回来。
+ * 去重放在 pushWakeMessage 那一端（同一条正文不重复落地），比在这里想办法更稳 ——
+ * 队列里本来就可能有重复，那道去重是迟早要有的。
+ * `notify_only` 是给服务端留的提示：将来那边认了这个字段，就连队都不入、只发通知。
+ *
+ * 没 VPS 或没注册过 FCM token 就返回 false，调用方回落 ntfy。
+ */
+function proNotifyNative(who, body){
+  try{
+    if(state.proNotifyNativeOff) return false;
+    const base = (typeof wakeBase === "function" ? wakeBase() : "") || "";
+    if(!base) return false;
+    let tok = "";
+    try{ tok = LS.get("fcmToken", "") || ""; }catch(e){}
+    if(!tok) return false;   // 没注册过 FCM，原生这条根本走不通
+    const headers = { "Content-Type":"application/json", "Accept":"application/json" };
+    const auth = (typeof wakeToken === "function" ? wakeToken() : "") || "";
+    if(auth) headers["X-Auth-Token"] = auth;
+    fetch(base + "/proactive/push_bg", {
+      method:"POST", headers,
+      body: JSON.stringify({
+        content: String(body||"").slice(0,120),
+        threadId: state.chatTarget || "a1",
+        reason: "local_notify",
+        notify_only: true,
+        title: who || "TA",
+      }),
+    }).catch(()=>{});
+    return true;
+  }catch(e){ return false; }
 }
 /** 本地影子式主动：无深夜屏蔽；白天最多5；夜里睡觉窗口随机3-5；冷静期2–3.5h随机 */
 function pushPeriodKey(d){
@@ -19153,32 +19396,107 @@ function incLocalPush(period){
 function __proNote(text){
   state.__proStatus = { at: Date.now(), text: String(text||"") };
 }
-async function proactiveTryLocal(force){
+/**
+ * 上一段是不是「吵完没收场」。
+ *
+ * 这是她真正想要的那个触发：吵架之后他来把她抓回来。以前一条都没有 ——
+ * 触发只有六轴 urge、静默时长、屏幕时间，全都跟「刚才发生了什么」无关，
+ * 所以吵完架他反而最安静（冷静期 2–3.5 小时正好把那段盖住）。
+ *
+ * 判据来自语气识别（见 readTone）：她最近三句里有一句是重话 —— 反话，或者底下是
+ * 生气/委屈/吃醋/不耐烦/难过 —— 而且**那之后她没再软下来**。
+ * 「软下来」看的只是她自己的后续消息：他回没回、回了什么，都不算数
+ * （他回了她不理，恰恰是最该追一句的情形）。
+ */
+const PRO_CONFLICT_WORDS = ["生气","委屈","吃醋","不耐烦","难过","失落"];
+function proactiveConflict(){
+  try{
+    if(state.toneOn === false) return null;
+    const target = state.chatTarget === "group" ? "a1" : (state.chatTarget || "a1");
+    const th = (state.chatThreads||{})[target] || {};
+    const pool = (th.messages && th.messages.length) ? th.messages : (state.messages||[]);
+    const msgs = pool.filter(m=>m.role==="user" || m.role==="assistant");
+    if(!msgs.length) return null;
+    const hers = msgs.filter(m=>m.role==="user").slice(-3);
+    let hot = null;
+    for(let i=hers.length-1; i>=0; i--){
+      const t = hers[i].tone;
+      if(!t) continue;
+      // **不按强度过滤。**「行吧，随便你」没有感叹号、字数也短，readTone 给的是「轻」——
+      // 可冷着说的反话正是最该追的那一种，按强度滤掉等于专门漏掉最要紧的。
+      // 会不会太频繁由别处管：同一场架只追一次 + 每时段上限 + 至少静默半小时。
+      if(t.play === "反话" || PRO_CONFLICT_WORDS.indexOf(t.under) >= 0){ hot = hers[i]; break; }
+    }
+    if(!hot) return null;
+    const idx = msgs.lastIndexOf(hot);
+    const afterHers = msgs.slice(idx+1).filter(m=>m.role==="user");
+    const madeUp = afterHers.some(m=>{
+      const t = m.tone;
+      if(!t) return false;
+      return t.under === "开心" || t.under === "撒娇" || t.under === "想他"
+          || (t.play === "认真" && t.surface === "平静");
+    });
+    if(madeUp) return null;
+    return { at: hot.time || "", word: hot.tone.under || "生气", play: hot.tone.play || "认真" };
+  }catch(e){ return null; }
+}
+
+/**
+ * 「他现在该不该开口」的全部闸门，连同触发理由一起算出来。
+ * 抽出来是因为现在有两个入口：前台的 proactiveTryLocal 和切后台时的 bgGenProactive。
+ * 两边必须走同一套闸门 —— 否则换个入口就绕过了冷静期和每日上限，变成刷屏。
+ * 返回 {ok, reason, note}；note 是给状态行看的「为什么没开口」。
+ */
+function proactiveGate(force){
   const cfg = state.proactiveConfig || {};
-  if(!cfg.enabled && !force){ __proNote("总开关是关的"); return; }
+  if(!cfg.enabled && !force) return { ok:false, note:"总开关是关的" };
   const period = pushPeriodKey();
   const limit = localPushLimit(period);
   const count = countLocalPushes(period);
-  if(!force && count >= limit){ __proNote(`这个时段已发 ${count} 条，上限 ${limit}`); return; }
+  if(!force && count >= limit) return { ok:false, note:`这个时段已发 ${count} 条，上限 ${limit}` };
+
+  const silentH0 = proactiveHoursSinceLastChat();
+
+  // ── 吵完没收场：门槛整体放低 ────────────────────────────────────────────
+  // 这一条必须**排在冷静期前面**。冷静期是 2–3.5 小时，而架一般是几十分钟前吵的 ——
+  // 放在后面等于这个触发永远轮不到，那就白做了。
+  // 代价是它绕过了冷静期，所以自己要有防重复：同一场架只追一次（按那句气话的时间去重）。
+  if(!force){
+    const cf = proactiveConflict();
+    if(cf && silentH0 >= 0.5){
+      const key = "c:" + (cf.at || "?");
+      if(state.proactiveLastConflict !== key){
+        return {
+          ok: true, period, conflict: cf, conflictKey: key,
+          reason: `刚才那段吵完没收场（她${cf.word}${cf.play==="反话"?"，嘴上说没事":""}），已经 ${silentH0.toFixed(1)} 小时没声音了`,
+        };
+      }
+    }
+  }
+
+  // ── 消失很久：一整天没消息，六轴那道门也不该再拦 ─────────────────────────
+  // 六轴是 VPS 算的，她一天没说话时事件源本来就可能是 stale 的，
+  // 拿一个没人喂数据的数值去挡「一天没见」这种最该开口的情形，方向是反的。
+  const goneLong = !force && silentH0 >= 18;
 
   // 冷静期：距任意最后消息（含推送）2–3.5 小时随机；force 跳过
   const cooldownMin = 120 + Math.floor(Math.random() * 91);
   const last = state.proactiveLastLocal || 0;
-  // 也看聊天最后时间
   let lastChat = 0;
-  try {
-    const silentH = proactiveHoursSinceLastChat();
-    lastChat = Date.now() - silentH * 3600000;
-  } catch(e){}
+  try{
+    const silentH0 = proactiveHoursSinceLastChat();
+    lastChat = Date.now() - silentH0 * 3600000;
+  }catch(e){}
   const lastAny = Math.max(last, lastChat || 0);
   if(!force && lastAny && (Date.now() - lastAny) < cooldownMin * 60000){
-    __proNote(`距上条消息 ${((Date.now()-lastAny)/3600000).toFixed(1)} 小时，这次抽到的冷静期是 ${(cooldownMin/60).toFixed(1)} 小时`);
-    return;
+    return { ok:false, note:`距上条消息 ${((Date.now()-lastAny)/3600000).toFixed(1)} 小时，这次抽到的冷静期是 ${(cooldownMin/60).toFixed(1)} 小时` };
   }
 
-  const silentH = proactiveHoursSinceLastChat();
+  const silentH = silentH0;
   let reason = force ? "用户点了试一条" : (
-    silentH >= 2 ? `已经约 ${silentH.toFixed(1)} 小时没聊，想主动浮上来` : "想主动说一句"
+    silentH >= 18 ? `整整 ${Math.round(silentH)} 小时没有她的消息了，想把她叫回来`
+    : silentH >= 2 ? `已经约 ${silentH.toFixed(1)} 小时没聊，想主动浮上来`
+    : "想主动说一句"
   );
   // 有屏幕时间数据时，把「偷看活动」写进触发理由
   if(!force){
@@ -19188,31 +19506,38 @@ async function proactiveTryLocal(force){
       if(apps.length){
         const top = apps[0].name || apps[0].package || "";
         const hh = new Date().getHours();
-        if(top && (hh >= 23 || hh < 6))
-          reason = `夜深了，对方还在用 ${top}，想戳一句`;
-        else if(top && silentH >= 2)
-          reason = `独处约 ${silentH.toFixed(1)} 小时，看到最近在用 ${top}`;
+        if(top && (hh >= 23 || hh < 6)) reason = `夜深了，对方还在用 ${top}，想戳一句`;
+        else if(top && silentH >= 2)    reason = `独处约 ${silentH.toFixed(1)} 小时，看到最近在用 ${top}`;
       }
     }catch(e){}
   }
   // 六轴情绪门控：VPS 已连时，本地影子只在情绪够浓（missing/desire 高）才开口，
   // 由定时变情绪驱动；未连 VPS 退回原冷静期逻辑（离线兜底）。
   const six = state.sixAxis;
-  const sixGated = !force && !!(six && typeof six.missing === "number") && !!(cfg.baseUrl);
+  const sixGated = !force && !goneLong && !!(six && typeof six.missing === "number") && !!(cfg.baseUrl);
   if(sixGated){
     const urge = Math.max(six.missing||0, six.desire||0);
-    if(urge < 0.3){ __proNote(`六轴情绪不够浓（urge ${urge.toFixed(2)}，要 ≥0.30）`); return; } // 把开口交给 VPS 六轴决策
-    if(silentH < 2){ __proNote(`才 ${silentH.toFixed(1)} 小时没聊，不到 2 小时`); return; }
-  } else if(!force && silentH < 2){
-    __proNote(`才 ${silentH.toFixed(1)} 小时没聊，不到 2 小时`);
-    return; // 和冷静期双保险
+    if(urge < 0.3) return { ok:false, note:`六轴情绪不够浓（urge ${urge.toFixed(2)}，要 ≥0.30）` };
+    if(silentH < 2) return { ok:false, note:`才 ${silentH.toFixed(1)} 小时没聊，不到 2 小时` };
+  } else if(!force && !goneLong && silentH < 2){
+    return { ok:false, note:`才 ${silentH.toFixed(1)} 小时没聊，不到 2 小时` }; // 和冷静期双保险
   }
+  return { ok:true, reason, period };
+}
 
-  const textMsg = await proactiveGenerateLocal(reason);
+async function proactiveTryLocal(force){
+  const gate = proactiveGate(force);
+  if(!gate.ok){ __proNote(gate.note || "这次没开口"); return; }
+  const period = gate.period;
+  const reason = gate.reason;
+
+  const textMsg = await proactiveGenerateLocal(reason, { conflict: gate.conflict });
   if(!textMsg || !String(textMsg).trim()){ __proNote("生成没拿到内容"); return; }
   proactivePushToChat(String(textMsg).trim(), { from: force?"test":"shadow_local", is_push: true });
   state.proactiveLastLocal = Date.now();
   persist("proactiveLastLocal");
+  // 同一场架只追一次。这条触发绕过了冷静期，没有它就会每 10 分钟追一句
+  if(gate.conflictKey){ state.proactiveLastConflict = gate.conflictKey; persist("proactiveLastConflict"); }
   if(!force) incLocalPush(period);
   __proNote((force ? "手动试了一条：" : "开口了：") + String(textMsg).trim().slice(0, 24)
     + (state.__proGenErr ? `（走的是兜底模板，模型没回：${state.__proGenErr}）` : ""));
@@ -21399,20 +21724,23 @@ function tickBodyState(){
 }
 
 /** 根据用户刚发的话，轻量推一把驱动（不依赖 API） */
-function nudgeBodyFromUserText(text){
+function nudgeBodyFromUserText(text, tone){
   if(!text) return;
   const t = text.toLowerCase();
   const v = state.bodyVitals;
+  // 反话/抱怨里出现的「抱抱」「想你」不是在撩，是在讨说法 —— 照旧推 desire 会推反。
+  // 这是六轴那条老坑（intimate 发反了）的同一类：**词命中不等于语义成立**。
+  const ironic = tone && (tone.play === "反话" || (tone.play === "抱怨" && tone.under === "委屈"));
   // 她撩他 → 把 VPS 六轴的 desire **推高**（desire_add）。
   // 以前这里发的是 intimate —— 那是「欲望被满足」，直接 −0.35 砸回地板 0.15，
   // 等于她越撩他欲望掉得越狠，语义整个是反的（本地 v.desire 反而是 +8，两边打架）。
   // intimate 现在只留给「冷静一点」那个手动按钮。
   const teaseWords = ["想你","喜欢你","爱你","抱抱","蹭","亲亲","想我","想要","摸摸","床","吻","色","亲","贴贴"];
-  if(teaseWords.some(w=>t.includes(w))){
+  if(!ironic && teaseWords.some(w=>t.includes(w))){
     if(typeof postAppEvent === "function") postAppEvent("desire_add", { text: text.slice(0,80) });
   }
-  if(/想你|喜欢|爱/.test(t)) { v.longing = clamp(v.longing+6,0,100); v.heartbeat = clamp(v.heartbeat+4,58,118); }
-  if(/抱抱|蹭|亲亲|想要/.test(t)) { v.desire = clamp(v.desire+8,0,100); v.temp = clamp(v.temp+0.05,36.1,37.8); }
+  if(!ironic && /想你|喜欢|爱/.test(t)) { v.longing = clamp(v.longing+6,0,100); v.heartbeat = clamp(v.heartbeat+4,58,118); }
+  if(!ironic && /抱抱|蹭|亲亲|想要/.test(t)) { v.desire = clamp(v.desire+8,0,100); v.temp = clamp(v.temp+0.05,36.1,37.8); }
   if(/晚安|睡/.test(t)) {
     v.energy = clamp(v.energy-5,5,100);
     if(typeof postAppEvent === "function") postAppEvent("rested", { text: text.slice(0,80) });
@@ -24986,12 +25314,18 @@ function renderPhone(){
           </div>
         </div>
         <div class="feat-section-label">通话记录</div>
-        ${records.length? records.slice(0,12).map(r=>`
-          <div class="call-record">
+        ${records.length? records.slice(0,12).map(r=>{
+          const open = state.callOpenRec === r.id;
+          const caps = Array.isArray(r.caps) ? r.caps : null;
+          return `
+          <div class="call-record"${caps&&caps.length?` data-call-rec="${r.id}" style="cursor:pointer"`:""}>
             <div style="font-weight:600"><i data-lucide="phone"></i> ${esc(r.summary||"语音通话")} · ${esc(callFormatDuration(r.duration||0))}</div>
             <div style="font-size:10px;color:var(--sub);margin-top:4px">${r.time?formatTime(r.time):""}${r.reason?" · "+esc(r.reason):""}</div>
-          </div>
-        `).join("") : `<div class="empty-state">还没有通话记录</div>`}
+            ${open&&caps&&caps.length?`<div class="call-rec-caps">${caps.map(c=>
+              `<div class="call-rec-cap ${c.w==="me"?"me":"them"}">${esc(c.t)}</div>`
+            ).join("")}</div>`:""}
+          </div>`;
+        }).join("") : `<div class="empty-state">还没有通话记录</div>`}
         <div class="feat-section-label"><i data-lucide="volume-2"></i> 语音合成（TTS）</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -25106,6 +25440,7 @@ async function callStartOutgoing(){
   callClearInviteTimer();
   s.startAt = Date.now();
   s.caps = [];
+  s.ctxSent = false;   // 每通电话 CC 通道都要重新补一次聊天上下文
   s.draft = "";
   s.loading = false;
   render();
@@ -25138,6 +25473,7 @@ function callAccept(){
   s.phase = "active";
   s.startAt = Date.now();
   s.caps = [];
+  s.ctxSent = false;
   render();
   callAiTurn("（用户接听了你的电话。用口语短句说明你为什么打来，1-2句。）");
 }
@@ -25166,6 +25502,56 @@ function callDecline(note){
   }
   render();
 }
+// ─── 通话的上下文：让电话接着聊天往下说 ─────────────────────────────────────
+// 以前这里什么都不带。模型能看到的只有「来电理由 + 本通电话最近 8 句」——
+// 十分钟前在聊天里说的话它一个字都不知道，所以接起来像换了个人从零开始。
+// 三样一起补：压缩摘要（更早的事）＋ 最近的聊天逐句 ＋ 按「电话里正在说什么」重新检索的记忆。
+const CALL_CHAT_RECENT = 14;   // 带进电话的聊天条数
+const CALL_CAPS_KEEP   = 14;   // 本通电话回看的句数（原来是 8，长电话中间那段会丢）
+
+function callChatContextBlock(){
+  const bits = [];
+  try{
+    const target = state.chatTarget==="group" ? "a1" : (state.chatTarget || "a1");
+    const th = (state.chatThreads && state.chatThreads[target]) || {};
+    const pool = (th.messages && th.messages.length) ? th.messages : (state.messages || []);
+    const msgs = pool.filter(m=>m.role==="user" || m.role==="assistant");
+    const sum = (th.compressed && th.compressed.summary) || "";
+    if(sum) bits.push("【你们更早的事（摘要）】\n" + String(sum).slice(-600));
+    const lines = msgs.slice(-CALL_CHAT_RECENT).map(m=>{
+      let c;
+      if(m.role==="assistant" && typeof guardApiContent==="function"){
+        const gc = guardApiContent(m, false);   // 被拦那条只说「没送到」，不给原文
+        c = gc != null ? gc : String(m.content||"");
+      } else {
+        c = String(m.content||"");
+      }
+      c = c.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").replace(/\s+/g, " ").trim();
+      if(!c && m.image) c = "[图片]";
+      if(!c) return "";
+      const t = m.time ? formatTime(m.time) + " " : "";
+      return `${t}${m.role==="user" ? "她" : "你"}：${c.slice(0, 120)}`;
+    }).filter(Boolean).join("\n");
+    if(lines) bits.push("【刚才在聊天里说的（这通电话之前）】\n" + lines);
+  }catch(e){}
+  return bits.join("\n\n");
+}
+
+/** 通话版尾部注入：只要「此刻 + 内心底色」。
+ *  不复用 chatTailBlock —— 它会带上思考链要求和床事暗号，而电话里写明了不许有暗号。 */
+function callTailBlock(){
+  const bits = [`【此刻】${formatTimeFull(new Date().toISOString())}`];
+  try{
+    if(state.desireDriveOn){
+      const sixLine = (typeof sixAxisWords === "function") ? sixAxisWords() : "";
+      const feel = (state.bodyFeel||"").trim();
+      if(sixLine) bits.push(`【你此刻的内心底色】${sixLine}`);
+      if(feel) bits.push(`【你此刻心里那句话】${feel}`);
+    }
+  }catch(e){}
+  return bits.join("\n");
+}
+
 async function callAiTurn(userText){
   const s = ensureCallSession();
   if(s.phase!=="active" || s.loading) return;
@@ -25183,6 +25569,14 @@ async function callAiTurn(userText){
   const metaLine = (meta.emotion||meta.tone) ? `\n用户语音线索：情绪=${meta.emotion||"?"}，语气=${meta.tone||"?"}` : "";
   let prompt, ccOpts = null, sys = null;
   const isKo = callLang() === "ko";
+  // 检索记忆的 query 用「电话里正在说的」，不是停在打电话之前那三条聊天上
+  const memQuery = [
+    ...(s.caps||[]).filter(c=>c.who==="me").slice(-3).map(c=>c.text),
+    (userText && !userText.startsWith("（")) ? userText : "",
+    s.reason || "",
+  ].filter(Boolean).join(" ");
+  const memBlock = (typeof retrievedMemoryBlock === "function") ? retrievedMemoryBlock(memQuery) : "";
+  const tailBlock = callTailBlock();
   // 韩语模式的输出约定。分隔符用全角「｜」——它不在正常中韩文本里出现，
   // 不会和正文抢；而每句一行是为了流式能按行收尾。
   // 「先韩语后翻译」的顺序是有原因的：解析器一见到分隔符就把韩语送去合成了，
@@ -25203,6 +25597,16 @@ async function callAiTurn(userText){
     prompt = (userText && userText.startsWith("（"))
       ? `[电话·系统] ${userText}${metaLine}`
       : `[电话] ${userText || ""}${metaLine}`;
+    // 聊天上下文**只在接通那一轮补一次**：CC 是一条不断增长的会话，每轮重发 14 条聊天
+    // 会永久留在上下文里、之后每轮重读一遍（4000 字【设定】那个坑就是这么来的）。
+    // 补过一次他就记住了，后面几轮只给会变的东西（此刻/内心底色/检索记忆）。
+    if(!s.ctxSent){
+      const ctx = callChatContextBlock();
+      if(ctx) prompt += "\n\n" + ctx;
+      s.ctxSent = true;
+    }
+    const ccTail = [memBlock, tailBlock].filter(Boolean).join("\n\n");
+    if(ccTail) prompt += "\n\n" + ccTail;
     // CC 通道不塞完整 sys（会污染那条长会话），韩语的格式约定只能跟在这一条里
     if(isKo) prompt += "\n" + KO_RULE;
     ccOpts = { timeoutMs: 60000 };  // 打电话等 3 分钟没有意义
@@ -25215,18 +25619,30 @@ async function callAiTurn(userText){
     try{
       state.nsfwOn = false;
       state.thoughtOn = false;
+      // skipMemory：检索记忆改挂到 prompt 末尾，且用的是「电话里正在说的」当 query。
+      // 留在 sys 里的那份 query 是冻住的（见 retrievedMemoryBlock），整通电话都不变。
       sys = buildSysForAgent(ag, `【现在是语音通话，不是打字】
 - 口语、短句，一次说 1-3 句，像真的在打电话；绝对不要写成长文或旁白。
 - 只输出你要说出口的话：不要引号、不要动作描写、不要 <thinking>、不要任何暗号。
 - 匹配对方的能量：她轻你就轻，她急你就跟上。
-- 你的人设、称呼、和她的关系，和聊天里完全一样。${isKo ? "\n\n" + KO_RULE : ""}`);
+- 你的人设、称呼、和她的关系，和聊天里完全一样。
+- 电话是聊天的延续，不是新的开始：下面「更早的事」和「刚才在聊天里说的」就是你们几分钟前还在聊的，
+  可以直接接着往下说，不要重新自我介绍、不要问已经知道答案的事。${isKo ? "\n\n" + KO_RULE : ""}`, { skipMemory:true });
     } finally {
       state.nsfwOn = _nsfw;
       state.thoughtOn = _thought;
     }
-    const hist = (s.caps||[]).slice(-8).map(c=>(c.who==="me"?"用户：":"你：")+c.text).join("\n");
-    prompt = `【通话背景】${s.reason||"闲聊"}${metaLine}
-${hist ? "【刚才说过的】\n"+hist+"\n" : ""}${userText && userText.startsWith("（") ? "【系统】"+userText : "【她刚说】"+(userText||"")}`;
+    const hist = (s.caps||[]).slice(-CALL_CAPS_KEEP)
+      .map(c=>(c.who==="me"?"她：":"你：")+String(c.text||"").slice(0,150)).join("\n");
+    const ctx = callChatContextBlock();
+    prompt = [
+      `【通话背景】${s.reason||"闲聊"}${metaLine}`,
+      ctx,
+      hist ? "【这通电话里已经说过的】\n"+hist : "",
+      userText && userText.startsWith("（") ? "【系统】"+userText : "【她刚说】"+(userText||""),
+      memBlock,
+      tailBlock,
+    ].filter(Boolean).join("\n\n");
   }
   try{
     callTtsReset();      // 上一轮没播完的尾巴不能压到这一轮
@@ -25341,6 +25757,39 @@ async function callMakeSummary(caps, dur){
   }catch(e){ return ""; }
 }
 
+/**
+ * 通话摘要进记忆库。
+ * 摘要以前只写进聊天历史那一条消息里 —— 一旦那段历史被压缩或滚出窗口，这通电话就彻底没了，
+ * 检索也检索不到（记忆库里根本没有它）。现在同时落一条 diary，云端向量库也存一份，
+ * 之后不管是聊天还是打电话，retrieveRelevantMemories 都能把它捞回来。
+ */
+function callSummaryToMemory(sum, dur){
+  try{
+    const text = String(sum||"").trim();
+    if(text.length < 10) return;
+    if(!Array.isArray(state.memories)) state.memories = [];
+    const now = new Date();
+    const item = {
+      id: Date.now() + Math.floor(Math.random()*1000),
+      content: `【${formatTimeFull(now.toISOString())} 通话 ${callFormatDuration(dur)}】${text}`.slice(0, 500),
+      layer: "diary",
+      importance: 6,
+      valence: 0.4,
+      arousal: 0.5,
+      createdAt: now.toISOString(),
+      activations: 1,
+      resolved: false,
+      pinned: false,
+      fromChat: true,
+      fromCall: true,
+    };
+    state.memories.unshift(item);
+    persist("memories");
+    // 云端失败不影响本地那条（memPushToCloud 自己吞异常并写 __memPushErr）
+    if(typeof memPushToCloud === "function") memPushToCloud([item]);
+  }catch(e){}
+}
+
 function callHangup(){
   const s = ensureCallSession();
   callClearInviteTimer();
@@ -25354,7 +25803,11 @@ function callHangup(){
   const summary = dur < 20 ? "短暂通话" : ((caps.filter(c=>c.who==="them").slice(-1)[0]?.text) || "通了电话").slice(0,40);
   const recId = Date.now();
   const rec = { id: recId, duration: dur, summary, time: new Date().toISOString(), reason: s.reason||"" };
+  // 逐句记录留一份：以前挂断即焚，只剩一条 300 字摘要，「昨天电话里你说的那个」就查不回来了。
+  // 只给最近 8 通存（40 通 × 逐句会把 localStorage 撑爆 —— persist 配额满是静默失败的）。
+  rec.caps = (caps||[]).slice(-40).map(c=>({ w: c.who, t: String(c.text||"").slice(0,160) })).filter(x=>x.t);
   state.callRecords = [rec, ...(state.callRecords||[])].slice(0, 40);
+  state.callRecords.forEach((r,i)=>{ if(i >= 8 && r && r.caps) delete r.caps; });
   persist("callRecords");
   // 写入聊天一条记录（先落占位，真摘要回来了再原地换掉）
   if(typeof proactivePushToChat==="function"){
@@ -25362,6 +25815,7 @@ function callHangup(){
   }
   s.phase = "idle";
   s.caps = [];
+  s.ctxSent = false;
   s.startAt = 0;
   render();
 
@@ -25372,6 +25826,7 @@ function callHangup(){
     try{
       const r = (state.callRecords||[]).find(x=>x.id === recId);
       if(r){ r.summary = sum; persist("callRecords"); }
+      callSummaryToMemory(sum, dur);
       // 聊天里那条占位换成真摘要（找最近一条 call-record）
       const list = state.messages || [];
       for(let i=list.length-1; i>=0 && i>=list.length-12; i--){
@@ -29560,8 +30015,9 @@ function renderChat(){
         }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
-        ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
+        ${isMe&&typeof toneChipHtml==="function"?toneChipHtml(m, idx):""}${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
       </div>
+      ${isMe&&typeof tonePickHtml==="function"?tonePickHtml(idx):""}
       ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
       <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
         ${(isImStyle?IMSG_REACT_EMOJIS:[]).map(em=>`<button type="button" class="imsg-react-pick" data-msg-react="${idx}" data-react-emoji="${em}" title="回应">${em}</button>`).join("")}
@@ -29714,6 +30170,15 @@ function renderChat(){
               <span style="position:absolute;content:'';height:20px;width:20px;left:${state.thoughtOn!==false?"22px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span>
             </label>
           </div>
+          ${[["tone-on-toggle","语气识别",state.toneOn!==false],["tone-ai-toggle","AI 精修语气",state.toneAi!==false&&state.toneOn!==false]].map(([tid,lbl,on])=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border)">
+            <div style="font-size:12px;font-weight:600;color:var(--text)">${lbl}</div>
+            <label style="position:relative;display:inline-block;width:44px;height:26px;flex-shrink:0">
+              <input type="checkbox" id="${tid}" ${on?"checked":""} style="opacity:0;width:0;height:0"/>
+              <span style="position:absolute;cursor:pointer;inset:0;background:${on?"var(--accent)":"var(--border)"};border-radius:26px;transition:.2s"></span>
+              <span style="position:absolute;content:'';height:20px;width:20px;left:${on?"22px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span>
+            </label>
+          </div>`).join("")}
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
             ${agents.map(ag=>`
               <button type="button" class="filter-chip${(guideAg&&guideAg.id)===ag.id?" active":""}" data-guide-agent="${ag.id}" style="font-size:11px">
@@ -30298,6 +30763,27 @@ function renderMemory(){
         if(!parts.length) return "";
         return `<div style="font-size:11px;color:var(--sub);opacity:.85;margin-top:4px;line-height:1.5;word-break:break-all">${parts.join(" · ")}</div>`;
       })()}
+      ${(()=>{
+        // 沉淀进度：总条数 / 已消化到哪 / 积压多少。
+        // 「一直在沉淀但全是过去的事」那次，从外面完全看不出游标落后了几千条 ——
+        // 这一行就是为了让那种情况一眼看得见。
+        try{
+          const ids = [...((state.agents||[]).map(a=>a.id)), "group"];
+          const rows = ids.map(id=>{
+            const c = (typeof memRelevantCount==="function") ? memRelevantCount(id) : 0;
+            if(!c) return "";
+            const r = (state.memCpRecent||{})[id] || {};
+            const lo = +((state.memCheckpoint||{})[id]) || 0;
+            const from = +r.from || 0, to = +r.to || 0;
+            const back = Math.max(0, from - lo), fresh = Math.max(0, c - to);
+            const nm = (agentById(id) && agentById(id).name) || id;
+            return `${esc(nm)} ${c}${fresh?` · 待沉淀 ${fresh}`:""}${back?` · 积压 ${back}`:""}`;
+          }).filter(Boolean);
+          if(!rows.length) return "";
+          const rw = state.memCpRewound ? `<div style="color:var(--accent);margin-top:2px">游标被回夹过：${esc(String(state.memCpRewound).slice(0,80))}</div>` : "";
+          return `<div style="font-size:10px;color:var(--sub);opacity:.7;margin-top:3px;line-height:1.5">${rows.join(" ｜ ")}${rw}</div>`;
+        }catch(e){ return ""; }
+      })()}
       <div class="mem-actions" style="flex-wrap:wrap">
         <button id="mem-from-chat" class="btn-accent2">
           ${state.memMergeLoading?"整理中...":'<i data-lucide="message-circle"></i> 从聊天整理'}
@@ -30866,7 +31352,7 @@ function renderPrompts(){
    把这位 AI 当前填的整套通道配置（渠道 + Key + Base + 模型）存成一张卡，
    换渠道时点一下切回来，不用把输入框清空重填。
    只覆盖下面这几个字段 —— 名字/头像/气泡色/专属思考引导是人设，不跟着换。 */
-const AP_FIELDS = ["channel","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel",
+const AP_FIELDS = ["channel","claudeBase","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel",
                    "geminiKey","geminiModel","ccWsUrl","ccPin","ccModel"];
 const AP_CH_LABEL = { claude:"Claude", openai:"OpenAI", gemini:"Gemini", cc:"CC" };
 
@@ -30881,7 +31367,11 @@ function apMatches(p, ag){
 }
 /** 存的时候给个默认名字，她可以改 */
 function apAutoName(ag){
-  if(ag.channel==="claude") return "Claude · " + String(claudeModelOf(ag,null)).replace(/^claude-/,"");
+  if(ag.channel==="claude"){
+    // 中转和官方要分得开：两张卡都叫「Claude · opus-4-6」的话，切错了都看不出来
+    const host = String(ag.claudeBase||"").replace(/^https?:\/\//,"").split("/")[0];
+    return (host || "Claude") + " · " + String(claudeModelOf(ag,null)).replace(/^claude-/,"");
+  }
   if(ag.channel==="gemini") return "Gemini · " + (ag.geminiModel||"gemini-2.0-flash");
   if(ag.channel==="cc")     return "CC · " + (ag.ccModel||"默认");
   const host = String(ag.openaiBase||"").replace(/^https?:\/\//,"").split("/")[0];
@@ -30928,12 +31418,15 @@ function renderAgentSettingsBlock(ag, idx){
         </div>
       </div>
       ${ag.channel==="claude"?`
+        <div class="setting-row"><span class="setting-label">Base</span>
+          <input id="${prefix}-claudeBase" value="${escAttr(ag.claudeBase||"")}" placeholder="留空 = api.anthropic.com；中转填到 /v1 为止"/></div>
         <div class="setting-row"><span class="setting-label">Claude Key</span>
           <input type="password" id="${prefix}-claudeKey" value="${escAttr(ag.claudeKey||"")}" placeholder="sk-ant-..."/></div>
         <div class="setting-row"><span class="setting-label">模型</span>
-          <select id="${prefix}-claudeModel" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
-            ${CLAUDE_MODEL_OPTIONS.map(m=>`<option value="${escAttr(m.id)}" ${claudeModelOf(ag,null)===m.id?"selected":""}>${esc(m.label)}</option>`).join("")}
-          </select></div>
+          <input id="${prefix}-claudeModel" list="claude-models-${escAttr(ag.id)}" value="${escAttr(ag.claudeModel||"")}" placeholder="${escAttr(CLAUDE_DEFAULT_MODEL)}"/>
+          <datalist id="claude-models-${escAttr(ag.id)}">
+            ${CLAUDE_MODEL_OPTIONS.map(m=>`<option value="${escAttr(m.id)}">${esc(m.label)}</option>`).join("")}
+          </datalist></div>
       `:ag.channel==="gemini"?`
         <div class="setting-row"><span class="setting-label">Gemini Key</span>
           <input type="password" id="${prefix}-geminiKey" value="${escAttr(ag.geminiKey||"")}" placeholder="AIza..."/></div>
@@ -31869,6 +32362,42 @@ if(!window.__mpDelegated){
       if(id==="toggle-guide" || raw.closest("#toggle-guide")){
         e.preventDefault(); e.stopImmediatePropagation();
         state.showThoughtGuide = !state.showThoughtGuide;
+        if(typeof render==="function") render();
+        return;
+      }
+      // 语气小标：点开/收起改标面板
+      const tonePickBtn = raw.closest("[data-tone-pick]");
+      if(tonePickBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const i = +tonePickBtn.getAttribute("data-tone-pick");
+        state.tonePickIdx = (state.tonePickIdx === i) ? null : i;
+        if(typeof render==="function") render();
+        return;
+      }
+      const toneSet = raw.closest("[data-tone-play],[data-tone-under]");
+      if(toneSet){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const isPlay = toneSet.hasAttribute("data-tone-play");
+        const i = +toneSet.getAttribute(isPlay ? "data-tone-play" : "data-tone-under");
+        const v = toneSet.getAttribute("data-tone-v") || "";
+        const m = (state.messages||[])[i];
+        if(m){
+          const tn = Object.assign({ play:"认真", surface:"平静", under:"平静", level:"中" }, m.tone||{});
+          if(isPlay) tn.play = v; else { tn.under = v; if(tn.surface === (m.tone&&m.tone.under)) tn.surface = v; }
+          tn.by = "me";   // 她自己标的，aux 精修不再覆盖（见 toneRefine）
+          m.tone = tn;
+          if(typeof saveActiveThread==="function") saveActiveThread();
+          persist("chatThreads");
+        }
+        if(typeof render==="function") render();
+        return;
+      }
+      // 通话记录：点一下展开逐句
+      const recEl = raw.closest("[data-call-rec]");
+      if(recEl){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const rid = +recEl.getAttribute("data-call-rec");
+        state.callOpenRec = (state.callOpenRec === rid) ? null : rid;
         if(typeof render==="function") render();
         return;
       }
@@ -33245,6 +33774,18 @@ function bindEvents(){
     try{ LS.set("thoughtOn", state.thoughtOn); }catch(e){}
     render();
   };
+  const toneOnToggle=document.getElementById("tone-on-toggle");
+  if(toneOnToggle) toneOnToggle.onchange=()=>{
+    state.toneOn = !!toneOnToggle.checked;
+    try{ LS.set("toneOn", state.toneOn); }catch(e){}
+    render();
+  };
+  const toneAiToggle=document.getElementById("tone-ai-toggle");
+  if(toneAiToggle) toneAiToggle.onchange=()=>{
+    state.toneAi = !!toneAiToggle.checked;
+    try{ LS.set("toneAi", state.toneAi); }catch(e){}
+    render();
+  };
   $$("[data-guide-agent]").forEach(btn=>{
     btn.onclick=()=>{ state.guideEditAgentId=btn.dataset.guideAgent; render(); };
   });
@@ -33806,6 +34347,7 @@ function bindEvents(){
       };
     };
     bind("name", prefix+"-name", true);
+    bind("claudeBase", prefix+"-claudeBase");
     bind("claudeKey", prefix+"-claudeKey");
     bind("claudeModel", prefix+"-claudeModel", true);
     bind("geminiKey", prefix+"-geminiKey");
@@ -36377,9 +36919,21 @@ function sendUserMsg(){
     state.pendingUser.push({ role:"user", content:text, time:new Date().toISOString() });
   }
   const effText = text || (atts[0]&&atts[0].type==="file"?(atts[0].text||"").slice(0,80):"");
+  // 语气：本地词典先判一个挂上去（0 延迟，跟着这条一起进模型），随后 aux 异步精修
+  let __tone = null;
+  try{
+    if(text && state.toneOn !== false && typeof readTone === "function"){
+      __tone = readTone(text);
+      if(__tone){
+        const mine = state.pendingUser[state.pendingUser.length-1];
+        if(mine && mine.role === "user") mine.tone = __tone;
+        if(typeof toneRefine === "function") toneRefine(mine, text);
+      }
+    }
+  }catch(e){}
   // 偷听：把用户消息悄悄喂给宝宝（如开关开着）
   if(effText) babyOverhearChat(effText, "user");
-  if(typeof nudgeBodyFromUserText === "function" && effText) nudgeBodyFromUserText(effText);
+  if(typeof nudgeBodyFromUserText === "function" && effText) nudgeBodyFromUserText(effText, __tone);
   saveActiveThread();
   state.needChatScroll = true; // 发消息后贴底，像微信
   if(typeof postAppEvent === "function") postAppEvent("chat_message", { text: (text||"🖼️ 图片").slice(0,120) });
@@ -36438,6 +36992,66 @@ async function bgGenSubmit(){
     cap.BR.dispatchEvent({ label:"mp.bgchat", event:"bgchat", details: { task } }).catch(()=>{});
   }catch(e){ console.warn("[bg] submit fail", e); }
 }
+/**
+ * 主动消息走安卓后台引擎。
+ *
+ * 前台那条（proactiveTryLocal + 每 10 分钟 tick）只在 App 活着时跑 —— 而「自动唤醒」
+ * 最该发生的时刻恰恰是她没在看手机的时候。原来这个缺口是 VPS 上的 CC 用 nudge 补的，
+ * 但那样正文是 CC 写的，不是她聊天那位写的，口气对不上。
+ *
+ * 这里复用 bgGenSubmit 那套已经验过的机制（@capacitor/background-runner 是独立 JS 引擎，
+ * 锁屏后仍会把这次调用跑完），只是把任务从「补完一条回复」换成「影子提示词」——
+ * **正文因此还是她的 API + 她的人设写的**。
+ *
+ * 前提和边界，别指望它做不到的事：
+ * - 只在 App 还活着（切后台/锁屏）时有效。**进程被彻底杀掉就没人 dispatch 了** ——
+ *   那种情况仍然要 VPS 那条路，见下面给她的说明。
+ * - 闸门和前台完全共用 proactiveGate，换入口不等于绕过冷静期和每日上限。
+ * - CC 通道直接不参与：它是共享终端，锁屏后台去敲它会和别的请求串线。
+ */
+async function bgGenProactive(){
+  try{
+    if(!state.bgGen || state.bgGen === "off") return;
+    const cap = bgGenCap();
+    if(!cap) return;
+    if(state.chatLoading) return;
+    if(state.pendingUser && state.pendingUser.length) return; // 有待回复的，让 bgGenSubmit 先做
+    const gate = proactiveGate(false);
+    if(!gate.ok) return;
+    const built = proactiveBuildRequest(gate.reason, { conflict: gate.conflict });
+    if(!built) return;
+    const ag = built.ag;
+    if(ag.channel === "cc") return;
+    const target = state.chatTarget === "group" ? "a1" : (state.chatTarget || "a1");
+    const task = {
+      messages: built.msgs,
+      sys: built.sys,
+      cfg: {
+        channel: ag.channel,
+        claudeKey: ag.claudeKey || "", claudeBase: ag.claudeBase || "", claudeModel: ag.claudeModel || "",
+        openaiKey: ag.openaiKey || "", openaiBase: ag.openaiBase || "https://api.openai.com/v1",
+        openaiModel: ag.openaiModel || "gpt-4o",
+        geminiKey: ag.geminiKey || "", geminiModel: ag.geminiModel || "gemini-2.0-flash",
+      },
+      threadId: target,
+      agentName: ag.name || "TA",
+      notify: true,          // 主动消息不通知等于没发生
+      proactive: true,
+      wakeBase: (typeof wakeBase === "function" ? wakeBase() : "") || "",
+      wakeToken: (typeof wakeToken === "function" ? wakeToken() : "") || "",
+    };
+    // 先记账再 dispatch：runner 是独立引擎，它成功与否这边收不到，
+    // 不先占坑的话每次切后台都会再派一条出去。
+    state.proactiveLastLocal = Date.now();
+    persist("proactiveLastLocal");
+    if(gate.conflictKey){ state.proactiveLastConflict = gate.conflictKey; persist("proactiveLastConflict"); }
+    if(typeof incLocalPush === "function" && gate.period) incLocalPush(gate.period);
+    __proNote("已交给后台引擎（锁屏后生成）：" + String(gate.reason||"").slice(0, 20));
+    if(cap.KV){ try{ await cap.KV.set({ key:"mpBgTask", value: JSON.stringify(task) }); }catch(e){} }
+    cap.BR.dispatchEvent({ label:"mp.bgchat", event:"bgchat", details:{ task } }).catch(()=>{});
+  }catch(e){ console.warn("[bg] proactive fail", e); }
+}
+
 /** 读取后台生成结果并落到原线程 */
 async function bgGenPollResult(){
   try{
@@ -36463,10 +37077,14 @@ async function bgGenPollResult(){
  * 缓存里掉出去，每轮按全价重烧。放到最后一条消息末尾就没这个问题
  * （chatTailBlock 早就是这么做的，这里只是跟上）。
  */
-function retrievedMemoryBlock(){
+function retrievedMemoryBlock(queryOverride){
   try{
     if(!state.memories || !state.memories.length) return "";
-    const recentUserMsgs = state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
+    // queryOverride：通话里她说的话不进 state.messages，不给 query 的话整通电话都在
+    // 拿「打电话之前那三条」去检索，聊到哪都不变。见 callAiTurn。
+    const recentUserMsgs = (typeof queryOverride === "string" && queryOverride.trim())
+      ? queryOverride
+      : state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
     const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
     if(!relevant.length) return "";
     return "以下是与当前对话最相关的记忆：\n" + relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
@@ -36519,7 +37137,7 @@ function msgsToApiFormat(allMsgs, isGroup){
   const keepFull = guardKeepFull(list); // 只有最近两条被拦的给完整措辞
   return list.map(m=>{
     if(m.role==="user"){
-      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
+      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${toneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
       // 多模态：透传图片（图片不进文本前缀）
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
@@ -36537,8 +37155,16 @@ function truthDareCardLabel(m){
 
 // ─── 缓存优化：锚定窗口（不滑动）+ 覆盖式压缩 + 主聊天请求拼装 ───────────────
 const WINDOW_HARD_CAP = 120;   // 压缩故障保险丝
-const COMPRESS_THRESHOLD = 60; // 未压缩消息超过阈值触发压缩
-const COMPRESS_KEEP_TAIL = 30; // 压缩时保留最近 N 条不压
+// 60/30 → 100/10（2026-09-16，她定的）。算过的账：
+//   压缩周期 每 30 条 → 每 90 条；平均每轮注入 25.6 条 → 24.2 条；
+//   前缀失效 13.3 次/100 条 → 8 次/100 条。
+// **省的大头不在「注入条数」**（绝大多数轮次本来就顶在 WINDOW_SEND_CAP 上，平均值几乎不动），
+// 而在「压缩调用少了三分之二」和「前缀失效少了四成」—— 后者要配合 cache_control 才兑现，
+// 见 __claudeCacheMark。
+// KEEP_TAIL 没按她说的压到 0：那样压缩那一轮他手上**一条原文都没有，只剩摘要**，
+// 每 100 条断片一次。留 10 条，平均只多 1.9 条，但没有那个断崖。
+const COMPRESS_THRESHOLD = 100; // 未压缩消息超过阈值触发压缩
+const COMPRESS_KEEP_TAIL = 10;  // 压缩时保留最近 N 条不压
 
 // 注入上限：一次最多发这么多条。压缩仍然按 COMPRESS_THRESHOLD 走，
 // 这里只管「发多少」，把峰值从 60 条砍到 30 条上下。
@@ -36570,6 +37196,172 @@ function getWindowedMessages(allMsgs, target){
   }
   if(limit > 0) list = list.slice(-limit); // 用户显式设置的上限仍优先
   return { messages: list, summary };
+}
+
+// ═══════════════ 语气识别：她说的话，表面 vs 底下 ═══════════════════════════
+// 起因：她开玩笑他当真。模型看到的只有裸文本 ——「你走开」和「你走开哈哈哈」
+// 送进去是同一句，它没有任何线索知道哪句是真的。
+//
+// 输出不是「玩笑 / 认真」两档，是三层：
+//   play    说话方式：玩笑 / 反话 / 撒娇 / 试探 / 抱怨 / 认真 / 正事
+//   surface 表面情绪：她字面上摆出来的那个（生气、冷淡、夸奖…）
+//   under   底下情绪：真正的那个（撒娇、委屈、吃醋、得意…）
+// **surface ≠ under 的那些句子才是她说的「分不清」** ——「你别理我了😤」
+// 表面是赶人，底下是要哄。两个都给他，他才有得选。
+//
+// 本地词典先出一个（0 延迟、不花钱、发送前就有，跟着这条消息一起进模型），
+// aux 异步再精修一遍写回 m.tone，**下一轮**生效 —— 所以不挡发送、越聊越准。
+const TONE_PLAYS  = ["玩笑","反话","撒娇","试探","抱怨","认真","正事"];
+const TONE_MOODS  = ["开心","兴奋","得意","害羞","想他","撒娇","委屈","吃醋","生气","不耐烦","难过","失落","累","焦虑","无聊","平静"];
+const TONE_EMOJI  = { 玩笑:"😹", 反话:"🙃", 撒娇:"🐱", 试探:"🎣", 抱怨:"💧", 认真:"·", 正事:"·" };
+
+function readTone(raw){
+  const text = String(raw||"").trim();
+  if(!text) return null;
+  const T = (re)=>re.test(text);
+
+  const laugh   = T(/(哈{2,}|嘿{2,}|嘻{2,}|噗|hhh+|233+|笑死|绷不住|逗你|骗你的|开玩笑|说着玩|doge|🤣|😂|😆|😜|😝|🤪|😏)/i);
+  const irony   = T(/(呵呵|哦{2,}|行吧|随便你|你厉害|你最棒|好棒棒|真有你的|挺好的|我没事|没事啊|当我没说|爱咋咋|你说了算)/);
+  const coy     = T(/(嘛|啦|呀|哟|哼|嘤|唔|人家|宝宝|老公|亲爱的|～|〜|🥺|🥰|😚|😘|🤗|抱抱|蹭)/);
+  const angry   = T(/(滚|闭嘴|烦死|讨厌|别理我|不理你|气死|生气|过分|欺负|你凶|😤|😡|🤬|💢)/);
+  const hurt    = T(/(算了|无所谓|反正|我不重要|没关系啊?|不用管我|又不是|凭什么|😞|😔|🥲|😢|😭)/);
+  const jealous = T(/(谁啊|是谁|跟她|和她|别人|别的女|前女友|你还爱|你会不会|要是我|如果我|万一我|你更喜欢|有没有别)/);
+  const miss    = T(/(想你|想见|好想|爱你|喜欢你|在干嘛|想我吗|亲亲|贴贴)/);
+  const tired   = T(/(好累|累了|好困|困了|睡不着|不想动|emo|没力气|头疼|难受|撑不住|烦)/);
+  const happy   = T(/(开心|太好了|好耶|终于|真棒|爽|😄|😁|🎉|✨|❤️|💕|💖)/);
+  const proud   = T(/(我就说|果然|看吧|早说了|是不是我说的|厉害吧|夸我)/);
+  const shy     = T(/(不好意思|羞|别说了|讨厌啦|脸红|😳|🙈)/);
+  const biz     = T(/(帮我|怎么(弄|做|改|办|用)|是不是要|能不能|多少钱|几点|地址|https?:\/\/|报错|bug|文件)/i);
+  const asking  = T(/[?？]/);
+
+  // 强度：叠字、连标点、句长、表情堆。轻/中/重三档。
+  let lv = 1;
+  if(T(/[!！]{2,}|[?？]{2,}|\.{3,}|。{2,}/)) lv++;
+  if(T(/(.)\1{2,}/)) lv++;                       // 「好好好」「啊啊啊」
+  if(text.length > 60) lv++;
+  if((text.match(/[\u{1F300}-\u{1FAFF}]/gu)||[]).length >= 3) lv++;
+  const level = ["轻","轻","中","重","重"][Math.min(lv,4)];
+
+  let play = "", surface = "", under = "";
+
+  if(angry && (laugh || coy)){                   // 嘴上赶人，底下要哄 —— 最常被当真的那一类
+    play = "玩笑"; surface = "生气"; under = coy ? "撒娇" : "逗他";
+  } else if(irony){
+    play = "反话"; surface = happy ? "夸奖" : "没事"; under = angry ? "生气" : "委屈";
+  } else if(hurt && !laugh){
+    play = "抱怨"; surface = "没事"; under = "委屈";
+  } else if(jealous){
+    play = "试探"; surface = asking ? "随口问" : "平静"; under = "吃醋";
+  } else if(laugh){
+    play = "玩笑"; surface = "开心"; under = proud ? "得意" : (miss ? "想他" : "开心");
+  } else if(coy && (miss || asking)){
+    play = "撒娇"; surface = "亲昵"; under = miss ? "想他" : "撒娇";
+  } else if(angry){
+    play = "认真"; surface = "生气"; under = "生气";
+  } else if(tired){
+    play = "抱怨"; surface = "累"; under = "累";
+  } else if(shy){
+    play = "撒娇"; surface = "害羞"; under = "害羞";
+  } else if(biz){
+    play = "正事"; surface = "平静"; under = "平静";
+  } else if(miss){
+    play = "撒娇"; surface = "亲昵"; under = "想他";
+  } else if(happy || proud){
+    play = "认真"; surface = "开心"; under = proud ? "得意" : "开心";
+  } else {
+    play = "认真"; surface = "平静"; under = "平静";
+  }
+  return { play, surface, under, level, by:"local" };
+}
+
+/** 给模型的语气前缀。表里不一时把两层都写出来，一致时只写一层（别把平常话也标得神神叨叨）。 */
+function toneLabel(m){
+  const tn = m && m.tone;
+  if(!tn || !tn.play) return "";
+  if(tn.play === "正事") return "";                       // 正事不用标，标了反而干扰
+  if(tn.play === "认真" && tn.surface === "平静") return "";  // 平常话不标
+  const same = tn.surface === tn.under;
+  const core = same ? tn.surface : `表面${tn.surface}，其实${tn.under}`;
+  const src = tn.by === "me" ? "她自己标的" : "";
+  return `[语气 · ${tn.play} · ${core}${tn.level==="重"?" · 很用力":""}${src?" · "+src:""}] `;
+}
+
+/**
+ * aux 异步精修。**不挡发送** —— 本地那份在 sendUserMsg 里已经跟着这条消息进模型了，
+ * 这里的结果写回 m.tone，下一轮起生效（历史消息都带着标签，他能看出情绪走势）。
+ * aux 会间歇 503（见 VPS 那条），失败就保留本地判断，不弹任何东西。
+ */
+async function toneRefine(m, text){
+  try{
+    if(!m || !text || text.length < 2) return;
+    if(state.toneOn === false || state.toneAi === false) return;
+    if(typeof callAuxAPI !== "function") return;
+    const prompt = `判断这句话的语气，只输出一行 JSON，不要 markdown、不要解释：
+{"play":"玩笑|反话|撒娇|试探|抱怨|认真|正事","surface":"表面情绪两三个字","under":"真实情绪两三个字","level":"轻|中|重"}
+说话人是 Jasmine，对象是她的恋人。表面和真实不一样时要分开写（嘴上赶人其实是要哄：surface=生气，under=撒娇）；一样就写同一个词。
+这句话：${String(text).slice(0,200)}`;
+    const raw = await callAuxAPI(state.apiConfig, prompt);
+    const s = String(raw||"");
+    const a = s.indexOf("{"), b = s.lastIndexOf("}");
+    if(a < 0 || b <= a) return;
+    const o = JSON.parse(s.slice(a, b+1));
+    if(!o || !o.play) return;
+    if(m.tone && m.tone.by === "me") return;   // 她自己标过的不许被盖掉
+    const next = {
+      play: TONE_PLAYS.includes(o.play) ? o.play : ((m.tone && m.tone.play) || "认真"),
+      surface: String(o.surface||"").slice(0,6) || "平静",
+      under: String(o.under||"").slice(0,6) || "平静",
+      level: ["轻","中","重"].includes(o.level) ? o.level : "中",
+      by: "ai",
+    };
+    const old = m.tone || {};
+    m.tone = next;
+    if(typeof saveActiveThread === "function") saveActiveThread();
+    persist("chatThreads");
+    // 只在真变了、且不在等回复时重绘（render 是整页重绘，流式途中插一脚会闪）
+    const changed = old.play!==next.play || old.surface!==next.surface || old.under!==next.under;
+    if(changed && !state.chatLoading && state.tab === "chat" && typeof render === "function") render();
+  }catch(e){}
+}
+
+/** 气泡旁那个小标。不加解释文案 —— 只有一个 emoji 和「表面→其实」，点一下能改。
+ *  平常话（认真·平静）和正事不标：满屏都是标签等于没有标签。 */
+function toneChipHtml(m, idx){
+  try{
+    if(state.toneOn === false) return "";
+    const tn = m && m.tone;
+    if(!tn || !tn.play) return "";
+    if(tn.play === "正事" || (tn.play === "认真" && tn.surface === "平静")) return "";
+    const txt = (tn.surface === tn.under) ? tn.under : `${tn.surface}→${tn.under}`;
+    return `<button type="button" class="tone-chip${tn.by==="me"?" mine":""}${tn.level==="重"?" hot":""}" data-tone-pick="${idx}" title="${escAttr(tn.play)}">${TONE_EMOJI[tn.play]||"·"}<span>${esc(txt)}</span></button>`;
+  }catch(e){ return ""; }
+}
+
+/** 点开的改标面板：上排改说话方式，下排改「其实是」。她改过的 by="me"，aux 不再覆盖。 */
+function tonePickHtml(idx){
+  try{
+    if(state.tonePickIdx !== idx) return "";
+    const m = (state.messages||[])[idx];
+    if(!m) return "";
+    const tn = m.tone || {};
+    return `<div class="tone-pick">
+      <div class="tone-pick-row">${TONE_PLAYS.map(p=>`<button type="button" class="tone-opt${tn.play===p?" on":""}" data-tone-play="${idx}" data-tone-v="${escAttr(p)}">${esc(p)}</button>`).join("")}</div>
+      <div class="tone-pick-row">${TONE_MOODS.map(o=>`<button type="button" class="tone-opt${tn.under===o?" on":""}" data-tone-under="${idx}" data-tone-v="${escAttr(o)}">${esc(o)}</button>`).join("")}</div>
+    </div>`;
+  }catch(e){ return ""; }
+}
+
+/** 尾部那条使用说明。只在最近几条里真出现过「表里不一」时才发，平时一个字都不占。 */
+function toneRuleBlock(msgs){
+  try{
+    const recent = (msgs||[]).filter(m=>m.role==="user" && m.tone).slice(-6);
+    if(!recent.length) return "";
+    const tricky = recent.some(m=>m.tone.surface !== m.tone.under || m.tone.play==="玩笑" || m.tone.play==="反话");
+    if(!tricky) return "";
+    return `【她这几句怎么说的】消息前面的 [语气 · …] 是自动判的，不是她打出来的字，别复述也别提它。
+「表面X，其实Y」的意思是这句别照字面接：她说「别理我了」+ 玩笑，你要哄不要真的走开。
+判错了也有可能 —— 拿不准就顺着那个「其实」接，或者直接问她一句「你是认真的还是逗我」，比猜错好。`;
+  }catch(e){ return ""; }
 }
 
 /** 语音消息给模型的语气前缀。转写只有「说了什么」，情绪/hint 是「怎么说的」——
@@ -37088,7 +37880,7 @@ function buildMainChatRequest(ag, extraHint){
   const keepFull = guardKeepFull(win.messages); // 只有最近两条被拦的给完整措辞
   const apiMsgs = win.messages.map(m=>{
     if(m.role==="user"){
-      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
+      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${toneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
     }
@@ -37102,7 +37894,8 @@ function buildMainChatRequest(ag, extraHint){
   // 检索记忆也走这条路 —— 它以前在 system 末尾，每轮一变就把后面整段历史
   // 从缓存里踢出去；那才是「一条 18000 每轮全价」的真正原因。
   try{
-    const tail = [retrievedMemoryBlock(), chatTailBlock()].filter(Boolean).join("\n\n");
+    const toneRule = (typeof toneRuleBlock === "function") ? toneRuleBlock(win.messages) : "";
+    const tail = [retrievedMemoryBlock(), toneRule, chatTailBlock()].filter(Boolean).join("\n\n");
     if(tail && apiMsgs.length){
       const last = apiMsgs[apiMsgs.length - 1];
       if(last && typeof last.content === "string") last.content = last.content + "\n\n" + tail;
@@ -37127,19 +37920,36 @@ async function compressThreadIfNeeded(){
     const oldChunk = msgs.slice(compressedUp, compressTo);
     const prevSummary = (thread.compressed && thread.compressed.summary) || "";
     // 每句带上时间：不带的话压完就是一锅粥，谁也说不清哪件事发生在哪天
+    // 每句带上时间：不带的话压完就是一锅粥，谁也说不清哪件事发生在哪天。
+    // 单句 300→220 字：KEEP_TAIL 从 30 降到 10 之后，一次要压的是 90 条不是 30 条，
+    // 按 300 字算是 27000 字，会被下面的 slice 砍掉三分之二 —— **那是静默丢内容**。
     const text = oldChunk.map(m=>{
       const t = m.time ? `[${formatTimeFull(m.time)}] ` : "";
-      return `${t}${m.role==="user"?"用户":"TA"}：${String(m.content||"").slice(0,300)}`;
+      return `${t}${m.role==="user"?"用户":"TA"}：${String(m.content||"").slice(0,220)}`;
     }).join("\n");
     const span = (()=>{
       const ts = oldChunk.map(m=>m.time).filter(Boolean);
       if(!ts.length) return "";
       return `（这段对话发生在 ${formatTimeFull(ts[0])} 到 ${formatTimeFull(ts[ts.length-1])} 之间）`;
     })();
-    const prompt = `把下面这段已发生的对话，覆盖式压缩成一段中文摘要：保留关键人物、事件、关系进展、承诺和伏笔，删掉寒暄。
-**每一件关键事件都要带上它发生的时间**（写成「2026/09/01 周一」这样；同一天的多件事可以合并到一个日期下；跨度长的可以写「8 月下旬」）。
-时间顺序要保持，不要把不同日子的事揉成一句。
-这是对「上一次摘要」的整体更新，不是追加——新摘要要包含旧摘要里依然重要的内容（**旧摘要里已有的日期要原样保留**），且总长不超过 600 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,8000)}`;
+    // 摘要只管最近 24 小时 + 还没兑现的约定，长期的事交给记忆库（每轮检索 5 条挂在消息尾部）。
+    // 以前是「从开头到压缩点的全部历史」覆盖式重写，截到 1200 字（中文约 1800 token）每轮都发。
+    // 分工清楚之后它能瘦一半。**约定必须豁免 24 小时** —— 30 小时前答应的事，
+    // 摘要里没有、检索又没命中，就真的丢了。
+    const cutoff = formatTimeFull(new Date(Date.now() - 24*60*60*1000).toISOString());
+    const prompt = `把下面这段已发生的对话，覆盖式压缩成一段中文摘要。分两块写：
+
+【最近一天】只写 ${cutoff} 之后发生的事：关键事件、关系进展、情绪走向、正在进行的话题。删掉寒暄。
+每件事带上时间（写成「2026/09/01 周一 21:30」这样，同一天的多件事可以合并到一个日期下）。时间顺序不许乱。
+比这更早的事不要写进这一块 —— 它们已经进了记忆库，不用在这里重复。
+
+【还没兑现的约定】不受时间限制：任何一方答应过、但还没做完/没验证的事，以及明确说了以后要做的安排。
+每条带上是谁答应的、什么时候答应的。已经兑现或已经作废的就删掉。没有就写「（无）」。
+
+这是对「上一次摘要」的整体更新，不是追加：
+- 上一次摘要里【最近一天】那块，凡是已经超过 ${cutoff} 的，这次要删掉；
+- 【还没兑现的约定】那块要原样带过来，再加上新对话里新出现的。
+总长不超过 400 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,20000)}`;
     // 兜底优先挑非 CC 的通道：CC 是共享终端，摘要和她刚发的消息撞在一起会互相串
     // （hub 的回复没有请求 id）—— 「换官方订阅渠道就把摘要发出来了」就是这么来的。
     const ag = (typeof bgChatAgent==="function" ? bgChatAgent() : null) || agentById(target) || (state.agents||[])[0];
@@ -37151,7 +37961,8 @@ async function compressThreadIfNeeded(){
     }
     // 空摘要绝不能覆盖上一份，否则压缩点白推进、旧对话就真丢了
     if(!String(summary||"").trim()) return;
-    thread.compressed = { summary: (summary||"").slice(0,1200), upToIndex: compressTo, at: new Date().toISOString() };
+    // 1200 → 900：提示词要的是 400 字，留点余量就够；这一段每轮都进 system，越短越省
+    thread.compressed = { summary: (summary||"").slice(0,900), upToIndex: compressTo, at: new Date().toISOString() };
     saveActiveThread();
   }catch(e){ /* 压缩失败不阻塞聊天 */ }
 }
@@ -37161,6 +37972,22 @@ let __usageLog = [];
 function __pushUsageLog(u){
   __usageLog.push(u);
   if(__usageLog.length > 50) __usageLog = __usageLog.slice(-50);
+}
+/**
+ * 一条请求的 token 账，人话版。
+ * 加这句判定是因为**缓存失效是静默的** —— 请求照样成功，只是账单变贵，不报任何错。
+ * 唯一的地面真相就是 cache_read / cache_write 这两个数。
+ * 注意 input 只是「没命中缓存的那部分」，整条请求的大小 = input + read + write。
+ */
+function __usageLine(u){
+  if(!u) return "";
+  const r = u.cache_read||0, w = u.cache_write||0, i = u.input||0;
+  const total = r + w + i;
+  let verdict;
+  if(r > 0)      verdict = `缓存命中 ${Math.round(r*100/Math.max(1,total))}%`;
+  else if(w > 0) verdict = "首次写入缓存（下一条才开始省）";
+  else           verdict = "没走缓存";
+  return `${verdict} · 读 ${r} · 写 ${w} · 未命中 ${i} · 输出 ${u.output||0}（共 ${total}）`;
 }
 function __recordUsage(u){
   if(!u) return;
@@ -37976,6 +38803,40 @@ const MEM_AUTO_MAX_PER_RUN = 200;
 /** 聊天记录每新增多少条才自动提炼一次记忆（单位是聊天消息条数，不是记忆条数）。
  *  原 60 → 200 → 100：避免过密流水账；手动「立刻沉淀 / 从聊天整理」不受此限制。 */
 const MEM_AUTO_MIN_NEW = 100;
+/** 每轮顺带补多少条积压（「两头同时跑」的旧端）。比新端小得多：
+ *  新的是她现在要用的，旧的只是慢慢补齐，不该跟新的抢预算。 */
+const MEM_BACKFILL_PER_RUN = 200;
+/** 积压小于这个数就不单独跑旧端了（并进新端一次做掉，省一次模型调用） */
+const MEM_BACKFILL_MIN = 8;
+
+/**
+ * 沉淀游标。**一条线程有两个游标，不是一个。**
+ *
+ * 老版本只有 `memCheckpoint[id]`，语义是「[0, cp) 已消化」，自动沉淀从 cp 往后
+ * 顺序啃 200 条。一旦 cp 被回夹（见 memAutoIntegrate 里那道闸），积压几千条，
+ * 每 20 分钟推进 200 —— 于是「一直在沉淀，沉淀出来的全是几个月前的事」。
+ *
+ * 现在拆成两个：
+ *   cp[id]              旧端游标：[0, cp) 已消化
+ *   rc[id] = {from,to}  新端区间：[from, to) 已消化
+ * 未消化 = [cp, from) ∪ [to, c)。每轮两头各取一批，新端优先。
+ * 迁移：老数据 from = to = 老的 cp，此时未消化恰好等于 [cp, c)，和老语义完全一致。
+ */
+function memCursors(id, c){
+  const cp = state.memCheckpoint || (state.memCheckpoint = {});
+  const rc = state.memCpRecent   || (state.memCpRecent   = {});
+  let changed = false;
+  let lo = cp[id];
+  if(lo === undefined || lo === null || isNaN(+lo)){
+    // 首次见到该线程：只消化最近 MEM_AUTO_MIN_NEW 条，更早的做基线跳过
+    lo = Math.max(0, c - MEM_AUTO_MIN_NEW); cp[id] = lo; changed = true;
+  } else lo = +lo || 0;
+  let r = rc[id];
+  if(!r || typeof r !== "object" || isNaN(+r.from) || isNaN(+r.to)){
+    r = { from: lo, to: lo }; rc[id] = r; changed = true;
+  }
+  return { lo, from:+r.from||0, to:+r.to||0, changed };
+}
 /** 自动沉淀：把自检查点后新增的聊天自动整理成记忆（触发：回复完成后 / 打开 App）
  *  opts.force=true 跳过「攒够 MEM_AUTO_MIN_NEW 条」和 20 分钟冷却（记忆库页的「立刻沉淀」用） */
 async function memAutoIntegrate(opts){
@@ -37990,37 +38851,63 @@ async function memAutoIntegrate(opts){
     console.warn("[memAuto] 上一轮超过 10 分钟没结束，判定卡死，重跑");
   }
   if(state.memAutoDisabled && !force){ __memNote("自动沉淀开关是关的"); return; }
+  // ⚠️ 聊天记录没读完就绝对不能跑。
+  // 恢复链（fsLoadAllKvIntoState + salvageChatThreadsFromDevice：全盘扫 localStorage、
+  // 所有 IDB scope、所有 Preferences 键，再读几 MB 的私有目录 JSON）是异步的，
+  // 而这个函数在开 App 后 6 秒就被调。几千条历史在手机上 6 秒读不完 ——
+  // 那一刻 memRelevantCount 拿到的是个小数（IDB 那份被 trim 到 5000、LS 分片、甚至 0），
+  // 下面那道回夹闸就会把检查点**永久夹到那个小数并落盘**，之后积压几千条，
+  // 自动沉淀从最旧的开始啃，于是「一直在沉淀但全是过去的事」。
+  // salvage 自己有 __chatNativeHydrated 防止把空快照写回去，检查点这条路以前一道保护都没有。
+  if(!window.__chatNativeHydrated){
+    __memNote("聊天记录还没读完，先不沉淀（避免把检查点夹坏）");
+    return;
+  }
   const anyKey = state.apiConfig && (state.apiConfig.claudeKey || state.apiConfig.auxOpenaiKey || state.apiConfig.openaiKey);
   const agKey = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
   if(!anyKey && !agKey){ __memNote("没有可用的 API Key"); return; }
   const ids = [...((state.agents||[]).map(a=>a.id)), "group"];
-  const cp = state.memCheckpoint || {};
+  const cp = state.memCheckpoint || (state.memCheckpoint = {});
+  const rc = state.memCpRecent   || (state.memCpRecent   = {});
   const newPer = {};
-  let totalNew = 0;
+  let totalNew = 0, totalBack = 0;
   let baselineChanged = false;
+  const rewound = [];
   ids.forEach(id=>{
     const c = memRelevantCount(id);
-    let done = cp[id];
-    if(done === undefined || done === null || isNaN(+done)){
-      // 首次见到该线程：只消化最近 MEM_AUTO_MIN_NEW 条，更早的历史做基线跳过
-      // （避免一次性把积压全部喂 AI、费用爆炸）；需要旧记忆可手动「从聊天整理」。
-      done = Math.max(0, c - MEM_AUTO_MIN_NEW);
-      cp[id] = done;
-      baselineChanged = true;
-    } else done = +done || 0;
-    // 检查点是「第几条」这种绝对下标，而聊天记录会变短（冷启动多源抢救挑中了更短的那份、
-    // 手动清理、换账号前缀）。一旦 done > c，n 就永远是负数，这条线程**再也不会沉淀**，
-    // 而且全程没有任何提示。夹回来。
-    if(done > c){
-      console.warn("[memAuto] 检查点比实际记录还靠后，回夹", id, done, "→", c);
-      done = c; cp[id] = done; baselineChanged = true;
+    // c===0 一律不碰游标。这条线程可能只是这台机器上还没建（a2 从没聊过），
+    // 也可能是这一刻还没 hydrate 出来 —— 两种情况下把游标夹到 0 都是纯粹的破坏。
+    if(!c) return;
+    const cur = memCursors(id, c);
+    if(cur.changed) baselineChanged = true;
+    let lo = cur.lo, from = cur.from, to = cur.to;
+    // 游标是「第几条」这种绝对下标，而聊天记录确实会变短（手动清理、换账号前缀）。
+    // 不夹的话 n 永远是负数，这条线程再也不会沉淀。**但现在只在 hydrate 完之后才夹**，
+    // 而且夹了要留痕 —— 以前夹完悄无声息，从外面完全看不出记忆为什么开始倒退。
+    if(to > c){
+      rewound.push(`${id} ${to}→${c}`);
+      console.warn("[memAuto] 游标比实际记录还靠后，回夹", id, to, "→", c);
+      to = c; baselineChanged = true;
     }
-    const n = c - done;
-    if(n > 0){ newPer[id] = { n, done }; totalNew += n; }
+    if(from > to){ from = to; baselineChanged = true; }
+    if(lo > from){ lo = from; baselineChanged = true; }
+    cp[id] = lo; rc[id] = { from, to };
+    const nNew  = Math.max(0, c - to);      // 新端：还没消化的新消息
+    const nBack = Math.max(0, from - lo);   // 旧端：积压
+    if(nNew > 0 || nBack > 0){ newPer[id] = { c, lo, from, to, nNew, nBack }; }
+    totalNew += nNew; totalBack += nBack;
   });
-  if(baselineChanged){ state.memCheckpoint = cp; persist("memCheckpoint"); }
-  if(!force && totalNew < MEM_AUTO_MIN_NEW){ __memNote(`新增 ${totalNew} 条，攒够 ${MEM_AUTO_MIN_NEW} 条才自动整理`); return; }
-  if(totalNew <= 0){ __memNote("没有新的聊天可整理"); return; }
+  if(rewound.length){
+    state.memCpRewound = rewound.join("、") + "（" + new Date().toLocaleString() + "）";
+    persist("memCpRewound");
+  }
+  if(baselineChanged){ persist("memCheckpoint"); persist("memCpRecent"); }
+  // 触发只看**新消息**：积压再多也不该让它每 20 分钟自己跑起来
+  if(!force && totalNew < MEM_AUTO_MIN_NEW){
+    __memNote(`新增 ${totalNew} 条，攒够 ${MEM_AUTO_MIN_NEW} 条才自动整理${totalBack?`（积压 ${totalBack} 条，跟着新的一起补）`:""}`);
+    return;
+  }
+  if(totalNew <= 0 && totalBack <= 0){ __memNote("没有新的聊天可整理"); return; }
   const now = Date.now();
   const cool = 20*60000 - (now - (state.memLastAutoAt||0));
   if(!force && cool > 0){ __memNote(`冷却中，还有 ${Math.ceil(cool/60000)} 分钟`); return; }
@@ -38029,39 +38916,78 @@ async function memAutoIntegrate(opts){
   state.__memErr = "";
   __memNote("整理中…");
   if(state.subPage==="memory") render();
-  let totalCreated = 0, totalRemote = 0;
+  let totalCreated = 0, totalRemote = 0, madeNew = 0, madeBack = 0;
   const errs = [];
   try{
+    // 提炼一律走**聊天模型**（memDigestTranscript 里已改成聊天模型主力）。
+    // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
+    // DeepSeek 欠费时它照样回 {ok:true,count:0}，把「失败」伪装成「没什么可记的」。
+    // 现在云端只负责**存**（/mem/add 只做保存 + 向量化，不调任何 LLM）。
+    const digest = async (tid, skip, take, label)=>{
+      const transcript = collectChatTranscript({ threadIds:[tid], skip, limit: take, maxPerThread:0 });
+      if(!transcript.trim()) return true;   // 空区间也算处理过，照常推进游标，免得反复重试
+      const created = await memDigestTranscript(transcript, label, take);
+      if(created && created.length){
+        state.memories = [...created, ...state.memories];
+        totalCreated += created.length;
+        totalRemote += await memPushToCloud(created); // 同步进云端向量库，检索才找得到
+        if(window.__memPushErr) errs.push(window.__memPushErr);
+      }
+      return true;
+    };
+
     for(const [tid, info] of Object.entries(newPer)){
-      if(info.n < 4) continue;
-      // 一次最多消化 MEM_AUTO_MAX_PER_RUN 条。
-      // force（立刻沉淀）：在未处理区间里取**最新**一批，避免积压时反复提炼很早以前的聊天。
-      // 自动：仍从检查点顺序往前推进，保证不漏。
-      const take = Math.min(info.n, MEM_AUTO_MAX_PER_RUN);
-      const skipStart = force ? (info.done + Math.max(0, info.n - take)) : info.done;
-      const upTo = skipStart + take;
-      const transcript = collectChatTranscript({ threadIds:[tid], skip: skipStart, limit: take, maxPerThread:0 });
-      if(!transcript.trim()){ cp[tid] = upTo; state.memCheckpoint = cp; persist("memCheckpoint"); continue; }
-      // 提炼一律走**聊天模型**（memDigestTranscript 里已改成聊天模型主力）。
-      // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
-      // DeepSeek 欠费时它照样回 {ok:true,count:0}，把「失败」伪装成「没什么可记的」。
-      // 现在云端只负责**存**（/mem/add 只做保存 + 向量化，不调任何 LLM）。
-      try{
-        const created = await memDigestTranscript(transcript, "最近 "+take+" 条", take);
-        if(created && created.length){
-          state.memories=[...created, ...state.memories];
-          totalCreated += created.length;
-          totalRemote += await memPushToCloud(created); // 同步进云端向量库，检索才找得到
-          if(window.__memPushErr) errs.push(window.__memPushErr);
+      let { c, lo, from, to, nNew, nBack } = info;
+
+      // ── 新端：她现在要用的那一头，永远先做 ──────────────────────────────
+      if(nNew >= 4 || (force && nNew > 0)){
+        const take = Math.min(nNew, MEM_AUTO_MAX_PER_RUN);
+        try{
+          if(from === to){
+            // 迁移后第一次开新端：直接取**最新**那批，游标一步跨到末尾，
+            // 中间没消化的那段整体变成积压（和已有积压首尾相接，仍是一个连续区间）。
+            // 这一步就是「沉淀出来的东西立刻变成当下的事」的那一下。
+            await digest(tid, c - take, take, `最近 ${take} 条`);
+            from = c - take; to = c;
+          } else if(nNew <= MEM_AUTO_MAX_PER_RUN){
+            await digest(tid, to, nNew, `最近 ${nNew} 条`);
+            to = c;
+          } else {
+            // 一轮之内涨了 200+ 条（很罕见：要 20 分钟里聊 200 条）。
+            // 这时取新端会在中间劈出第二个洞，而洞只能表示一个 —— 所以退回顺序推进，
+            // 下一轮就追上了，最多落后一轮。
+            await digest(tid, to, take, `第 ${to+1}–${to+take} 条`);
+            to += take;
+          }
+          if(lo >= from){ lo = to; from = to; }  // 没有积压：两个游标合并回一个，别让它俩白白飘着
+          madeNew++;
+          cp[tid] = lo; rc[tid] = { from, to };
+          persist("memCheckpoint"); persist("memCpRecent");
+        }catch(e){
+          // 以前这里只有 console.warn —— 手机上看不到 console，
+          // 所以「不会自动整合」查了几轮都没线索。失败不推进游标，下次重试。
+          const why = String((e&&e.message)||e).slice(0,80);
+          errs.push(`${tid} 新：${why}`);
+          console.warn("[memAuto] 新端", tid, e);
         }
-        // 成功处理即推进检查点（含空结果，避免反复花钱重试同一批）
-        cp[tid] = upTo; state.memCheckpoint = cp;
-        persist("memCheckpoint");
-      }catch(e){
-        // 以前这里只有 console.warn —— 手机上看不到 console，所以「不会自动整合」查了几轮都没线索
-        const why = String((e&&e.message)||e).slice(0,80);
-        errs.push(`${tid}：${why}`);
-        console.warn("[memAuto] 线程", tid, e); /* 该线程失败不推进，下次重试 */
+      }
+
+      // ── 旧端：顺带补一小批积压，不跟新的抢预算 ─────────────────────────
+      nBack = Math.max(0, from - lo);
+      if(nBack > 0){
+        const take = Math.min(nBack, nBack <= MEM_BACKFILL_MIN ? nBack : MEM_BACKFILL_PER_RUN);
+        try{
+          await digest(tid, lo, take, `更早的 ${take} 条`);
+          lo += take;
+          if(lo >= from){ lo = to; from = to; }   // 积压补完，两个游标合并回一个
+          madeBack++;
+          cp[tid] = lo; rc[tid] = { from, to };
+          persist("memCheckpoint"); persist("memCpRecent");
+        }catch(e){
+          const why = String((e&&e.message)||e).slice(0,80);
+          errs.push(`${tid} 旧：${why}`);
+          console.warn("[memAuto] 旧端", tid, e);
+        }
       }
     }
     if(totalCreated > 0){
@@ -38073,8 +38999,13 @@ async function memAutoIntegrate(opts){
       const cloudTxt = totalRemote > 0 ? `（云端 ${totalRemote}）` : "";
       showToast(`🧠 已自动沉淀 ${totalCreated} 条记忆${cloudTxt}`);
     }
+    // 剩余积压：她关心的是「还要多久才全是当下的事」，这个数字最直接
+    const backLeft = Object.keys(newPer).reduce((s,tid)=>{
+      const r = rc[tid] || {}; return s + Math.max(0, (+r.from||0) - (+cp[tid]||0));
+    }, 0);
+    const how = `${madeNew?`新 ${madeNew} 批`:""}${madeNew&&madeBack?" + ":""}${madeBack?`补旧 ${madeBack} 批`:""}`;
     __memNote(totalCreated || totalRemote
-      ? `已沉淀 ${totalCreated} 条，上云 ${totalRemote} 条${errs.length?" · "+errs[0]:""}`
+      ? `已沉淀 ${totalCreated} 条，上云 ${totalRemote} 条${how?`（${how}）`:""}${backLeft?` · 积压还剩 ${backLeft} 条`:""}${errs.length?" · "+errs[0]:""}`
       : (errs.length ? "整理失败："+errs[0] : "这批聊天没提炼出可存的记忆"));
     // __memErr 可能已经被 memDigestTranscript 拼进错误信息里了，别重复贴一遍
     if(state.__memErr && state.__memNote.text.indexOf(state.__memErr) < 0){
@@ -38121,7 +39052,8 @@ window.reinitState = function(){
     bubbleOpacity:"bubbleOpacity",bubbleGrad:"bubbleGrad",bubbleMeColor:"bubbleMeColor",bubbleThemColor:"bubbleThemColor",
     apiConfig:"apiConfig",apiPresets:"apiPresets",agents:"agents",chatTarget:"chatTarget",chatMode:"chatMode",
     chatThreads:"chatThreads",memories:"memories",prompts:"prompts",coupleInfo:"coupleInfo",
-    memCheckpoint:"memCheckpoint",memLastAutoAt:"memLastAutoAt",memAutoDisabled:"memAutoDisabled",memRemote:"memRemote",savedChats:"savedChats",savedCats:"savedCats",
+    memCheckpoint:"memCheckpoint",memCpRecent:"memCpRecent",memCpRewound:"memCpRewound",
+    memLastAutoAt:"memLastAutoAt",memAutoDisabled:"memAutoDisabled",memRemote:"memRemote",savedChats:"savedChats",savedCats:"savedCats",
     diaryData:"diaryData",albumData:"albumData",htmlGameSrc:"htmlGameSrc",htmlGameName:"htmlGameName",
     thoughtGuide:"thoughtGuide",htmlGameCollection:"htmlGameCollection",cmdList:"cmdList",
     contextLimit:"contextLimit",musicConfig:"musicConfig",musicNow:"musicNow",
@@ -38134,11 +39066,12 @@ window.reinitState = function(){
     roleplays:"roleplays",activeRoleplayId:"activeRoleplayId",desireDriveOn:"desireDriveOn",
     divinationSkillOn:"divinationSkillOn",
     bodyVitals:"bodyVitals",sixAxis:"sixAxis",bodyFeel:"bodyFeel",bodyWant:"bodyWant",
-    proactiveConfig:"proactiveConfig",proactiveLastLocal:"proactiveLastLocal",
+    proactiveConfig:"proactiveConfig",proactiveLastLocal:"proactiveLastLocal",proactiveLastConflict:"proactiveLastConflict",
     proactiveInbox:"proactiveInbox",dreamConfig:"dreamConfig",dreamState:"dreamState",
     cabinets:"cabinets",cabinetFeedChat:"cabinetFeedChat",
     sparkVault:"sparkVault",callConfig:"callConfig",
     callRecords:"callRecords",pushStats:"pushStats",ntfyConfig:"ntfyConfig",ntfyLog:"ntfyLog",
+    toneOn:"toneOn",toneAi:"toneAi",claudeCacheOn:"claudeCacheOn",
     branding:"branding",hisPhone:"hisPhone",captivityConfig:"captivityConfig",eatApple:"eatApple",
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
@@ -38480,9 +39413,16 @@ function proactiveTick(){
 if(!window.__proactiveTimer){
   window.__proactiveTimer = setInterval(proactiveTick, 10 * 60 * 1000);
   document.addEventListener("visibilitychange", ()=>{
-    if(document.visibilityState !== "visible") return;
+    if(document.visibilityState !== "visible"){
+      // 切后台这一下是「自动唤醒」唯一能抓住的时机：前台那条定时器待会儿就不跑了。
+      // 把这一轮交给安卓后台引擎（它自己有闸门，不会每次切后台都发）。
+      try{ if(typeof bgGenProactive === "function") bgGenProactive(); }catch(e){}
+      return;
+    }
     if(Date.now() - (window.__proactiveLastTick || 0) < 60000) return; // 来回切前台防抖
     proactiveTick();
+    // 回到前台顺手收一下后台引擎生成好的那条
+    try{ if(typeof bgGenPollResult === "function") bgGenPollResult(); }catch(e){}
   });
 }
 
