@@ -2309,16 +2309,30 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     return { role, content: m.content || "" };
   });
   let prevSig = ""; // 防死循环：连续两轮请求同一组工具调用就收敛
+  // 关键：模型经常「同一轮既写长文又调 write_cards」。
+  // 旧逻辑只返回「最后一轮无 tool_calls 的 text」，中间那轮的正文会被丢掉 → 表现为写卡吞消息。
+  // 这里把每一轮有意义的正文累加起来。
+  let accText = "";
+  const __mergePiece = (piece)=>{
+    const p = String(piece||"").trim();
+    if(!p || p==="（无响应）" || p==="(无响应)") return;
+    if(!accText){ accText = p; return; }
+    if(accText.includes(p)) return;
+    if(p.includes(accText) && p.length > accText.length){ accText = p; return; }
+    accText = accText + "\n\n" + p;
+  };
   for(let round=0; !maxRounds || round < maxRounds; round++){
     const res = await __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsParam);
+    __mergePiece(res && res.text);
     if(!res.toolCalls || !res.toolCalls.length){
-      return { text: res.text, toolEvents };
+      return { text: accText || res.text || "", toolEvents };
     }
     // 同一组工具+参数连续重复 → 认为循环卡死，撤掉工具让模型直接作答
     const sig = (res.toolCalls||[]).map(tc=>tc.name+"::"+JSON.stringify(tc.arguments||{})).join(";;");
     if(prevSig && sig === prevSig){
       const final = await __chatApiSingleRound(channel, creds, convo, systemPrompt, null);
-      return { text: final.text || res.text, toolEvents };
+      __mergePiece(final && final.text);
+      return { text: accText || (final && final.text) || res.text || "", toolEvents };
     }
     prevSig = sig;
     const toolResults = [];
@@ -2332,6 +2346,17 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
           continue;
         }
         resultStr = flattenMcpResult(r);
+        // 写卡成功：明确告诉模型正文已保留，下一轮不要空回复也不要重写长文
+        if(tc.name === "write_cards"){
+          try{
+            const okHint = "卡片已写入。本轮若已在上一则消息写出叙事正文，系统会保留；你只需自然接一句或保持沉默，不要重复长文，也不要只回空。";
+            if(typeof resultStr === "string"){
+              resultStr = resultStr + (resultStr.endsWith(".")||resultStr.endsWith("。")?"":"。") + okHint;
+            } else {
+              resultStr = JSON.stringify({ ok:true, detail: resultStr, hint: okHint });
+            }
+          }catch(_){}
+        }
         toolEvents.push({ name: tc.name, args: tc.arguments, result: String(resultStr).slice(0, 500) });
       }catch(e){
         resultStr = JSON.stringify({ type:"tool_error", error: e.message||String(e), tool: tc.name, lastArguments: tc.arguments, instruction:"修正参数后重试同一个工具，或直接给出答案。" });
@@ -2341,7 +2366,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     }
     __chatAppendToolRound(channel, convo, res.assistantMsg, toolResults);
   }
-  return { text: "（MCP 工具调用未收敛，已停止）", toolEvents };
+  return { text: accText || "（MCP 工具调用未收敛，已停止）", toolEvents };
 }
 
 /** 后台任务（压缩摘要 / 记忆提炼）用哪个便宜模型。
@@ -31139,7 +31164,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       }
       // 卡片协议提示（工具优先；无工具时也可用 ⟪写卡:…⟫）
       if(cardsOn){
-        const ctip = "\n\n【小卡片·必读】你可以把真正想留下的瞬间写成卡片。\n- 优先调用工具 write_cards（一轮最多 2 张，类型仅 ramble 碎碎念 / note 便签，且不重复）。\n- 没有工具时可用标记：⟪写卡:碎碎念|标题|正文⟫ 或 ⟪写卡:便签|正文⟫。\n- 只有工具/标记真正写成功后，聊天头像下才会出现「活动」；嘴上说「我记下了」不算。\n- 成功后正常继续聊天，不要在正文里反复解释「我写了卡片」。";
+        const ctip = "\n\n【小卡片·必读】你可以把真正想留下的瞬间写成卡片。\n- 优先调用工具 write_cards（一轮最多 2 张，类型仅 ramble 碎碎念 / note 便签，且不重复）。\n- 没有工具时可用标记：⟪写卡:碎碎念|标题|正文⟫ 或 ⟪写卡:便签|正文⟫。\n- 只有工具/标记真正写成功后，聊天头像下才会出现「活动」；嘴上说「我记下了」不算。\n- 成功后正常继续聊天，不要在正文里反复解释「我写了卡片」。\n- 重要：若本轮要写长文并同时 write_cards，请把完整叙事写在同一条回复的正文里，工具只负责落卡；不要只调工具不写正文。系统会保留工具调用前的正文，工具返回后不要覆盖成空消息。";
         if(typeof sysCam==="object" && sysCam && (sysCam.static!=null||sysCam.dynamic!=null)){
           sysCam = { static: (sysCam.static||"")+ctip, dynamic: sysCam.dynamic||"" };
         } else {
@@ -31156,7 +31181,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       try{
         if((toolEvents||[]).some(t=>t && t.name==="write_cards")){
           const rt = String(reply||"").trim();
-          if(!rt || rt==="（无响应）" || rt==="(无响应)") reply = "";
+          // 仅清掉占位「无响应」；有正文（含工具轮累计）一律保留，避免写卡吞长文
+          if(rt==="（无响应）" || rt==="(无响应)") reply = "";
         }
       }catch(e){}
     }catch(e){
