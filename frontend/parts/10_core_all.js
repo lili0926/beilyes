@@ -11466,7 +11466,10 @@ function memRemotePost(path, body){
  *  - 现在改回 aux 优先，但**两层都按异常处理**（try/catch 各包各的），
  *    aux 挂了照样落到聊天模型，不会再出现「静默哑掉」。
  * aux 现在默认指向 VPS 的 /aux 转发口，key 在服务器上，见 auxEndpoint()。 */
-async function memModelCall(prompt){
+async function memModelCall(prompt, opts){
+  // opts.auxOnly：只许用便宜模型，aux 挂了就返回空，**绝不落到聊天模型**。
+  // 给「补旧账」那条路用 —— 拿她的 API 去消化三个月前的聊天记录，
+  // 花的是现在的钱、买的是过去的信息，不值。
   let result = "";
   state.__memErr = ""; // 每次重算，否则上一轮的旧错误会挂在界面上误导
   // 第一层：便宜模型
@@ -11476,7 +11479,7 @@ async function memModelCall(prompt){
     state.__memErr = "后台模型失败：" + String((e&&e.message)||e).slice(0,80);
   }
   // 第二层：聊天模型兜底（要花订阅额度，所以只在上面没成的时候走）
-  if(!result || !result.trim()){
+  if((!result || !result.trim()) && !(opts && opts.auxOnly)){
     try{
       // 优先非 CC 的通道，落到 CC 时也标 background，免得提炼出来的 LAYER|…
       // 串到聊天里去（CC 的回复没有请求 id，见 __ccHubSend）
@@ -30291,6 +30294,13 @@ function toneLabel(m){
   if(!tn || !tn.play) return "";
   if(tn.play === "正事") return "";                       // 正事不用标，标了反而干扰
   if(tn.play === "认真" && tn.surface === "平静") return "";  // 平常话不标
+  // **只标真正有歧义的**。量过：不加这道闸，每条请求要多 8.3% 的字，
+  // 而且大头花在「今天上班好累」这种一眼就看得懂的句子上（「累/困/烦」太常见，
+  // 几乎每条都会被判成抱怨）。她要的本来就只是「分不清我在逗他」那几种。
+  // 留下来的四类：表里不一、玩笑、反话、试探 —— 照字面读会读错的正是这些。
+  const ambiguous = (tn.surface !== tn.under)
+    || tn.play === "玩笑" || tn.play === "反话" || tn.play === "试探";
+  if(!ambiguous && tn.by !== "me") return "";   // 她自己标的一律尊重，照发
   const same = tn.surface === tn.under;
   const core = same ? tn.surface : `表面${tn.surface}，其实${tn.under}`;
   const src = tn.by === "me" ? "她自己标的" : "";
@@ -31711,7 +31721,7 @@ function sanitizeMemoryContent(raw){
 }
 
 /** 把聊天转写喂给 AI 提炼成记忆行（手动「从聊天整理」+ 自动沉淀共用）。返回记忆数组 */
-async function memDigestTranscript(transcript, rangeLabel, msgCount){
+async function memDigestTranscript(transcript, rangeLabel, msgCount, opts){
   const CHUNK = 14000;
   const chunks = [];
   if(transcript.length <= CHUNK) chunks.push(transcript);
@@ -31727,7 +31737,7 @@ async function memDigestTranscript(transcript, rangeLabel, msgCount){
       i = end;
     }
   }
-  const callMemOnce = (prompt)=> memModelCall(prompt);
+  const callMemOnce = (prompt)=> memModelCall(prompt, opts);
   let result = "";
   for(let ci=0; ci<chunks.length; ci++){
     const part = chunks[ci];
@@ -31940,10 +31950,10 @@ async function memAutoIntegrate(opts){
     // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
     // DeepSeek 欠费时它照样回 {ok:true,count:0}，把「失败」伪装成「没什么可记的」。
     // 现在云端只负责**存**（/mem/add 只做保存 + 向量化，不调任何 LLM）。
-    const digest = async (tid, skip, take, label)=>{
+    const digest = async (tid, skip, take, label, opts)=>{
       const transcript = collectChatTranscript({ threadIds:[tid], skip, limit: take, maxPerThread:0 });
       if(!transcript.trim()) return true;   // 空区间也算处理过，照常推进游标，免得反复重试
-      const created = await memDigestTranscript(transcript, label, take);
+      const created = await memDigestTranscript(transcript, label, take, opts);
       if(created && created.length){
         state.memories = [...created, ...state.memories];
         totalCreated += created.length;
@@ -31994,7 +32004,12 @@ async function memAutoIntegrate(opts){
       if(nBack > 0){
         const take = Math.min(nBack, nBack <= MEM_BACKFILL_MIN ? nBack : MEM_BACKFILL_PER_RUN);
         try{
-          await digest(tid, lo, take, `更早的 ${take} 条`);
+          // **补旧账只许用便宜模型**（auxOnly）。这一批是三个月前的聊天，
+          // 200 条转写会被 memDigestTranscript 切成好几段、每段一次调用；
+          // 让它落到她的聊天 API 上，就是拿现在的钱买过去的信息。
+          // aux 不可用时 memModelCall 返回空 → memDigestTranscript 抛错 →
+          // 下面 catch 住、游标不推进，下一轮 aux 好了再补，什么都不会丢。
+          await digest(tid, lo, take, `更早的 ${take} 条`, { auxOnly: true });
           lo += take;
           if(lo >= from){ lo = to; from = to; }   // 积压补完，两个游标合并回一个
           madeBack++;
