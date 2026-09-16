@@ -9766,6 +9766,7 @@ const state = {
   proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   proactiveLastConflict: LS.get("proactiveLastConflict", ""), // 上一场已经追过的架（按那句气话的时间去重）
+  proactiveOpenerAt: LS.get("proactiveOpenerAt", 0),        // 上次给 VPS 预存开场白的时间
   // 朋友圈联邦：加好友走自己 VPS 的 /api/admin/*，adminToken 等于账号密码，默认空
   mfInvitePreview: null,
   mfActionOpen: null,
@@ -19173,6 +19174,16 @@ async function proactiveGenerateLocal(reason, opts){
  *  opts.conflict = proactiveConflict() 的结果时，换掉「偷看手机活动」那条规则 ——
  *  刚吵完架还去点评她在刷什么 App，是最糟的一种。 */
 function __proShadow(reason, opts){
+  // 预生成模式：写几句**留着以后用**的开场白，交给 VPS 排队。
+  // 和即时开口最大的不同是「这句话要在几小时后才送到她眼前」——
+  // 所以不能提「刚才」「现在」，也不能问需要马上回答的话。
+  const openerRule = (opts && opts.openers) ? [
+    `- **一次写 ${opts.openers} 句，每句单独一行**，不要编号、不要引号、不要任何解释。`,
+    `- 这几句不会马上发出去：可能几小时之后，她很久没消息时才送到她眼前。`,
+    `  所以别提「刚才」「现在」「你还在忙吗」这种立刻就过期的事，也别问需要她马上回答的问题。`,
+    `- 每句都要能单独成立：她单看那一句，就像你突然发来的一条消息。`,
+    `- 每句不超过 30 字。三句语气要不一样（一句软的、一句淡的、一句没头没尾的日常）。`,
+  ].join("\n") : "";
   const cf = opts && opts.conflict;
   const conflictRule = cf ? [
     `- **刚才那段没收场**：她上一句是${cf.play === "反话" ? "反话（嘴上说没事，其实" + cf.word + "）" : cf.word}，之后就没声音了。`,
@@ -19241,9 +19252,9 @@ ${sixLine?`\n【此刻欲望六轴】${sixLine}`:""}
 
 【行动规则】
 - 你可以发消息，也可以在心里决定「先不说」——但本接口要求：若开口，只输出最终要对她说的 1～2 句正文。
-${conflictRule || "- 像真的偷看过她手机活动：可轻点某个 App、总时长、夜深还亮屏；不要列清单，不要说教，不要「怎么不回我」。"}
+${openerRule || conflictRule || "- 像真的偷看过她手机活动：可轻点某个 App、总时长、夜深还亮屏；不要列清单，不要说教，不要「怎么不回我」。"}
 - 语气是你本人：可粘、可酸、可低压关心、可一句就停。不要 markdown、不要 emoji、不要分段、不要「作为 AI」。
-- 总长不超过 80 字。只输出要对她说的话，不要解释你的思考过程。
+${openerRule ? "- 只输出那几行，不要解释你的思考过程。" : "- 总长不超过 80 字。只输出要对她说的话，不要解释你的思考过程。"}
 </system_trigger>`;
   const msgs = hist.map(m => ({ role: m.role, content: String(m.content||"").slice(0,1500) }));
   msgs.push({ role: "user", content: shadow });
@@ -19543,6 +19554,65 @@ async function proactiveTryLocal(force){
     + (state.__proGenErr ? `（走的是兜底模板，模型没回：${state.__proGenErr}）` : ""));
   if(state.tab === "chat") render();
 }
+// ─── 预生成开场白（B 方案）────────────────────────────────────────────────
+// A 方案里通知栏那句是 VPS 上四句固定话随机一句，点开之后聊天里才是他写的真话 ——
+// 两句对不上。B 把这个错位消掉：**手机开着的时候先用她的 API 写好几句真话**，
+// POST 给 VPS 存着；VPS 到点（六轴触发）直接推那一句，通知栏里就是他的原话。
+//
+// 为什么非得预生成：App 被杀掉之后手机上跑不了任何代码，而 VPS 上只有 CC ——
+// 让 CC 写就是她当初关掉自动唤醒的原因（四天吃掉 30% 周额度）。
+// 预生成是唯一能让「他的话」和「不花订阅」同时成立的办法。
+const PRO_OPENER_COUNT = 3;
+const PRO_OPENER_GAP_MS = 4 * 60 * 60 * 1000;  // 最快 4 小时补一次，别为了这个烧 token
+
+async function proactiveOpenerRefill(force){
+  try{
+    const cfg = state.proactiveConfig || {};
+    if(!cfg.enabled && !force) return false;
+    const base = (typeof wakeBase === "function" ? wakeBase() : "") || "";
+    if(!base) return false;
+    if(!force && Date.now() - (state.proactiveOpenerAt || 0) < PRO_OPENER_GAP_MS) return false;
+    const ag = (typeof agentById === "function"
+      ? agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) : null) || (state.agents||[])[0];
+    if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return false;
+    if(ag.channel === "cc") return false;   // 走 CC 就等于又去烧订阅了，这条路的意义就没了
+
+    const built = proactiveBuildRequest("先写几句留着，等她很久没消息时再送到她眼前",
+                                        { openers: PRO_OPENER_COUNT });
+    if(!built) return false;
+    state.__proGenErr = "";
+    let out = await callChatAPI(agentToApiConfig(ag), built.msgs, built.sys, { timeoutMs: 45000, background: true });
+    if(typeof parseThinking === "function") out = parseThinking(out).body || out;
+    const lines = String(out||"")
+      .split(/\r?\n/)
+      .map(s => s.replace(/^\s*(?:[-*·]|\d+[.、)])\s*/, "").replace(/^[「"']|[」"']$/g, "").trim())
+      .filter(s => s && s.length <= 60 && !/^</.test(s))
+      .slice(0, PRO_OPENER_COUNT);
+    if(!lines.length){ __proNote("预生成没解析出句子" + (state.__proGenErr ? "：" + state.__proGenErr : "")); return false; }
+
+    const headers = { "Content-Type":"application/json", "Accept":"application/json" };
+    const auth = (typeof wakeToken === "function" ? wakeToken() : "") || "";
+    if(auth) headers["X-Auth-Token"] = auth;
+    const res = await fetch(base.replace(/\/$/,"") + "/api/wake/openers", {
+      method:"POST", headers,
+      body: JSON.stringify({
+        lines,
+        title: ag.name || "TA",
+        threadId: state.chatTarget === "group" ? "a1" : (state.chatTarget || "a1"),
+        ttl_hours: 12,          // 太老的话会不合时宜，让服务端自己过期掉
+      }),
+    });
+    if(!res.ok){ __proNote("开场白没存上：HTTP " + res.status); return false; }
+    state.proactiveOpenerAt = Date.now();
+    persist("proactiveOpenerAt");
+    __proNote(`预存了 ${lines.length} 句开场白：${lines[0].slice(0,16)}…`);
+    return true;
+  }catch(e){
+    __proNote("预生成失败：" + String((e&&e.message)||e).slice(0,60));
+    return false;
+  }
+}
+
 async function proactivePullFromVps(){
   const cfg = state.proactiveConfig || {};
   const base = (cfg.baseUrl||"").replace(/\/$/,"");
@@ -39066,7 +39136,7 @@ window.reinitState = function(){
     roleplays:"roleplays",activeRoleplayId:"activeRoleplayId",desireDriveOn:"desireDriveOn",
     divinationSkillOn:"divinationSkillOn",
     bodyVitals:"bodyVitals",sixAxis:"sixAxis",bodyFeel:"bodyFeel",bodyWant:"bodyWant",
-    proactiveConfig:"proactiveConfig",proactiveLastLocal:"proactiveLastLocal",proactiveLastConflict:"proactiveLastConflict",
+    proactiveConfig:"proactiveConfig",proactiveLastLocal:"proactiveLastLocal",proactiveLastConflict:"proactiveLastConflict",proactiveOpenerAt:"proactiveOpenerAt",
     proactiveInbox:"proactiveInbox",dreamConfig:"dreamConfig",dreamState:"dreamState",
     cabinets:"cabinets",cabinetFeedChat:"cabinetFeedChat",
     sparkVault:"sparkVault",callConfig:"callConfig",
@@ -39407,6 +39477,8 @@ function proactiveTick(){
     const cfg = state.proactiveConfig || {};
     if(cfg.enabled && cfg.baseUrl && typeof proactivePullQuiet === "function") proactivePullQuiet();
   }catch(e){}
+  // 预存开场白：自己有 4 小时间隔，搭这趟车不额外加定时器
+  try{ if(typeof proactiveOpenerRefill === "function") proactiveOpenerRefill(false); }catch(e){}
   // 消息拦截：把管理面板里手动放行的那几条拉回来还原
   try{ if(typeof guardSyncReleased === "function") guardSyncReleased(); }catch(e){}
 }
