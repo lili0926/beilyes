@@ -12175,7 +12175,10 @@ function proactivePushToChat(content, meta={}){
     role: "assistant",
     content: String(content).trim(),
     time: new Date().toISOString(),
-    msgId: "pro_"+Date.now(),
+    // 不能只用 Date.now()：下面那道「和上一条 msgId 相同就不推」的闸
+    // 会把**同一毫秒内到达的第二条**静默丢掉。而 deliverWakePull 正是在循环里
+    // 一条接一条推的 —— 队列里积了几条一起拉回来时会塌成一条。
+    msgId: "pro_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
     speakerId: ag?.id || "a1",
     speakerName: ag?.name || "TA",
     speakerColor: ag?.color,
@@ -12470,8 +12473,25 @@ async function proactiveTryLocal(force){
 // 为什么非得预生成：App 被杀掉之后手机上跑不了任何代码，而 VPS 上只有 CC ——
 // 让 CC 写就是她当初关掉自动唤醒的原因（四天吃掉 30% 周额度）。
 // 预生成是唯一能让「他的话」和「不花订阅」同时成立的办法。
-const PRO_OPENER_COUNT = 3;
-const PRO_OPENER_GAP_MS = 4 * 60 * 60 * 1000;  // 最快 4 小时补一次，别为了这个烧 token
+// 池子深一点、活久一点：**App 被彻底杀掉之后手机上一行代码都跑不了**，
+// 这时候全靠 VPS 拿池子里存的话去推。她要是一整天没开 App，池子太浅就见底了，
+// 唤醒会回落到那几句固定短句 —— 那正是 B 要消掉的东西。
+// 5 句 × 24 小时，够撑过一天不开 App。
+const PRO_OPENER_COUNT = 5;
+const PRO_OPENER_TTL_H = 24;
+const PRO_OPENER_GAP_MS = 4 * 60 * 60 * 1000;   // 池子还够时，最快 4 小时补一次
+const PRO_OPENER_LOW_GAP_MS = 30 * 60 * 1000;   // 池子见底时的下限，避免连着打
+const PRO_OPENER_LOW = 2;                        // 少于这个数就算见底
+
+/** 问一下服务端池子里还剩几句。拿不到返回 null（当作"不知道"，走时间间隔那套）。 */
+async function __proOpenerCount(base, headers){
+  try{
+    const r = await fetch(base.replace(/\/$/,"") + "/api/wake/openers", { headers });
+    if(!r.ok) return null;
+    const d = await r.json();
+    return (d && typeof d.count === "number") ? d.count : null;
+  }catch(e){ return null; }
+}
 
 async function proactiveOpenerRefill(force){
   try{
@@ -12479,7 +12499,19 @@ async function proactiveOpenerRefill(force){
     if(!cfg.enabled && !force) return false;
     const base = (typeof wakeBase === "function" ? wakeBase() : "") || "";
     if(!base) return false;
-    if(!force && Date.now() - (state.proactiveOpenerAt || 0) < PRO_OPENER_GAP_MS) return false;
+    const headers0 = { "Accept":"application/json" };
+    const auth0 = (typeof wakeToken === "function" ? wakeToken() : "") || "";
+    if(auth0) headers0["X-Auth-Token"] = auth0;
+    const since = Date.now() - (state.proactiveOpenerAt || 0);
+    if(!force){
+      // 先看池子真实剩几句，再决定要不要补 —— 比闷头按 4 小时定时补准得多：
+      // 她一天不开 App，池子早空了而定时器还没到；反过来池子满着也不该白烧 token。
+      const n = await __proOpenerCount(base, headers0);
+      const low = (n !== null && n < PRO_OPENER_LOW);
+      const gap = low ? PRO_OPENER_LOW_GAP_MS : PRO_OPENER_GAP_MS;
+      if(since < gap) return false;
+      if(n !== null && !low && since < PRO_OPENER_GAP_MS) return false;
+    }
     const ag = (typeof agentById === "function"
       ? agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) : null) || (state.agents||[])[0];
     if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return false;
@@ -12507,7 +12539,7 @@ async function proactiveOpenerRefill(force){
         lines,
         title: ag.name || "TA",
         threadId: state.chatTarget === "group" ? "a1" : (state.chatTarget || "a1"),
-        ttl_hours: 12,          // 太老的话会不合时宜，让服务端自己过期掉
+        ttl_hours: PRO_OPENER_TTL_H,   // 太老的话会不合时宜，让服务端自己过期掉
       }),
     });
     if(!res.ok){ __proNote("开场白没存上：HTTP " + res.status); return false; }
@@ -32397,6 +32429,10 @@ if(!window.__proactiveTimer){
       // 切后台这一下是「自动唤醒」唯一能抓住的时机：前台那条定时器待会儿就不跑了。
       // 把这一轮交给安卓后台引擎（它自己有闸门，不会每次切后台都发）。
       try{ if(typeof bgGenProactive === "function") bgGenProactive(); }catch(e){}
+      // 同时把开场白池补满。**这是进程被杀之前最后能跑代码的时机** ——
+      // 之后手机上一行都跑不了，全靠 VPS 拿池子里存好的话去推。
+      // 它自己会先问池子剩几句，不够才补，所以每次切后台调一下不会乱烧 token。
+      try{ if(typeof proactiveOpenerRefill === "function") proactiveOpenerRefill(false); }catch(e){}
       return;
     }
     if(Date.now() - (window.__proactiveLastTick || 0) < 60000) return; // 来回切前台防抖
