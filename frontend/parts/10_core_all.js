@@ -1257,8 +1257,57 @@ function __isDeadVoiceHost(url){
   return /:3456(\/|$|\?)/.test(String(url || ""));
 }
 
+// ─── 生成超时 & 手动中止 ────────────────────────────────────────────────────
+// 2026-09-17 拿她的 key 在她的通道（ckff · opus-4-6）上实测出来的两件事：
+//
+// ① **不是一直慢，是抽风**。同一句话四次：237.8s / 7.2s / 4.4s / 113.1s。
+// ② **掐断照样扣钱**。31 秒掐断、一个字节都没收到，账单照样涨 0.0984 美分；
+//    跑完那一发是 0.2422 —— 省下的只是「还没生成完的那截输出」，
+//    输入那一万多 token 一分不少。
+//
+// 两条合起来，短的一刀切超时是**最坏的组合**：钱付了、回复没拿到、
+// 下一条还得重发再付一次输入。所以默认放长，把「什么时候不等了」交给她自己按。
+//
+// （流式在这条路上帮不上忙：实测首字 ≈ 总时长，中转把整条回复缓冲完才一次性吐，
+//   所以「多久没动静就掐」这种停顿超时在这儿没有意义。）
+const API_TIMEOUT_DEFAULT_SEC = 240;
+function apiTimeoutMs(){
+  const s = +(state && state.apiTimeoutSec);
+  return (s > 0 ? s : API_TIMEOUT_DEFAULT_SEC) * 1000;
+}
+
+const __chatAbort = { ctrl: null, startedAt: 0, byUser: false };
+function chatAbortBegin(){
+  __chatAbort.ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+  __chatAbort.startedAt = Date.now();
+  __chatAbort.byUser = false;
+}
+function chatAbortEnd(){ __chatAbort.ctrl = null; __chatAbort.startedAt = 0; }
+function chatAbortNow(){
+  if(!__chatAbort.ctrl) return false;
+  __chatAbort.byUser = true;
+  try{ __chatAbort.ctrl.abort(); }catch(e){}
+  return true;
+}
+function chatAbortSignal(){ return __chatAbort.ctrl ? __chatAbort.ctrl.signal : undefined; }
+function chatWaitedSec(){
+  return __chatAbort.startedAt ? Math.round((Date.now() - __chatAbort.startedAt)/1000) : 0;
+}
+
+// 等待秒数的走字。**不能每秒 render()** —— render 是整页重绘，
+// 一秒一次会把她那台机器拖卡（这条以前踩过）。只改那一个节点的字。
+let __chatTick = 0;
+function chatTickStart(){
+  chatTickStop();
+  __chatTick = setInterval(()=>{
+    const el = (typeof document !== "undefined") && document.getElementById("chat-waited");
+    if(el) el.textContent = chatWaitedSec() + "s";
+  }, 1000);
+}
+function chatTickStop(){ if(__chatTick){ clearInterval(__chatTick); __chatTick = 0; } }
+
 async function __apiFetch(url, options, timeoutMs){
-  const ms = timeoutMs == null ? 60000 : timeoutMs;
+  const ms = timeoutMs == null ? apiTimeoutMs() : timeoutMs;
   const maxTry = 3; // 1 次 + 最多 2 次重试
   let lastErr;
   for(let attempt = 0; attempt < maxTry; attempt++){
@@ -1290,7 +1339,10 @@ async function __apiFetch(url, options, timeoutMs){
       // 超时（AbortController 掐断）不重试：慢生成再跑两遍只是让她多等一倍时间，最后照样超时。
       // 以前 60s 超时 × 3 次 = 要等 3 分钟才看到「超时」，长文/长 JSON 生成必踩。
       if(e && (e.name === "AbortError" || ctrl.signal.aborted)){
-        throw new Error("生成超时（等了 " + Math.round(ms/1000) + " 秒还没回来）");
+        // 她自己按的和到点掐的要分开说 —— 前者不是故障，别报成「超时」吓她
+        if(__chatAbort.byUser) throw new Error("已中止（等了 " + chatWaitedSec() + " 秒）");
+        throw new Error("生成超时（等了 " + Math.round(ms/1000) + " 秒还没回来）"
+          + "。这一发的输入多半已经计费了 —— 设置里可以把「生成超时」调长。");
       }
       if(attempt < maxTry - 1){
         await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
@@ -1441,6 +1493,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
     const res = await __apiFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: chatAbortSignal(),
       body: JSON.stringify({
         contents,
         generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
@@ -1475,6 +1528,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
         "Authorization": "Bearer " + claudeKey,
         "anthropic-version": "2023-06-01",
       },
+      signal: chatAbortSignal(),
       body: JSON.stringify(body),
     }, __timeoutMs);
     const data = await res.json();
@@ -1511,6 +1565,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
     const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
+      signal: chatAbortSignal(),
       body: JSON.stringify({
         model: openaiModel || "gpt-4o",
         messages: systemPrompt
@@ -1911,6 +1966,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     const res = await __apiFetch(claudeEndpoint(ag, cfg), {
       method:"POST",
       headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "Authorization":"Bearer "+claudeKey, "anthropic-version":"2023-06-01" },
+      signal: chatAbortSignal(),
       body: JSON.stringify(body),
     });
     if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
@@ -1950,7 +2006,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     }
     (messages||[]).forEach(m=> contents.push({ role: m.role==="assistant" ? "model" : "user", parts: m.image ? __chatContentForChannel("gemini", m) : [{ text: m.content||"" }] }));
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(geminiKey)}`;
-    const res = await __apiFetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ contents, generationConfig:{ temperature:0.9, maxOutputTokens:8192 } }) });
+    const res = await __apiFetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, signal: chatAbortSignal(), body: JSON.stringify({ contents, generationConfig:{ temperature:0.9, maxOutputTokens:8192 } }) });
     if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
     let input=0, output=0, cacheRead=0;
     for await (const ev of __sse(res.body)){
@@ -1976,6 +2032,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
+    signal: chatAbortSignal(),
     body: JSON.stringify(body),
   });
   if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
@@ -2098,6 +2155,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
     const res = await __apiFetch(claudeEndpoint(creds._agent || null, creds), {
       method:"POST",
       headers:{ "Content-Type":"application/json", "x-api-key":claudeKey, "Authorization":"Bearer "+claudeKey, "anthropic-version":"2023-06-01" },
+      signal: chatAbortSignal(),
       body: JSON.stringify(body),
     });
     const data = await res.json();
@@ -2136,6 +2194,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
   const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
+    signal: chatAbortSignal(),
     body: JSON.stringify(body),
   });
   const data = await res.json();
@@ -2837,6 +2896,9 @@ const state = {
   toneOn: LS.get("toneOn", true),
   toneAi: LS.get("toneAi", true),
   claudeCacheOn: LS.get("claudeCacheOn", true),  // Claude 通道的 cache_control，见 __claudeCacheMark
+  // 生成超时（秒）。默认 240 —— 实测她的中转会在 4 秒和 238 秒之间抽风，
+  // 而且掐断**不退输入那部分的钱**，短超时等于白付。见 apiTimeoutMs。
+  apiTimeoutSec: LS.get("apiTimeoutSec", 0),
   tonePickIdx: null,  // 正在改标的那条（不持久化）
 
   // 日常柜子
@@ -4954,7 +5016,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -19088,6 +19150,12 @@ function renderPhone(){
           <button type="button" class="btn-ghost" id="call-tts-test" style="margin-top:10px;align-self:flex-start">试听一句</button>
           ${cfg._ttsTestMsg?`<p style="font-size:11px;color:var(--sub);margin-top:6px">${esc(cfg._ttsTestMsg)}</p>`:""}
         </div>
+        <div class="feat-section-label"><i data-lucide="timer"></i> 生成超时</div>
+        <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
+          <span class="setting-label">多少秒不回就放弃（留空 = 240）</span>
+          <input id="api-timeout-sec" type="number" min="30" max="900" step="10" value="${escAttr(state.apiTimeoutSec||'')}" placeholder="240"/>
+          <div style="font-size:11px;color:var(--sub);margin-top:6px">打断不退输入那部分的钱，所以调短不省钱，只是更早放弃。等不下去的时候用气泡上的「中止」。</div>
+        </div>
         <div class="feat-section-label"><i data-lucide="mic"></i> STT 语音识别</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
           <div class="body-switch-row" style="margin-bottom:10px;padding:0;border:none">
@@ -23783,9 +23851,15 @@ function renderChat(){
   if(state.chatLoading){
     const glassCls = (typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "";
     const _imTyping = (state.chatStyleMode||"classic")==="imessage" && (state.chatViewMode||"chat")!=="rpg";
+    // 等待秒数 + 中止。这条通道实测会在 4 秒和 238 秒之间抽风，
+    // 干等着不知道该不该继续等 —— 给个数字，她自己判断。
     msgs+=`<div class="bubble-row them">
       ${_imTyping?"":profileAvatarLink(bubbleAvatarHtml("them", isGroup?null:target), isGroup?"them":(target||"them"))}
-      <div class="bubble them${glassCls}"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+      <div class="bubble them${glassCls}" style="display:flex;align-items:center;gap:8px">
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+        <span id="chat-waited" style="font-size:11px;opacity:.55;font-variant-numeric:tabular-nums">${chatWaitedSec()}s</span>
+        <button type="button" id="chat-stop" style="font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--sub);cursor:pointer">中止</button>
+      </div>
     </div>`;
   }
   msgs+=`<div id="chat-bottom"></div>`;
@@ -27473,6 +27547,13 @@ function bindEvents(){
   const trigger=document.getElementById("trigger-reply");
   if(trigger) trigger.onclick=triggerAIReply;
 
+  const stopBtn=document.getElementById("chat-stop");
+  if(stopBtn) stopBtn.onclick=()=>{
+    // 掐断省不回输入那部分的钱（已经付了），能省的只有还没生成完的输出。
+    // 但等一条已经死掉的请求毫无意义，所以这个按钮还是要有。
+    if(chatAbortNow()) showToast("已中止（输入那部分已经计费，省下的是没生成完的输出）");
+  };
+
   // 聊天/文章模式切换
   $$("[data-chat-mode]").forEach(btn=>{
     btn.onclick=()=>{
@@ -30160,6 +30241,13 @@ reader.readAsArrayBuffer(f);
   if(state.subPage === "phone" && typeof aicallConnect === "function"){
     aicallConnect(false);
   }
+  const apiTo = document.getElementById("api-timeout-sec");
+  if(apiTo) apiTo.onchange = ()=>{
+    const v = parseInt(apiTo.value, 10);
+    state.apiTimeoutSec = (v >= 30 && v <= 900) ? v : 0;   // 超出范围就退回默认，别让她把自己锁死
+    persist("apiTimeoutSec");
+    render();
+  };
   const streamSttTg = document.getElementById("call-streamstt-toggle");
   if(streamSttTg) streamSttTg.onclick = ()=>{
     state.callConfig = state.callConfig || {};
@@ -32270,6 +32358,8 @@ async function triggerAIReply(){
   state.pendingUser=[];
   state.chatLoading=true;
   state.needChatScroll=true;
+  chatAbortBegin();     // 这一轮的中止闸 + 计时起点
+  chatTickStart();
   saveActiveThread(); // 用户消息立即落盘，杀进程不丢
   render();
 
@@ -32310,6 +32400,8 @@ async function triggerAIReply(){
   }catch(e){
     showToast(`请求失败：${e.message}`); // 报错走浮窗，不留在聊天
   }
+  chatAbortEnd();
+  chatTickStop();
   state.chatLoading=false;
   state.needChatScroll=true;
   saveActiveThread();
@@ -32977,7 +33069,7 @@ window.reinitState = function(){
     cabinets:"cabinets",cabinetFeedChat:"cabinetFeedChat",
     sparkVault:"sparkVault",callConfig:"callConfig",
     callRecords:"callRecords",pushStats:"pushStats",ntfyConfig:"ntfyConfig",ntfyLog:"ntfyLog",
-    toneOn:"toneOn",toneAi:"toneAi",claudeCacheOn:"claudeCacheOn",
+    toneOn:"toneOn",toneAi:"toneAi",claudeCacheOn:"claudeCacheOn",apiTimeoutSec:"apiTimeoutSec",
     branding:"branding",hisPhone:"hisPhone",captivityConfig:"captivityConfig",eatApple:"eatApple",
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
