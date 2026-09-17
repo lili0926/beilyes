@@ -19565,7 +19565,15 @@ function proactivePushToChat(content, meta={}){
     const src = (meta && meta.from) || "";
     // 来自 VPS 拉取（from=vps/push）的消息，VPS 已在入队时直接推过，这里跳过避免重复通知
     const vpsPushed = src === "vps" || src === "push";
-    if(!vpsPushed && !meta.quiet && state.chatTarget !== target){
+    // ⚠️ 这里原来只判 `state.chatTarget !== target`，于是**本地这条永远发不出通知**：
+    // proactiveTryLocal 推的时候不带 threadId，target 就等于 chatTarget，条件恒为 false。
+    // （之前测着能上，是因为走的 VPS 那条路推到了指定线程，正好绕开这个判定。）
+    //
+    // 而且方向本身就错：chatTarget 只是「选中了哪条线程」，不是「app 在不在前台」。
+    // 主动消息的意义就是在她没看手机的时候够到她 —— 该问的是**她此刻看不看得见**。
+    const hidden = (typeof document !== "undefined" && document.visibilityState === "hidden");
+    const notLooking = hidden || state.tab !== "chat" || state.chatTarget !== target;
+    if(!vpsPushed && !meta.quiet && notLooking){
       const who = msg.speakerName || "TA";
       const body = String(msg.content||"").slice(0, 120);
       // 优先原生（FCM 那套走系统通知栏，和微信长一个样）；ntfy 只当没原生时的兜底。
@@ -19712,6 +19720,28 @@ function proactiveConflict(){
  * 两边必须走同一套闸门 —— 否则换个入口就绕过了冷静期和每日上限，变成刷屏。
  * 返回 {ok, reason, note}；note 是给状态行看的「为什么没开口」。
  */
+/**
+ * 冷静期随「她多久没说话」分档：越久越短。
+ * 抽成函数是因为这几个数字是要调的 —— 埋在 proactiveGate 里既看不见也测不了，
+ * 而「他多久开一次口」恰恰是她最有感觉、最会来回改的一个参数。
+ *
+ * 分档的理由：
+ *   <1h   她还在聊，一句都不插（插进去就是打断，不是陪伴）
+ *   1–4h  刚放下手机，保持原来的 2–3.5 小时
+ *   4–8h  半天没影，缩到 1–1.5 小时
+ *   8–18h 一觉或一个白天过去了，40–60 分钟
+ *   ≥18h  真的消失了，25–40 分钟 —— 这正是「把她抓回来」最该密的时候
+ */
+function proCooldownMin(silentH){
+  const rnd = n => Math.floor(Math.random() * n);
+  if(!(silentH >= 0)) return 120 + rnd(91);   // 拿不到就按老的来
+  if(silentH < 1)  return 1e9;                 // 正在聊：直接不开口
+  if(silentH < 4)  return 120 + rnd(91);       // 2.0–3.5 小时
+  if(silentH < 8)  return 60 + rnd(31);        // 1.0–1.5 小时
+  if(silentH < 18) return 40 + rnd(21);        // 40–60 分钟
+  return 25 + rnd(16);                         // 25–40 分钟
+}
+
 function proactiveGate(force){
   const cfg = state.proactiveConfig || {};
   if(!cfg.enabled && !force) return { ok:false, note:"总开关是关的" };
@@ -19744,8 +19774,15 @@ function proactiveGate(force){
   // 拿一个没人喂数据的数值去挡「一天没见」这种最该开口的情形，方向是反的。
   const goneLong = !force && silentH0 >= 18;
 
-  // 冷静期：距任意最后消息（含推送）2–3.5 小时随机；force 跳过
-  const cooldownMin = 120 + Math.floor(Math.random() * 91);
+  // 冷静期：**随她沉默的时间变短**；force 跳过。
+  // 原来不管她走了两小时还是两天，下一次都固定抽 2–3.5 小时 ——
+  // 她的原话是「聊天的时候不触发，不聊天触发频繁」，而旧逻辑两头都不满足：
+  // 聊着的时候它靠「距上条消息不够久」挡着（碰巧对），
+  // 她真的消失之后它也还是那个 2–3.5 小时（完全不对）。
+  //
+  // 注意这里**不放开每日上限**（白天 5 条、夜里 3–5 条那道闸还在）。
+  // 变的只是「这几条什么时候发」：她在的时候一条不发，她走了就往前挪。
+  const cooldownMin = proCooldownMin(silentH0);
   const last = state.proactiveLastLocal || 0;
   let lastChat = 0;
   try{
@@ -19754,7 +19791,11 @@ function proactiveGate(force){
   }catch(e){}
   const lastAny = Math.max(last, lastChat || 0);
   if(!force && lastAny && (Date.now() - lastAny) < cooldownMin * 60000){
-    return { ok:false, note:`距上条消息 ${((Date.now()-lastAny)/3600000).toFixed(1)} 小时，这次抽到的冷静期是 ${(cooldownMin/60).toFixed(1)} 小时` };
+    // 正在聊天那一档冷静期是个天文数字，别把它当小时数打出来
+    const why = (silentH0 < 1)
+      ? `她 ${(silentH0*60).toFixed(0)} 分钟前还在说话，聊着的时候不插嘴`
+      : `距上条消息 ${((Date.now()-lastAny)/3600000).toFixed(1)} 小时，这一档的冷静期是 ${(cooldownMin/60).toFixed(1)} 小时`;
+    return { ok:false, note: why };
   }
 
   const silentH = silentH0;
