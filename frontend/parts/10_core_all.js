@@ -4739,17 +4739,20 @@ ${guideText}`;
   const menuBlock = (typeof menuStatusPromptBlock === "function" && state._menuShareOn) ? menuStatusPromptBlock() : "";
   const menuOrderBlock = (typeof menuOrderStatusPromptBlock === "function" && state._menuOrderShareOn) ? menuOrderStatusPromptBlock() : "";
   const dreamTraceBlock = (typeof dreamTracePromptBlock === "function") ? dreamTracePromptBlock() : "";
-  // 角色扮演：**不再注入**（她 2026-09-17 说的：「rp 直接不注入了」）。
-  // 起因是思考链里他老提角色扮演 —— 那说明设定一直挂在上下文里，
-  // 而她根本没在玩。代码留着，想开回来把下面这行换成
-  // roleplayStatusPromptBlock() 就行。
-  const rpBlock = "";
+  // 角色扮演（DDLG/师生/上司下属那套情景）：她 2026-09-17 要开着。
+  // 只在她选了某个情景（activeRoleplayId）时才出内容，没选就是空 —— 平时不占。
+  // 它在尾部（书签之后），所以内容变也不碰缓存。
+  const rpBlock = (typeof roleplayStatusPromptBlock === "function") ? roleplayStatusPromptBlock() : "";
   const tipsyBlock = (typeof tipsyStatusPromptBlock === "function") ? tipsyStatusPromptBlock() : "";
   // 省 token：情侣日历仅在聊到日期/纪念日时注入，不常驻
   const calendarBlock = (typeof calendarPromptBlock === "function" && __featHot("日历","纪念日","在一起的","周年","几天了","今天几号","日程","安排","几点")) ? calendarPromptBlock() : "";
   // 纪念日临近提示：不设关键词条件（等她提起就晚了），额度在 annNudgeTake 里控
   const annNudgeBlock = (typeof anniversaryNudgeBlock === "function") ? anniversaryNudgeBlock() : "";
-  const prMainBlock = (typeof prMainChatPromptBlock === "function") ? prMainChatPromptBlock() : "";
+  // 快穿冒险往**主聊天**塞进度摘要：她 2026-09-17 要关（他老在日常聊天里提冒险剧情）。
+  // 默认不注入，state.prMainInject === true 才开。关掉的代价：主聊天的 Aries 不知道
+  // 她在玩快穿，她提起冒险时他可能会懵 —— 想开回来把这个开关打开即可。
+  // ⚠️ 只关这一条「主聊天感知」。prPlayBlock 是她真在快穿框里玩时的扮演正文，不动。
+  const prMainBlock = (state.prMainInject === true && typeof prMainChatPromptBlock === "function") ? prMainChatPromptBlock() : "";
   const prPlayBlock = (typeof prPlayPromptBlock === "function") ? prPlayPromptBlock() : "";
   const annoBlock = (typeof annoPromptBlock === "function") ? annoPromptBlock() : "";
   // 省 token：飞行棋/真心话大冒险 仅在相关时注入
