@@ -31779,9 +31779,14 @@ function __cacheNum(v){ return (v === undefined || v === null) ? null : (+v || 0
 function __usageLine(u){
   if(!u) return "";
   const r = u.cache_read, w = u.cache_write, i = u.input||0;
-  // 「瞎」有两种长相：字段缺失，和**字段在但全是 0 且连 input 都是 0**。
-  // 只认 null 会漏掉后者 —— 真发出去过的请求，input_tokens 不可能是 0。
-  const blind = (r == null && w == null) || (i === 0 && !w && !r);
+  // 这一条是实测逼出来的：ckff 那个站**命中时会回 cache_read，但从来不回 cache_write**。
+  // 所以「字段没了」在同一个站上有两种意思，得靠历史区分：
+  //   这一整轮里从没见过这两个字段 → 它真的不报，只能说「看不到」
+  //   见过 → 那这次没有就是**真没命中**，别再拿「看不到」和稀泥
+  const seen = __usageLog.some(x => x && (x.cache_read != null || x.cache_write != null));
+  // 「瞎」的第二种长相：字段在但全是 0 **且连 input 都是 0** ——
+  // 真发出去过的请求，input_tokens 不可能是 0，那种 0 也是假的。
+  const blind = (r == null && w == null && !seen) || (i === 0 && !w && !r);
   if(blind){
     return `缓存：看不到 —— 这个站不回缓存字段，**不等于没命中**` +
            `（输出 ${u.output||0}）`;
