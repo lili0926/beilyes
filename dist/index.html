@@ -38998,10 +38998,27 @@ function buildMainChatRequest(ag, extraHint){
   try{
     const sysLen = (sys||"").length;
     const winChars = apiMsgs.reduce((a,m)=>a + String(m.content||"").length, 0);
+    // 人设拆解：她一直问「哪里吃 token」。人设 = 启用的提示词拼起来的，
+    // 所以把「启用了几条、共多少字」摊开 —— 要是有两条大的都开着（比如前端人设 +
+    // 又贴了一份 CLAUDE.md），一眼就看出「收了两份」。
+    let pN = 0, pChars = 0, pBig = 0, pDup = 0;
+    try{
+      const enabled = (state.prompts||[]).filter(p=>
+        p.enabled && (p.category==="global" || (state.nsfwOn && p.category==="nsfw")));
+      pN = enabled.length;
+      const seen = {};
+      enabled.forEach(p=>{
+        const c = String(p.content||""); pChars += c.length;
+        if(c.length > 500) pBig++;                 // 算「大条」的门槛
+        const sig = c.slice(0, 80);                // 开头 80 字当指纹，抓重复贴的两份
+        if(sig){ if(seen[sig]) pDup++; else seen[sig] = 1; }
+      });
+    }catch(e){}
     state.__lastReqParts = {
       sys: sysLen,
       summary: (win.summary||"").length,
       persona: Math.max(0, sysLen - (win.summary||"").length),
+      promptN: pN, promptChars: pChars, promptBig: pBig, promptDup: pDup,
       n: apiMsgs.length,
       win: winChars - tailLen,     // 窗口里她和他真正说的话
       tail: tailLen, mem: memLen, rule: ruleLen, tick: tickLen, dyn: dynLen,
@@ -39047,8 +39064,16 @@ function reqPartsLine(p){
   if(!p || !p.total) return "";
   const k = n => Math.round(n * 1.5);
   const pct = n => Math.round(n * 100 / p.total);
+  // 人设那块拆到提示词层：几条启用、其中几条是大条、有没有重复贴的两份
+  let personaDetail = `人设 ${p.persona}（${pct(p.persona)}%`;
+  if(p.promptN != null){
+    personaDetail += `，${p.promptN}条提示词${p.promptChars?`共${p.promptChars}字`:""}`;
+    if(p.promptBig >= 2) personaDetail += `，其中${p.promptBig}条是大条`;
+    if(p.promptDup > 0) personaDetail += `，⚠️有${p.promptDup}条重复（多半收了两份人设）`;
+  }
+  personaDetail += "）";
   return `这条请求 ${p.total} 字 ≈ ${k(p.total)} tok`
-    + ` · 人设 ${p.persona}（${pct(p.persona)}%）`
+    + ` · ${personaDetail}`
     + (p.summary ? ` · 摘要 ${p.summary}（${pct(p.summary)}%）` : "")
     + ` · 历史 ${p.n} 条 ${p.win}（${pct(p.win)}%）`
     + ` · 尾部 ${p.tail}（状态 ${p.dyn||0}/记忆 ${p.mem}/语气 ${p.rule}/此刻 ${p.tick}）`;
