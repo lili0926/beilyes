@@ -24333,6 +24333,9 @@ async function callVadStart(){
     });
     s.handsFree = true;
     s.sttError = "";
+    // 提前把边说边传那条连接握好。放在这里而不是第一句说完时 ——
+    // 否则建连的那几百毫秒正好压在她说的第一句上，最该快的那一下反而最慢。
+    if(sttWsEnabled()) { try{ sttWsOpen(); }catch(e){} }
     __vadStartRecorder();
     __vadLoop();
     render();
@@ -24349,6 +24352,7 @@ function callVadStop(){
   __vad.on = false;
   if(__vad.raf){ try{ cancelAnimationFrame(__vad.raf); }catch(e){} __vad.raf = 0; }
   __vadStopRecorder(true);
+  sttWsClose();
   try{ if(__vad.stream) __vad.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
   try{ if(__vad.ctx) __vad.ctx.close(); }catch(e){}
   __vad.ctx = null; __vad.stream = null; __vad.analyser = null;
@@ -24362,10 +24366,19 @@ function __vadStartRecorder(){
   if(!__vad.stream) return;
   try{
     __callAudioChunks = [];
+    sttWsReset();            // 新的一段：服务端那边也从头开始
     const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
       : (MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "");
     const rec = mime ? new MediaRecorder(__vad.stream, { mimeType: mime }) : new MediaRecorder(__vad.stream);
-    rec.ondataavailable = e=>{ if(e.data && e.data.size) __callAudioChunks.push(e.data); };
+    rec.ondataavailable = e=>{
+      if(!e.data || !e.data.size) return;
+      // ⚠️ rec.stop() 之后还会再吐**一片尾巴**，而且是排在任务队列里、晚于这里的重开。
+      // 不认这一下的话，上一段的尾巴会落进下一段的开头 —— webm 是个容器，
+      // 开头多一截没有头的碎片，整段就解不开了。认一下当前录音机是不是它自己，代价一个比较。
+      if(rec !== __callMediaRecorder) return;
+      __callAudioChunks.push(e.data);
+      sttWsChunk(e.data);    // 边录边推：说话的同时上传就已经在走了
+    };
     rec.start(100);
     __callMediaRecorder = rec;
     __vad.recStartAt = performance.now();
@@ -24380,7 +24393,7 @@ function __vadStopRecorder(discard){
   __callMediaRecorder = null;
   if(!rec) return null;
   try{ rec.stop(); }catch(e){}
-  if(discard){ __callAudioChunks = []; return null; }
+  if(discard){ __callAudioChunks = []; sttWsReset(); return null; }
   const blob = new Blob(__callAudioChunks, { type: rec.mimeType || "audio/webm" });
   __callAudioChunks = [];
   return blob;
@@ -24486,13 +24499,28 @@ async function __vadEndTurn(){
   s.recording = false;
   callHoldPaint();
   const blob = __vadStopRecorder(false);
+  // **先要结果，再重开录音**：重开会给服务端发 reset，顺序反了就把这一段冲掉了。
+  // sttWsEnd 只是把 end 发出去、挂个等待者，不阻塞，下面的重开照样是立刻发生的。
+  const wsPending = sttWsEnabled() ? sttWsEnd() : null;
   __vadStartRecorder();                     // 立刻开下一段，别漏掉她接着说的话
   if(!blob || blob.size < 800) return;      // 太短：多半是咳嗽或关门声，不值得跑一趟 STT
   if(s.loading) return;                     // 上一轮还在路上，这一段先丢（不排队，排队只会越积越晚）
   s.loading = true; render();
   callLatMark("start");
   try{
-    const text = await callSttUpload(blob);
+    let text = "";
+    // 边说边传这条路：成功就直接拿到文字，音频早在她说话时就传完了
+    const wsRes = wsPending ? await wsPending : null;
+    if(wsRes && wsRes.type === "transcript"){
+      text = String(wsRes.text || wsRes.transcript || wsRes.result || "").trim();
+      if(text){
+        if(wsRes.emotion || wsRes.tone) s.lastVoiceMeta = { emotion: wsRes.emotion||"", tone: wsRes.tone||"" };
+        s.lastStt = { provider: String(wsRes.provider||""), ms: +wsRes.ms || 0,
+                      bytes: +wsRes.bytes || 0, stream: true };
+      }
+    }
+    // 没拿到（连不上／超时／上游报错）就走老路。这条加速层不该让她听不见回话。
+    if(!text) text = await callSttUpload(blob);
     callLatMark("stt");
     s.loading = false;
     if(text && text.trim()) await callAiTurn(text);
@@ -24785,6 +24813,111 @@ function handleAlbumMarkers(body){
   return text;
 }
 
+// ─── 边说边传：/ws/stt ─────────────────────────────────────────────────────
+// HTTP 那条是「录完 → 整段上传 → 转写」，上传那几百毫秒**整个串在延迟里**，
+// 而且她说得越长、上传越久 —— 说一句长的反而等更久，这很反直觉但就是这样。
+// 这条把上传摊进她说话的过程里：MediaRecorder 每 100ms 吐一片就推一片，
+// 她一停下，服务端手里已经是整段音频，只剩转写本身。
+//
+// 传的是**原样的 webm/opus 分片**（第一片带头，顺序拼接就是完整文件），不是 PCM ——
+// 服务端因此能原样复用那套 STT 后端，一行没改。
+//
+// 整条路是**可失败的加速层**：连不上、没鉴权、超时、回了 error，一律安静地退回
+// callSttUpload()。她不该因为网络抖一下就听不见回话。
+const STT_WS = { ws:null, authed:false, waiter:null, gen:0, opening:null, failed:false, bytes:0 };
+
+function sttWsUrl(){
+  const base = callGatewayBase();
+  if(!base) return "";
+  return base.replace(/^http/i, "ws") + "/ws/stt";   // http→ws, https→wss
+}
+function sttWsEnabled(){
+  const cfg = state.callConfig || {};
+  if(cfg.streamStt === false) return false;          // 设置里关掉了
+  if(STT_WS.failed) return false;                    // 这通电话里已经证明不通，别每轮再试一遍
+  if(typeof WebSocket === "undefined") return false;
+  if((cfg.sttUrl||"").trim()) return false;          // 她自己填了别家 STT 地址，那就听她的
+  return !!sttWsUrl();
+}
+function sttWsAlive(){ return !!(STT_WS.ws && STT_WS.ws.readyState === 1 && STT_WS.authed); }
+
+/** 开连接并完成鉴权。**token 走第一条消息**，不进 URL —— 进 URL 就会被 nginx 的 access log 记一辈子。 */
+function sttWsOpen(){
+  if(sttWsAlive()) return Promise.resolve(true);
+  if(STT_WS.opening) return STT_WS.opening;
+  const url = sttWsUrl();
+  if(!url) return Promise.resolve(false);
+  STT_WS.opening = new Promise(resolve=>{
+    let settled = false;
+    const done = (ok)=>{ if(settled) return; settled = true; STT_WS.opening = null; if(!ok) STT_WS.failed = true; resolve(ok); };
+    let ws;
+    try{ ws = new WebSocket(url); }catch(e){ return done(false); }
+    ws.binaryType = "arraybuffer";
+    const timer = setTimeout(()=>{ try{ ws.close(); }catch(e){} done(false); }, 6000);
+    ws.onopen = ()=>{
+      const cfg = state.callConfig || {};
+      const tok = (cfg.sttToken && String(cfg.sttToken).trim()) || callAuthToken();
+      try{ ws.send(JSON.stringify({ type:"auth", token: tok || "" })); }catch(e){ clearTimeout(timer); done(false); }
+    };
+    ws.onmessage = (ev)=>{
+      let d = null;
+      try{ d = JSON.parse(String(ev.data)); }catch(e){ return; }
+      if(d.type === "auth"){
+        clearTimeout(timer);
+        if(d.ok){ STT_WS.ws = ws; STT_WS.authed = true; done(true); }
+        else { try{ ws.close(); }catch(e){} done(false); }
+        return;
+      }
+      // 鉴权之后的每条回复都交给当前那个等待者（sttWsEnd 挂上去的）
+      const w = STT_WS.waiter;
+      if(w){ STT_WS.waiter = null; w(d); }
+    };
+    ws.onerror = ()=>{ clearTimeout(timer); done(false); };
+    ws.onclose = ()=>{
+      clearTimeout(timer);
+      if(STT_WS.ws === ws){ STT_WS.ws = null; STT_WS.authed = false; }
+      const w = STT_WS.waiter;
+      if(w){ STT_WS.waiter = null; w(null); }   // 连接断了也要让等待者醒过来，否则那一轮就悬在那
+      done(false);
+    };
+  });
+  return STT_WS.opening;
+}
+
+/** 推一片。失败不抛 —— 这条路本来就是可失败的，末尾的 end 拿不到结果自然会退回 HTTP。 */
+function sttWsChunk(blob){
+  if(!sttWsAlive()) return;
+  try{ STT_WS.ws.send(blob); STT_WS.bytes += (blob && blob.size) || 0; }catch(e){}
+}
+/** 这一段不要了（她插话、或空转重开）：服务端丢掉缓冲，连接留着。 */
+function sttWsReset(){
+  STT_WS.bytes = 0;
+  if(!sttWsAlive()) return;
+  try{ STT_WS.ws.send(JSON.stringify({ type:"reset" })); }catch(e){}
+}
+/** 收尾：要结果。拿不到就返回 null，由调用方退回 HTTP。 */
+function sttWsEnd(timeoutMs){
+  return new Promise(resolve=>{
+    if(!sttWsAlive() || STT_WS.bytes < 800){ STT_WS.bytes = 0; return resolve(null); }
+    STT_WS.bytes = 0;
+    const myGen = ++STT_WS.gen;
+    let done = false;
+    const finish = (v)=>{ if(done) return; done = true; clearTimeout(t); if(STT_WS.waiter === cb) STT_WS.waiter = null; resolve(v); };
+    const cb = (d)=>{ if(myGen === STT_WS.gen) finish(d); };
+    const t = setTimeout(()=>finish(null), timeoutMs || 8000);
+    STT_WS.waiter = cb;
+    try{ STT_WS.ws.send(JSON.stringify({ type:"end" })); }catch(e){ finish(null); }
+  });
+}
+function sttWsClose(){
+  const ws = STT_WS.ws;
+  STT_WS.ws = null; STT_WS.authed = false; STT_WS.waiter = null; STT_WS.bytes = 0;
+  STT_WS.failed = false;              // 挂断即清账：下一通电话重新给它一次机会
+  if(!ws) return;
+  try{ ws.send(JSON.stringify({ type:"bye" })); }catch(e){}
+  try{ ws.close(); }catch(e){}
+}
+
 let __sttPath = ""; // 本次会话里探到的可用识别路径："/transcribe" 或 "/stt"
 async function callSttUpload(blob){
   const cfg = state.callConfig || {};
@@ -24831,11 +24964,21 @@ async function callSttUpload(blob){
   }
   const text = (data.text || data.transcript || data.result || "").trim();
   if(!text) throw new Error("没有识别到内容");
+  const s = ensureCallSession();
   // 情绪/语气 → 给模型做前缀，轻声模式据此降音量
   if(data.emotion || data.tone){
-    const s = ensureCallSession();
     s.lastVoiceMeta = { emotion: data.emotion||"", tone: data.tone||"" };
   }
+  // 服务端把「上游真正花了多久」和「用的哪家」一起回来了，以前这两个字段被丢掉。
+  // 有了它才能把「上传」和「转写」分开 —— 否则只知道这一段慢，不知道慢在网络还是上游。
+  // 而这两者的对策完全相反：上传慢要改传输方式，上游慢要换供应商或查代理。
+  try{
+    s.lastStt = {
+      provider: String(data.provider || ""),
+      ms: +data.ms || 0,
+      bytes: (blob && blob.size) || 0,
+    };
+  }catch(e){}
   return text;
 }
 
@@ -25256,6 +25399,8 @@ function callLatMark(which){
                          audio: Math.round(__callLat.audio), at: Date.now() };
       try{
         const s = ensureCallSession();
+        // 把这一轮 STT 的上游耗时并进来：上传时间 = 这一段总时长 − 上游耗时
+        if(s.lastStt) __callLat.last.up = s.lastStt;
         s.lat = __callLat.last;
         s.latLog = [__callLat.last, ...(s.latLog||[])].slice(0, 8);
       }catch(e){}
@@ -25269,7 +25414,18 @@ function callLatMark(which){
 function callLatLine(l){
   if(!l || !l.audio) return "";
   const seg = (a, b) => Math.max(0, Math.round(a - b));
-  return `上轮 ${(l.audio/1000).toFixed(1)}s ＝ 上传转写 ${l.stt}ms ＋ 模型首字 ${seg(l.first, l.stt)}ms ＋ 合成出声 ${seg(l.audio, l.first)}ms`;
+  // 第一段再拆一层：上游自己报的 ms 是「转写真正花的时间」，
+  // 剩下的就是上传 + 网关往返 —— 这两半的对策完全相反，不拆开没法决定改哪儿。
+  let head = `上传转写 ${l.stt}ms`;
+  if(l.up && l.up.ms){
+    const net = Math.max(0, l.stt - l.up.ms);
+    const kb = l.up.bytes ? `，${Math.round(l.up.bytes/1024)}KB` : "";
+    // 边说边传时这一段只剩「最后一片 + 往返」，标出来才看得懂为什么它突然变这么小
+    head = l.up.stream
+      ? `边传 ${net}ms${kb} ＋ 转写 ${l.up.ms}ms（${l.up.provider || "?"}）`
+      : `上传 ${net}ms${kb} ＋ 转写 ${l.up.ms}ms（${l.up.provider || "?"}）`;
+  }
+  return `上轮 ${(l.audio/1000).toFixed(1)}s ＝ ${head} ＋ 模型首字 ${seg(l.first, l.stt)}ms ＋ 合成出声 ${seg(l.audio, l.first)}ms`;
 }
 
 const __callTts = { items: [], playIdx: 0, playing: false, gen: 0, playhead: 0, srcs: [] };
@@ -25935,6 +26091,15 @@ function renderPhone(){
         </div>
         <div class="feat-section-label"><i data-lucide="mic"></i> STT 语音识别</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
+          <div class="body-switch-row" style="margin-bottom:10px;padding:0;border:none">
+            <div>
+              <div class="body-switch-label">${cfg.streamStt===false?"边说边传：关":"边说边传：开"}</div>
+              <div style="font-size:11px;color:var(--sub);margin-top:2px">免提时一边说一边传，说完只等转写。连不上自动走老路</div>
+            </div>
+            <div id="call-streamstt-toggle" class="toggle-switch" style="background:${cfg.streamStt===false?"var(--border)":"var(--accent)"}">
+              <div class="toggle-knob" style="left:${cfg.streamStt===false?2:18}px"></div>
+            </div>
+          </div>
           <span class="setting-label">STT URL</span>
           <input id="call-stt-url" value="${escAttr(cfg.sttUrl||"")}" placeholder="https://vps.example.com/stt"/>
           <span class="setting-label" style="margin-top:8px">STT Token（可选）</span>
@@ -36996,6 +37161,16 @@ reader.readAsArrayBuffer(f);
   if(state.subPage === "phone" && typeof aicallConnect === "function"){
     aicallConnect(false);
   }
+  const streamSttTg = document.getElementById("call-streamstt-toggle");
+  if(streamSttTg) streamSttTg.onclick = ()=>{
+    state.callConfig = state.callConfig || {};
+    state.callConfig.streamStt = state.callConfig.streamStt === false ? true : false;
+    persist("callConfig");
+    // 关掉就把连接收了；重新打开时 sttWsOpen 会自己握手，不用在这里等
+    if(state.callConfig.streamStt === false){ try{ sttWsClose(); }catch(e){} }
+    else { STT_WS.failed = false; }   // 手动开＝再给它一次机会，清掉「这通已证明不通」的记号
+    render();
+  };
 const sttUrl = document.getElementById("call-stt-url");
   if(sttUrl) sttUrl.onchange = ()=>{ state.callConfig=state.callConfig||{}; state.callConfig.sttUrl=sttUrl.value.trim(); persist("callConfig"); };
   const sttTok = document.getElementById("call-stt-token");
