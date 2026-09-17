@@ -17195,6 +17195,9 @@ const VAD = {
   gain:         3.2,    // 进入阈值 = max(floor, 噪声底 × gain)
   exitRatio:    0.62,   // 退出阈值 = 进入阈值 × 这个。**双阈值**：单阈值会在临界值上下抖，一句话被切成七八段
   speakingGain: 3.3,    // 他在说话时把门槛再抬高，降低扬声器串音和呼吸误触
+  bargeInMs:    820,    // 他正在说话时，要持续开口这么久才算「打断」。
+                        // 光靠 speakingGain 不够：回声、呼吸、"嗯"这种附和都是短促的，
+                        // 真想插话的人撑得过 0.8 秒 —— 这道门槛把「附和」和「打断」分开
   watchdogMs:   1600,   // 这么久没有任何一帧超过进入阈值就强制收尾 ——
                         // AGC 会慢慢把环境音抬到退出阈值之上，没有这条会永远停不下来
   maxTurnMs:    30000,  // 一段最长 30 秒，防止忘了挂断录到天荒地老
@@ -17293,31 +17296,50 @@ function __vadStopRecorder(discard){
  * 状态存在 v 里（生产传 __vad，测试可以自己造一个）。
  */
 function __vadStep(v, rms, now, himTalking, busy){
-  // 噪声底：没说话时快跟；说话中也慢慢向观测到的最小值靠 ——
-  // 不这么做的话，AGC 把底噪一路抬上去，退出阈值永远够不着，一句话停不下来。
-  if(!v.speaking){ v.noise = v.noise*0.97 + rms*0.03; }
-  else {
+  // **先算阈值，再决定这一帧要不要进噪声估计。** 顺序反了会出大事：
+  // 噪声底估的是「背景」，而 gain × speakingGain = 10.6 —— 底噪往上挪 3% 就足以
+  // 让进入阈值超过说话人的音量。于是打断要撑的那 820ms 里，底噪被那段话自己
+  // 一路抬高、阈值跟着涨，hot 还没数够就被重置，**打断永远触发不了**
+  //（probe10 D2 抓到的）。正常开口也一样，只是 3 帧太短不容易看出来。
+  let enter = Math.max(VAD.floor, v.noise * VAD.gain);
+  if(himTalking) enter *= VAD.speakingGain;   // 他在说话时抬高门槛（TTS 走同一个扬声器）
+  let exit = enter * VAD.exitRatio;
+
+  if(!v.speaking){
+    // 只吸收确实落在背景区间的帧。高于退出阈值的一律不算背景，不许污染底噪。
+    if(rms <= exit){
+      v.noise = v.noise*0.97 + rms*0.03;
+      enter = Math.max(VAD.floor, v.noise * VAD.gain);
+      if(himTalking) enter *= VAD.speakingGain;
+      exit = enter * VAD.exitRatio;
+    }
+  } else {
+    // 说话中：慢慢向观测到的最小值靠 —— 不这么做的话，AGC 把底噪一路抬上去，
+    // 退出阈值永远够不着，一句话停不下来。
     v.speechMin = Math.min(v.speechMin, rms);
     v.noise = Math.min(v.noise*1.0015, Math.max(v.noise, v.speechMin));
   }
-  let enter = Math.max(VAD.floor, v.noise * VAD.gain);
-  if(himTalking) enter *= VAD.speakingGain;   // 他在说话时抬高门槛（TTS 走同一个扬声器）
-  const exit = enter * VAD.exitRatio;
   if(rms > enter) v.lastHotAt = now;
 
   if(!v.speaking){
     if(rms > enter){
       v.hot += 1;
-      if(v.hot >= VAD.startHold && !busy){
+      if(!v.hotSince) v.hotSince = now;
+      // 他正在说话时要多撑 bargeInMs 才算打断 —— 附和和回声撑不过 0.8 秒
+      const need = himTalking ? VAD.bargeInMs : 0;
+      if(v.hot >= VAD.startHold && (now - v.hotSince) >= need && !busy){
         v.speaking = true;
         v.speechStartAt = now;
         v.speechMin = 1;
         v.silenceSince = 0;
-        return "start";
+        v.hotSince = 0;
+        // 打断和正常开口要分开告诉调用方：前者得先让他闭嘴
+        return himTalking ? "barge" : "start";
       }
       return null;
     }
     v.hot = 0;
+    v.hotSince = 0;
     // 没人说话时定期重开录音，把攒下的静音丢掉 —— 静音也要上传，白花时间
     return (now - v.recStartAt > VAD.idleRestartMs) ? "idle" : null;
   }
@@ -17348,7 +17370,12 @@ function __vadLoop(){
   const now = performance.now();
 
   const act = __vadStep(__vad, rms, now, !!(__callTts && __callTts.playing), !!s.loading);
-  if(act === "start"){ s.recording = true; callHoldPaint(); }
+  if(act === "barge"){
+    // 她插话了：先让他闭嘴，在途的合成一并作废（gen++），再当成正常开口
+    callTtsReset();
+    s.recording = true; callHoldPaint();
+  }
+  else if(act === "start"){ s.recording = true; callHoldPaint(); }
   else if(act === "idle"){ __vadStopRecorder(true); __vadStartRecorder(); }
   else if(act === "end"){ __vadEndTurn(); }
 }
@@ -17878,6 +17905,13 @@ function ensureCallAudio(){
  *  这里先用一段极短的静音把它 play 过一次，之后再 src= 播就不受限了。 */
 let __callAudioUnlocked = false;
 function callUnlockAudio(){
+  // AudioContext 和 <audio> 是两套独立的解锁，两个都得在这一下手势里办。
+  // 只解锁 <audio> 的话，排期播放那条路会拿到一个 suspended 的 ctx，
+  // 表现和当年一模一样：接通了但一声不吭，还没有任何报错。
+  try{
+    const c = callPlayCtx();
+    if(c && c.state === "suspended") c.resume();
+  }catch(e){}
   if(__callAudioUnlocked) return;
   try{
     const a = ensureCallAudio();
@@ -18140,10 +18174,38 @@ function callLatLine(l){
   return `上轮 ${(l.audio/1000).toFixed(1)}s ＝ 上传转写 ${l.stt}ms ＋ 模型首字 ${seg(l.first, l.stt)}ms ＋ 合成出声 ${seg(l.audio, l.first)}ms`;
 }
 
-const __callTts = { items: [], playIdx: 0, playing: false, gen: 0 };
+const __callTts = { items: [], playIdx: 0, playing: false, gen: 0, playhead: 0, srcs: [] };
+
+// ─── 播放：AudioContext 排期，而不是一个 <audio> 顺序播 ────────────────────
+// 老做法是 `a.src = 下一句; a.play()`，句与句之间要经历「取 URL → 解码 → 起播」，
+// 每次几十到几百毫秒 —— 听起来就是一顿一顿的。
+// 改成提前解码好，用 ctx.currentTime 把每句排进时间轴：playhead 累加 buffer.duration，
+// 下一句紧接着上一句的结束时刻开始，**中间一个采样点都不空**。
+//
+// ⚠️ 保留 <audio> 那条回落：AudioContext 在某些 WebView 上解不了 mp3，
+// 真解不了就退回老路 —— 顿一点总比整通电话哑掉强。
+let __callPlayCtx = null;
+function callPlayCtx(){
+  if(__callPlayCtx) return __callPlayCtx;
+  try{
+    const C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return null;
+    __callPlayCtx = new C();
+  }catch(e){ __callPlayCtx = null; }
+  return __callPlayCtx;
+}
+
+function callTtsStopSources(){
+  (__callTts.srcs || []).forEach(s=>{
+    try{ s.onended = null; s.stop(); }catch(e){}
+  });
+  __callTts.srcs = [];
+  __callTts.playhead = 0;
+}
 
 function callTtsReset(){
   __callTts.gen++;
+  callTtsStopSources();
   __callTts.items.forEach(it=>{
     if(it && it.url && !it.external){ try{ URL.revokeObjectURL(it.url); }catch(e){} }
   });
@@ -18190,11 +18252,70 @@ function callTtsPush(text){
 
 /** 按序播：只看队首，没就绪就等（合成回调会再叫一次）。 */
 function callTtsPump(){
+  const ctx = callPlayCtx();
+  if(ctx) return callTtsPumpCtx(ctx);
+  return callTtsPumpEl();
+}
+
+/** AudioContext 排期版：能排多少排多少，不等上一句播完。 */
+async function callTtsPumpCtx(ctx){
+  if(__callTts.pumping) return;                   // decodeAudioData 是异步的，防重入
+  __callTts.pumping = true;
+  try{
+    if(ctx.state === "suspended"){ try{ await ctx.resume(); }catch(e){} }
+    while(true){
+      const it = __callTts.items[__callTts.playIdx];
+      if(!it) break;
+      if(it.status === "pending") break;           // 等它，别跳过去播后面的
+      if(it.status === "failed"){ __callTts.playIdx++; continue; }
+      const gen = __callTts.gen;
+      let buf;
+      try{
+        const res = await fetch(it.url);
+        const ab = await res.arrayBuffer();
+        buf = await ctx.decodeAudioData(ab);
+      }catch(e){
+        // 解不了就整条链退回 <audio>：顿一点总比哑掉强
+        __callTts.pumping = false;
+        __callPlayCtx = null;
+        try{ ctx.close(); }catch(_){}
+        return callTtsPumpEl();
+      }
+      if(gen !== __callTts.gen) break;             // 这通/这轮已经作废（比如她插话了）
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      // 轻声模式：她语气偏轻/气音时回话音量减半（和 callSpeak 里那条同源）
+      const tone = (ensureCallSession().lastVoiceMeta || {}).tone || "";
+      const g = ctx.createGain();
+      g.gain.value = /轻|气音|耳语|放低|小声|呼吸/.test(tone) ? 0.5 : 1;
+      src.connect(g); g.connect(ctx.destination);
+      const at = Math.max(ctx.currentTime + 0.02, __callTts.playhead || 0);
+      src.start(at);
+      __callTts.playhead = at + buf.duration;
+      __callTts.srcs.push(src);
+      if(!__callTts.playing){ __callTts.playing = true; callLatMark("audio"); }
+      src.onended = ()=>{
+        __callTts.srcs = __callTts.srcs.filter(x=>x !== src);
+        if(!__callTts.srcs.length){
+          __callTts.playing = false;
+          __callTts.playhead = 0;
+        }
+      };
+      if(it.url && !it.external){ try{ URL.revokeObjectURL(it.url); }catch(e){} it.url = null; }
+      __callTts.playIdx++;
+    }
+  } finally {
+    __callTts.pumping = false;
+  }
+}
+
+/** 老路：一个 <audio> 顺序播。只在拿不到 AudioContext 或解码失败时走。 */
+function callTtsPumpEl(){
   if(__callTts.playing) return;
   const it = __callTts.items[__callTts.playIdx];
   if(!it) return;
   if(it.status === "pending") return;             // 等它，别跳过去播后面的
-  if(it.status === "failed"){ __callTts.playIdx++; callTtsPump(); return; }
+  if(it.status === "failed"){ __callTts.playIdx++; callTtsPumpEl(); return; }
 
   const gen = __callTts.gen;
   const a = ensureCallAudio();
@@ -18204,7 +18325,7 @@ function callTtsPump(){
     __callTts.playing = false;
     if(it.url && !it.external){ try{ URL.revokeObjectURL(it.url); }catch(e){} it.url = null; }
     __callTts.playIdx++;
-    callTtsPump();
+    callTtsPumpEl();
   };
   a.onended = done;
   a.onerror = done;
@@ -29703,7 +29824,13 @@ reader.readAsArrayBuffer(f);
     hfBtn.onclick = (e)=>{
       e.preventDefault(); e.stopPropagation();
       if(callVadOn()) callVadStop();
-      else { callUnlockAudio(); callVadStart(); }   // 解锁音频必须在这一下手势里，等 VAD 触发就来不及了
+      else {
+        // 解锁音频必须在这一下手势里，等 VAD 触发就来不及了。
+        // AudioContext 也一样：iOS/WebView 只认用户手势里创建或 resume 的那一个。
+        callUnlockAudio();
+        try{ const c = callPlayCtx(); if(c && c.state === "suspended") c.resume(); }catch(e){}
+        callVadStart();
+      }
     };
   }
   const holdBtn = document.getElementById("call-hold");
