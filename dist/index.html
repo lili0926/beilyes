@@ -18941,10 +18941,32 @@ async function pullWakeMessages(){
     return data.messages || data.data || [];
   }catch(e){ return []; }
 }
+// ─── 唤醒消息的节流（2026-09-16 晚上那次「10 分钟扣 6 次」就是这里）─────────
+// /api/wake/pull 一次最多回 5 条，而**四个地方**都在循环拉取、每条都调
+// pushWakeMessage；needPersona 的每一条又各自跑一次 proactiveGenerateLocal
+// （人设 + 16 条历史 + 影子提示词，一次完整的 API 调用）。
+// 队列攒了一晚上、App 一打开全拉回来 → 5 次生成，加上开场白预生成正好 6 次。
+//
+// 而且这条路**一道闸都没有** —— proactiveGate 的冷静期和每时段上限全绕过了。
+//
+// 收口：不管从哪条路进来，
+//   ① 一段时间内只许生成一次正文（攒着的那几条本来也是同一个意思：他想说话）；
+//   ② 一次最多落 2 条，别让她一开 App 就被糊一脸。
+const WAKE_PERSONA_GAP_MS = 30 * 60 * 1000;
+const WAKE_MAX_PER_PULL = 2;
+let __wakePersonaAt = 0;
+let __wakePulled = 0;
+
+/** 每次拉取开始时清零。**按「一次拉取」算，不是按时间窗口算** ——
+ *  用时间窗口的话，30 秒后到达的、真正新的那一条也会被一起吞掉。 */
+function wakeBurstReset(){ __wakePulled = 0; }
+
 /** 拉到的主动消息统一入口：六轴触发（needPersona）→ 用人设生成正文；否则直接用。 */
 async function pushWakeMessage(m){
   const content = m.content || m.text || "";
   if(!content) return;
+  // 一次拉取里落太多条 → 后面的直接丢。丢的是「他想说话」的重复信号，不是内容。
+  if(__wakePulled >= WAKE_MAX_PER_PULL) return;
   // 去重。VPS 那个队列是 no_dedup=True 入的，而且现在本地生成的那条为了走原生通知
   // 也会往队列里过一趟（见 proNotifyNative）—— 不去重的话同一句会在聊天里出现两遍。
   // 只比最近 10 条：更早的重复多半是她隔了很久又收到同一句，那反而该显示。
@@ -18956,13 +18978,30 @@ async function pushWakeMessage(m){
     const key = norm(content);
     if(key && recent.some(x => x && x.role === "assistant" && norm(x.content) === key)) return;
   }catch(e){}
-  const needPersona = !!(m.needPersona || m.need_persona) || /^six_axis/.test(m.reason||"");
+  // **服务端说了就听服务端的**，别再用 reason 去猜。
+  // 那个 `/^six_axis/` 的猜法会把预生成开场白也判成「要重新生成」——
+  // 而开场白正是手机早先用她的 API 写好、存在 VPS 上的他本人的话：
+  // 重新生成 = 通知栏一句、聊天里另一句（B 方案要消掉的错位），还白花一次调用。
+  // 只有服务端压根没带这个字段（老版本）时才退回猜。
+  const explicit = (m.needPersona !== undefined) ? m.needPersona
+                 : (m.need_persona !== undefined ? m.need_persona : undefined);
+  const needPersona = (explicit !== undefined)
+    ? !!explicit
+    : /^six_axis/.test(m.reason||"");
   let finalContent = content;
-  if(needPersona && typeof proactiveGenerateLocal === "function"){
+  if(needPersona){
+    // **这一条才是真正花钱的**：一次完整的 API 调用（人设 + 16 条历史 + 影子提示词）。
+    // 半小时内只许一次 —— 队列里攒着的那几条说的是同一件事（他想说话），
+    // 没有必要为每一条各生成一遍。
+    if(Date.now() - __wakePersonaAt < WAKE_PERSONA_GAP_MS) return;
+    if(typeof proactiveGenerateLocal !== "function") return;
+    __wakePersonaAt = Date.now();   // 先占坑再生成：生成要几秒，期间别让第二条挤进来
     // VPS 只给了欲望上下文 hint；正文让 AI 用本家人设 + 记忆生成
     const persona = await proactiveGenerateLocal(content || m.reason || "想你了");
-    if(persona && String(persona).trim()) finalContent = String(persona).trim();
+    if(!persona || !String(persona).trim()) return;  // 生成失败就别把 hint 当正文发出去
+    finalContent = String(persona).trim();
   }
+  __wakePulled++;
   if(typeof proactivePushToChat === "function"){
     // hub 把 threadId 写死成 'a1'（见 VPS 那边）。而正文是 proactiveGenerateLocal 用
     // **她当前那位**的人设 + Key 生成的 —— 落回当前线程才是对的，不是落回 a1。
@@ -18973,6 +19012,7 @@ async function pushWakeMessage(m){
 }
 async function deliverWakePull(){
   if(!(state.proactiveConfig||{}).enabled) return; // 主动消息总开关（用户已关闭）
+  wakeBurstReset();
   const list = await pullWakeMessages();
   if(!list.length) return;
   for(const m of list){
@@ -19705,6 +19745,7 @@ async function proactivePullFromVps(){
     const data = await res.json();
     const list = data.messages || data.data || (Array.isArray(data)?data:[]);
     if(!list.length){ alert("暂无待发消息"); return; }
+    wakeBurstReset();   // 手动拉取也重新计数，每次给足 2 条
     for(const m of list){
       try{ await pushWakeMessage(m); }catch(e){}
     }
@@ -19726,6 +19767,7 @@ async function proactivePullQuiet(){
     if(!res.ok) return 0;
     const data = await res.json();
     const list = data.messages || data.data || (Array.isArray(data)?data:[]);
+    wakeBurstReset();
     for(const m of list){
       try{ await pushWakeMessage(m); }catch(e){}
     }
@@ -39587,6 +39629,7 @@ if(!window.__proactiveBoot){
         fetch(base + "/proactive/pull", { headers }).then(r=>r.ok?r.json():null).then(async data=>{
           if(!data) return;
           const list = data.messages || data.data || (Array.isArray(data)?data:[]);
+          wakeBurstReset();
           for(const m of list){
             try{ await pushWakeMessage(m); }catch(e){}
           }
