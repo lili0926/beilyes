@@ -1538,6 +1538,12 @@
       -webkit-backdrop-filter: blur(22px) saturate(1.4);
     }
 
+    /* 思考链弹窗里的 token 账：以前只写在 title= 里，手机没有 hover 等于看不见 */
+    .think-usage-line {
+      font-size: 10px; line-height: 1.6; color: var(--sub); opacity: .85;
+      margin-top: 3px; word-break: break-all; font-variant-numeric: tabular-nums;
+    }
+
     /* ── 语气小标：气泡左边那一小块（见 readTone）───────────────────────── */
     .tone-chip {
       flex-shrink: 0; align-self: flex-end; margin-bottom: 2px;
@@ -9401,30 +9407,16 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     return { role, content: m.content || "" };
   });
   let prevSig = ""; // 防死循环：连续两轮请求同一组工具调用就收敛
-  // 关键：模型经常「同一轮既写长文又调 write_cards」。
-  // 旧逻辑只返回「最后一轮无 tool_calls 的 text」，中间那轮的正文会被丢掉 → 表现为写卡吞消息。
-  // 这里把每一轮有意义的正文累加起来。
-  let accText = "";
-  const __mergePiece = (piece)=>{
-    const p = String(piece||"").trim();
-    if(!p || p==="（无响应）" || p==="(无响应)") return;
-    if(!accText){ accText = p; return; }
-    if(accText.includes(p)) return;
-    if(p.includes(accText) && p.length > accText.length){ accText = p; return; }
-    accText = accText + "\n\n" + p;
-  };
   for(let round=0; !maxRounds || round < maxRounds; round++){
     const res = await __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsParam);
-    __mergePiece(res && res.text);
     if(!res.toolCalls || !res.toolCalls.length){
-      return { text: accText || res.text || "", toolEvents };
+      return { text: res.text, toolEvents };
     }
     // 同一组工具+参数连续重复 → 认为循环卡死，撤掉工具让模型直接作答
     const sig = (res.toolCalls||[]).map(tc=>tc.name+"::"+JSON.stringify(tc.arguments||{})).join(";;");
     if(prevSig && sig === prevSig){
       const final = await __chatApiSingleRound(channel, creds, convo, systemPrompt, null);
-      __mergePiece(final && final.text);
-      return { text: accText || (final && final.text) || res.text || "", toolEvents };
+      return { text: final.text || res.text, toolEvents };
     }
     prevSig = sig;
     const toolResults = [];
@@ -9438,17 +9430,6 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
           continue;
         }
         resultStr = flattenMcpResult(r);
-        // 写卡成功：明确告诉模型正文已保留，下一轮不要空回复也不要重写长文
-        if(tc.name === "write_cards"){
-          try{
-            const okHint = "卡片已写入。本轮若已在上一则消息写出叙事正文，系统会保留；你只需自然接一句或保持沉默，不要重复长文，也不要只回空。";
-            if(typeof resultStr === "string"){
-              resultStr = resultStr + (resultStr.endsWith(".")||resultStr.endsWith("。")?"":"。") + okHint;
-            } else {
-              resultStr = JSON.stringify({ ok:true, detail: resultStr, hint: okHint });
-            }
-          }catch(_){}
-        }
         toolEvents.push({ name: tc.name, args: tc.arguments, result: String(resultStr).slice(0, 500) });
       }catch(e){
         resultStr = JSON.stringify({ type:"tool_error", error: e.message||String(e), tool: tc.name, lastArguments: tc.arguments, instruction:"修正参数后重试同一个工具，或直接给出答案。" });
@@ -9458,7 +9439,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     }
     __chatAppendToolRound(channel, convo, res.assistantMsg, toolResults);
   }
-  return { text: accText || "（MCP 工具调用未收敛，已停止）", toolEvents };
+  return { text: "（MCP 工具调用未收敛，已停止）", toolEvents };
 }
 
 /** 后台任务（压缩摘要 / 记忆提炼）用哪个便宜模型。
@@ -12037,6 +12018,10 @@ function thinkModalHtml(){
   const editing = state.editingThinkId === tid;
   const u = m.usage || null;
   const usageTip = (typeof __usageLine === "function") ? __usageLine(u) : "";
+  // 最近一次请求的分解。只对最后一条助手消息显示 —— __lastReqParts 是全局的一份，
+  // 挂到更早的消息上会是错的（那条当时的构成早就不是现在这个了）。
+  const partsTip = (idx === (msgs.length - 1) && typeof reqPartsLine === "function")
+    ? reqPartsLine(state.__lastReqParts) : "";
   const claudeSheet = (state.uiShell || "") === "claude";
   return `<div class="think-modal-mask${claudeSheet?" claude-thought-mask":""}" id="think-modal-mask" data-think-modal-close="1">
     <div class="think-modal${claudeSheet?" claude-thought-sheet":""}" role="dialog" aria-label="Thought process" onclick="event.stopPropagation()">
@@ -12051,7 +12036,11 @@ function thinkModalHtml(){
           <button type="button" class="think-mini-btn" data-think-modal-close="1">关闭</button>
         </div>
       </div>
-      ${u?`<div class="think-modal-usage" title="${escAttr(usageTip)}">⚡ ${((u.input||0)+(u.output||0)).toLocaleString()} tok</div>`:""}
+      ${(u||partsTip)?`<div class="think-modal-usage">
+        ${u?`<div>⚡ ${((u.input||0)+(u.output||0)+(u.cache_read||0)+(u.cache_write||0)).toLocaleString()} tok</div>`:""}
+        ${usageTip?`<div class="think-usage-line">${esc(usageTip)}</div>`:""}
+        ${partsTip?`<div class="think-usage-line">${esc(partsTip)}</div>`:""}
+      </div>`:""}
       <div class="think-modal-body">
         ${editing
           ? `<textarea id="think-edit-${tid}">${esc(m.thinking)}</textarea>
@@ -38037,15 +38026,50 @@ function buildMainChatRequest(ag, extraHint){
   // 尾部注入：挂在最后一条消息末尾（不入缓存前缀，离生成点最近）。
   // 检索记忆也走这条路 —— 它以前在 system 末尾，每轮一变就把后面整段历史
   // 从缓存里踢出去；那才是「一条 18000 每轮全价」的真正原因。
+  let tailLen = 0, memLen = 0, ruleLen = 0, tickLen = 0;
   try{
-    const toneRule = (typeof toneRuleBlock === "function") ? toneRuleBlock(win.messages) : "";
-    const tail = [retrievedMemoryBlock(), toneRule, chatTailBlock()].filter(Boolean).join("\n\n");
+    const memB  = retrievedMemoryBlock() || "";
+    const toneRule = ((typeof toneRuleBlock === "function") ? toneRuleBlock(win.messages) : "") || "";
+    const tickB = chatTailBlock() || "";
+    memLen = memB.length; ruleLen = toneRule.length; tickLen = tickB.length;
+    const tail = [memB, toneRule, tickB].filter(Boolean).join("\n\n");
+    tailLen = tail.length;
     if(tail && apiMsgs.length){
       const last = apiMsgs[apiMsgs.length - 1];
       if(last && typeof last.content === "string") last.content = last.content + "\n\n" + tail;
     }
   }catch(e){}
+  // ── 这一条请求到底由谁占的 ──────────────────────────────────────────────
+  // 她报「单条光输入就 11700」。我在这台机器上量的是骨架（人设为空、消息是我造的短句），
+  // 得出 7417 —— 那个数说明不了她的情况，因为大头是**她自己的人设和她自己写的话**。
+  // 与其继续隔空猜，不如把真实那一条拆开记下来，她点开思考链就能看见。
+  try{
+    const sysLen = (sys||"").length;
+    const winChars = apiMsgs.reduce((a,m)=>a + String(m.content||"").length, 0);
+    state.__lastReqParts = {
+      sys: sysLen,
+      summary: (win.summary||"").length,
+      persona: Math.max(0, sysLen - (win.summary||"").length),
+      n: apiMsgs.length,
+      win: winChars - tailLen,     // 窗口里她和他真正说的话
+      tail: tailLen, mem: memLen, rule: ruleLen, tick: tickLen,
+      total: sysLen + winChars,
+      at: Date.now(),
+    };
+  }catch(e){}
   return { apiMsgs, sys };
+}
+
+/** 把上面记下的分解写成一行人话。中文约 1.5 token/字，所以顺手把 token 估出来。 */
+function reqPartsLine(p){
+  if(!p || !p.total) return "";
+  const k = n => Math.round(n * 1.5);
+  const pct = n => Math.round(n * 100 / p.total);
+  return `这条请求 ${p.total} 字 ≈ ${k(p.total)} tok`
+    + ` · 人设 ${p.persona}（${pct(p.persona)}%）`
+    + (p.summary ? ` · 摘要 ${p.summary}（${pct(p.summary)}%）` : "")
+    + ` · 历史 ${p.n} 条 ${p.win}（${pct(p.win)}%）`
+    + ` · 尾部 ${p.tail}（记忆 ${p.mem}/语气 ${p.rule}/此刻 ${p.tick}）`;
 }
 
 /** 压缩：覆盖式摘要 + 推进游标。仅无限窗口（contextLimit=0）需要，有限窗口本身有界。 */
@@ -38256,7 +38280,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       }
       // 卡片协议提示（工具优先；无工具时也可用 ⟪写卡:…⟫）
       if(cardsOn){
-        const ctip = "\n\n【小卡片·必读】你可以把真正想留下的瞬间写成卡片。\n- 优先调用工具 write_cards（一轮最多 2 张，类型仅 ramble 碎碎念 / note 便签，且不重复）。\n- 没有工具时可用标记：⟪写卡:碎碎念|标题|正文⟫ 或 ⟪写卡:便签|正文⟫。\n- 只有工具/标记真正写成功后，聊天头像下才会出现「活动」；嘴上说「我记下了」不算。\n- 成功后正常继续聊天，不要在正文里反复解释「我写了卡片」。\n- 重要：若本轮要写长文并同时 write_cards，请把完整叙事写在同一条回复的正文里，工具只负责落卡；不要只调工具不写正文。系统会保留工具调用前的正文，工具返回后不要覆盖成空消息。";
+        const ctip = "\n\n【小卡片·必读】你可以把真正想留下的瞬间写成卡片。\n- 优先调用工具 write_cards（一轮最多 2 张，类型仅 ramble 碎碎念 / note 便签，且不重复）。\n- 没有工具时可用标记：⟪写卡:碎碎念|标题|正文⟫ 或 ⟪写卡:便签|正文⟫。\n- 只有工具/标记真正写成功后，聊天头像下才会出现「活动」；嘴上说「我记下了」不算。\n- 成功后正常继续聊天，不要在正文里反复解释「我写了卡片」。";
         if(typeof sysCam==="object" && sysCam && (sysCam.static!=null||sysCam.dynamic!=null)){
           sysCam = { static: (sysCam.static||"")+ctip, dynamic: sysCam.dynamic||"" };
         } else {
@@ -38273,8 +38297,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       try{
         if((toolEvents||[]).some(t=>t && t.name==="write_cards")){
           const rt = String(reply||"").trim();
-          // 仅清掉占位「无响应」；有正文（含工具轮累计）一律保留，避免写卡吞长文
-          if(rt==="（无响应）" || rt==="(无响应)") reply = "";
+          if(!rt || rt==="（无响应）" || rt==="(无响应)") reply = "";
         }
       }catch(e){}
     }catch(e){
