@@ -1485,8 +1485,9 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
         state.__lastUsage = {
           input: data.usage.input_tokens||0,
           output: data.usage.output_tokens||0,
-          cache_read: data.usage.cache_read_input_tokens||0,
-          cache_write: data.usage.cache_creation_input_tokens||0,
+          // 缺字段就留 null，别兜成 0 —— 见 __usageLine 里那段
+          cache_read: __cacheNum(data.usage.cache_read_input_tokens),
+          cache_write: __cacheNum(data.usage.cache_creation_input_tokens),
           ts: Date.now(),
         };
         if (typeof __pushUsageLog === "function") __pushUsageLog(state.__lastUsage);
@@ -1913,14 +1914,19 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
       body: JSON.stringify(body),
     });
     if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
-    let input=0, output=0, cacheRead=0, cacheWrite=0;
+    // cacheRead/Write 初值是 **null 不是 0** —— 没收到这两个字段时要能说「看不到」，
+    // 而不是印一个我们自己兜出来的 0。流式和非流式是两条链路，
+    // 缓存很可能只在其中一条上生效，所以这里也必须分得清「没命中」和「看不见」。
+    let input=0, output=0, cacheRead=null, cacheWrite=null;
     let curType = null;
     for await (const ev of __sse(res.body)){
       const d = ev.data;
       if(!d || typeof d !== "object") continue;
       if(ev.event === "message_start"){
         const u = d.usage || {};
-        input = u.input_tokens||0; cacheRead = u.cache_read_input_tokens||0; cacheWrite = u.cache_creation_input_tokens||0;
+        input = u.input_tokens||0;
+        cacheRead = __cacheNum(u.cache_read_input_tokens);
+        cacheWrite = __cacheNum(u.cache_creation_input_tokens);
       } else if(ev.event === "message_delta"){
         const u = d.usage || {};
         if(u.output_tokens != null) output = u.output_tokens;
@@ -2100,8 +2106,8 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
       if(data.usage){
         state.__lastUsage = {
           input: data.usage.input_tokens||0, output: data.usage.output_tokens||0,
-          cache_read: data.usage.cache_read_input_tokens||0,
-          cache_write: data.usage.cache_creation_input_tokens||0, ts: Date.now(),
+          cache_read: __cacheNum(data.usage.cache_read_input_tokens),
+          cache_write: __cacheNum(data.usage.cache_creation_input_tokens), ts: Date.now(),
         };
         if(typeof __pushUsageLog==="function") __pushUsageLog(state.__lastUsage);
       }
@@ -31762,15 +31768,31 @@ function __pushUsageLog(u){
  * 唯一的地面真相就是 cache_read / cache_write 这两个数。
  * 注意 input 只是「没命中缓存的那部分」，整条请求的大小 = input + read + write。
  */
+/**
+ * 缓存字段要**三态**：命中 / 没命中 / **看不见**。
+ * 以前用 `||0` 读，于是「这个站根本不回这个字段」和「它回了 0」长得一模一样 ——
+ * 界面上印出一个看起来很确定的 0，而那个 0 是我们自己兜出来的，不是它说的。
+ * 一个假的零比没有数字更糟：它会让人去修一个可能根本不存在的问题。
+ */
+function __cacheNum(v){ return (v === undefined || v === null) ? null : (+v || 0); }
+
 function __usageLine(u){
   if(!u) return "";
-  const r = u.cache_read||0, w = u.cache_write||0, i = u.input||0;
-  const total = r + w + i;
+  const r = u.cache_read, w = u.cache_write, i = u.input||0;
+  // 「瞎」有两种长相：字段缺失，和**字段在但全是 0 且连 input 都是 0**。
+  // 只认 null 会漏掉后者 —— 真发出去过的请求，input_tokens 不可能是 0。
+  const blind = (r == null && w == null) || (i === 0 && !w && !r);
+  if(blind){
+    return `缓存：看不到 —— 这个站不回缓存字段，**不等于没命中**` +
+           `（输出 ${u.output||0}）`;
+  }
+  const rr = r||0, ww = w||0;
+  const total = rr + ww + i;
   let verdict;
-  if(r > 0)      verdict = `缓存命中 ${Math.round(r*100/Math.max(1,total))}%`;
-  else if(w > 0) verdict = "首次写入缓存（下一条才开始省）";
-  else           verdict = "没走缓存";
-  return `${verdict} · 读 ${r} · 写 ${w} · 未命中 ${i} · 输出 ${u.output||0}（共 ${total}）`;
+  if(rr > 0)      verdict = `缓存命中 ${Math.round(rr*100/Math.max(1,total))}%`;
+  else if(ww > 0) verdict = "首次写入缓存（下一条才开始省）";
+  else            verdict = "没走缓存";
+  return `${verdict} · 读 ${rr} · 写 ${ww} · 未命中 ${i} · 输出 ${u.output||0}（共 ${total}）`;
 }
 function __recordUsage(u){
   if(!u) return;
@@ -31791,12 +31813,13 @@ function __recordUsageFromData(data){
       ts: Date.now(),
     });
   } else if(u.input_tokens != null || u.output_tokens != null){
-    // Claude 原生格式
+    // Claude 原生格式。缺字段留 null —— 「站子不回这个字段」和「它回了 0」
+    // 不是一回事，兜成 0 就把前者印成了后者
     __recordUsage({
       input: u.input_tokens || 0,
       output: u.output_tokens || 0,
-      cache_read: u.cache_read_input_tokens || 0,
-      cache_write: u.cache_creation_input_tokens || 0,
+      cache_read: __cacheNum(u.cache_read_input_tokens),
+      cache_write: __cacheNum(u.cache_creation_input_tokens),
       ts: Date.now(),
     });
   }
@@ -31816,8 +31839,10 @@ function __recordUsageFromGemini(data){
 function usageLogText(){
   if(!__usageLog.length) return "还没有缓存数据——发一条消息后即可看到本轮用量。";
   const last = __usageLog[__usageLog.length-1];
-  const parts = __usageLog.slice(-8).map(u=>`${fmtClock(u.ts)} r${u.cache_read} w${u.cache_write} i${u.input} o${u.output}`).join("\n");
-  return `最近一次：读 ${last.cache_read} · 写 ${last.cache_write} · 输入 ${last.input} · 输出 ${last.output}\n\n最近 8 条：\n${parts}`;
+  const n = v => (v == null ? "看不到" : v);   // null＝站子没回这个字段，别印成 0
+  const s = v => (v == null ? "—" : v);
+  const parts = __usageLog.slice(-8).map(u=>`${fmtClock(u.ts)} r${s(u.cache_read)} w${s(u.cache_write)} i${u.input} o${u.output}`).join("\n");
+  return `最近一次：读 ${n(last.cache_read)} · 写 ${n(last.cache_write)} · 输入 ${last.input} · 输出 ${last.output}\n\n最近 8 条：\n${parts}`;
 }
 function fmtClock(ts){
   if(!ts) return "--:--";
