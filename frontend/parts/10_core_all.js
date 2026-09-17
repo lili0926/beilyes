@@ -4806,9 +4806,26 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
+  // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
+  // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
+  const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","推送","相册","券","钱包",
+    "项目文件","狗狗动作","表情","拽头像","资料","口袋","MC","朋友圈","备注","任务","Galatea","选择题","床事目录"];
+  const __dynNames = ["身体状态","用量","衣橱","值日","在读","在看","宝宝","菜单","点单","角色扮演",
+    "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件"];
+  const __named = (arr, names)=>{
+    const out = [];
+    for(let i=0;i<arr.length;i++){
+      const s = arr[i] ? String(arr[i]).trim() : "";
+      if(s) out.push({ name: names[i] || ("块"+i), len: s.length, h: __strHash(s) });
+    }
+    return out;
+  };
   __sysPartsCache = {
     static: __staticArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     dynamic: __dynArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
+    blocks: (__staticNames.length === __staticArr.length && __dynNames.length === __dynArr.length)
+      ? __named(__staticArr, __staticNames).concat(__named(__dynArr, __dynNames))
+      : [],   // 名字和块数对不上就干脆不报，宁可没有也不要错的
   };
   return (base ? base+"\n\n"+timeHint : timeHint) + guide
     + nsfwFormatBlock
@@ -4854,6 +4871,16 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + (bedBlock ? "\n\n"+bedBlock : "")
     + (tipsyBlock ? "\n\n"+tipsyBlock : "");
 }
+/** 32 位字符串哈希（FNV-1a）。只用来比「这轮和上轮是不是同一段字节」，不做安全用途。 */
+function __strHash(s){
+  let h = 0x811c9dc5;
+  for(let i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = (h + ((h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24))) >>> 0;
+  }
+  return h >>> 0;
+}
+
 let __sysPartsCache = null; // 拆分缓存（本进程内瞬态，不持久化）
 function systemPromptParts(ag){
   systemPrompt(ag || null);
@@ -4949,6 +4976,9 @@ function thinkModalHtml(){
   // 挂到更早的消息上会是错的（那条当时的构成早就不是现在这个了）。
   const partsTip = (idx === (msgs.length - 1) && typeof reqPartsLine === "function")
     ? reqPartsLine(state.__lastReqParts) : "";
+  // 同理只挂最后一条：__prefixWatch 也是全局一份
+  const prefixTip = (idx === (msgs.length - 1) && typeof prefixWatchLine === "function")
+    ? prefixWatchLine(state.__prefixWatch) : "";
   const claudeSheet = (state.uiShell || "") === "claude";
   return `<div class="think-modal-mask${claudeSheet?" claude-thought-mask":""}" id="think-modal-mask" data-think-modal-close="1">
     <div class="think-modal${claudeSheet?" claude-thought-sheet":""}" role="dialog" aria-label="Thought process" onclick="event.stopPropagation()">
@@ -4963,10 +4993,11 @@ function thinkModalHtml(){
           <button type="button" class="think-mini-btn" data-think-modal-close="1">关闭</button>
         </div>
       </div>
-      ${(u||partsTip)?`<div class="think-modal-usage">
+      ${(u||partsTip||prefixTip)?`<div class="think-modal-usage">
         ${u?`<div>⚡ ${((u.input||0)+(u.output||0)+(u.cache_read||0)+(u.cache_write||0)).toLocaleString()} tok</div>`:""}
         ${usageTip?`<div class="think-usage-line">${esc(usageTip)}</div>`:""}
         ${partsTip?`<div class="think-usage-line">${esc(partsTip)}</div>`:""}
+        ${prefixTip?`<div class="think-usage-line">${esc(prefixTip)}</div>`:""}
       </div>`:""}
       <div class="think-modal-body">
         ${editing
@@ -30830,20 +30861,25 @@ function getWindowedMessages(allMsgs, target){
   const limit = state.contextLimit || 0;
   let list = allMsgs.filter(m=>m.role==="user"||m.role==="assistant");
   let summary = "";
+  // 窗口起点在「过滤后那整串」里的下标。报出去是为了能盯住它 ——
+  // 起点一挪，历史那半段前缀就整个作废，和 system 变了是一样的后果。
+  let from = 0;
   if(compressed && compressed.upToIndex > 0 && compressed.upToIndex <= list.length){
     summary = compressed.summary || "";
+    from += compressed.upToIndex;
     list = list.slice(compressed.upToIndex);
   }
-  if(list.length > WINDOW_HARD_CAP) list = list.slice(-WINDOW_HARD_CAP); // 保险丝
+  if(list.length > WINDOW_HARD_CAP){ from += list.length - WINDOW_HARD_CAP; list = list.slice(-WINDOW_HARD_CAP); } // 保险丝
   // 注入上限，阶梯式前进：丢弃条数只随「超出多少个 STEP」变化，
   // 所以 31~40 条时起点都停在 10、41~50 条时都停在 20 —— 每 STEP 轮才动一次。
   if(WINDOW_SEND_CAP > 0 && list.length > WINDOW_SEND_CAP){
     const over = list.length - WINDOW_SEND_CAP;
     const drop = Math.ceil(over / WINDOW_SEND_STEP) * WINDOW_SEND_STEP;
+    from += drop;
     list = list.slice(drop);
   }
-  if(limit > 0) list = list.slice(-limit); // 用户显式设置的上限仍优先
-  return { messages: list, summary };
+  if(limit > 0){ from += Math.max(0, list.length - limit); list = list.slice(-limit); } // 用户显式设置的上限仍优先
+  return { messages: list, summary, fromIndex: from };
 }
 
 // ═══════════════ 语气识别：她说的话，表面 vs 底下 ═══════════════════════════
@@ -31571,6 +31607,41 @@ function buildMainChatRequest(ag, extraHint){
   // 她报「单条光输入就 11700」。我在这台机器上量的是骨架（人设为空、消息是我造的短句），
   // 得出 7417 —— 那个数说明不了她的情况，因为大头是**她自己的人设和她自己写的话**。
   // 与其继续隔空猜，不如把真实那一条拆开记下来，她点开思考链就能看见。
+  // ── 前缀到底稳不稳 ──────────────────────────────────────────────────────
+  // 缓存是**从最开头逐字节比前缀**的：tools → system → messages。
+  // Claude 通道没有 system 字段，sys 是当成 messages[0] 塞进去的 ——
+  // 也就是说 sys 里只要有一个字变了，后面**整段历史**全部 miss，
+  // 断点打在哪儿都没用。而它不报错，只是账单变贵，所以必须量出来。
+  //
+  // 顺带按块比对：光知道「变了」还得一块一块试，而这条链上每试一次都真花钱。
+  try{
+    const h = __strHash(sys || "");
+    const prev = state.__prefixWatch || null;
+    const nowBlocks = ((__sysPartsCache && __sysPartsCache.blocks) || []);
+    let changed = [];
+    if(prev && prev.blocks){
+      const before = {};
+      prev.blocks.forEach(b=>{ before[b.name] = b.h; });
+      const after = {};
+      nowBlocks.forEach(b=>{ after[b.name] = b.h; });
+      Object.keys(after).forEach(n=>{
+        if(!(n in before)) changed.push(n + "(新出现)");
+        else if(before[n] !== after[n]) changed.push(n);
+      });
+      Object.keys(before).forEach(n=>{ if(!(n in after)) changed.push(n + "(消失)"); });
+    }
+    state.__prefixWatch = {
+      h, blocks: nowBlocks,
+      same: !!(prev && prev.h === h),
+      first: !prev,
+      changed: changed.slice(0, 6),
+      nChanged: changed.length,
+      // 窗口起点也要盯：它一挪，历史那半段前缀同样全废
+      winFrom: (win && win.fromIndex != null) ? win.fromIndex : null,
+      winMoved: !!(prev && prev.winFrom != null && win && win.fromIndex != null && prev.winFrom !== win.fromIndex),
+      at: Date.now(),
+    };
+  }catch(e){}
   try{
     const sysLen = (sys||"").length;
     const winChars = apiMsgs.reduce((a,m)=>a + String(m.content||"").length, 0);
@@ -31586,6 +31657,22 @@ function buildMainChatRequest(ag, extraHint){
     };
   }catch(e){}
   return { apiMsgs, sys };
+}
+
+/**
+ * 前缀稳不稳，写成一行。
+ * 这一行回答的是「缓存为什么不命中」——命中与否是**前缀逐字节相同**决定的，
+ * 不是「开没开 cache_control」决定的。开了但前缀每轮都变，等于没开，而且写入还贵 1.25–2 倍。
+ */
+function prefixWatchLine(w){
+  if(!w) return "";
+  if(w.first) return "前缀：这是本次启动的第一条，下一条才比得出来";
+  const win = w.winMoved ? "；窗口起点挪了（历史那半段也全废）" : "";
+  if(w.same && !w.winMoved) return "前缀：和上一条完全相同 ✓ 缓存应当命中";
+  if(!w.changed || !w.changed.length)
+    return "前缀：变了（不是 system 块，多半是人设/摘要/称呼那几段）" + win;
+  const more = w.nChanged > w.changed.length ? ` 等 ${w.nChanged} 块` : "";
+  return `前缀：变了 —— ${w.changed.join("、")}${more}${win}`;
 }
 
 /** 把上面记下的分解写成一行人话。中文约 1.5 token/字，所以顺手把 token 估出来。 */
