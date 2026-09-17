@@ -24279,6 +24279,204 @@ let __callMediaRecorder = null;
 let __callAudioChunks = [];
 let __callInviteTimer = null;
 
+// ─── 免提：客户端自动断句（VAD）──────────────────────────────────────────
+//
+// 「按住说话」里，手指按下去之前那半秒、说完到松手那半秒，全算在「他回得慢」里 ——
+// 那是**人为加进去的延迟**，跟模型一点关系没有。这里让它自己判断你说完没有。
+//
+// 参数取自 pai-voice 调出来的那一组（他 README 里专门说了「调参是产品的一部分」），
+// 每个都有存在的理由，别随手改：
+const VAD = {
+  startHold:    3,      // 连续几帧超过进入阈值才算开口 —— 挡掉咳嗽、桌子响这种单帧尖峰
+  endSilenceMs: 650,    // 低于退出阈值持续这么久算说完。再短会把句中换气切断
+  floor:        0.006,  // 噪声底的下限。全静音房间里不至于把呼吸判成说话
+  gain:         3.2,    // 进入阈值 = max(floor, 噪声底 × gain)
+  exitRatio:    0.62,   // 退出阈值 = 进入阈值 × 这个。**双阈值**：单阈值会在临界值上下抖，一句话被切成七八段
+  speakingGain: 3.3,    // 他在说话时把门槛再抬高，降低扬声器串音和呼吸误触
+  watchdogMs:   1600,   // 这么久没有任何一帧超过进入阈值就强制收尾 ——
+                        // AGC 会慢慢把环境音抬到退出阈值之上，没有这条会永远停不下来
+  maxTurnMs:    30000,  // 一段最长 30 秒，防止忘了挂断录到天荒地老
+  idleRestartMs:3000,   // 没人说话时每隔这么久重开一次录音，把攒下的静音丢掉（省上传）
+};
+
+const __vad = {
+  on: false, ctx: null, stream: null, analyser: null, buf: null, raf: 0,
+  noise: 0.01, hot: 0, speaking: false, silenceSince: 0, lastHotAt: 0,
+  speechStartAt: 0, recStartAt: 0, speechMin: 1,
+};
+
+function callVadOn(){ return !!__vad.on; }
+
+/** 开免提：一路流两用 —— MediaRecorder 负责编码上传，AnalyserNode 负责判断说没说完。 */
+async function callVadStart(){
+  if(__vad.on) return true;
+  const s = ensureCallSession();
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      // 这三个必须开：不开回声消除，他自己的声音会被当成你在说话，一直互相打断
+      audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1 },
+    });
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    if(ctx.state === "suspended") await ctx.resume();
+    const src = ctx.createMediaStreamSource(stream);
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);           // **不接 destination** —— 接了就等于自己听自己，直接啸叫
+    Object.assign(__vad, {
+      on:true, ctx, stream, analyser:an, buf:new Uint8Array(an.fftSize),
+      noise:0.01, hot:0, speaking:false, silenceSince:0, lastHotAt:0,
+      speechStartAt:0, recStartAt:0, speechMin:1,
+    });
+    s.handsFree = true;
+    s.sttError = "";
+    __vadStartRecorder();
+    __vadLoop();
+    render();
+    return true;
+  }catch(e){
+    s.handsFree = false;
+    s.sttError = "麦克风失败：" + (e && e.message || e);
+    render();
+    return false;
+  }
+}
+
+function callVadStop(){
+  __vad.on = false;
+  if(__vad.raf){ try{ cancelAnimationFrame(__vad.raf); }catch(e){} __vad.raf = 0; }
+  __vadStopRecorder(true);
+  try{ if(__vad.stream) __vad.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ if(__vad.ctx) __vad.ctx.close(); }catch(e){}
+  __vad.ctx = null; __vad.stream = null; __vad.analyser = null;
+  __vad.speaking = false;
+  const s = ensureCallSession();
+  s.handsFree = false; s.recording = false;
+  render();
+}
+
+function __vadStartRecorder(){
+  if(!__vad.stream) return;
+  try{
+    __callAudioChunks = [];
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
+      : (MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "");
+    const rec = mime ? new MediaRecorder(__vad.stream, { mimeType: mime }) : new MediaRecorder(__vad.stream);
+    rec.ondataavailable = e=>{ if(e.data && e.data.size) __callAudioChunks.push(e.data); };
+    rec.start(100);
+    __callMediaRecorder = rec;
+    __vad.recStartAt = performance.now();
+  }catch(e){
+    try{ ensureCallSession().sttError = "录音失败：" + (e && e.message || e); }catch(_){}
+  }
+}
+
+/** 停掉当前这段。discard=true 时只是丢掉（换一段新的），不上传。 */
+function __vadStopRecorder(discard){
+  const rec = __callMediaRecorder;
+  __callMediaRecorder = null;
+  if(!rec) return null;
+  try{ rec.stop(); }catch(e){}
+  if(discard){ __callAudioChunks = []; return null; }
+  const blob = new Blob(__callAudioChunks, { type: rec.mimeType || "audio/webm" });
+  __callAudioChunks = [];
+  return blob;
+}
+
+/**
+ * VAD 的判定本体，**纯函数**：进去一个音量和时刻，出来 "start" / "end" / "idle" / null。
+ * 抽出来是因为这套阈值参数正是最需要回归覆盖的东西 ——
+ * 埋在 requestAnimationFrame 和 AnalyserNode 里就没法测，
+ * 而「一句话被切成七八段」「永远停不下来」这类毛病全出在这几行的边界上。
+ * 状态存在 v 里（生产传 __vad，测试可以自己造一个）。
+ */
+function __vadStep(v, rms, now, himTalking, busy){
+  // 噪声底：没说话时快跟；说话中也慢慢向观测到的最小值靠 ——
+  // 不这么做的话，AGC 把底噪一路抬上去，退出阈值永远够不着，一句话停不下来。
+  if(!v.speaking){ v.noise = v.noise*0.97 + rms*0.03; }
+  else {
+    v.speechMin = Math.min(v.speechMin, rms);
+    v.noise = Math.min(v.noise*1.0015, Math.max(v.noise, v.speechMin));
+  }
+  let enter = Math.max(VAD.floor, v.noise * VAD.gain);
+  if(himTalking) enter *= VAD.speakingGain;   // 他在说话时抬高门槛（TTS 走同一个扬声器）
+  const exit = enter * VAD.exitRatio;
+  if(rms > enter) v.lastHotAt = now;
+
+  if(!v.speaking){
+    if(rms > enter){
+      v.hot += 1;
+      if(v.hot >= VAD.startHold && !busy){
+        v.speaking = true;
+        v.speechStartAt = now;
+        v.speechMin = 1;
+        v.silenceSince = 0;
+        return "start";
+      }
+      return null;
+    }
+    v.hot = 0;
+    // 没人说话时定期重开录音，把攒下的静音丢掉 —— 静音也要上传，白花时间
+    return (now - v.recStartAt > VAD.idleRestartMs) ? "idle" : null;
+  }
+
+  // 说话中：低于退出阈值持续够久 → 收尾；或者看门狗兜底
+  let done = false;
+  if(rms < exit){
+    if(!v.silenceSince) v.silenceSince = now;
+    else if(now - v.silenceSince >= VAD.endSilenceMs) done = true;
+  } else {
+    v.silenceSince = 0;
+  }
+  if(!done && v.lastHotAt && now - v.lastHotAt >= VAD.watchdogMs) done = true;
+  if(!done && now - v.speechStartAt >= VAD.maxTurnMs) done = true;
+  return done ? "end" : null;
+}
+
+function __vadLoop(){
+  if(!__vad.on || !__vad.analyser){ return; }
+  __vad.raf = requestAnimationFrame(__vadLoop);
+  const s = ensureCallSession();
+  if(s.phase !== "active" || s.muted){ return; }
+
+  __vad.analyser.getByteTimeDomainData(__vad.buf);
+  let sum = 0;
+  for(let i=0;i<__vad.buf.length;i++){ const v = (__vad.buf[i]-128)/128; sum += v*v; }
+  const rms = Math.sqrt(sum / __vad.buf.length);
+  const now = performance.now();
+
+  const act = __vadStep(__vad, rms, now, !!(__callTts && __callTts.playing), !!s.loading);
+  if(act === "start"){ s.recording = true; callHoldPaint(); }
+  else if(act === "idle"){ __vadStopRecorder(true); __vadStartRecorder(); }
+  else if(act === "end"){ __vadEndTurn(); }
+}
+
+async function __vadEndTurn(){
+  const s = ensureCallSession();
+  __vad.speaking = false;
+  __vad.silenceSince = 0;
+  __vad.hot = 0;
+  s.recording = false;
+  callHoldPaint();
+  const blob = __vadStopRecorder(false);
+  __vadStartRecorder();                     // 立刻开下一段，别漏掉她接着说的话
+  if(!blob || blob.size < 800) return;      // 太短：多半是咳嗽或关门声，不值得跑一趟 STT
+  if(s.loading) return;                     // 上一轮还在路上，这一段先丢（不排队，排队只会越积越晚）
+  s.loading = true; render();
+  callLatMark("start");
+  try{
+    const text = await callSttUpload(blob);
+    callLatMark("stt");
+    s.loading = false;
+    if(text && text.trim()) await callAiTurn(text);
+    else render();
+  }catch(e){
+    s.loading = false;
+    s.sttError = e.message;
+    render();
+  }
+}
+
 function callGatewayHeaders(){
   const cfg = state.callConfig || {};
   const h = { "Accept": "application/json" };
@@ -24671,8 +24869,10 @@ async function callHoldEnd(){
   __callAudioChunks = [];
   if(blob.size < 800){ s.sttError = "太短了，再试一次"; render(); return; }
   s.loading = true; render();
+  callLatMark("start");          // 计时起点＝她说完的那一刻
   try{
     const text = await callSttUpload(blob);
+    callLatMark("stt");
     s.loading = false;
     await callAiTurn(text);
   }catch(e){
@@ -25002,6 +25202,42 @@ async function callSpeak(text){
  * 2. `gen` 是代数。挂断或开新一轮时 ++，在途的合成结果回来发现代数变了就丢掉，
  *    否则上一通电话的尾巴会插进这一通里。
  */
+// ─── 通话延迟埋点 ──────────────────────────────────────────────────────────
+// 在这之前「慢」只是感觉：她说慢、我说改完快了，谁都拿不出数。
+// 一轮里真正串起来的是四段，各自能改的手段完全不同：
+//   收尾→转写回来（上传 + STT）｜ 转写→模型首字 ｜ 首字→第一声（TTS 合成）
+// 埋在这里而不是各处零散计时，是因为**只有同一把尺子量出来的数才能互相比**。
+const __callLat = { t0: 0, stt: 0, first: 0, audio: 0, last: null };
+
+function callLatMark(which){
+  try{
+    const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    if(which === "start"){ __callLat.t0 = now; __callLat.stt = __callLat.first = __callLat.audio = 0; return; }
+    if(!__callLat.t0) return;                 // 没有起点就不记，免得算出天文数字
+    if(which === "stt" && !__callLat.stt) __callLat.stt = now - __callLat.t0;
+    else if(which === "first" && !__callLat.first) __callLat.first = now - __callLat.t0;
+    else if(which === "audio" && !__callLat.audio){
+      __callLat.audio = now - __callLat.t0;
+      __callLat.last = { stt: Math.round(__callLat.stt), first: Math.round(__callLat.first),
+                         audio: Math.round(__callLat.audio), at: Date.now() };
+      try{
+        const s = ensureCallSession();
+        s.lat = __callLat.last;
+        s.latLog = [__callLat.last, ...(s.latLog||[])].slice(0, 8);
+      }catch(e){}
+      __callLat.t0 = 0;                        // 一轮只记一次「第一声」
+      if(state.subPage === "phone") render();
+    }
+  }catch(e){}
+}
+
+/** 把一轮的四段写成一行人话。分段显示而不是只给总数 —— 总数告诉你慢，分段告诉你慢在哪。 */
+function callLatLine(l){
+  if(!l || !l.audio) return "";
+  const seg = (a, b) => Math.max(0, Math.round(a - b));
+  return `上轮 ${(l.audio/1000).toFixed(1)}s ＝ 上传转写 ${l.stt}ms ＋ 模型首字 ${seg(l.first, l.stt)}ms ＋ 合成出声 ${seg(l.audio, l.first)}ms`;
+}
+
 const __callTts = { items: [], playIdx: 0, playing: false, gen: 0 };
 
 function callTtsReset(){
@@ -25075,7 +25311,10 @@ function callTtsPump(){
   a.volume = /轻|气音|耳语|放低|小声|呼吸/.test(_tone) ? 0.5 : 1;
   a.src = it.url;
   const p = a.play();
-  if(p && p.catch) p.catch(()=> done());
+  // 「第一声」要埋在 play() 真的开始之后，不是合成回来的那一刻 ——
+  // 解码和起播那几十到几百毫秒她是听得见的，算进去才是她感受到的延迟。
+  if(p && p.then) p.then(()=> callLatMark("audio")).catch(()=> done());
+  else callLatMark("audio");
 }
 
 /** 流式分句器：喂增量文本，吐出能立刻送去合成的整句。
@@ -25467,7 +25706,11 @@ function renderPhone(){
       <div style="padding:0 16px 8px">
         ${s.sttError?`<div style="font-size:11px;color:#c45;margin-bottom:6px">🎤 ${esc(s.sttError)}</div>`:""}
         ${s.ttsError?`<div style="font-size:11px;color:#c45;margin-bottom:6px">🔊 ${esc(s.ttsError)}</div>`:""}
-        <button type="button" class="call-hold${s.recording?" rec":""}${s.holdLocked?" locked":""}" id="call-hold" ${s.muted||s.loading?"disabled":""}>${s.recording?(s.holdLocked?"录音中 · 点一下结束并发送":"松开结束 · 松手前抬起可免提"):"按住说话 · 点一下免提"}</button>
+        ${s.lat?`<div style="font-size:10px;color:var(--sub);opacity:.75;margin-bottom:6px;font-variant-numeric:tabular-nums">${esc(callLatLine(s.lat))}</div>`:""}
+        ${s.handsFree
+          ? `<button type="button" class="call-hold${s.recording?" rec":""} locked" id="call-handsfree">${s.recording?"听见你了…":"免提中 · 说话就行"}</button>`
+          : `<button type="button" class="call-hold${s.recording?" rec":""}${s.holdLocked?" locked":""}" id="call-hold" ${s.muted||s.loading?"disabled":""}>${s.recording?(s.holdLocked?"录音中 · 点一下结束并发送":"松开结束 · 松手前抬起可免提"):"按住说话"}</button>
+             <button type="button" class="btn-ghost" id="call-handsfree" style="width:100%;padding:8px;margin-top:6px;font-size:12px" ${s.muted?"disabled":""}>开免提（自动断句）</button>`}
         <div class="chat-input-row">
           <textarea id="call-input" placeholder="${s.muted?"已静音（仍可打字）":"打字说话…"}" style="flex:1;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:13px;outline:none;background:var(--bg);color:var(--text);max-height:80px">${esc(s.draft||"")}</textarea>
           <button class="send-btn active" id="call-send"><i data-lucide="send"></i></button>
@@ -25847,6 +26090,7 @@ async function callAiTurn(userText){
         onLive: (live)=>{
           const full = String((live && live.text) || "");
           if(full.length <= seen) return;
+          callLatMark("first");        // 模型吐出第一个字的时刻
           const delta = full.slice(seen);
           seen = full.length;
           if(isKo){
@@ -25879,6 +26123,7 @@ async function callAiTurn(userText){
       }
     } else {
       text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], sys, ccOpts);
+      callLatMark("first");   // CC 通道没有流式，整段回来的那一刻就是「首字」
       if(typeof parseThinking==="function") text = parseThinking(text).body || text;
       text = String(text||"").trim().slice(0,300) || "……我在听。";
     }
@@ -25980,6 +26225,9 @@ function callHangup(){
   const s = ensureCallSession();
   callClearInviteTimer();
   callCancelLinger();
+  // 免提开着的话，麦克风和 AudioContext 都还占着 —— 挂断必须放掉，
+  // 否则指示灯一直亮、下次开又拿一路新的流
+  try{ if(typeof callVadOn === "function" && callVadOn()) callVadStop(); }catch(e){}
   // 挂断要立刻闭嘴：停掉正在播的那句，并把在途的合成结果作废（gen++），
   // 否则挂了电话他还会继续把剩下几句说完。
   callTtsReset();
@@ -36547,6 +36795,15 @@ reader.readAsArrayBuffer(f);
   // recording 还是 false，旧代码 `if(!s.recording) return` 直接跳出 —— holdLocked
   // 永远设不上，免提从来没生效过，只有按住超过 TAP_MS 才走得通。
   // 改成看 holdPending：按下那一刻**同步**置位，不等麦克风。
+  // 免提开关：开了就交给 VAD 自动断句，「按住」那套整个让位
+  const hfBtn = document.getElementById("call-handsfree");
+  if(hfBtn){
+    hfBtn.onclick = (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      if(callVadOn()) callVadStop();
+      else { callUnlockAudio(); callVadStart(); }   // 解锁音频必须在这一下手势里，等 VAD 触发就来不及了
+    };
+  }
   const holdBtn = document.getElementById("call-hold");
   if(holdBtn){
     const TAP_MS = 350; // 低于这个时长算「点一下」
