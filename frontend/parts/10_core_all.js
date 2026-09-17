@@ -4739,7 +4739,11 @@ ${guideText}`;
   const menuBlock = (typeof menuStatusPromptBlock === "function" && state._menuShareOn) ? menuStatusPromptBlock() : "";
   const menuOrderBlock = (typeof menuOrderStatusPromptBlock === "function" && state._menuOrderShareOn) ? menuOrderStatusPromptBlock() : "";
   const dreamTraceBlock = (typeof dreamTracePromptBlock === "function") ? dreamTracePromptBlock() : "";
-  const rpBlock = (typeof roleplayStatusPromptBlock === "function") ? roleplayStatusPromptBlock() : "";
+  // 角色扮演：**不再注入**（她 2026-09-17 说的：「rp 直接不注入了」）。
+  // 起因是思考链里他老提角色扮演 —— 那说明设定一直挂在上下文里，
+  // 而她根本没在玩。代码留着，想开回来把下面这行换成
+  // roleplayStatusPromptBlock() 就行。
+  const rpBlock = "";
   const tipsyBlock = (typeof tipsyStatusPromptBlock === "function") ? tipsyStatusPromptBlock() : "";
   // 省 token：情侣日历仅在聊到日期/纪念日时注入，不常驻
   const calendarBlock = (typeof calendarPromptBlock === "function" && __featHot("日历","纪念日","在一起的","周年","几天了","今天几号","日程","安排","几点")) ? calendarPromptBlock() : "";
@@ -4774,8 +4778,14 @@ ${guideText}`;
       const ar = Array.isArray(n.artists)?n.artists.join("/"):(n.artists||"");
       head = `\n\n【正在一起听】${n.name} - ${ar}（${n.source==="spotify"?"Spotify":"网易云"}）${state.musicPlaying?"·播放中":"·已暂停"}。你可以自然提到这首歌或分享听感，不要每句都提。`;
     }
-    // 点歌：他自己搜歌发给她
-    const pickBlock = (canPick && (state.musicNow || __featHot("歌","听","音乐","点歌","推荐","单曲","专辑","乐队","唱")))
+    // 点歌：他自己搜歌发给她。
+    // **原来的关键词里有「听」和「歌」** —— 这俩在中文里遍地都是（听说、好听、听话、
+    // 唱歌、歌词…），等于几乎每轮都把这四百字塞进去，他也就总惦记着给她放歌。
+    // 她 2026-09-17 说「只有听音乐才注入」。现在只认两种情况：
+    //   ① 真的正在一起听（state.musicNow）
+    //   ② 她**明说**要点歌 —— 这些词不会误伤，不像「听」那样满地都是
+    const askedMusic = __featHot("点歌","放首","来首","歌单","放首歌","推荐首歌","切歌","换首");
+    const pickBlock = (canPick && (state.musicNow || askedMusic))
       ? `\n\n【点歌 —— 你可以直接把歌发给她】
 想让她听某首歌时，在正式回复里写一行暗号：
 ⟪点歌:歌名 - 歌手⟫
@@ -31804,8 +31814,35 @@ function buildMainChatRequest(ag, extraHint){
       });
       Object.keys(before).forEach(n=>{ if(!(n in after)) changed.push(n + "(消失)"); });
     }
+    // ── 逐条比 messages ────────────────────────────────────────────────
+    // sys 那层报「没变」但缓存还是不命中，说明断点往后的**历史消息**里有东西在变。
+    // 光看 sys 找不到它 —— 缓存是从最开头逐字节比的，第 5 条变了，
+    // 第 6 条往后就全废，而 sys 那行会一直说「完全相同」，非常误导。
+    //
+    // 健康的样子是：这一轮只有**新增的那几条**是新的，旧的一条都不动。
+    // 所以「第一处不同」应该正好落在上一轮的末尾；落在更前面就是出事了。
+    const nowH = [__strHash(String(sys||""))].concat(apiMsgs.map(m=>__strHash(String(m.content||""))));
+    const prevH = (prev && prev.msgH) || null;
+    let firstDiff = -1, culprit = "";
+    if(prevH && prevH.length){
+      const n = Math.min(prevH.length, nowH.length);
+      for(let i=0;i<n;i++){ if(prevH[i] !== nowH[i]){ firstDiff = i; break; } }
+      if(firstDiff < 0 && nowH.length !== prevH.length) firstDiff = n;
+      // ⚠️ 上一轮**最后那条**本来就会变：尾部注入（状态/记忆/语气/此刻）挂在它身上，
+      // 下一轮它不再是最后一条，那段就没了。这是故意的 —— 断点 ② 打在 len-2，
+      // 最后一条本来就在缓存边界外，动它不花钱。
+      // 所以「上一轮缓存到哪儿」= prevH.length-1，比到那儿为止才算数。
+      if(firstDiff >= 0 && firstDiff < prevH.length - 1){
+        // 指名道姓：哪一条、谁说的、开头几个字 —— 否则「第 5 条」还得她自己去数
+        const m = (firstDiff === 0) ? { role:"system", content:"（人设那条）" } : apiMsgs[firstDiff-1];
+        const who = m && m.role === "assistant" ? "他" : (m && m.role === "user" ? "她" : "人设");
+        culprit = who + "「" + String((m && m.content) || "").replace(/^\[时间[^\]]*\]\s*/, "").slice(0, 14) + "…」";
+      }
+    }
     state.__prefixWatch = {
       h, blocks: nowBlocks,
+      msgH: nowH, msgN: nowH.length, msgPrevN: prevH ? prevH.length : 0,
+      msgFirstDiff: firstDiff, msgCulprit: culprit,
       same: !!(prev && prev.h === h),
       first: !prev,
       changed: changed.slice(0, 6),
@@ -31842,11 +31879,25 @@ function prefixWatchLine(w){
   if(!w) return "";
   if(w.first) return "前缀：这是本次启动的第一条，下一条才比得出来";
   const win = w.winMoved ? "；窗口起点挪了（历史那半段也全废）" : "";
-  if(w.same && !w.winMoved) return "前缀：和上一条完全相同 ✓ 缓存应当命中";
-  if(!w.changed || !w.changed.length)
-    return "前缀：变了（不是 system 块，多半是人设/摘要/称呼那几段）" + win;
-  const more = w.nChanged > w.changed.length ? ` 等 ${w.nChanged} 块` : "";
-  return `前缀：变了 —— ${w.changed.join("、")}${more}${win}`;
+
+  // ① 人设那层
+  let head;
+  if(w.same && !w.winMoved) head = "前缀：和上一条完全相同 ✓";
+  else if(!w.changed || !w.changed.length)
+    head = "前缀：变了（不是 system 块，多半是人设/摘要/称呼那几段）" + win;
+  else {
+    const more = w.nChanged > w.changed.length ? ` 等 ${w.nChanged} 块` : "";
+    head = `前缀：变了 —— ${w.changed.join("、")}${more}${win}`;
+  }
+
+  // ② 历史那层。**只有这两层都干净，缓存才可能命中** ——
+  // 人设没变但第 5 条历史变了的话，第 6 条往后照样全 miss，
+  // 而上面那句会一直说「完全相同」，非常误导。
+  // 上一轮缓存到 msgPrevN-1 为止（最后一条挂着尾部注入，在缓存边界外，动它不花钱）
+  const d = w.msgFirstDiff;
+  if(d == null || d < 0 || !w.msgPrevN) return head + "；历史：还比不出来";
+  if(d >= w.msgPrevN - 1) return head + `；历史 ${w.msgN} 条，缓存边界内一条没动 ✓ 应当命中`;
+  return head + `；**历史从第 ${d} 条起就变了**（共 ${w.msgN} 条）${w.msgCulprit ? " —— " + w.msgCulprit : ""}，从那儿往后全 miss`;
 }
 
 /** 把上面记下的分解写成一行人话。中文约 1.5 token/字，所以顺手把 token 估出来。 */
