@@ -11924,56 +11924,116 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     }
     return out;
   };
+  // ── 同一套顺序要拼两遍，所以抽成函数 ────────────────────────────────────
+  // ① 完整版：字节跟以前一模一样，其它调用方原样用
+  // ② 只留稳定块的版本：主聊天拿它当 messages[0]，会变的那些改挂到最后一条消息末尾
+  //
+  // **抽函数而不是把表达式抄两遍**：抄两遍迟早会改漏一处，
+  // 而改漏的后果是静默的 —— 前缀里悄悄多一块会变的东西，账单变贵，不报任何错。
+  const __sysJoin = (B) => (B.base ? B.base+"\n\n"+B.timeHint : B.timeHint) + B.guide
+    + B.nsfwFormatBlock
+    + (B.bodyBlock ? "\n\n"+B.bodyBlock : "")
+    + (B.usageBlock ? "\n\n"+B.usageBlock : "")
+    + (B.wardrobeBlock ? "\n\n"+B.wardrobeBlock : "")
+    + (B.dutyBlock ? "\n\n"+B.dutyBlock : "")
+    + (B.readBlock ? "\n\n"+B.readBlock : "")
+    + (B.watchBlock ? "\n\n"+B.watchBlock : "")
+    + (B.babyBlock ? "\n\n"+B.babyBlock : "")
+    + (B.menuBlock ? "\n\n"+B.menuBlock : "")
+    + (B.menuOrderBlock ? "\n\n"+B.menuOrderBlock : "")
+    + (B.rpBlock ? "\n\n"+B.rpBlock : "")
+    + (B.cabinetBlock ? "\n\n"+B.cabinetBlock : "")
+    + (B.dreamTraceBlock ? "\n\n"+B.dreamTraceBlock : "")
+    + B.musicBlock
+    + (B.calendarBlock ? "\n\n"+B.calendarBlock : "")
+    + (B.prMainBlock ? "\n\n"+B.prMainBlock : "")
+    + ((state.prOpen && B.prPlayBlock) ? "\n\n"+B.prPlayBlock : "")
+    + (B.annoBlock ? "\n\n"+B.annoBlock : "")
+    + (B.flightChessBlock ? "\n\n"+B.flightChessBlock : "")
+    + (B.truthDareBlock ? "\n\n"+B.truthDareBlock : "")
+    + (B.divinationBlock ? "\n\n"+B.divinationBlock : "")
+    + (B.voiceToneBlock ? "\n\n"+B.voiceToneBlock : "")
+    + (B.annNudgeBlock ? "\n\n"+B.annNudgeBlock : "")
+    + B.callBlock
+    + B.pushBlock
+    + B.albumBlock
+    + B.couponBlock
+    + B.walletBlock
+    + B.projectFileBlock
+    + B.puppyActionBlock
+    + B.stickerBlock
+    + B.flingBlock
+    + B.profileBlock
+    + B.pocketBlock
+    + B.mcBlock
+    + (B.momentsBlock ? "\n\n"+B.momentsBlock : "")
+    + B.remarkBlock
+    + B.remarkEventBlock
+    + B.questBlock
+    + B.galateaBlock
+    + (B.bedBlock ? "\n\n"+B.bedBlock : "")
+    + (B.tipsyBlock ? "\n\n"+B.tipsyBlock : "");
+
+  const __ALL = { base, timeHint, guide, nsfwFormatBlock, bodyBlock, usageBlock, wardrobeBlock,
+    dutyBlock, readBlock, watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock, cabinetBlock,
+    dreamTraceBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock,
+    truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, pushBlock, albumBlock,
+    couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
+    profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, remarkEventBlock, questBlock,
+    galateaBlock, bedBlock, tipsyBlock };
+
+  // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
+  // 搬到尾部之后彼此的相对顺序一字不变，只是整体挪到了书签后面。
+  const __DYN_ORDER = [
+    ["身体状态","bodyBlock"], ["用量","usageBlock"], ["衣橱","wardrobeBlock"], ["值日","dutyBlock"],
+    ["在读","readBlock"], ["在看","watchBlock"], ["宝宝","babyBlock"], ["菜单","menuBlock"],
+    ["点单","menuOrderBlock"], ["角色扮演","rpBlock"], ["柜子","cabinetBlock"], ["梦痕","dreamTraceBlock"],
+    ["音乐","musicBlock"], ["日历","calendarBlock"], ["PR主","prMainBlock"], ["PR玩","prPlayBlock"],
+    ["公告","annoBlock"], ["飞行棋","flightChessBlock"], ["真心话","truthDareBlock"],
+    ["占卜","divinationBlock"], ["语音语气","voiceToneBlock"], ["公告提醒","annNudgeBlock"],
+    ["备注事件","remarkEventBlock"], ["醉意","tipsyBlock"],
+  ];
+  // 留在前缀里的稳定块。**只列真的进了拼接的** —— choiceBlock 算了但没拼进去，
+  // 把它算进来的话，前缀监控会盯一块根本不在前缀里的东西，报出来的名字就是错的。
+  const __STATIC_ORDER = [
+    ["人设","base"], ["时间提示","timeHint"], ["思考引导","guide"], ["NSFW格式","nsfwFormatBlock"],
+    ["电话","callBlock"], ["推送","pushBlock"], ["相册","albumBlock"], ["券","couponBlock"],
+    ["钱包","walletBlock"], ["项目文件","projectFileBlock"], ["狗狗动作","puppyActionBlock"],
+    ["表情","stickerBlock"], ["拽头像","flingBlock"], ["资料","profileBlock"], ["口袋","pocketBlock"],
+    ["MC","mcBlock"], ["朋友圈","momentsBlock"], ["备注","remarkBlock"], ["任务","questBlock"],
+    ["Galatea","galateaBlock"], ["床事目录","bedBlock"],
+  ];
+
+  const __STATIC_ONLY = Object.assign({}, __ALL);
+  __DYN_ORDER.forEach(([, k])=>{ __STATIC_ONLY[k] = ""; });
+
+  const __pick = (pairs, src)=>{
+    const out = [];
+    pairs.forEach(([name, k])=>{
+      // PR玩 在完整拼接里本来就带条件，尾部也得照着来，不然会凭空多出一块
+      if(k === "prPlayBlock" && !state.prOpen) return;
+      const s = src[k] ? String(src[k]).trim() : "";
+      if(s) out.push({ name, len:s.length, h:__strHash(s), text:s });
+    });
+    return out;
+  };
+  const __dynPicked = __pick(__DYN_ORDER, __ALL);
+  const __staticPicked = __pick(__STATIC_ORDER, __ALL);
+  const __full = __sysJoin(__ALL);
+
   __sysPartsCache = {
     static: __staticArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     dynamic: __dynArr.filter(Boolean).map(s=>String(s).trim()).join("\n\n"),
     blocks: (__staticNames.length === __staticArr.length && __dynNames.length === __dynArr.length)
       ? __named(__staticArr, __staticNames).concat(__named(__dynArr, __dynNames))
       : [],   // 名字和块数对不上就干脆不报，宁可没有也不要错的
+    full: __full,
+    staticOnly: __sysJoin(__STATIC_ONLY),
+    dynText: __dynPicked.map(b=>b.text).join("\n\n"),
+    staticBlocks: __staticPicked.map(b=>({ name:b.name, len:b.len, h:b.h })),
+    dynBlocks: __dynPicked.map(b=>({ name:b.name, len:b.len, h:b.h })),
   };
-  return (base ? base+"\n\n"+timeHint : timeHint) + guide
-    + nsfwFormatBlock
-    + (bodyBlock ? "\n\n"+bodyBlock : "")
-    + (usageBlock ? "\n\n"+usageBlock : "")
-    + (wardrobeBlock ? "\n\n"+wardrobeBlock : "")
-    + (dutyBlock ? "\n\n"+dutyBlock : "")
-    + (readBlock ? "\n\n"+readBlock : "")
-    + (watchBlock ? "\n\n"+watchBlock : "")
-    + (babyBlock ? "\n\n"+babyBlock : "")
-    + (menuBlock ? "\n\n"+menuBlock : "")
-    + (menuOrderBlock ? "\n\n"+menuOrderBlock : "")
-    + (rpBlock ? "\n\n"+rpBlock : "")
-    + (cabinetBlock ? "\n\n"+cabinetBlock : "")
-    + (dreamTraceBlock ? "\n\n"+dreamTraceBlock : "")
-    + musicBlock
-    + (calendarBlock ? "\n\n"+calendarBlock : "")
-    + (prMainBlock ? "\n\n"+prMainBlock : "")
-    + ((state.prOpen && prPlayBlock) ? "\n\n"+prPlayBlock : "")
-    + (annoBlock ? "\n\n"+annoBlock : "")
-    + (flightChessBlock ? "\n\n"+flightChessBlock : "")
-    + (truthDareBlock ? "\n\n"+truthDareBlock : "")
-    + (divinationBlock ? "\n\n"+divinationBlock : "")
-    + (voiceToneBlock ? "\n\n"+voiceToneBlock : "")
-    + (annNudgeBlock ? "\n\n"+annNudgeBlock : "")
-    + callBlock
-    + pushBlock
-    + albumBlock
-    + couponBlock
-    + walletBlock
-    + projectFileBlock
-    + puppyActionBlock
-    + stickerBlock
-    + flingBlock
-    + profileBlock
-    + pocketBlock
-    + mcBlock
-    + (momentsBlock ? "\n\n"+momentsBlock : "")
-    + remarkBlock
-    + remarkEventBlock
-    + questBlock
-    + galateaBlock
-    + (bedBlock ? "\n\n"+bedBlock : "")
-    + (tipsyBlock ? "\n\n"+tipsyBlock : "");
+  return __full;
 }
 /** 32 位字符串哈希（FNV-1a）。只用来比「这轮和上轮是不是同一段字节」，不做安全用途。 */
 function __strHash(s){
@@ -37875,9 +37935,18 @@ function retrievedMemoryBlock(queryOverride){
 }
 
 /** opts.skipMemory：把检索记忆留给调用方自己往消息尾部挂，见 retrievedMemoryBlock */
+/**
+ * opts.splitDynamic：只要稳定块，会变的那些由调用方自己挂到消息尾部。
+ * 为什么是个开关而不是直接改默认：systemPrompt 有好几个调用方，
+ * 谁要是拿了静态版又不负责把动态块接回去，那些状态就**凭空消失**了，
+ * 而且是静默的 —— 他不会报错，只会不知道她今天穿了什么。
+ */
 function buildSysForAgent(ag, extraGroupHint, opts){
   // 每位 AI 使用自己的思考引导
   let sys = systemPrompt(ag || null);
+  if(opts && opts.splitDynamic && __sysPartsCache && __sysPartsCache.staticOnly != null){
+    sys = __sysPartsCache.staticOnly;
+  }
   if(ag && ag.name){
     const nm = ag.name;
     sys = `你是 Aries（若角色显示名是「${nm}」可作称呼）。与你对话的是 Jasmine。请以 Aries 的身份自然对话。\n\n` + (sys||"");
@@ -38676,7 +38745,11 @@ function buildMainChatRequest(ag, extraHint){
   // 用 buildSysForAgent 保持与主路径一致的 systemPrompt 拼接顺序（不破坏思考链）；
   // 摘要作为追加段附在 system 末尾（它只在压缩发生时才变，不像检索记忆每轮都变）。
   // **skipMemory**：检索记忆改挂到最后一条消息末尾，见下面的尾部注入。
-  let sys = buildSysForAgent(ag, extraHint || null, { skipMemory:true });
+  // **splitDynamic**：身体状态、音乐、日历、衣橱…这些每轮都在变的块不进 sys。
+  // Claude 通道没有 system 字段，sys 是当 messages[0] 发的，也就是前缀的最开头 ——
+  // 里面混一块会变的东西，后面整段历史全部 miss，断点打在哪儿都没用。
+  // 实测：她那条通道缓存是通的（第二发只花 10.3%），所以漏掉的全是我们自己这边的钱。
+  let sys = buildSysForAgent(ag, extraHint || null, { skipMemory:true, splitDynamic:true });
   const win = getWindowedMessages(allMsgs, target);
   const keepFull = guardKeepFull(win.messages); // 只有最近两条被拦的给完整措辞
   const apiMsgs = win.messages.map(m=>{
@@ -38694,13 +38767,17 @@ function buildMainChatRequest(ag, extraHint){
   // 尾部注入：挂在最后一条消息末尾（不入缓存前缀，离生成点最近）。
   // 检索记忆也走这条路 —— 它以前在 system 末尾，每轮一变就把后面整段历史
   // 从缓存里踢出去；那才是「一条 18000 每轮全价」的真正原因。
-  let tailLen = 0, memLen = 0, ruleLen = 0, tickLen = 0;
+  let tailLen = 0, memLen = 0, ruleLen = 0, tickLen = 0, dynLen = 0;
   try{
+    // 从 sys 里搬下来的那些状态块。放在尾部最前面 ——
+    // 它们在完整提示词里本来就排在记忆/语气/此刻之前，彼此的相对顺序也一字没动，
+    // 变的只是「整体挪到了书签后面」这一件事。
+    const dynB = (__sysPartsCache && __sysPartsCache.dynText) || "";
     const memB  = retrievedMemoryBlock() || "";
     const toneRule = ((typeof toneRuleBlock === "function") ? toneRuleBlock(win.messages) : "") || "";
     const tickB = chatTailBlock() || "";
-    memLen = memB.length; ruleLen = toneRule.length; tickLen = tickB.length;
-    const tail = [memB, toneRule, tickB].filter(Boolean).join("\n\n");
+    dynLen = dynB.length; memLen = memB.length; ruleLen = toneRule.length; tickLen = tickB.length;
+    const tail = [dynB, memB, toneRule, tickB].filter(Boolean).join("\n\n");
     tailLen = tail.length;
     if(tail && apiMsgs.length){
       const last = apiMsgs[apiMsgs.length - 1];
@@ -38721,7 +38798,10 @@ function buildMainChatRequest(ag, extraHint){
   try{
     const h = __strHash(sys || "");
     const prev = state.__prefixWatch || null;
-    const nowBlocks = ((__sysPartsCache && __sysPartsCache.blocks) || []);
+    // **只盯真的进了前缀的块**。动态块已经搬到尾部了，再拿它们比对的话，
+    // 监控会天天报「身体状态变了」—— 一句正确但完全没用的话，
+    // 而真正把前缀顶掉的那块反倒被淹没在里面。
+    const nowBlocks = ((__sysPartsCache && __sysPartsCache.staticBlocks) || []);
     let changed = [];
     if(prev && prev.blocks){
       const before = {};
@@ -38755,7 +38835,7 @@ function buildMainChatRequest(ag, extraHint){
       persona: Math.max(0, sysLen - (win.summary||"").length),
       n: apiMsgs.length,
       win: winChars - tailLen,     // 窗口里她和他真正说的话
-      tail: tailLen, mem: memLen, rule: ruleLen, tick: tickLen,
+      tail: tailLen, mem: memLen, rule: ruleLen, tick: tickLen, dyn: dynLen,
       total: sysLen + winChars,
       at: Date.now(),
     };
@@ -38788,7 +38868,7 @@ function reqPartsLine(p){
     + ` · 人设 ${p.persona}（${pct(p.persona)}%）`
     + (p.summary ? ` · 摘要 ${p.summary}（${pct(p.summary)}%）` : "")
     + ` · 历史 ${p.n} 条 ${p.win}（${pct(p.win)}%）`
-    + ` · 尾部 ${p.tail}（记忆 ${p.mem}/语气 ${p.rule}/此刻 ${p.tick}）`;
+    + ` · 尾部 ${p.tail}（状态 ${p.dyn||0}/记忆 ${p.mem}/语气 ${p.rule}/此刻 ${p.tick}）`;
 }
 
 /** 压缩：覆盖式摘要 + 推进游标。仅无限窗口（contextLimit=0）需要，有限窗口本身有界。 */
