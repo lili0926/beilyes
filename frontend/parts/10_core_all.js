@@ -1468,7 +1468,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
 
   // —— CC 通道：走 VPS hub（非流式兜底）——
   if (channel === "cc") {
-    const wsUrl = (ag&&ag.ccWsUrl) || apiConfig.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
+    const wsUrl = (ag&&ag.ccWsUrl) || apiConfig.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://43.142.110.120:3456";
     const pin = (ag&&ag.ccPin) || apiConfig.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
     const modelId = (ag && ag.ccModel) || apiConfig.ccModel || "";
     try{ await __ccEnsureModel(wsUrl, pin, modelId); }catch(e){}
@@ -1886,7 +1886,7 @@ function __ccBuildContent(messages, systemPrompt){
 async function __fetchClaudeQuota(){
   const wsUrl = (state.callConfig && state.callConfig.ccWsUrl)
     || (state.agents && state.agents[0] && state.agents[0].ccWsUrl)
-    || "ws://115.29.237.172:3456";
+    || "ws://43.142.110.120:3456";
   const base = String(wsUrl).replace(/^wss?:\/\//, "http://").replace(/\/$/, "");
   const qUrl = base + "/api/quota";
   // 必须带超时：3456 是 hub 的 WebSocket 端口，它挂掉时 TCP 还能连上但一个字节都不回，
@@ -1930,7 +1930,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
 
   // —— CC 通道：走 VPS hub，不直调 API ——
   if(channel === "cc"){
-    const wsUrl = (ag&&ag.ccWsUrl) || cfg.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
+    const wsUrl = (ag&&ag.ccWsUrl) || cfg.ccWsUrl || (state.callConfig&&state.callConfig.ccWsUrl) || "ws://43.142.110.120:3456";
     const pin = (ag&&ag.ccPin) || cfg.ccPin || (state.callConfig&&state.callConfig.ccPin) || "";
     const modelId = (ag && ag.ccModel) || cfg.ccModel || "";
     try{ await __ccEnsureModel(wsUrl, pin, modelId); }catch(e){}
@@ -2699,7 +2699,7 @@ const state = {
   sexBed: LS.get("sexBed", null) || { log:[], cool:{}, streak:{} }, // 床事档案：记录/冷却/连击
   bedTab: "week", // 床事报告看哪一档（不持久化）
   // 工作间（独立 WS，绝不复用 __cc 恋爱通道）
-  wsWsUrl: LS.get("wsWsUrl", "ws://115.29.237.172/ws/workshop") || "ws://115.29.237.172/ws/workshop",
+  wsWsUrl: LS.get("wsWsUrl", "ws://43.142.110.120/ws/workshop") || "ws://43.142.110.120/ws/workshop",
   wsPin: LS.get("wsPin", "521314") || "521314",
   wsMessages: Array.isArray(LS.get("wsMessages", [])) ? LS.get("wsMessages", []) : [],
   wsBusy: false,
@@ -2755,7 +2755,7 @@ const state = {
 
   // music
   musicConfig: LS.get("musicConfig", {
-    baseUrl: "http://115.29.237.172:9090",
+    baseUrl: "http://43.142.110.120:9090",
     token: "",
     source: "netease", // netease | spotify
     // gateway = 自建 /music/* 网关；duetto = Duetto /api/ncm/*（官方可扫码）
@@ -2782,7 +2782,7 @@ const state = {
   musicBrowseTitle: "",  // 当前浏览列表标题（歌单名/每日推荐…）
   musicLoading: false,
   // screen time / app usage (VPS)
-  usageConfig: LS.get("usageConfig", { baseUrl: "http://115.29.237.172:9090", token: "" }),
+  usageConfig: LS.get("usageConfig", { baseUrl: "http://43.142.110.120:9090", token: "" }),
   usageToday: LS.get("usageToday", null), // {date, total_minutes, apps:[], updated_at, ...}
   usageDays: [],
   usageLoading: false,
@@ -2794,7 +2794,7 @@ const state = {
   todayOutfit: LS.get("todayOutfit", { top:null, bottom:null, shoes:null, underwear:null, accessories:[] }),
   // 主动消息（本地触发 + 可选 VPS 拉取）
   // token 一律空：仓库是 public，默认值里写 token 等于公开发布。去设置 → VPS 填一次。
-  proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://115.29.237.172:9090", token: "", pollMin: 15 }),
+  proactiveConfig: LS.get("proactiveConfig", { enabled: false, baseUrl: "http://43.142.110.120:9090", token: "", pollMin: 15 }),
   proactiveLastLocal: LS.get("proactiveLastLocal", 0),
   proactiveLastConflict: LS.get("proactiveLastConflict", ""), // 上一场已经追过的架（按那句气话的时间去重）
   proactiveOpenerAt: LS.get("proactiveOpenerAt", 0),        // 上次给 VPS 预存开场白的时间
@@ -2858,7 +2858,7 @@ const state = {
   hisPhoneTab: "home", // home | shop | memo | album | private | psearch | pnotes | palbum | settings
 
 
-  captivityConfig: LS.get("captivityConfig", { baseUrl: "http://115.29.237.172:5058", openIn: "iframe" }), // 囚禁模拟器外部地址（已部署 VPS，默认即玩）
+  captivityConfig: LS.get("captivityConfig", { baseUrl: "http://43.142.110.120:5058", openIn: "iframe" }), // 囚禁模拟器外部地址（已部署 VPS，默认即玩）
   captivityOpen: false,
   biscaOpen: null, // { key, title, url } 牌室/大富豪/大富翁 页内 iframe
   biscaBot: LS.get("biscaBot", {
@@ -2893,7 +2893,7 @@ const state = {
 
   // 电话（Callhome 风格 · 文字通话 + 可选 VPS）
   callConfig: LS.get("callConfig", {
-    baseUrl: "http://115.29.237.172:9090", token: "", dnd: false,
+    baseUrl: "http://43.142.110.120:9090", token: "", dnd: false,
     // AIcall 语音网关（WebSocket/HTTP，本地局域网）；来电轮询走上面的 baseUrl(VPS)
     wsUrl: "ws://192.168.101.1:8765",
     httpUrl: "http://192.168.101.1:8080",
@@ -2905,7 +2905,7 @@ const state = {
     minimaxVoice: "female-shaonv",
     minimaxModel: "speech-2.6-turbo",
     minimaxEndpoint: "https://api.minimax.chat/v1/t2a_v2", // 新版统一网关；旧国内 api.minimaxi.chat / 国际 api.minimax.io
-    ttsProxy: "http://115.29.237.172:9090", // 自建代理（VPS /tts/minimax），避免浏览器 CORS；后端持 MiniMax Key 时 app 可不填
+    ttsProxy: "http://43.142.110.120:9090", // 自建代理（VPS /tts/minimax），避免浏览器 CORS；后端持 MiniMax Key 时 app 可不填
     ttsEnabled: true,
     // STT
     sttUrl: "", // 如 https://vps/stt  → POST multipart file
@@ -3288,7 +3288,7 @@ function defaultAgents(){
       openaiModel: a.openaiModel || "gpt-4o",
       geminiKey: a.geminiKey || "",
       geminiModel: a.geminiModel || "gemini-2.0-flash",
-      ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456",
+      ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://43.142.110.120:3456",
       ccPin: (state.callConfig&&state.callConfig.ccPin) || "498898",
       ccModel: "",
       avatar: (state.coupleInfo && state.coupleInfo.partnerAvatar) || "",
@@ -3308,7 +3308,7 @@ function defaultAgentA2(){
     claudeKey: "", openaiKey: "",
     openaiBase: "https://api.openai.com/v1", openaiModel: "gpt-4o",
     geminiKey: "", geminiModel: "gemini-2.0-flash",
-    ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456",
+    ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://43.142.110.120:3456",
     ccPin: (state.callConfig&&state.callConfig.ccPin) || "498898",
     ccModel: "",
     claudeModel: "",
@@ -3333,7 +3333,7 @@ function ensureAgents(){
       }
       if(!ag.channel) ag.channel = "claude";
       if(ag.enabled === undefined) ag.enabled = true;
-      if(typeof ag.ccWsUrl !== "string" || !ag.ccWsUrl) ag.ccWsUrl = (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456";
+      if(typeof ag.ccWsUrl !== "string" || !ag.ccWsUrl) ag.ccWsUrl = (state.callConfig&&state.callConfig.ccWsUrl) || "ws://43.142.110.120:3456";
       if(typeof ag.ccPin !== "string" || !ag.ccPin) ag.ccPin = (state.callConfig&&state.callConfig.ccPin) || "498898";
       if(typeof ag.ccModel !== "string") ag.ccModel = "";
       if(typeof ag.claudeModel !== "string") ag.claudeModel = ""; // 空 = 用 CLAUDE_DEFAULT_MODEL
@@ -9572,7 +9572,7 @@ function bindPrOverlay(){
 
 
 // ═══ 共读 Anno（VPS）═══
-const ANNO_API_BASE = "http://115.29.237.172:8795";
+const ANNO_API_BASE = "http://43.142.110.120:8795";
 const ANNO_API_TOKEN = "a0bd852963347811ff3293009542012b402af1599794cd86";
 
 function ensureAnno(){
@@ -9772,7 +9772,7 @@ function bindAnno(){
 // 在一起日起写死：6 月 24 日（年份按 COUPLE_START）
 const COUPLE_START = "2026-06-24"; // 在一起：2026-06-24（只改这一处）
 // VPS 日历 API（无域名用 IP；Token 与服务器 .env 一致）
-const CAL_API_BASE = "http://115.29.237.172:8788";
+const CAL_API_BASE = "http://43.142.110.120:8788";
 const CAL_API_TOKEN = "8f7e6d5c4b3a2910f8e7d6c5b4a392817f6e5d4c3b2a1908f";
 
 function calPad(n){ return String(n).padStart(2,"0"); }
@@ -15993,7 +15993,7 @@ function renderTavern(){
 
 // ─── 意识改写（iframe 内嵌独立 HTML）────────────────────────────────────────
 // 源文件是他在 Project 里写的那份：VPS 的 `/root/cc-work/project/rewrite.html`
-// （也能从 `http://115.29.237.172:3456/project?pin=…` 翻到）。这里存的是原样的一份拷贝。
+// （也能从 `http://43.142.110.120:3456/project?pin=…` 翻到）。这里存的是原样的一份拷贝。
 // **存成 base64 而不是模板字符串**：那份 HTML 里有 9 个反引号和 73 个反斜杠，
 // 照 TAVERN_HTML 那样写就得逐个转义 —— `\n` 漏一个，游戏的旁白就断行断错。
 // 要更新就在 VPS 上 `base64 -w0 rewrite.html` 重新生成一遍换掉下面这行。
@@ -16811,7 +16811,7 @@ function albumGo(dir){
 
 function ensureCaptivityConfig(){
   if(!state.captivityConfig || typeof state.captivityConfig !== "object"){
-    state.captivityConfig = { baseUrl: "http://115.29.237.172:5058", openIn: "iframe" };
+    state.captivityConfig = { baseUrl: "http://43.142.110.120:5058", openIn: "iframe" };
   }
   if(!state.captivityConfig.openIn) state.captivityConfig.openIn = "iframe";
   return state.captivityConfig;
@@ -16823,9 +16823,9 @@ const BISCA_URLS = {
   bisca_monopoly: "https://jasmine0926.xyz/monopoly",
 };
 const BISCA_URLS_IP = {
-  bisca_cards: "http://115.29.237.172/cards",
-  bisca_daifugo: "http://115.29.237.172/daifugo",
-  bisca_monopoly: "http://115.29.237.172/monopoly",
+  bisca_cards: "http://43.142.110.120/cards",
+  bisca_daifugo: "http://43.142.110.120/daifugo",
+  bisca_monopoly: "http://43.142.110.120/monopoly",
 };
 const BISCA_TITLES = {
   bisca_cards: "牌室",
@@ -16848,7 +16848,7 @@ function biscaBotBase(){
     const u = biscaLaunchUrl(state.biscaOpen && state.biscaOpen.key || "bisca_cards");
     return new URL(u).origin;
   }catch(e){}
-  return "http://115.29.237.172";
+  return "http://43.142.110.120";
 }
 function ensureBiscaBot(){
   if(!state.biscaBot || typeof state.biscaBot !== "object"){
@@ -17277,7 +17277,7 @@ function renderCaptivity(){
 
 // ─── 占卜 · 问心处（VPS fortune-stall iframe）───────────────────────────────
 function renderDivination(){
-  const base = wakeBase() || "http://115.29.237.172:9090";
+  const base = wakeBase() || "http://43.142.110.120:9090";
   const url = base.replace(/\/$/,"") + "/divination/";
   return `<div class="page">
     ${subHeader('<i data-lucide="sparkles"></i> 占卜 · 问心处')}
@@ -19037,33 +19037,37 @@ async function callTtsTest(){
 
 // ─── 电话（Callhome 风格 UI · 文字通话）──────────────────────────────────────
 
-// VPS 迁移：旧机 IP 192.169.7.234 → 新机 115.29.237.172。
-// 只扫存 IP 的配置对象、只改含旧 IP 的字符串，把手机存量 localStorage 自动切到新机，无需手改。
+// VPS 迁移：192.169.7.234 → 115.29.237.172（阿里云）→ 43.142.110.120（腾讯云，2026-09-18）。
+// 手机存量设置里的旧 IP 会整份盖掉代码默认值（LS 覆盖默认值那个坑），所以必须在启动时改存量。
+// 只改含旧 IP 的字符串，别的一个字不动。
+const VPS_OLD_IPS = ["192.169.7.234", "115.29.237.172"], VPS_NEW_IP = "43.142.110.120";
 function migrateVpsIp(){
-  const OLD_IP = "192.169.7.234", NEW_IP = "115.29.237.172";
-  const keys = ["callConfig","musicConfig","usageConfig","proactiveConfig","captivityConfig","ntfyConfig","pocketConfig","apiConfig","proactiveInbox"];
-  let changed = false;
-  const rewrite = (obj)=>{
+  const keys = ["callConfig","musicConfig","usageConfig","proactiveConfig","captivityConfig","ntfyConfig","pocketConfig","apiConfig","proactiveInbox","agents","wsWsUrl"];
+  const swap = s => VPS_OLD_IPS.reduce((a, ip)=>a.split(ip).join(VPS_NEW_IP), s);
+  const hit = s => VPS_OLD_IPS.some(ip=>s.includes(ip));
+  const dirty = new Set();
+  const rewrite = (obj, top)=>{
     if(!obj || typeof obj !== "object") return;
     for(const k of Object.keys(obj)){
       const v = obj[k];
-      if(typeof v === "string" && v.includes(OLD_IP)){
-        obj[k] = v.split(OLD_IP).join(NEW_IP);
-        changed = true;
-      } else if(v && typeof v === "object") rewrite(v);
+      if(typeof v === "string" && hit(v)){ obj[k] = swap(v); dirty.add(top); }
+      else if(v && typeof v === "object") rewrite(v, top);
     }
   };
-  keys.forEach(k=>{ if(state[k]) rewrite(state[k]); });
-  if(changed){
-    keys.forEach(k=>{ if(state[k]) { try{ persist(k); }catch(e){} } });
-  }
-  return changed;
+  keys.forEach(k=>{
+    const v = state[k];
+    if(typeof v === "string"){ if(hit(v)){ state[k] = swap(v); dirty.add(k); } }
+    else if(v) rewrite(v, k);
+  });
+  dirty.forEach(k=>{ try{ persist(k); }catch(e){} try{ if(!PERSIST_MAP[k]) LS.set(k, state[k]); }catch(e){} });
+  return dirty.size > 0;
 }
+try{ migrateVpsIp(); }catch(e){}   // 启动就跑一次，不等打开电话页
 
 function ensureCallConfig(){
   try{ if(typeof migrateVpsIp === "function") migrateVpsIp(); }catch(e){}
   // 来电轮询(Callhome 网关)默认指 VPS；AIcall 语音网关(wsUrl/httpUrl)是另一套，保持局域网默认
-  const VPS = "http://115.29.237.172:9090";
+  const VPS = "http://43.142.110.120:9090";
   const d = {
     baseUrl:VPS, token:"", dnd:false, ttsProvider:"minimax", minimaxKey:"", minimaxGroupId:"",
     minimaxVoice:"female-shaonv", minimaxModel:"speech-2.6-turbo",
@@ -19418,7 +19422,7 @@ function renderPhone(){
           </select>
           `}
           <span class="setting-label" style="margin-top:8px">TTS 代理（走后端，默认已指向 VPS）</span>
-          <input id="call-tts-proxy" value="${escAttr(cfg.ttsProxy||"")}" placeholder="如 http://115.29.237.172:9090 → 请求 /tts/minimax"/>
+          <input id="call-tts-proxy" value="${escAttr(cfg.ttsProxy||"")}" placeholder="如 http://43.142.110.120:9090 → 请求 /tts/minimax"/>
           
           <div style="font-size:11px;margin-top:6px;color:${callAuthToken()?"var(--sub)":"#c45"}">
             当前网关 Token：${callAuthToken()?"已就绪 ✓":"空 —— TTS / 按住说话都会 401"}
@@ -19448,7 +19452,7 @@ function renderPhone(){
           <span class="setting-label" style="margin-top:8px">STT Token（可选）</span>
           <input type="password" id="call-stt-token" value="${escAttr(cfg.sttToken||"")}" placeholder="默认用网关 Token"/>
           <span class="setting-label" style="margin-top:8px">hervoice URL</span>
-          <input id="call-hervoice-url" value="${escAttr(cfg.hervoiceUrl||"")}" placeholder="http://115.29.237.172:8100"/>
+          <input id="call-hervoice-url" value="${escAttr(cfg.hervoiceUrl||"")}" placeholder="http://43.142.110.120:8100"/>
           <span class="setting-label" style="margin-top:8px">语音消息 Voce URL</span>
           <input id="call-voce-url" value="${escAttr(cfg.voceUrl||"")}" placeholder="http://127.0.0.1:3456"/>
         </div>
@@ -25542,7 +25546,7 @@ function renderAgentSettingsBlock(ag, idx){
         <div class="setting-row"><span class="setting-label" style="font-size:10px;opacity:0.75;line-height:1.45">免费层级可用 gemini-2.0-flash / gemini-1.5-flash。需在 Google AI Studio 申请 Key。浏览器直连可能遇 CORS，若失败请走 OpenAI 兼容中转。</span></div>
       `:ag.channel==="cc"?`
         <div class="setting-row"><span class="setting-label">Hub 地址</span>
-          <input id="${prefix}-ccWsUrl" value="${escAttr(ag.ccWsUrl||"ws://115.29.237.172:3456")}" placeholder="ws://IP:3456"/></div>
+          <input id="${prefix}-ccWsUrl" value="${escAttr(ag.ccWsUrl||"ws://43.142.110.120:3456")}" placeholder="ws://IP:3456"/></div>
         <div class="setting-row"><span class="setting-label">Hub PIN</span>
           <input type="password" id="${prefix}-ccPin" value="${escAttr(ag.ccPin||"")}" placeholder="hub PIN"/></div>
         <div class="setting-row"><span class="setting-label">模型</span>
@@ -28481,7 +28485,7 @@ function bindEvents(){
       ccModelSel.onchange = ()=>{
         ag.ccModel = ccModelSel.value;
         persist("agents");
-        const hubUrl = ag.ccWsUrl || "ws://115.29.237.172:3456";
+        const hubUrl = ag.ccWsUrl || "ws://43.142.110.120:3456";
         const hubPin = ag.ccPin || "";
         const id = ccModelSel.value;
         if(!id){
@@ -30722,7 +30726,7 @@ const sttUrl = document.getElementById("call-stt-url");
   // 存在手机的 localStorage 里。
   const vpsQuickfill = document.getElementById("vps-quickfill");
   if(vpsQuickfill) vpsQuickfill.onclick = ()=>{
-    const VPS_BASE = "http://115.29.237.172:9090";
+    const VPS_BASE = "http://43.142.110.120:9090";
     state.musicConfig      = { ...(state.musicConfig||{}),      baseUrl: VPS_BASE };
     state.usageConfig      = { ...(state.usageConfig||{}),      baseUrl: VPS_BASE };
     state.proactiveConfig  = { ...(state.proactiveConfig||{}),  baseUrl: VPS_BASE };
@@ -33559,6 +33563,7 @@ try{ restorePrNative(); }catch(e){} }catch(e){}
       try{
         if(typeof fsLoadAllKvIntoState === "function"){
           const kv = await fsLoadAllKvIntoState();
+          try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次
           if(kv && kv.ok) try{ render(); }catch(e){}
         }
       }catch(e){}
@@ -33632,6 +33637,7 @@ if(!window.__chatFlushBound){
     try{
       if(typeof fsLoadAllKvIntoState === "function"){
         const kv = await fsLoadAllKvIntoState();
+          try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次
         if(kv && kv.ok && typeof render === "function") render();
       }
     }catch(e){}

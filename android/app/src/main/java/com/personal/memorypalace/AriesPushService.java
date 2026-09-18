@@ -61,11 +61,12 @@ public class AriesPushService extends Service {
     private static int msgNotifId = 4300;
 
     private static final String PREFS = "aries_push";
-    private static final String KEY_BASE = "base";          // 形如 115.29.237.172:3456
+    private static final String KEY_BASE = "base";          // 形如 43.142.110.120:3456
     private static final String KEY_PIN = "pin";
     private static final String KEY_LAST_NOTIFIED = "last_notified_id";
 
-    private static final String DEFAULT_HOST = "115.29.237.172:3456";
+    // 2026-09-18 迁到腾讯云。KEY_BASE 全代码没人写，所以实际一直走这个默认值。
+    private static final String DEFAULT_HOST = "43.142.110.120:3456";
     private static final String DEFAULT_PIN = "498898";
 
     private OkHttpClient client;
