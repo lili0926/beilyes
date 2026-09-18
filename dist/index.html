@@ -9586,11 +9586,43 @@ async function callAuxAPI(apiConfig, prompt) {
 
 
 // ─── 智能记忆检索（词频向量余弦相似度） ─────────────────────────────────────
+// 当前聊天的是哪个联系人（a1=API / a2=订阅）。记忆按它分开，同一个人但不串。
+function memAgentId(){
+  const t = state.chatTarget;
+  return (t === "a2") ? "a2" : "a1";   // group/其它一律算 a1
+}
+// 记忆分三层（她 2026-09-18 定的）：
+//   共享底 —— 关于她、关于我们的事（核心/偏好/约定/计划），哪个渠道记下的两边都看得到；
+//   各自的 —— 日记、PR 这类「在这边具体聊了什么」，留在记下它的那边；
+//   渡口   —— 不是记忆，是切过来时附上另一边最近聊的几句（crossThreadBridgeBlock）。
+const MEM_SHARED_LAYERS = new Set(["core", "daily", "handoff", "plans"]);
+function memIsShared(m){ return !!m && (m.agentId === "shared" || MEM_SHARED_LAYERS.has(m.layer)); }
+// 一条记忆归谁：共享的两边都算；老记忆没标 agentId 的，一律当 a1（她一直在 API 渠道聊）
+function memBelongsTo(m, who){
+  if(memIsShared(m)) return true;
+  const a = (m && m.agentId) || "a1";
+  return a === who;
+}
+// 推到云端时的 agent 标签：共享的标 "shared"，检索时两边都会去搜它
+function memCloudAgent(m){ return memIsShared(m) ? "shared" : ((m && m.agentId) || "a1"); }
+// 一个线程 id 归哪个联系人：group 和其它一律算 a1
+function memAgentOfThread(tid){ return (tid === "a2") ? "a2" : "a1"; }
+// 盖章：任何新写入的记忆都打上 agentId。默认「当前联系人」，
+// 但自动沉淀是遍历所有线程的，得传**正在整理的那条线程**的归属，不能用全局 chatTarget。
+// 所有 state.memories 的写入点都套它，漏一个 = a2 的新记忆泄给 a1。
+function memStamp(obj, who){
+  if(obj && !obj.agentId) obj.agentId = who || memAgentId();
+  return obj;
+}
+
 function retrieveRelevantMemories(query, topK = 5) {
-  const memories = state.memories;
+  const who = memAgentId();
+  // 只在**当前联系人**的记忆里检索。云端预热结果已按 agent 过滤（见 memRemote*）。
+  const memories = (state.memories || []).filter(m=>memBelongsTo(m, who));
   // 云端向量记忆优先：发消息前已异步预热到 memRemoteCache（60s 内有效），VPS 无结果自动回退本地
   if(typeof memRemoteOn==="function" && memRemoteOn()
      && Array.isArray(state.memRemoteCache) && state.memRemoteCache.length
+     && state.memRemoteCacheWho === who                 // 刚切了联系人，上一个人的缓存不能用
      && (Date.now() - (state.memRemoteCacheAt||0)) < 60000){
     return state.memRemoteCache.slice(0, topK);
   }
@@ -10364,11 +10396,30 @@ function defaultAgents(){
     },
   ];
 }
+// a2 =「订阅」渠道（CC / tmux claude），和 a1「API」渠道分开成两个联系人。
+// 她 2026-09-18 要的：API 和订阅各一页、记忆不串。
+function defaultAgentA2(){
+  return {
+    id: "a2",
+    name: "Aries · 订阅",
+    channel: "cc",                       // CC 通道（吃订阅额度，不走 API token）
+    claudeKey: "", openaiKey: "",
+    openaiBase: "https://api.openai.com/v1", openaiModel: "gpt-4o",
+    geminiKey: "", geminiModel: "gemini-2.0-flash",
+    ccWsUrl: (state.callConfig&&state.callConfig.ccWsUrl) || "ws://115.29.237.172:3456",
+    ccPin: (state.callConfig&&state.callConfig.ccPin) || "498898",
+    ccModel: "",
+    claudeModel: "",
+    avatar: (state.coupleInfo && state.coupleInfo.partnerAvatar) || "",
+    color: "#A5C4D4",
+    thoughtGuide: "",
+    enabled: true,
+  };
+}
 function ensureAgents(){
   if(!Array.isArray(state.agents) || state.agents.length < 1){
     state.agents = defaultAgents();
   } else {
-    state.agents = state.agents.filter(a=>a && a.id!=="a2");
     if(!state.agents.length) state.agents = defaultAgents();
     state.agents.forEach((ag, i)=>{
       if(typeof ag.thoughtGuide !== "string"){
@@ -10388,10 +10439,17 @@ function ensureAgents(){
     if(!state.agents.find(a=>a.id==="a1")){
       state.agents = defaultAgents().concat(state.agents);
     }
-    const a1 = state.agents.find(a=>a.id==="a1");
-    if(a1) state.agents = [a1];
   }
-  if(state.chatTarget && state.chatTarget!=="a1") state.chatTarget = "a1";
+  // a2「订阅」常驻：没有就补一个（CC 通道）。删 a2 那句下线了。
+  if(!state.agents.find(a=>a.id==="a2")){
+    state.agents.push(defaultAgentA2());
+  }
+  // 只保留 a1 / a2 两个，顺序固定 a1 在前
+  const a1 = state.agents.find(a=>a.id==="a1");
+  const a2 = state.agents.find(a=>a.id==="a2");
+  state.agents = [a1, a2].filter(Boolean);
+  // chatTarget 现在允许 a1 / a2；别的（group 等）回落 a1
+  if(state.chatTarget !== "a1" && state.chatTarget !== "a2") state.chatTarget = "a1";
   return state.agents;
 }
 ensureAgents();
@@ -10404,6 +10462,11 @@ function memDedupLocalOnce(){
   try{
     if(state.__memDedupV1) return;                 // 只跑一次
     if(!Array.isArray(state.memories) || !state.memories.length){ state.__memDedupV1 = 1; return; }
+    // 顺手迁移：老记忆没标 agentId 的，一律归「API」(a1) —— 她一直在 API 渠道聊。
+    // 订阅(a2)从空白开始，两边不串。
+    let tagged = 0;
+    state.memories.forEach(m=>{ if(m && !m.agentId){ m.agentId = "a1"; tagged++; } });
+    if(tagged) try{ persist("memories"); }catch(e){}
     const seen = new Set();
     const before = state.memories.length;
     const kept = [];
@@ -16136,7 +16199,7 @@ function prGetWorld(id){
 function prWriteToMemory(content, importance){
   if(!content) return;
   if(!Array.isArray(state.memories)) state.memories = [];
-  state.memories.unshift({
+  state.memories.unshift(memStamp({
     id: Date.now() + Math.floor(Math.random()*1000),
     content: String(content).slice(0, 500),
     layer: "pr",
@@ -16146,7 +16209,7 @@ function prWriteToMemory(content, importance){
     createdAt: new Date().toISOString(),
     activations: 1,
     source: "pr",
-  });
+  }));
   // 同 source 只保留最近 30 条 PR 记忆，避免刷屏
   let prCount = 0;
   state.memories = state.memories.filter(m=>{
@@ -18955,6 +19018,7 @@ async function memPushToCloud(list){
         content: txt,
         type: _layerToMemType(m.layer),
         importance: (m.importance>=8) ? "high" : ((m.importance<=3) ? "low" : "medium"),
+        agent: memCloudAgent(m),   // 云端也按联系人分开：a1(API) / a2(订阅) / shared(两边共享)
       });
       if(r && r.ok) n++;
       else { failed++; lastErr = r ? "服务端拒收" : "请求失败（网络/鉴权）"; }
@@ -19015,6 +19079,7 @@ async function memCloudBackupAll(){
         content: String(m.content).trim(),
         type: _layerToMemType(m.layer),
         importance: (m.importance>=8) ? "high" : ((m.importance<=3) ? "low" : "medium"),
+        agent: memCloudAgent(m),   // 不带就被服务端记成 a1，订阅那边的记忆会漏给 API
       });
       B.done++;
       if(r && r.ok){ B.ok++; miss = 0; }
@@ -19077,6 +19142,10 @@ async function memPullFromCloud(){
     if(!rows.length) throw new Error("云端是空的，没有覆盖");
     state.__memLocalBak = { at: Date.now(), list: state.memories || [] };
     try{ LS.set("__memLocalBak", state.__memLocalBak); }catch(_){}
+    // 联系人标记要跟着走：服务端回了 agent 就用它；老服务端不回，
+    // 那云端这批只能当 a1，本地已有的非 a1 记忆原样留下，别被整份覆盖洗掉。
+    const _cloudHasAgent = rows.some(m=>m && m.agent);
+    const _keepLocal = _cloudHasAgent ? [] : (state.memories||[]).filter(m=>m && m.agentId && m.agentId !== "a1");
     state.memories = rows.map((m, i)=>({
       id: Date.now() + i,
       content: String((m && m.content) || ""),
@@ -19086,7 +19155,8 @@ async function memPullFromCloud(){
       arousal: 0.5,
       createdAt: (m && m.created_at) || new Date().toISOString(),
       fromRemote: true,
-    })).filter(m=>m.content);
+      agentId: (m && m.agent) || "a1",
+    })).filter(m=>m.content).concat(_keepLocal);
     persist("memories");
     __memNote(`已用云端覆盖本地：${before} → ${state.memories.length} 条`);
   }catch(e){
@@ -19104,8 +19174,31 @@ async function memRemoteWarmup(q){
   try{
     const query = (q || (state.messages||[]).filter(m=>m.role==="user").slice(-3).map(m=>m.content||"").join(" ") || "").trim();
     if(!query){ state.memRemoteCache=null; return; }
-    const res = await memRemoteFetch("/search?q=" + encodeURIComponent(query) + "&top_k=5");
+    // 只搜**当前联系人**的云端记忆（a1=API / a2=订阅）。老服务端不认 agent 参数会忽略它，
+    // 那就回落到「不分」，但至少本地那层还是分开的（memBelongsTo）。
+    const who = memAgentId();
+    const other = who === "a2" ? "a1" : "a2";
+    // 三路：自己的 + 共享的 + 对面那边的「偏好/约定」（云端老记忆全标 a1，
+    // 里面关于她的偏好和约定得让订阅那边也看得到，不用改服务端就能共享）
+    const q1 = "/search?q=" + encodeURIComponent(query) + "&top_k=5&agent=";
+    const [rOwn, rShared, rOther] = await Promise.all([
+      memRemoteFetch(q1 + encodeURIComponent(who)),
+      memRemoteFetch(q1 + "shared"),
+      memRemoteFetch(q1 + encodeURIComponent(other)),
+    ]);
+    const pick = r => (r && r.ok && Array.isArray(r.memories)) ? r.memories : null;
+    let res = null;
+    if(pick(rOwn) || pick(rShared)){
+      const seen = new Set();
+      const merged = [].concat(pick(rOwn)||[], pick(rShared)||[],
+          (pick(rOther)||[]).filter(m=>m && (m.type==="promise" || m.type==="preference")))
+        .filter(m=>{ const k = String(m && m.content || ""); if(!k || seen.has(k)) return false; seen.add(k); return true; })
+        .sort((a,b)=>(+a.distance||0)-(+b.distance||0))
+        .slice(0, 5);
+      res = { ok:true, memories: merged };
+    }
     if(res && res.ok && Array.isArray(res.memories)){
+      state.memRemoteCacheWho = who;
       state.memRemoteCache = res.memories.map(m=>({
         content: m.content,
         layer: _memTypeToLayer(m.type),
@@ -23324,7 +23417,7 @@ function bookComposerSave(){
   if(!text) return;
   const mode = state.bookComposer || "write";
   if(mode==="memory"){
-    state.memories.push({ id:Date.now(), content:text, layer:"diary", importance:6, valence:0.4, arousal:0.5, createdAt:new Date().toISOString(), activations:1, resolved:false, pinned:false });
+    state.memories.push(memStamp({ id:Date.now(), content:text, layer:"diary", importance:6, valence:0.4, arousal:0.5, createdAt:new Date().toISOString(), activations:1, resolved:false, pinned:false }));
     persist("memories");
     diaryAdd(state.selectedDay, "char", text);
   } else {
@@ -26848,7 +26941,7 @@ function callSummaryToMemory(sum, dur){
       fromChat: true,
       fromCall: true,
     };
-    state.memories.unshift(item);
+    state.memories.unshift(memStamp(item));
     persist("memories");
     // 云端失败不影响本地那条（memPushToCloud 自己吞异常并写 __memPushErr）
     if(typeof memPushToCloud === "function") memPushToCloud([item]);
@@ -30151,6 +30244,33 @@ function renderProjectOverlays(){
   return `${preview||""}${htmlRun||""}`;
 }
 
+// 通讯录：a1(API) / a2(订阅) 两个联系人，点一下切会话。记忆按联系人分开（memAgentId）。
+function sbContactsCard(){
+  const cur = state.chatTarget || "a1";
+  const list = (state.agents || []).filter(a => a && (a.id === "a1" || a.id === "a2"));
+  if(list.length < 2) return "";
+  const rows = list.map(ag => {
+    const th = (state.chatThreads || {})[ag.id] || {};
+    const msgs = (ag.id === cur) ? (state.messages || []) : (th.messages || []);
+    let last = null;
+    for(let i = msgs.length - 1; i >= 0; i--){ const m = msgs[i]; if(m && (m.role === "user" || m.role === "assistant") && m.content){ last = m; break; } }
+    let prev = last ? String(last.content).replace(/<thinking>[\s\S]*?<\/thinking>/g, "").replace(/[⟪\[][^⟫\]]{0,80}[⟫\]]/g, "").replace(/\s+/g, " ").trim() : "";
+    if(prev.length > 22) prev = prev.slice(0, 22) + "…";
+    const tag = ag.channel === "cc" ? "订阅" : "API";
+    const ava = ag.avatar
+      ? `<img src="${escAttr(ag.avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"/>`
+      : esc(String(ag.name || "A").slice(0, 1));
+    const on = ag.id === cur;
+    return `<button type="button" class="sb-file-item" data-sb-contact="${escAttr(ag.id)}" style="${on ? "background:color-mix(in srgb, var(--accent) 14%, transparent);" : ""}">
+      <div class="sb-file-ico" style="overflow:hidden;border-radius:50%;${ag.avatar ? "" : "background:" + escAttr(ag.color || "var(--accent)") + ";color:#fff;font-weight:700"}">${ava}</div>
+      <div class="sb-file-meta">
+        <div class="sb-file-name">${esc(ag.name || ag.id)} <span style="font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid var(--border);color:var(--sub);font-weight:400">${tag}</span></div>
+        <div class="sb-file-sub">${esc(prev || "还没有消息")}</div>
+      </div>
+    </button>`;
+  }).join("");
+  return `<div class="sb-card"><div class="sb-card-label">联系人</div><div class="sb-file-list">${rows}</div></div>`;
+}
 function renderChatSidebar(){
   const open = !!state.chatSidebarOpen;
   try{ document.body.classList.toggle("kr-sb-open", open && (state.uiShell||"")==="korean"); }catch(e){}
@@ -30197,6 +30317,7 @@ function renderChatSidebar(){
         <button type="button" class="sb-close" id="chat-sidebar-close" aria-label="关闭">✕</button>
       </div>
       <div class="chat-sidebar-body">
+        ${sbContactsCard()}
         <div class="sb-card">
           <div class="sb-card-label">时间</div>
           <div class="sb-clock" id="sb-clock-time">${esc(clock.time)}</div>
@@ -30439,6 +30560,15 @@ function bindChatSidebar(){
   };
   const closeBtn = document.getElementById("chat-sidebar-close");
   if(closeBtn) closeBtn.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
+  document.querySelectorAll("[data-sb-contact]").forEach(b => b.onclick = ()=>{
+    const id = b.getAttribute("data-sb-contact");
+    // 回复还在路上时切走，回来的那条会落进另一个人的线程
+    if(state.chatLoading && id !== (state.chatTarget || "a1")){ showToast("等他这条回完再切"); return; }
+    if(id && id !== (state.chatTarget || "a1") && typeof loadChatTarget === "function") loadChatTarget(id);
+    state.chatSidebarOpen = false; state.chatProjectPreview = null;
+    try{ document.body.classList.remove("kr-sb-open"); }catch(e){}
+    render();
+  });
   const mask = document.getElementById("chat-sidebar-mask");
   if(mask) mask.onclick = ()=>{ state.chatSidebarOpen = false; state.chatProjectPreview = null; try{ document.body.classList.remove("kr-sb-open"); }catch(e){} render(); };
   const quotaBtn = document.getElementById("sb-quota-refresh");
@@ -34987,14 +35117,14 @@ function bindEvents(){
   if(memSave) memSave.onclick=()=>{
     const content=document.getElementById("mem-content").value.trim();
     if(!content) return;
-    state.memories.push({
+    state.memories.push(memStamp({
       id:Date.now(), content,
       layer:document.getElementById("mem-layer").value,
       importance:+document.getElementById("mem-imp").value,
       valence:+document.getElementById("mem-val").value,
       arousal:+document.getElementById("mem-aro").value,
       createdAt:new Date().toISOString(), activations:1, resolved:false, pinned:false,
-    });
+    }));
     state.newMem={content:"",layer:"diary",importance:5,valence:0,arousal:0.5};
     state.memAdding=false; persist("memories"); render();
   };
@@ -39010,6 +39140,34 @@ function chatTailBlock(){
   return bits.join("\n\n");
 }
 
+// 渡口：她从另一个窗口过来时，附上**这边上次开口之后**另一边聊的最后几句。
+// 同一个人两个渠道，看不到彼此上下文就接不上话；整段搬过来又贵又乱，所以只给摘几句。
+// 只挂尾部（不进缓存前缀），另一边这段时间没聊就是空串。
+const BRIDGE_MAX_MSGS = 8, BRIDGE_MAX_CHARS = 120, BRIDGE_MAX_AGE_MS = 24*3600*1000;
+function crossThreadBridgeBlock(target){
+  if(target !== "a1" && target !== "a2") return "";
+  const other = target === "a2" ? "a1" : "a2";
+  const th = state.chatThreads || {};
+  const own = (target === (state.chatTarget||"a1") && state.messages && state.messages.length)
+    ? state.messages : ((th[target] && th[target].messages) || []);
+  const theirs = (th[other] && th[other].messages) || [];
+  if(!theirs.length) return "";
+  const ts = m => { const t = Date.parse(m && m.time); return isNaN(t) ? 0 : t; };
+  // 这边他上一次开口的时间；从没开过口就从 24 小时前算起
+  let since = 0;
+  for(let i = own.length - 1; i >= 0; i--){ if(own[i] && own[i].role === "assistant"){ since = ts(own[i]); break; } }
+  since = Math.max(since, Date.now() - BRIDGE_MAX_AGE_MS);
+  const clean = s => String(s||"").replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
+    .replace(/⟪[^⟫]{0,200}⟫/g, "").replace(/\[(action|pay|buy|song)[^\]]{0,200}\]/gi, "")
+    .replace(/\s+/g, " ").trim();
+  const picked = theirs.filter(m => m && (m.role === "user" || m.role === "assistant") && !m.guard && ts(m) > since)
+    .slice(-BRIDGE_MAX_MSGS)
+    .map(m => { let c = clean(m.content); if(!c) return ""; if(c.length > BRIDGE_MAX_CHARS) c = c.slice(0, BRIDGE_MAX_CHARS) + "…"; return (m.role === "user" ? "她：" : "你：") + c; })
+    .filter(Boolean);
+  if(!picked.length) return "";
+  const where = other === "a2" ? "订阅" : "API";
+  return `【另一个窗口（${where}）里，你在这边上次说话之后和她聊过的】\n${picked.join("\n")}\n（那也是你自己说的话。自然接上，别复述，也别主动提「另一个窗口/渠道」这种说法。）`;
+}
 function buildMainChatRequest(ag, extraHint){
   const target = state.chatTarget || "a1";
   const threadMsgs = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || [];
@@ -39048,8 +39206,10 @@ function buildMainChatRequest(ag, extraHint){
     const memB  = retrievedMemoryBlock() || "";
     const toneRule = ((typeof toneRuleBlock === "function") ? toneRuleBlock(win.messages) : "") || "";
     const tickB = chatTailBlock() || "";
+    let bridgeB = "";
+    try{ bridgeB = crossThreadBridgeBlock(target) || ""; }catch(_){}
     dynLen = dynB.length; memLen = memB.length; ruleLen = toneRule.length; tickLen = tickB.length;
-    const tail = [dynB, memB, toneRule, tickB].filter(Boolean).join("\n\n");
+    const tail = [dynB, bridgeB, memB, toneRule, tickB].filter(Boolean).join("\n\n");
     tailLen = tail.length;
     if(tail && apiMsgs.length){
       const last = apiMsgs[apiMsgs.length - 1];
@@ -40114,6 +40274,9 @@ ${part}
     const why = state.__memErr ? ("：" + state.__memErr) : (String(result||"").trim() ? "：模型回的内容没法解析" : "：模型没有返回内容");
     throw new Error("没能提炼出记忆" + why);
   }
+  // 盖章：用调用方传进来的 agentId（正在整理的那条线程），没传才回落当前联系人
+  const who = (opts && opts.agentId) || memAgentId();
+  created.forEach(m=>memStamp(m, who));
   return created;
 }
 
@@ -40267,7 +40430,9 @@ async function memAutoIntegrate(opts){
     const digest = async (tid, skip, take, label, opts)=>{
       const transcript = collectChatTranscript({ threadIds:[tid], skip, limit: take, maxPerThread:0 });
       if(!transcript.trim()) return true;   // 空区间也算处理过，照常推进游标，免得反复重试
-      const created = await memDigestTranscript(transcript, label, take, opts);
+      // 正在整理哪条线程，就把提炼出来的记忆盖成哪个联系人的（a2→订阅，其余→API）
+      const created = await memDigestTranscript(transcript, label, take,
+        Object.assign({}, opts, { agentId: memAgentOfThread(tid) }));
       if(created && created.length){
         state.memories = [...created, ...state.memories];
         totalCreated += created.length;
