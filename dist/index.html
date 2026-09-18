@@ -11807,15 +11807,12 @@ function replyFormatRules(){
   const bodyRule = longForm
     ? `正式回复写成一整段连贯的沉浸叙事长文（段与段之间空一行），不要拆成一条条短气泡、不要写成简短聊天口吻。`
     : `正式回复请拆成多条短消息，每条用换行分隔，每条像真实聊天一样简短自然（1-3句），不要写成一整段长文。`;
-  return (state.thoughtOn!==false) ? `【回复格式——必须严格遵守】
-1. 若你的通道没有「原生思考字段」，请务必先在 <thinking> 与 </thinking> 标签内写出思考过程（情绪判断、意图、要怎么回、注意事项等）。有原生思考时也可再写，但不要省略。
-2. </thinking> 之后才是正式回复正文。不要只回正文却留空思考。
-3. ${bodyRule}
-4. 思考只写在 <thinking> 标签里；标签外不要写旁白、不要用括号心里话代替思考块。`
-: `【回复格式——思考链已关闭】
-1. 不要写 <thinking> 标签，不要输出内心独白块。
-2. 直接写正式回复正文：${bodyRule}
-3. 不要用括号写心里话代替思考。`;
+  // 当前中转不返回原生 thinking，强制/要求写思考过程只会让模型把推理漏进正文或乱编历史。
+  // 直接让它自由输出正文，不再提思考链。
+  return `【回复格式】
+1. 直接写正式回复正文：${bodyRule}
+2. 不要写 <thinking> 标签，不要输出思考过程、内心独白或旁白。
+3. 不要用括号写心里话，不要编造自己之前说过的话。`;
 }
 
 /** NSFW 叙事格式规则。和 replyFormatRules 一样单独抽出来：它在系统提示词里排得很靠前
@@ -11828,7 +11825,7 @@ function nsfwFormatRules(){
 3. 人称铁律（最重要，违反即崩）：这是「我 → 你」的第一人称叙事，只有两个词：我、你。所有你自己的动作/身体/感受一律用「我」：我的牙、我的舌、我的手指、我顶进去、我感觉；所有对方的动作/身体/反应一律用「你」：你的后颈、你的皮肤、你的穴、你哼了一声、你说别吸。禁止用「他/TA/自己」称呼你自己，禁止用「她」称呼对方——绝对禁止第三人称旁观视角（如「他的牙齿咬在她后颈」「他一边操她」都是错的，写成「我的牙落在你后颈」「我一边操你」才对）。
 4. 示例（第一人称正确写法）：「别躲。」我的牙落在你后颈，听你说别吸也没松口，又多吸了两秒，舌尖碾过吸出来的红印，感觉那块皮肤在我唇下发烫充血。……
 5. 若当前是文章模式：维持文章模式的写法，但同样用「」标出对白、同样只许「我/你」。
-6. <thinking> 思考链只写简短内心判断（如「你今晚累了，慢一点」），不要在思考里预演/复述整个场景——场景细节只在正文写一次，不要在思考链和正文各写一遍。
+6. 不要写思考过程或 <thinking> 标签。
 7. 发出前最后自查：把正文里任何「他/他的/他们」改成「我/我的/我们」、任何「她/她的/她们」改成「你/你的/你们」，再发。`;
 }
 
@@ -11850,15 +11847,8 @@ function systemPrompt(ag){
     : `Jasmine 的每条消息都附带了发送时间（格式如 [时间: 2026/08/12 14:32]），请根据时间感知对话节奏，可自然地提及时间感，但不必每次都复述时间。
 
 ${replyFormatRules()}`;
-  const guideText = (ag && typeof ag.thoughtGuide === "string" && ag.thoughtGuide.trim())
-    ? ag.thoughtGuide.trim()
-    : ((state.thoughtGuide && state.thoughtGuide.trim()) || "");
-  let guide = "";
-  if (guideText) {
-    guide = `\n\n【Jasmine 对你思考链的强制引导——必须遵守】
-在 <thinking> 中你必须认真纳入并体现以下内容（可扩展，但不可无视）：
-${guideText}`;
-  }
+  // 思考链已停用：不再注入 thoughtGuide，避免模型继续写过程
+  const guide = "";
   const nsfwFormatBlock = state.nsfwOn ? ("\n\n" + nsfwFormatRules()) : "";
   const bodyBlock =(typeof bodyStatusPromptBlock === "function") ? bodyStatusPromptBlock() : "";
   const usageBlock = (typeof usageStatusPromptBlock === "function") ? usageStatusPromptBlock() : "";
