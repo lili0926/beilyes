@@ -4775,11 +4775,15 @@ ${guideText}`;
   let musicBlock = "";
   {
     const canPick = typeof musicBase === "function" ? !!musicBase() : true;
+    // **只有真在播才注入**。她 2026-09-18：暂停了就别再塞音乐提示词 ——
+    // 原来只要 musicNow 存在就给、还写「·已暂停」，他就一直念叨哪首歌停了，很烦。
+    // 暂停 = 没在一起听，那这段本就不该在。
+    const playingNow = !!(state.musicNow && state.musicPlaying);
     let head = "";
-    if(state.musicNow){
+    if(playingNow){
       const n = state.musicNow;
       const ar = Array.isArray(n.artists)?n.artists.join("/"):(n.artists||"");
-      head = `\n\n【正在一起听】${n.name} - ${ar}（${n.source==="spotify"?"Spotify":"网易云"}）${state.musicPlaying?"·播放中":"·已暂停"}。你可以自然提到这首歌或分享听感，不要每句都提。`;
+      head = `\n\n【正在一起听】${n.name} - ${ar}（${n.source==="spotify"?"Spotify":"网易云"}）·播放中。你可以自然提到这首歌或分享听感，不要每句都提。`;
     }
     // 点歌：他自己搜歌发给她。
     // **原来的关键词里有「听」和「歌」** —— 这俩在中文里遍地都是（听说、好听、听话、
@@ -4788,7 +4792,8 @@ ${guideText}`;
     //   ① 真的正在一起听（state.musicNow）
     //   ② 她**明说**要点歌 —— 这些词不会误伤，不像「听」那样满地都是
     const askedMusic = __featHot("点歌","放首","来首","歌单","放首歌","推荐首歌","切歌","换首");
-    const pickBlock = (canPick && (state.musicNow || askedMusic))
+    // 暂停不再吊着点歌块（原来 state.musicNow 一直真）；在播 或 她明说要点歌 才给
+    const pickBlock = (canPick && (playingNow || askedMusic))
       ? `\n\n【点歌 —— 你可以直接把歌发给她】
 想让她听某首歌时，在正式回复里写一行暗号：
 ⟪点歌:歌名 - 歌手⟫
