@@ -5337,6 +5337,22 @@ function render(){
     const prevPage = document.querySelector("#app > .page") || document.querySelector(".home-panel");
     if(prevPage){ savedPageScroll = prevPage.scrollTop; savedPageSel = prevPage.className; }
   }
+  // 朋友圈（公共/私人同一个容器）：刷新/点赞/发布都会整页重绘 —— 记住滚动别弹回顶部
+  let savedMoScroll = null;
+  if(state.tab==="moments"){
+    const el = document.querySelector(".page.mo-page");
+    if(el) savedMoScroll = el.scrollTop;
+  }
+  // 通话字幕：新字幕往下长，一重绘就跳顶，她得重新翻下来看翻译。
+  // 记住位置 + 是否本来就贴着底：贴底就跟新句走（看最新那句），翻上去看旧的就停在原处。
+  let savedCapScroll = null, capNearBottom = false;
+  if(state.subPage==="phone"){
+    const cap = document.getElementById("call-caps");
+    if(cap){
+      savedCapScroll = cap.scrollTop;
+      capNearBottom = (cap.scrollHeight - cap.scrollTop - cap.clientHeight) < 60;
+    }
+  }
   applyThemeVars();
   const app=document.getElementById("app");
   let html="";
@@ -5450,6 +5466,15 @@ function render(){
   if(savedPageScroll != null){
     const page = document.querySelector("#app > .page") || document.querySelector(".home-panel");
     if(page) page.scrollTop = savedPageScroll;
+  }
+  if(savedMoScroll != null){
+    const el = document.querySelector(".page.mo-page");
+    if(el) el.scrollTop = savedMoScroll;
+  }
+  if(state.subPage==="phone"){
+    const cap = document.getElementById("call-caps");
+    // 本来贴着底 → 贴新底看最新；否则停回原处（翻旧字幕时不被新句拽走、更不跳顶）
+    if(cap) cap.scrollTop = capNearBottom ? cap.scrollHeight : (savedCapScroll || 0);
   }
   // 恢复 HTML 游戏 iframe
   if(state.subPage==="htmlgame" && state.htmlGameSrc){
