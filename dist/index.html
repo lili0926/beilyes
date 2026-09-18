@@ -10394,6 +10394,39 @@ function ensureAgents(){
   return state.agents;
 }
 ensureAgents();
+
+// ── 本地记忆去重（一次性迁移）───────────────────────────────────────────────
+// 她 2026-09-18 要删记忆库里的重复。云端（VPS 向量库）已单独删过；
+// 这里管手机本地那份 state.memories：正文一字不差的，只留最早写的一条。
+// 只按**完全相同**删，不碰「意思相近但措辞不同」的 —— 那种误删就把真记忆弄没了。
+function memDedupLocalOnce(){
+  try{
+    if(state.__memDedupV1) return;                 // 只跑一次
+    if(!Array.isArray(state.memories) || !state.memories.length){ state.__memDedupV1 = 1; return; }
+    const seen = new Set();
+    const before = state.memories.length;
+    const kept = [];
+    // 从旧到新扫（数组是 unshift 进来的，新在前），留最早那条：所以反着遍历
+    for(let i = state.memories.length - 1; i >= 0; i--){
+      const m = state.memories[i];
+      const key = String((m && (m.content||m.text)) || "").trim();
+      if(!key){ kept.push(m); continue; }          // 空的不参与去重，原样留
+      if(seen.has(key)) continue;                   // 见过 = 重复，丢
+      seen.add(key); kept.push(m);
+    }
+    kept.reverse();                                 // 恢复「新在前」的原顺序
+    const removed = before - kept.length;
+    if(removed > 0){
+      state.memories = kept;
+      try{ persist("memories"); }catch(e){}
+    }
+    state.__memDedupV1 = 1;
+    try{ persist("__memDedupV1"); }catch(e){}
+    if(removed > 0) try{ console.log("[mem] 本地去重：删了 " + removed + " 条重复，剩 " + kept.length); }catch(e){}
+  }catch(e){ try{ state.__memDedupV1 = 1; }catch(_){} }
+}
+memDedupLocalOnce();
+
 // 主动消息总开关：跟随持久化设置（默认关，VPS 设置页可开）。
 // 频率由六轴阈值 + 在场门控 + 冷静期控制，不再整体强制关闭。
 if(!state.proactiveConfig) state.proactiveConfig = {};
