@@ -34853,7 +34853,8 @@ function bindEvents(){
   const thoughtOnToggle=document.getElementById("thought-on-toggle");
   if(thoughtOnToggle) thoughtOnToggle.onchange=()=>{
     state.thoughtOn = !!thoughtOnToggle.checked;
-    try{ LS.set("thoughtOn", state.thoughtOn); }catch(e){}
+    // 走 persist：只写 LS 的话，冷启动 fsLoadAllKvIntoState 会用私有目录里的旧值盖回来
+    try{ persist("thoughtOn"); }catch(e){ try{ LS.set("thoughtOn", state.thoughtOn); }catch(_){} }
     render();
   };
   const toneOnToggle=document.getElementById("tone-on-toggle");
