@@ -10445,6 +10445,14 @@ function hydrateChatThreadsFromLS(){
     if(!threads[id]) threads[id] = { messages:[], pendingUser:[] };
   });
   state.chatThreads = threads;
+  // 启动即按 LIVE_MSG_CAP 清一遍，已有 8000+ 的也立刻瘦身
+  try{
+    if(typeof trimThreadMessagesLive === "function"){
+      Object.keys(state.chatThreads).forEach(id=>{
+        trimThreadMessagesLive(state.chatThreads[id]);
+      });
+    }
+  }catch(e){}
 }
 hydrateChatThreadsFromLS();
 // 启动时恢复当前线程
@@ -10452,6 +10460,7 @@ hydrateChatThreadsFromLS();
   const t = state.chatTarget || "a1";
   state.chatThreads = state.chatThreads || {};
   const th = state.chatThreads[t] || {messages:[],pendingUser:[]};
+  try{ if(typeof trimThreadMessagesLive==="function") trimThreadMessagesLive(th); }catch(e){}
   state.messages = th.messages || [];
   state.pendingUser = th.pendingUser || [];
 })();
@@ -10460,9 +10469,12 @@ function chatThreadsScore(threads){
   let count = 0, latest = 0;
   if(!threads || typeof threads !== "object") return { count:0, latest:0 };
   Object.keys(threads).forEach(id=>{
-    const msgs = (threads[id] && threads[id].messages) || [];
+    const th = threads[id] || {};
+    const msgs = th.messages || [];
     if(!Array.isArray(msgs)) return;
-    count += msgs.length;
+    // 优先用 totalMsgCount（清旧消息后数字不缩水）
+    const n = Math.max(Number(th.totalMsgCount)||0, msgs.length);
+    count += n;
     for(let i=0;i<msgs.length;i++){
       const m = msgs[i];
       const t = Date.parse((m && (m.time || m.createdAt)) || 0) || 0;
@@ -10533,7 +10545,28 @@ function openChatIdb(){
   return __chatIdbOpening.then(db=>{ __chatIdbOpening = null; return db; }).catch(e=>{ __chatIdbOpening = null; throw e; });
 }
 
-const CHAT_IDB_MAX_MSGS = 5000; // IDB 热缓存：每线程最多 5 千条，减轻卡顿；全量仍在私有目录
+const CHAT_IDB_MAX_MSGS = 5000; // IDB 热缓存：每线程最多 5 千条，减轻卡顿
+const LIVE_MSG_CAP = 5000; // 内存/主存也限 5 千：超过就丢掉更早的消息内容，只留最近；totalMsgCount 只增不减
+
+/** 单线程：超过 LIVE_MSG_CAP 就只留最近 N 条；totalMsgCount 记录历史总条数（数字不删） */
+function trimThreadMessagesLive(th){
+  if(!th || typeof th !== "object") return th;
+  const msgs = Array.isArray(th.messages) ? th.messages : [];
+  const prevTotal = Math.max(Number(th.totalMsgCount)||0, msgs.length);
+  if(msgs.length <= LIVE_MSG_CAP){
+    th.totalMsgCount = prevTotal;
+    return th;
+  }
+  const dropped = msgs.length - LIVE_MSG_CAP;
+  th.messages = msgs.slice(-LIVE_MSG_CAP);
+  th.totalMsgCount = prevTotal; // 只增不减，UI 数字用这个
+  // 压缩游标若还指向被丢掉的区间，清掉，避免后续窗口起点错乱
+  if(th.compressed && typeof th.compressed.upToIndex === "number"){
+    if(th.compressed.upToIndex <= dropped) th.compressed = null;
+    else th.compressed = Object.assign({}, th.compressed, { upToIndex: th.compressed.upToIndex - dropped });
+  }
+  return th;
+}
 
 function trimThreadsForIdb(threads){
   if(!threads || typeof threads !== "object") return threads;
@@ -10542,7 +10575,8 @@ function trimThreadsForIdb(threads){
     const th = threads[tid] || {};
     const msgs = Array.isArray(th.messages) ? th.messages : [];
     const trimmed = msgs.length > CHAT_IDB_MAX_MSGS ? msgs.slice(-CHAT_IDB_MAX_MSGS) : msgs;
-    out[tid] = Object.assign({}, th, { messages: trimmed, pendingUser: th.pendingUser || [] });
+    const total = Math.max(Number(th.totalMsgCount)||0, msgs.length);
+    out[tid] = Object.assign({}, th, { messages: trimmed, pendingUser: th.pendingUser || [], totalMsgCount: total });
   });
   return out;
 }
@@ -10963,6 +10997,16 @@ function saveActiveThread(){
       state.chatThreads[t] = cand;
     }
   }
+  // 超过 LIVE_MSG_CAP 清掉更早的消息内容，数字用 totalMsgCount 保留
+  try{
+    if(typeof trimThreadMessagesLive === "function"){
+      trimThreadMessagesLive(state.chatThreads[t]);
+      // 同步内存视图，否则界面仍挂着 8000+ 条
+      if(state.chatTarget === t || !state.chatTarget){
+        state.messages = state.chatThreads[t].messages || [];
+      }
+    }
+  }catch(e){}
   persist("chatThreads");
   // 分线程备份：小对象更易落盘，杀进程丢盘时用小分片兜底
   try{
