@@ -3785,7 +3785,8 @@ async function fsReadKv(key){
 
 async function fsLoadAllKvIntoState(){
   const Fs = __capFs();
-  if(!Fs || typeof PERSIST_MAP === "undefined") return { ok:false, n:0 };
+  // 没有文件系统（浏览器预览）也要放行热力落盘，否则那边永远不存
+  if(!Fs || typeof PERSIST_MAP === "undefined"){ window.__kvHydrated = true; return { ok:false, n:0 }; }
   let n = 0;
   try{
     const dir = dataFsDir();
@@ -3793,7 +3794,7 @@ async function fsLoadAllKvIntoState(){
     try{
       const list = await Fs.readdir({ path: dir, directory: __fsDirData() });
       files = (list && list.files) || [];
-    }catch(e){ return { ok:false, n:0 }; }
+    }catch(e){ window.__kvHydrated = true; return { ok:false, n:0 }; }
     for(const ent of files){
       const name = (typeof ent === "string") ? ent : (ent.name || "");
       if(!name || !name.endsWith(".json") || name === "_migrated.json") continue;
@@ -3806,6 +3807,13 @@ async function fsLoadAllKvIntoState(){
         if(sk && typeof state !== "undefined"){
           if(sk === "menuShareOn") state._menuShareOn = val;
           else if(sk === "menuOrderShareOn") state._menuOrderShareOn = val;
+          else if(sk === "chatHeatMap" && val && typeof val === "object"){
+            // 热力只增不减：和启动后内存里攒的取较大值，不整份替换
+            const cur = (state.chatHeatMap && typeof state.chatHeatMap === "object") ? state.chatHeatMap : {};
+            const merged = Object.assign({}, val);
+            Object.keys(cur).forEach(d=>{ merged[d] = Math.max(+merged[d]||0, +cur[d]||0); });
+            state.chatHeatMap = merged;
+          }
           else state[sk] = val;
           n++;
         }
@@ -7468,7 +7476,10 @@ function mergeChatHeatMap(){
       const old = state.chatHeatMap[k] || 0;
       if(n > old){ state.chatHeatMap[k] = n; changed = true; }
     });
-    if(changed && typeof persist === "function") persist("chatHeatMap");
+    // 私有目录那份还没读回来之前**不许落盘**：启动时 saveActiveThread 比 fsLoadAllKvIntoState 早得多，
+    // 那时只有最近 5000 条算出来的残缺热力，一写就把磁盘上完整的那份盖掉（大退一次掉一截的根因）。
+    // 读回来时 fsLoadAllKvIntoState 会和内存取较大值合并，然后再补写。
+    if(changed && window.__kvHydrated && typeof persist === "function") persist("chatHeatMap");
   }catch(e){}
 }
 
@@ -33564,6 +33575,8 @@ try{ restorePrNative(); }catch(e){} }catch(e){}
         if(typeof fsLoadAllKvIntoState === "function"){
           const kv = await fsLoadAllKvIntoState();
           try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次
+          window.__kvHydrated = true;       // 此后热力才允许落盘（见 mergeChatHeatMap）
+          try{ mergeChatHeatMap(); persist("chatHeatMap"); }catch(_){}
           if(kv && kv.ok) try{ render(); }catch(e){}
         }
       }catch(e){}
@@ -33638,6 +33651,8 @@ if(!window.__chatFlushBound){
       if(typeof fsLoadAllKvIntoState === "function"){
         const kv = await fsLoadAllKvIntoState();
           try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次
+          window.__kvHydrated = true;       // 此后热力才允许落盘（见 mergeChatHeatMap）
+          try{ mergeChatHeatMap(); persist("chatHeatMap"); }catch(_){}
         if(kv && kv.ok && typeof render === "function") render();
       }
     }catch(e){}
