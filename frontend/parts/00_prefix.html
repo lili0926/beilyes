@@ -4498,6 +4498,93 @@
 
     .mf-refresh-bar { display:flex; justify-content:center; padding:8px 12px 4px; }
     .mf-refresh-bar .mo-mini { font-size:12px; opacity:.75; }
+/* ═══ 回执单（Sigillo）· 卡片皮 ═══
+ * 结构和交互照 github.com/29-Cu/sigillo 的 web/review-card.css（CC BY 4.0，Cu & Lunedì）。
+ * 颜色全换成 App 主题变量，跟着界面壳/配色走；--card 在玻璃态下是半透明的，信笺要实底，用 --card-opaque。 */
+.sg-card{
+  --sigillo-bg: var(--card-opaque, var(--card));
+  --sigillo-fg: var(--text);
+  --sigillo-dim: var(--sub);
+  --sigillo-line: var(--border-opaque, var(--border));
+  --sigillo-accent: var(--accent);
+  --sigillo-field: var(--bg);
+  --sigillo-star-on: var(--accent);
+  --sigillo-star-off: var(--border-opaque, var(--border));
+  --sigillo-radius: 12px;
+  --sigillo-font: ui-serif, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+  --sigillo-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.05);
+  display:block; margin:8px 0; width:100%; max-width:320px;
+  font-family:var(--sigillo-font); color:var(--sigillo-fg); text-align:left;
+  -webkit-text-size-adjust:100%;
+}
+.page > .sg-card{ margin:10px auto; }
+.sg-card--dead .sg-card__dead{ padding:8px 2px; font-size:13px; color:var(--sigillo-dim); }
+.sg-face{
+  display:flex; flex-direction:column; align-items:center; gap:6px; width:100%;
+  padding:18px 16px 16px; font:inherit; text-align:center; color:inherit;
+  background:var(--sigillo-bg); border:1px solid var(--sigillo-line); border-radius:var(--sigillo-radius);
+  box-shadow:var(--sigillo-shadow); cursor:pointer; -webkit-tap-highlight-color:transparent;
+}
+.sg-face:disabled{ cursor:default; }
+.sg-face__title{ font-size:10px; letter-spacing:.34em; text-indent:.34em; color:var(--sigillo-accent); }
+.sg-face__note{ font-size:15px; font-weight:600; line-height:1.5; word-break:break-word; }
+.sg-face__hint{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--sigillo-dim); }
+.sg-face__sep{ font-style:normal; color:var(--sigillo-accent); }
+.sg-face--sealed{ border-style:double; border-width:3px; }
+.sg-sheet{ background:var(--sigillo-bg); border:1px solid var(--sigillo-line); border-radius:var(--sigillo-radius); box-shadow:var(--sigillo-shadow); overflow:hidden; }
+.sg-scroller{ max-height:520px; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.sg-inner{ padding:14px 14px 12px; }
+.sg-head{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+.sg-head__cap{ font-size:11px; font-weight:600; letter-spacing:.3em; text-indent:.3em; color:var(--sigillo-accent); }
+.sg-orn{ display:flex; align-items:center; gap:5px; width:100%; font-size:9px; color:var(--sigillo-accent); }
+.sg-orn__line{ flex:1; height:1px; background:var(--sigillo-line); }
+.sg-orn--bottom{ margin:12px 0 8px; }
+.sg-date{ margin-top:8px; font-size:11px; text-align:center; letter-spacing:.06em; color:var(--sigillo-dim); }
+.sg-ctx{ margin-top:6px; font-size:12px; line-height:1.6; text-align:center; color:var(--sigillo-dim); }
+.sg-dims{ margin-top:10px; }
+.sg-dim{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.sg-dim__k{ font-size:12px; letter-spacing:.1em; color:var(--sigillo-fg); }
+.sg-dim__cn{ display:block; margin-top:1px; font-style:normal; font-size:10px; letter-spacing:.14em; color:var(--sigillo-dim); }
+.sg-hr{ height:1px; margin:8px 2px 4px; background:var(--sigillo-line); }
+.sg-item{ padding:6px 0; }
+.sg-item + .sg-item{ border-top:1px dashed var(--sigillo-line); }
+.sg-q{ display:flex; gap:6px; align-items:baseline; }
+.sg-q__mark{ font-size:9px; color:var(--sigillo-accent); }
+.sg-q__text{ margin:0; font-size:13px; line-height:1.65; word-break:break-word; }
+.sg-item .sg-stars{ margin-left:-4px; }
+.sg-box{ margin-top:4px; }
+.sg-box__ta{
+  display:block; box-sizing:border-box; width:100%; padding:6px 8px; font:inherit; font-size:12px; line-height:1.6;
+  color:var(--sigillo-fg); background:var(--sigillo-field); border:1px solid var(--sigillo-line); border-radius:6px; resize:vertical;
+}
+.sg-roline{ margin:4px 0 2px 14px; padding-left:8px; font-size:12px; line-height:1.6; color:var(--sigillo-dim); border-left:1px solid var(--sigillo-accent); word-break:break-word; }
+.sg-suggest{ margin-top:10px; }
+.sg-stars{ display:flex; align-items:center; }
+.sg-starcell{ width:34px; height:40px; display:flex; align-items:center; justify-content:center; padding:0; background:none; border:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.sg-starcell:disabled{ cursor:default; }
+.sg-star{
+  position:relative; width:17px; height:16.2px; background:var(--sigillo-star-off);
+  clip-path:polygon(50% 0%, 61.8% 38.2%, 100% 38.2%, 69.1% 61.8%, 80.9% 100%, 50% 76.4%, 19.1% 100%, 30.9% 61.8%, 0% 38.2%, 38.2% 38.2%);
+  transition:background .2s ease; pointer-events:none;
+}
+.sg-star::after{ content:""; position:absolute; top:0; bottom:0; left:0; width:50%; background:var(--sigillo-star-on); opacity:0; transition:opacity .2s ease; }
+.sg-starcell.is-on .sg-star{ background:var(--sigillo-star-on); }
+.sg-starcell.is-half .sg-star::after{ opacity:1; }
+.sg-starcell--sm{ width:28px; height:32px; }
+.sg-starcell--sm .sg-star{ width:14px; height:13.3px; }
+.sg-footbar{ display:flex; flex-direction:column; align-items:center; gap:6px; padding-bottom:4px; }
+.sg-sealbtn, .sg-stamp{
+  display:inline-flex; align-items:center; gap:8px; padding:8px 18px; font:inherit; font-size:13px; letter-spacing:.08em;
+  color:var(--sigillo-accent); background:transparent; border:1px solid var(--sigillo-accent); border-radius:999px; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.sg-sealbtn:disabled{ opacity:.45; cursor:default; }
+.sg-wax{ width:7px; height:7px; border-radius:50%; background:currentColor; }
+.sg-stamp{ display:flex; margin:6px auto 0; }
+.sg-footnote{ font-size:11px; color:var(--sigillo-dim); }
+.sg-fadein{ animation:sg-fadein .22s ease both; }
+@keyframes sg-fadein{ from{ opacity:0; transform:translateY(2px); } to{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce){ .sg-fadein{ animation:none; } .sg-star, .sg-star::after{ transition:none; } }
 </style>
 </head>
 <body>

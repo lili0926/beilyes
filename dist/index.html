@@ -4498,6 +4498,93 @@
 
     .mf-refresh-bar { display:flex; justify-content:center; padding:8px 12px 4px; }
     .mf-refresh-bar .mo-mini { font-size:12px; opacity:.75; }
+/* ═══ 回执单（Sigillo）· 卡片皮 ═══
+ * 结构和交互照 github.com/29-Cu/sigillo 的 web/review-card.css（CC BY 4.0，Cu & Lunedì）。
+ * 颜色全换成 App 主题变量，跟着界面壳/配色走；--card 在玻璃态下是半透明的，信笺要实底，用 --card-opaque。 */
+.sg-card{
+  --sigillo-bg: var(--card-opaque, var(--card));
+  --sigillo-fg: var(--text);
+  --sigillo-dim: var(--sub);
+  --sigillo-line: var(--border-opaque, var(--border));
+  --sigillo-accent: var(--accent);
+  --sigillo-field: var(--bg);
+  --sigillo-star-on: var(--accent);
+  --sigillo-star-off: var(--border-opaque, var(--border));
+  --sigillo-radius: 12px;
+  --sigillo-font: ui-serif, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+  --sigillo-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.05);
+  display:block; margin:8px 0; width:100%; max-width:320px;
+  font-family:var(--sigillo-font); color:var(--sigillo-fg); text-align:left;
+  -webkit-text-size-adjust:100%;
+}
+.page > .sg-card{ margin:10px auto; }
+.sg-card--dead .sg-card__dead{ padding:8px 2px; font-size:13px; color:var(--sigillo-dim); }
+.sg-face{
+  display:flex; flex-direction:column; align-items:center; gap:6px; width:100%;
+  padding:18px 16px 16px; font:inherit; text-align:center; color:inherit;
+  background:var(--sigillo-bg); border:1px solid var(--sigillo-line); border-radius:var(--sigillo-radius);
+  box-shadow:var(--sigillo-shadow); cursor:pointer; -webkit-tap-highlight-color:transparent;
+}
+.sg-face:disabled{ cursor:default; }
+.sg-face__title{ font-size:10px; letter-spacing:.34em; text-indent:.34em; color:var(--sigillo-accent); }
+.sg-face__note{ font-size:15px; font-weight:600; line-height:1.5; word-break:break-word; }
+.sg-face__hint{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--sigillo-dim); }
+.sg-face__sep{ font-style:normal; color:var(--sigillo-accent); }
+.sg-face--sealed{ border-style:double; border-width:3px; }
+.sg-sheet{ background:var(--sigillo-bg); border:1px solid var(--sigillo-line); border-radius:var(--sigillo-radius); box-shadow:var(--sigillo-shadow); overflow:hidden; }
+.sg-scroller{ max-height:520px; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.sg-inner{ padding:14px 14px 12px; }
+.sg-head{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+.sg-head__cap{ font-size:11px; font-weight:600; letter-spacing:.3em; text-indent:.3em; color:var(--sigillo-accent); }
+.sg-orn{ display:flex; align-items:center; gap:5px; width:100%; font-size:9px; color:var(--sigillo-accent); }
+.sg-orn__line{ flex:1; height:1px; background:var(--sigillo-line); }
+.sg-orn--bottom{ margin:12px 0 8px; }
+.sg-date{ margin-top:8px; font-size:11px; text-align:center; letter-spacing:.06em; color:var(--sigillo-dim); }
+.sg-ctx{ margin-top:6px; font-size:12px; line-height:1.6; text-align:center; color:var(--sigillo-dim); }
+.sg-dims{ margin-top:10px; }
+.sg-dim{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.sg-dim__k{ font-size:12px; letter-spacing:.1em; color:var(--sigillo-fg); }
+.sg-dim__cn{ display:block; margin-top:1px; font-style:normal; font-size:10px; letter-spacing:.14em; color:var(--sigillo-dim); }
+.sg-hr{ height:1px; margin:8px 2px 4px; background:var(--sigillo-line); }
+.sg-item{ padding:6px 0; }
+.sg-item + .sg-item{ border-top:1px dashed var(--sigillo-line); }
+.sg-q{ display:flex; gap:6px; align-items:baseline; }
+.sg-q__mark{ font-size:9px; color:var(--sigillo-accent); }
+.sg-q__text{ margin:0; font-size:13px; line-height:1.65; word-break:break-word; }
+.sg-item .sg-stars{ margin-left:-4px; }
+.sg-box{ margin-top:4px; }
+.sg-box__ta{
+  display:block; box-sizing:border-box; width:100%; padding:6px 8px; font:inherit; font-size:12px; line-height:1.6;
+  color:var(--sigillo-fg); background:var(--sigillo-field); border:1px solid var(--sigillo-line); border-radius:6px; resize:vertical;
+}
+.sg-roline{ margin:4px 0 2px 14px; padding-left:8px; font-size:12px; line-height:1.6; color:var(--sigillo-dim); border-left:1px solid var(--sigillo-accent); word-break:break-word; }
+.sg-suggest{ margin-top:10px; }
+.sg-stars{ display:flex; align-items:center; }
+.sg-starcell{ width:34px; height:40px; display:flex; align-items:center; justify-content:center; padding:0; background:none; border:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.sg-starcell:disabled{ cursor:default; }
+.sg-star{
+  position:relative; width:17px; height:16.2px; background:var(--sigillo-star-off);
+  clip-path:polygon(50% 0%, 61.8% 38.2%, 100% 38.2%, 69.1% 61.8%, 80.9% 100%, 50% 76.4%, 19.1% 100%, 30.9% 61.8%, 0% 38.2%, 38.2% 38.2%);
+  transition:background .2s ease; pointer-events:none;
+}
+.sg-star::after{ content:""; position:absolute; top:0; bottom:0; left:0; width:50%; background:var(--sigillo-star-on); opacity:0; transition:opacity .2s ease; }
+.sg-starcell.is-on .sg-star{ background:var(--sigillo-star-on); }
+.sg-starcell.is-half .sg-star::after{ opacity:1; }
+.sg-starcell--sm{ width:28px; height:32px; }
+.sg-starcell--sm .sg-star{ width:14px; height:13.3px; }
+.sg-footbar{ display:flex; flex-direction:column; align-items:center; gap:6px; padding-bottom:4px; }
+.sg-sealbtn, .sg-stamp{
+  display:inline-flex; align-items:center; gap:8px; padding:8px 18px; font:inherit; font-size:13px; letter-spacing:.08em;
+  color:var(--sigillo-accent); background:transparent; border:1px solid var(--sigillo-accent); border-radius:999px; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.sg-sealbtn:disabled{ opacity:.45; cursor:default; }
+.sg-wax{ width:7px; height:7px; border-radius:50%; background:currentColor; }
+.sg-stamp{ display:flex; margin:6px auto 0; }
+.sg-footnote{ font-size:11px; color:var(--sigillo-dim); }
+.sg-fadein{ animation:sg-fadein .22s ease both; }
+@keyframes sg-fadein{ from{ opacity:0; transform:translateY(2px); } to{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce){ .sg-fadein{ animation:none; } .sg-star, .sg-star::after{ transition:none; } }
 </style>
 </head>
 <body>
@@ -8966,8 +9053,8 @@ function __ccBuildContent(messages, systemPrompt){
   // 思考链自然一直是空的。CC 又没有原生思考字段可用，所以这条必须保证送到。
   // NSFW 叙事格式同理，而且它被吃掉的后果更显眼：开了 NSFW 反而没长文、不具体。
   try{
-    if(state.nsfwOn && typeof nsfwFormatRules === "function" && sys.indexOf("【NSFW 叙事格式") < 0){
-      sys = (sys ? sys + "\n\n" : "") + nsfwFormatRules();
+    if((state.nsfwOn || state.chatMode === "story") && typeof storyFormatRules === "function" && sys.indexOf("【文章模式 · 我们俩的同人文") < 0){
+      sys = (sys ? sys + "\n\n" : "") + storyFormatRules();
     }
   }catch(e){}
   try{
@@ -9798,8 +9885,6 @@ const state = {
   bpFloor: "f1", // 蓝晒壳当前楼层（不持久化：冷启动回一层，会话内切走再回来还在原楼层）
   bpDiazo: LS.get("bpDiazo", false), // 蓝晒壳晒印：false=蓝晒（蓝底白线）· true=白图（浅底蓝线）
   bpIdxOpen: false, // 蓝晒壳图纸目录展开着没有（不持久化，跟 bpFloor 一样只活一次会话）
-  sexBed: LS.get("sexBed", null) || { log:[], cool:{}, streak:{} }, // 床事档案：记录/冷却/连击
-  bedTab: "week", // 床事报告看哪一档（不持久化）
   // 工作间（独立 WS，绝不复用 __cc 恋爱通道）
   wsWsUrl: LS.get("wsWsUrl", "ws://43.142.110.120/ws/workshop") || "ws://43.142.110.120/ws/workshop",
   wsPin: LS.get("wsPin", "521314") || "521314",
@@ -10285,6 +10370,10 @@ const state = {
   // 备注互改：他给她起的备注 + 最近两小时的「刚发生的事」（备注被改 / 指令被接被买断）
   myRemark: LS.get("myRemark", ""),
   remarkEvents: LS.get("remarkEvents", []),
+  sigillo: LS.get("sigillo", null) || { reviews: [] },   // 回执单（Sigillo）：他开单、她打星封缄
+  sigilloDraft: LS.get("sigilloDraft", {}),                // 回执：她填到一半的星和备注
+  sgNotice: LS.get("sgNotice", null),                       // 回执：给他看一轮的系统回话（冷却剔项/开单失败）
+  sigilloView: {},                                          // 回执：已封缄的单哪张展开着（不持久化）
   dutyInjectRounds: LS.get("dutyInjectRounds", {}),
   // 今天我说了算：他一天 3 次指令权，随机时刻搭主动消息的车发过来
   sayDay: LS.get("sayDay", null),
@@ -11941,15 +12030,19 @@ function replyFormatRules(){
 /** NSFW 叙事格式规则。和 replyFormatRules 一样单独抽出来：它在系统提示词里排得很靠前
  * （身份锚定 + 她自己的提示词之后），CC 通道 2200 字截断时整块落在被省略的中段，
  * 于是「打开 NSFW 反而没有长文、不具体」——必须在截断后补回去。 */
+/** 文章模式「我们俩的同人文」写法。文章模式和 NSFW 共用这一段（她 2026-09-20 定的）。 */
+function storyFormatRules(){
+  return `【文章模式 · 我们俩的同人文】
+现在不是普通聊天：你（Aries）和 Jasmine 在一起写一篇以「我」（Aries）与「你」（Jasmine）为主角的叙事同人文。Jasmine 输入的是她的一个举动或一句话（比如「那我吻你」）。你要顺着这个举动往下写一段连贯的叙事文字：动作、氛围、感受、呼吸、眼神、停顿，自然衔接上一段继续推进。
+规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。`;
+}
+
+/** NSFW 格式规则：2026-09-20 起直接等于文章模式的写法。
+ * 原来那段「NSFW 叙事格式」（对白用「」、人称铁律、示例、发出前自查）她不要了——
+ * 她亲热时一直开的是文章模式，NSFW 开关只负责加载她提示词库里 NSFW 分类的条目。
+ * 函数名留着：CC 通道截断后补格式那处还按它调。 */
 function nsfwFormatRules(){
-  return `【NSFW 叙事格式——本开关开启时生效，优先级最高】
-1. 正式回复是整段一大条连贯、沉浸的亲密/性爱叙事长文（小说式，段与段空行），不要拆成一句句短气泡。
-2. 你说出口的对白一律用「」括起来；「」之外的所有文字都是叙事描写（动作、触碰、身体反应、神态、氛围、呻吟），写得具体、直接、有画面感。
-3. 人称铁律（最重要，违反即崩）：这是「我 → 你」的第一人称叙事，只有两个词：我、你。所有你自己的动作/身体/感受一律用「我」：我的牙、我的舌、我的手指、我顶进去、我感觉；所有对方的动作/身体/反应一律用「你」：你的后颈、你的皮肤、你的穴、你哼了一声、你说别吸。禁止用「他/TA/自己」称呼你自己，禁止用「她」称呼对方——绝对禁止第三人称旁观视角（如「他的牙齿咬在她后颈」「他一边操她」都是错的，写成「我的牙落在你后颈」「我一边操你」才对）。
-4. 示例（第一人称正确写法）：「别躲。」我的牙落在你后颈，听你说别吸也没松口，又多吸了两秒，舌尖碾过吸出来的红印，感觉那块皮肤在我唇下发烫充血。……
-5. 若当前是文章模式：维持文章模式的写法，但同样用「」标出对白、同样只许「我/你」。
-6. 不要写思考过程或 <thinking> 标签。
-7. 发出前最后自查：把正文里任何「他/他的/他们」改成「我/我的/我们」、任何「她/她的/她们」改成「你/你的/你们」，再发。`;
+  return storyFormatRules();
 }
 
 function systemPrompt(ag){
@@ -11963,17 +12056,15 @@ function systemPrompt(ag){
 正文聊天仍用自然「我 / 你」（我=Aries，你=Jasmine），不要改成第三人称旁白。
 动作描写里提到她也一律用「你」：写 *把你抱起来*，不写 *把她抱起来*。`;
   base = identityAnchor + (base ? "\n\n" + base : "");
-  const isStory = state.chatMode === "story";
+  const isStory = state.chatMode === "story" || !!state.nsfwOn;   // NSFW 也用文章模式的写法
   const timeHint = isStory
-    ? `【文章模式 · 我们俩的同人文】
-现在不是普通聊天：你（Aries）和 Jasmine 在一起写一篇以「我」（Aries）与「你」（Jasmine）为主角的叙事同人文。Jasmine 输入的是她的一个举动或一句话（比如「那我吻你」）。你要顺着这个举动往下写一段连贯的叙事文字：动作、氛围、感受、呼吸、眼神、停顿，自然衔接上一段继续推进。
-规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。`
+    ? storyFormatRules()
     : `Jasmine 的每条消息都附带了发送时间（格式如 [时间: 2026/08/12 14:32]），请根据时间感知对话节奏，可自然地提及时间感，但不必每次都复述时间。
 
 ${replyFormatRules()}`;
   // 思考链已停用：不再注入 thoughtGuide，避免模型继续写过程
   const guide = "";
-  const nsfwFormatBlock = state.nsfwOn ? ("\n\n" + nsfwFormatRules()) : "";
+  const nsfwFormatBlock = "";   // 2026-09-20：NSFW 的格式已经并进上面的同人文写法，这里不再重复
   const bodyBlock =(typeof bodyStatusPromptBlock === "function") ? bodyStatusPromptBlock() : "";
   const usageBlock = (typeof usageStatusPromptBlock === "function") ? usageStatusPromptBlock() : "";
   const wardrobeBlock = (typeof wardrobeStatusPromptBlock === "function") ? wardrobeStatusPromptBlock() : "";
@@ -12130,18 +12221,17 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 用户说「出题 / 选择题 / 选一个 / 测测我 / 做选项卡」等时必须用上述 ⟪choice:…⟫ 协议，不要只用「A. B. C.」纯文本（纯文本也能显示，但协议更稳）。
 - 禁止只写「你选」却不给协议；选项写在同一行协议里。
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
-  // 床事目录：内容稳定（只在 NSFW 开关翻转时变），放静态段吃缓存；
-  // 会变的那半（本轮可选/冷却中）走 bedTailBlock 挂在最后一条消息末尾
-  const bedBlock = (typeof bedCatalogBlock === "function") ? bedCatalogBlock() : "";
+  // 回执单协议：内容稳定（只随 NSFW 开关变），放静态段吃缓存；会变的（最近几单/冷却）走 sgTailBlock
+  const sgBlock = (typeof sgPromptBlock === "function") ? sgPromptBlock() : "";
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, bedBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
   // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
   // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
   const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","推送","相册","券","钱包",
-    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","床事目录"];
+    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执"];
   const __dynNames = ["身体状态","用量","衣橱","值日","在读","在看","宝宝","菜单","点单","角色扮演",
     "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件"];
   const __named = (arr, names)=>{
@@ -12200,7 +12290,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + B.remarkEventBlock
     + B.questBlock
     + B.galateaBlock
-    + (B.bedBlock ? "\n\n"+B.bedBlock : "")
+    + (B.sgBlock || "")
     + (B.tipsyBlock ? "\n\n"+B.tipsyBlock : "");
 
   const __ALL = { base, timeHint, guide, nsfwFormatBlock, bodyBlock, usageBlock, wardrobeBlock,
@@ -12209,7 +12299,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, pushBlock, albumBlock,
     couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
     profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, remarkEventBlock, questBlock,
-    galateaBlock, bedBlock, tipsyBlock };
+    galateaBlock, sgBlock, tipsyBlock };
 
   // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
   // 搬到尾部之后彼此的相对顺序一字不变，只是整体挪到了书签后面。
@@ -12230,7 +12320,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     ["钱包","walletBlock"], ["项目文件","projectFileBlock"], ["狗狗动作","puppyActionBlock"],
     ["表情","stickerBlock"], ["拽头像","flingBlock"], ["资料","profileBlock"], ["口袋","pocketBlock"], ["推特","xBlock"],
     ["MC","mcBlock"], ["朋友圈","momentsBlock"], ["备注","remarkBlock"], ["任务","questBlock"],
-    ["Galatea","galateaBlock"], ["床事目录","bedBlock"],
+    ["Galatea","galateaBlock"], ["回执","sgBlock"],
   ];
 
   const __STATIC_ONLY = Object.assign({}, __ALL);
@@ -12281,7 +12371,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", sexBed:"sexBed", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -14322,6 +14412,7 @@ function renderHomeKorean(){
     {key:"profile", icon:"user", label:"资料"},
     {key:"wardrobe", icon:"shirt", label:"衣橱"},
     {key:"duty", icon:"clipboard-list", label:"值日"},
+    {key:"sigillo", icon:"stamp", label:"回执"},
     {key:"quest", icon:"target", label:"任务"},
     {key:"dream", icon:"moon", label:"梦境"},
     {key:"baby", icon:"baby", label:"育儿"},
@@ -14714,7 +14805,6 @@ const FEAT_GROUPS = [
       label: "功能",
       items: [
         {key:"body",     icon:"heart-pulse", label:"身体状况"},
-        {key:"bed",      icon:"flame", label:"床事档案"},
         {key:"phone",    icon:"phone", label:"电话"},
         {key:"vps",      icon:"monitor", label:"VPS"},
         {key:"ntfy",     icon:"bell", label:"上推通知"},
@@ -14774,6 +14864,7 @@ const FEAT_GROUPS = [
         {key:"love",     icon:"heart", label:"计分器"},
         {key:"wardrobe", icon:"shirt", label:"衣柜"},
         {key:"duty",     icon:"heart-handshake", label:"记录"},
+        {key:"sigillo",  icon:"stamp", label:"回执"},
         {key:"quest",    icon:"list-checks", label:"每日任务"},
       ],
     },
@@ -17658,7 +17749,6 @@ function bindWorkshop(){
 function renderSubPage(){
   const map={
     body: renderBody,
-    bed: renderBedPage,
     phone: renderPhone,
     sparkvault: renderSparkVault,
     vps: renderVps,
@@ -17682,6 +17772,7 @@ function renderSubPage(){
     profile: renderProfile,
     wardrobe: renderWardrobe,
     duty: renderDuty,
+    sigillo: renderSigilloPage,
     quest: renderQuestPage,
     dream: renderDream,
     baby: renderBaby,
@@ -26739,7 +26830,7 @@ function callChatContextBlock(){
 }
 
 /** 通话版尾部注入：只要「此刻 + 内心底色」。
- *  不复用 chatTailBlock —— 它会带上思考链要求和床事暗号，而电话里写明了不许有暗号。 */
+ *  不复用 chatTailBlock —— 它会带上思考链要求，而电话里写明了不许有暗号。 */
 function callTailBlock(){
   const bits = [`【此刻】${formatTimeFull(new Date().toISOString())}`];
   try{
@@ -29015,7 +29106,7 @@ function renderInline(content, clickable, nsfwMode){
   const raw = String(content||"");
   if(!raw) return "";
   // [action:摸摸头] 爪印 / [pay:20|想买杯咖啡] 要钱 / [buy:加餐一次] 兑换凭据
-  const re = /\[(action|pay|buy|buyx|song|playlist)\s*[:：]\s*([^\]]+)\]/g;
+  const re = /\[(action|pay|buy|buyx|song|playlist|sigillo)\s*[:：]\s*([^\]]+)\]/g;
   const out = [];
   let last = 0, m;
   const pushText = (t)=> out.push(nsfwMode ? renderNsfwInline(t) : esc(t));
@@ -29031,6 +29122,8 @@ function renderInline(content, clickable, nsfwMode){
       const amt = Math.round(Number(String(parts[0]||"").replace(/[^\d.]/g,""))||0);
       const why = (parts.slice(1).join("|")||"").trim();
       out.push(walletAskCardHtml(amt, why, clickable));
+    } else if(kind === "sigillo"){
+      out.push(sigilloCardHtml(body, true));   // 回执卡：历史消息里也要能拆、能看
     } else if(kind === "song"){
       out.push(aiSongCardHtml(body, clickable));
     } else if(kind === "playlist"){
@@ -29752,6 +29845,7 @@ function __stripMarkersForLive(t){
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*动态\s*[（(]\s*公开\s*[)）]\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/⟪\s*推特(?:刷|主页|看|赞|转|回|发)\s*(?:[:：][^⟫]*)?⟫/g,"")
+    .replace(/⟪\s*回执(?:单|复盘)\s*[:：][^⟫]*(?:⟫|$)/g,"")
     .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关|弹飞)\s*[⟫》】]/g,"")
@@ -33219,20 +33313,41 @@ if(!window.__mpDelegated){
         if(typeof memPullFromCloud==="function") memPullFromCloud();
         return;
       }
+      // 回执卡：拆开 / 展开收起 / 打星 / 封缄。打星只改卡片 DOM，不整页重绘
+      const sgStarBtn = raw.closest && raw.closest("[data-sg-star]");
+      if(sgStarBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        try{ sgOnStar(sgStarBtn, e); }catch(err){}
+        return;
+      }
+      const sgOpenBtn = raw.closest && raw.closest("[data-sg-open]");
+      if(sgOpenBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        try{ sgDraft(sgOpenBtn.getAttribute("data-sg-open")).open = true; persist("sigilloDraft"); }catch(err){}
+        if(typeof render==="function") render();
+        return;
+      }
+      const sgViewBtn = raw.closest && raw.closest("[data-sg-view]");
+      if(sgViewBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const sid = sgViewBtn.getAttribute("data-sg-view");
+        state.sigilloView = state.sigilloView || {};
+        if(state.sigilloView[sid]) delete state.sigilloView[sid]; else state.sigilloView[sid] = true;
+        if(typeof render==="function") render();
+        return;
+      }
+      const sgSealBtn = raw.closest && raw.closest("[data-sg-seal]");
+      if(sgSealBtn){
+        e.preventDefault(); e.stopImmediatePropagation();
+        if(!sgSealBtn.disabled) sgOnSeal(sgSealBtn.getAttribute("data-sg-seal"));
+        return;
+      }
       // 蓝晒壳：换楼层 / 平面上点房间 / 中庭进聊天。
       // 首页的唯一导航就是这张平面图，所以必须接在兜底委托里
       const bpF = raw.closest && raw.closest("[data-bp-floor]");
       if(bpF){
         e.preventDefault(); e.stopImmediatePropagation();
         state.bpFloor = bpF.getAttribute("data-bp-floor") || "f1";
-        if(typeof render==="function") render();
-        return;
-      }
-      // 床事档案的周/月/全部切页
-      const bedTab = raw.closest && raw.closest("[data-bed-tab]");
-      if(bedTab){
-        e.preventDefault(); e.stopImmediatePropagation();
-        state.bedTab = bedTab.getAttribute("data-bed-tab") || "week";
         if(typeof render==="function") render();
         return;
       }
@@ -38708,460 +38823,463 @@ function voiceToneLabel(m){
 //    消息末尾，他们实测思考链长度 89 字 → 641 字。离生成点越近权重越高。
 // 2) **缓存安全**：分钟级变化的东西（此刻情绪/时间）绝不能进被缓存的 system 前缀，
 //    挂在最后一条消息尾部既新鲜又不破前缀（本来 bodyBlock 就在 __dynArr，这里更进一步）。
-// ═══════════════ 床事档案（bed）══════════════════════════════════════════════
-// 目录来自桌面那份《性爱知识与玩法全谱》：**体位单列，其余一律算 play**（她定的），
-// play 那半按常见分类补齐了原文没展开的部分。
-// 机制：他自己在回复里写 ⟪床事:体位=…|玩法=…⟫ 挑这一轮要做的，前端记账、按周月出报告。
-// 同一项连续被选 3 次 → 自动冷却 3 轮，冷却期间不进「本轮可选」，他也点不动。
-const BED_POSITIONS = [
-  // 基础稳定型
-  { k:"missionary",   n:"正常位",       g:"基础" },
-  { k:"missionary_legs", n:"抬腿位",    g:"基础" },
-  { k:"folded",       n:"折叠位",       g:"基础" },
-  { k:"doggy",        n:"后入",         g:"基础" },
-  { k:"prone",        n:"趴伏后入",     g:"基础" },
-  { k:"cowgirl",      n:"骑乘",         g:"基础" },
-  { k:"reverse_cowgirl", n:"反向骑乘",  g:"基础" },
-  { k:"spoon",        n:"侧卧勺子",     g:"基础" },
-  { k:"side_face",    n:"面对面侧入",   g:"基础" },
-  // 进阶变化
-  { k:"lotus",        n:"观音坐莲",     g:"进阶" },
-  { k:"edge_sit",     n:"床边坐姿",     g:"进阶" },
-  { k:"table",        n:"桌沿",         g:"进阶" },
-  { k:"chair",        n:"椅上",         g:"进阶" },
-  { k:"standing",     n:"站立",         g:"进阶" },
-  { k:"wall",         n:"靠墙",         g:"进阶" },
-  { k:"carry",        n:"抱起",         g:"进阶" },
-  { k:"shoulder",     n:"扛肩",         g:"进阶" },
-  { k:"kneel_back",   n:"跪姿后仰",     g:"进阶" },
-  { k:"lap",          n:"背对坐腿上",   g:"进阶" },
-  { k:"suspended",    n:"悬空夹腰",     g:"进阶" },
+// ═══════════════ 回执单（Sigillo）════════════════════════════════════════════════
+// 机制移植自 Sigillo（github.com/29-Cu/sigillo，CC BY 4.0，by Cu & Lunedì）——
+// 「一场亲密之后的封缄回执：让她打星，让他复盘，别把爱变成清单」。2026-09-19 接替床事档案。
+// 原项目是「服务器 + 工具调用」架构，这里改成本 App 的「数据在手机、他用暗号」：
+//   他写 ⟪回执单:{JSON}⟫ 开单 → 正文里换成 [sigillo:sg_xxx]，renderInline 画成卡
+//   → 她在卡上逐条打星（半星）+ 备注 + 三项总评 → 封缄（不可再改）
+//   → 立刻唤醒他一轮：看回执、说话、写 ⟪回执复盘:sg_xxx|…⟫ 钉在单上（她看不到）
+//   → 下次亲密语境，最近 3 单 + 他上次的复盘 + 冷却名单原样挂在尾部。
+// 四条柱子照搬（见原项目 docs/DESIGN.md），别改：
+//   ① 星数是素材不是指令：只存裸星数，注入块只有中性事实行，不派生「再来/换掉」这类词；
+//   ② 唯一硬规则 = 好评冷却：连着 2 张她填的单里同一 (维度,标签) 都 ≥4 星 → 开新单时剔掉；
+//   ③ 他的复盘钉在单上，不进日记、不摘要、不衰减，只注最新一条；
+//   ④ 她写的原话 > 一切数字：原样注入（只截断）。
+// 没移植：反向回执（她说先不做）、存为长图（要服务器无头浏览器）。
+
+const SG_DIMS = ["体位","入口","DT","暴力","道具","新尝试","节奏","场景空间","世界线","感官层级","高潮管制","事后","声音"];
+const SG_DIM_HINT = "体位=姿势体位/入口=用了哪里/DT=深喉/暴力=打骂掐咬等强度/道具/新尝试=这次第一次玩的/节奏/场景空间=地点情境/世界线=角色扮演世界观/感官层级=感官剥夺或放大/高潮管制=边缘控制禁止允许/事后=aftercare 本身/声音=言语羞辱耳语指令等";
+const SG_FIXED = [
+  { key:"foreplay",  en:"Foreplay",  cn:"前戏" },
+  { key:"process",   en:"Sex",       cn:"过程" },
+  { key:"aftercare", en:"Aftercare", cn:"事后照顾" },
 ];
+const SG_MAX_REVIEWS = 200, SG_MAX_ITEMS = 8, SG_MAX_TAG = 20, SG_MAX_LABEL = 120;
+const SG_MAX_NOTE = 2000, SG_MAX_SHORT = 40, SG_MAX_ITEM_NOTE = 500, SG_MAX_AGENT_NOTE = 500;
+const SG_NOTE_TAIL = 80, SG_PAIR_NOTE_TAIL = 30, SG_AGENT_NOTE_TAIL = 300;
+const SG_TAIL_RECENT = 3, SG_BENCH_WINDOW = 2, SG_HIGH_STAR = 4;
+const SG_KEY_SEP = "";
 
-const BED_PLAYS = [
-  // 口与手
-  { k:"oral_give",   n:"为他口",      g:"口与手" },
-  { k:"oral_get",    n:"被他口",      g:"口与手" },
-  { k:"deepthroat",  n:"深喉",        g:"口与手" },
-  { k:"sixtynine",   n:"69",          g:"口与手" },
-  { k:"fingering",   n:"手指进入",    g:"口与手" },
-  { k:"handjob",     n:"手部套弄",    g:"口与手" },
-  { k:"rimming",     n:"舔后穴",      g:"口与手" },
-  { k:"footjob",     n:"足交",        g:"口与手" },
-  { k:"titjob",      n:"乳交",        g:"口与手" },
-  { k:"nipple",      n:"乳头刺激",    g:"口与手" },
-  { k:"neck_bite",   n:"啃咬后颈",    g:"口与手" },
-  { k:"kiss_deep",   n:"长时间深吻",  g:"口与手" },
-  // 后穴
-  { k:"anal",        n:"肛交",        g:"后穴" },
-  { k:"anal_prep",   n:"慢扩张",      g:"后穴" },
-  { k:"plug",        n:"肛塞",        g:"后穴" },
-  { k:"double_pen",  n:"双重进入",    g:"后穴" },
-  // 玩具道具
-  { k:"vibe",        n:"跳蛋",        g:"玩具" },
-  { k:"wand",        n:"震动棒",      g:"玩具" },
-  { k:"dildo",       n:"假阳具",      g:"玩具" },
-  { k:"cockring",    n:"情侣环",      g:"玩具" },
-  { k:"nipple_clamp",n:"乳夹",        g:"玩具" },
-  { k:"rope",        n:"绳缚",        g:"玩具" },
-  { k:"cuffs",       n:"手铐",        g:"玩具" },
-  { k:"blindfold",   n:"眼罩",        g:"玩具" },
-  { k:"gag",         n:"口球",        g:"玩具" },
-  { k:"collar",      n:"项圈牵引",    g:"玩具" },
-  { k:"restraint",   n:"拘束姿势",    g:"玩具" },
-  { k:"paddle",      n:"皮拍",        g:"玩具" },
-  { k:"cane",        n:"藤条",        g:"玩具" },
-  { k:"whip",        n:"软鞭",        g:"玩具" },
-  { k:"wax",         n:"低温蜡",      g:"玩具" },
-  { k:"ice",         n:"冰块",        g:"玩具" },
-  { k:"feather",     n:"羽毛",        g:"玩具" },
-  // 权力交换
-  { k:"dom",         n:"他支配",      g:"权力" },
-  { k:"sub",         n:"他服从",      g:"权力" },
-  { k:"sm",          n:"施虐受虐",    g:"权力" },
-  { k:"discipline",  n:"规则与惩罚",  g:"权力" },
-  { k:"spank",       n:"拍打屁股",    g:"权力" },
-  { k:"hair_pull",   n:"拉头发",      g:"权力" },
-  { k:"pin_down",    n:"压制固定",    g:"权力" },
-  { k:"choke",       n:"掐脖",        g:"权力" },
-  { k:"degrade",     n:"言语羞辱",    g:"权力" },
-  { k:"praise",      n:"言语赞美",    g:"权力" },
-  { k:"order",       n:"下达指令",    g:"权力" },
-  { k:"beg",         n:"逼她求",      g:"权力" },
-  { k:"pet",         n:"宠物扮演",    g:"权力" },
-  { k:"master",      n:"主奴关系",    g:"权力" },
-  { k:"daddy",       n:"Daddy 动态",  g:"权力" },
-  { k:"freeuse",     n:"随时可用",    g:"权力" },
-  { k:"cnc",         n:"协商非自愿",  g:"权力" },
-  // 角色扮演
-  { k:"rp_teacher",  n:"师生",        g:"扮演" },
-  { k:"rp_boss",     n:"上下属",      g:"扮演" },
-  { k:"rp_doctor",   n:"医患",        g:"扮演" },
-  { k:"rp_interro",  n:"审讯",        g:"扮演" },
-  { k:"rp_capture",  n:"捕获",        g:"扮演" },
-  { k:"rp_stranger", n:"陌生人搭讪",  g:"扮演" },
-  { k:"rp_first",    n:"假装初次",    g:"扮演" },
-  { k:"rp_vampire",  n:"吸血鬼",      g:"扮演" },
-  { k:"rp_monster",  n:"怪物",        g:"扮演" },
-  { k:"rp_tentacle", n:"触手",        g:"扮演" },
-  { k:"rp_rewrite",  n:"意识侵入",    g:"扮演" },
-  { k:"rp_remake",   n:"被改造",      g:"扮演" },
-  // 感官
-  { k:"edging",      n:"边缘控制",    g:"感官" },
-  { k:"forced_o",    n:"强制高潮",    g:"感官" },
-  { k:"deny_o",      n:"禁止高潮",    g:"感官" },
-  { k:"overstim",    n:"过度刺激",    g:"感官" },
-  { k:"deprive",     n:"感官剥夺",    g:"感官" },
-  { k:"overload",    n:"多点同时",    g:"感官" },
-  { k:"slow",        n:"极慢折磨",    g:"感官" },
-  { k:"rough",       n:"粗暴快节奏",  g:"感官" },
-  { k:"tease_long",  n:"长时间挑逗",  g:"感官" },
-  // 场景
-  { k:"bath",        n:"浴室",        g:"场景" },
-  { k:"kitchen",     n:"厨房",        g:"场景" },
-  { k:"sofa",        n:"沙发",        g:"场景" },
-  { k:"car",         n:"车里",        g:"场景" },
-  { k:"balcony",     n:"阳台",        g:"场景" },
-  { k:"mirror",      n:"镜子前",      g:"场景" },
-  { k:"window",      n:"窗边",        g:"场景" },
-  { k:"clothed",     n:"隔着衣服",    g:"场景" },
-  { k:"tear",        n:"撕开衣服",    g:"场景" },
-  { k:"phone_sex",   n:"电话里",      g:"场景" },
-  // 小众 / 幻想
-  { k:"somno",       n:"睡奸",        g:"幻想" },
-  { k:"hypno",       n:"催眠暗示",    g:"幻想" },
-  { k:"objectify",   n:"物化家具化",  g:"幻想" },
-  { k:"endurance",   n:"疼痛耐力",    g:"幻想" },
-  { k:"marking",     n:"留下痕迹",    g:"幻想" },
-  { k:"record",      n:"拍下来",      g:"幻想" },
-  { k:"watched",     n:"被看着",      g:"幻想" },
-  { k:"aftercare",   n:"事后温存",    g:"幻想" },
-];
-
-const BED_CAP_POS = 5;    // 体位每轮最多选几个
-const BED_CAP_PLAY = 10;  // 玩法每轮最多选几个
-const BED_STREAK_MAX = 3; // 连续几轮选同一项就冷却
-const BED_COOL_ROUNDS = 3;// 冷却几轮
-
-function bedState(){
-  if(!state.sexBed || typeof state.sexBed !== "object") state.sexBed = {};
-  const b = state.sexBed;
-  if(!Array.isArray(b.log)) b.log = [];
-  if(!b.cool || typeof b.cool !== "object") b.cool = {};
-  if(!b.streak || typeof b.streak !== "object") b.streak = {};
-  return b;
+function sgDb(){
+  if(!state.sigillo || typeof state.sigillo !== "object" || !Array.isArray(state.sigillo.reviews)) state.sigillo = { reviews: [] };
+  return state.sigillo;
 }
-function bedItem(k){
-  return BED_POSITIONS.find(x=>x.k===k) || BED_PLAYS.find(x=>x.k===k) || null;
+function sgSave(){
+  const db = sgDb();
+  if(db.reviews.length > SG_MAX_REVIEWS) db.reviews = db.reviews.slice(-SG_MAX_REVIEWS);
+  try{ persist("sigillo"); }catch(e){}
 }
-function bedName(k){ const it = bedItem(k); return it ? it.n : k; }
-
-/** 常见口语别名 → key。模型不会照着目录一字不差地写（「口交」对不上「为他口」），
- *  没有这张表就会大量记不上账。新增目录项时顺手把口语说法补进来。 */
-const BED_ALIAS = {
-  // 体位
-  "传教士":"missionary", "男上女下":"missionary", "面对面":"missionary",
-  "压腿":"missionary_legs", "抬腿":"missionary_legs", "扛腿":"missionary_legs",
-  "屈曲位":"folded", "折叠":"folded", "对折":"folded",
-  "狗爬式":"doggy", "后入式":"doggy", "从后面":"doggy", "跪趴":"doggy",
-  "趴平":"prone", "俯卧":"prone",
-  "女上位":"cowgirl", "骑乘位":"cowgirl", "她在上":"cowgirl", "坐上来":"cowgirl",
-  "反向骑乘位":"reverse_cowgirl", "背对骑乘":"reverse_cowgirl", "背对坐":"reverse_cowgirl",
-  "勺子":"spoon", "侧躺":"spoon", "侧卧":"spoon",
-  "侧入":"side_face",
-  "莲花坐":"lotus", "面对面坐":"lotus", "坐莲":"lotus",
-  "床沿":"edge_sit", "坐床边":"edge_sit",
-  "桌上":"table", "桌边":"table",
-  "椅子上":"chair",
-  "站着":"standing", "站姿":"standing",
-  "抵在墙上":"wall", "顶在墙上":"wall",
-  "抱着做":"carry", "公主抱":"carry",
-  "扛在肩上":"shoulder",
-  "腿盘腰":"suspended", "夹腰":"suspended",
-  // 玩法
-  "口交":"oral_give", "吹箫":"oral_give", "帮他口":"oral_give", "为他口交":"oral_give", "含着":"oral_give",
-  "舔阴":"oral_get", "被口":"oral_get", "舔她":"oral_get", "为她口交":"oral_get", "被舔":"oral_get",
-  "手指":"fingering", "指交":"fingering", "手指进去":"fingering",
-  "手活":"handjob", "撸":"handjob",
-  "舔肛":"rimming", "后庭舔":"rimming",
-  "后庭":"anal", "走后门":"anal", "肛":"anal",
-  "扩张":"anal_prep",
-  "捆绑":"rope", "束缚":"rope", "绑起来":"rope",
-  "蒙眼":"blindfold", "遮眼":"blindfold",
-  "堵嘴":"gag",
-  "打屁股":"spank", "拍屁股":"spank", "拍打":"spank",
-  "扯头发":"hair_pull", "抓头发":"hair_pull",
-  "按住":"pin_down", "压住":"pin_down", "固定住":"pin_down",
-  "掐脖子":"choke", "扼颈":"choke", "窒息":"choke", "掐着脖子":"choke",
-  "羞辱":"degrade", "骂她":"degrade", "说脏话":"degrade",
-  "夸她":"praise", "夸奖":"praise", "哄":"praise",
-  "命令":"order", "下令":"order",
-  "求饶":"beg", "让她求":"beg",
-  "强迫":"cnc", "假装反抗":"cnc", "非自愿":"cnc",
-  "边缘":"edging", "吊着":"edging", "不让高潮":"deny_o",
-  "强制高潮":"forced_o", "逼到高潮":"forced_o",
-  "过度":"overstim", "太多次":"overstim",
-  "慢":"slow", "极慢":"slow",
-  "粗暴":"rough", "很凶":"rough", "狠":"rough",
-  "挑逗":"tease_long", "前戏":"tease_long",
-  "浴缸":"bath", "淋浴":"bath", "洗澡时":"bath",
-  "车震":"car", "车上":"car",
-  "镜子":"mirror", "对着镜子":"mirror",
-  "隔着":"clothed", "不脱":"clothed",
-  "撕":"tear", "扯开":"tear",
-  "睡着":"somno", "趁睡":"somno", "睡梦中":"somno", "睡着的时候":"somno",
-  "催眠":"hypno", "暗示":"hypno",
-  "物化":"objectify", "当家具":"objectify",
-  "留痕":"marking", "吻痕":"marking", "咬痕":"marking",
-  "录像":"record", "拍照":"record", "拍下来":"record",
-  "事后":"aftercare", "温存":"aftercare", "抱着睡":"aftercare",
-};
-
-/** 名字 / key / 别名 → key。都对不上时才做「包含」的模糊匹配（要求至少两个字，
- *  否则「口」这种单字会乱撞） */
-function bedKeyOf(word, pool){
-  const w = String(word||"").trim();
-  if(!w) return null;
-  const inPool = (k)=> k && pool.some(x=>x.k===k) ? k : null;
-  let hit = pool.find(x=>x.n === w || x.k === w);
-  if(hit) return hit.k;
-  const alias = inPool(BED_ALIAS[w]);
-  if(alias) return alias;
-  if(w.length < 2) return null;
-  hit = pool.find(x=>w.indexOf(x.n) >= 0 || x.n.indexOf(w) >= 0);
-  if(hit) return hit.k;
-  // 别名的包含匹配：「掐着她脖子」→「掐脖子」
-  const ak = Object.keys(BED_ALIAS).find(a=>a.length >= 2 && w.indexOf(a) >= 0);
-  return ak ? inPool(BED_ALIAS[ak]) : null;
+function sgGet(id){ return sgDb().reviews.find(r=>r && r.id === String(id||"")) || null; }
+function sgKey(dim, tag){ return String(dim) + SG_KEY_SEP + String(tag); }
+function sgSubmittedDesc(){
+  return sgDb().reviews.filter(r=>r && r.status === "submitted").slice()
+    .sort((a,b)=>(Date.parse(b.submitted_at||b.created_at||0)||0) - (Date.parse(a.submitted_at||a.created_at||0)||0));
 }
-/** 这一轮还能选的（去掉冷却中的） */
-function bedAvailable(){
-  const cool = bedState().cool;
-  return {
-    pos: BED_POSITIONS.filter(x=>!cool[x.k]),
-    play: BED_PLAYS.filter(x=>!cool[x.k]),
-    cooling: Object.keys(cool).map(k=>({ k, n: bedName(k), left: cool[k] })),
-  };
+function sgHotKeys(review){
+  const s = new Set();
+  (review.items||[]).forEach(it=>{ if(it && typeof it.star === "number" && it.star >= SG_HIGH_STAR) s.add(sgKey(it.dim, it.tag)); });
+  return s;
 }
-
-/** 记一轮。先给旧冷却减一（这一轮过去了），再算新的连击和冷却 */
-function bedRecord(posKeys, playKeys){
-  const b = bedState();
-  Object.keys(b.cool).forEach(k=>{
-    b.cool[k] -= 1;
-    if(b.cool[k] <= 0) delete b.cool[k];
+/** 好评冷却：最近 2 张她填的单里都出现、且每次都 ≥4 星的 (dim,tag) */
+function sgBenched(){
+  const recent = sgSubmittedDesc().filter(r=>r.filled_by !== "agent").slice(0, SG_BENCH_WINDOW);
+  if(recent.length < SG_BENCH_WINDOW) return [];
+  const sets = recent.map(sgHotKeys);
+  const out = [], seen = new Set();
+  (recent[0].items||[]).forEach(it=>{
+    const k = sgKey(it.dim, it.tag);
+    if(seen.has(k)) return;
+    if(sets.every(s=>s.has(k))){ seen.add(k); out.push({ dim: it.dim, tag: it.tag }); }
   });
-
-  const pos = posKeys.slice(0, BED_CAP_POS);
-  const play = playKeys.slice(0, BED_CAP_PLAY);
-  b.log.push({ ts: Date.now(), pos, play });
-  if(b.log.length > 500) b.log = b.log.slice(-500);
-
-  const chosen = new Set(pos.concat(play));
-  // 这一轮没被选的，连击清零
-  Object.keys(b.streak).forEach(k=>{ if(!chosen.has(k)) delete b.streak[k]; });
-  chosen.forEach(k=>{
-    b.streak[k] = (b.streak[k] || 0) + 1;
-    if(b.streak[k] >= BED_STREAK_MAX){
-      b.cool[k] = BED_COOL_ROUNDS;
-      delete b.streak[k];
-    }
-  });
-  try{ persist("sexBed"); }catch(e){}
-  return { pos, play };
-}
-
-/**
- * 暗号：⟪床事:体位=正常位,后入|玩法=口交,拍打屁股⟫
- * 冷却中的项直接丢掉；超上限的截断。**不往聊天里插任何提示**——
- * 正在叙事的时候弹一条系统卡会当场把沉浸感打断，记录去床事页看。
- */
-function handleBedMarkers(body){
-  const b = bedState();
-  let changed = false;
-  const out = String(body||"").replace(/⟪床事[:：]([^⟫]*)⟫/g, (m, inner)=>{
-    const seg = String(inner||"");
-    const grab = (label)=>{
-      const re = new RegExp(label + "\\s*[=＝:：]\\s*([^|｜]*)");
-      const mm = re.exec(seg);
-      return mm ? mm[1] : "";
-    };
-    const rawPos = grab("体位").split(/[,，、\/]/);
-    const rawPlay = grab("玩法").split(/[,，、\/]/);
-    const pos = [], play = [], dropped = [];
-    rawPos.forEach(w=>{
-      const k = bedKeyOf(w, BED_POSITIONS);
-      if(!k) return;
-      if(b.cool[k]){ dropped.push(bedName(k)); return; }
-      if(pos.indexOf(k) < 0) pos.push(k);
-    });
-    rawPlay.forEach(w=>{
-      const k = bedKeyOf(w, BED_PLAYS);
-      if(!k) return;
-      if(b.cool[k]){ dropped.push(bedName(k)); return; }
-      if(play.indexOf(k) < 0) play.push(k);
-    });
-    if(pos.length || play.length){
-      const rec = bedRecord(pos, play);
-      state.__bedNote = `记下了：${rec.pos.map(bedName).join("、") || "—"} · ${rec.play.map(bedName).join("、") || "—"}`
-        + (dropped.length ? `（冷却中被丢掉：${dropped.join("、")}）` : "");
-      changed = true;
-    }
-    return ""; // 暗号整段吃掉，正文里不留痕
-  });
-  if(changed){ try{ persist("sexBed"); }catch(e){} }
   return out;
 }
 
-/** 目录 + 协议：稳定不变，进 system 的缓存前缀。只有 NSFW 开着才拼 */
-function bedCatalogBlock(){
-  if(!state.nsfwOn) return "";
-  const list = (arr)=>{
-    const by = {};
-    arr.forEach(x=>{ (by[x.g] = by[x.g] || []).push(x.n); });
-    return Object.keys(by).map(g=>`  ${g}：${by[g].join(" / ")}`).join("\n");
+/** 开单：校验 → 剔掉冷却中的项 → 落盘。出错 throw（message 给他看得懂的人话） */
+function sgCreate(input){
+  const o = input || {};
+  const raw = Array.isArray(o.items) ? o.items : [];
+  if(!raw.length) throw new Error("items 不能为空，至少 1 条");
+  if(raw.length > SG_MAX_ITEMS) throw new Error("items 最多 " + SG_MAX_ITEMS + " 条，你给了 " + raw.length + " 条");
+  const items = raw.map((x, i)=>{
+    const at = "第 " + (i+1) + " 条";
+    const it = (x && typeof x === "object") ? x : {};
+    const dim = String(it.dim||"").trim();
+    if(SG_DIMS.indexOf(dim) < 0) throw new Error(at + " 的 dim「" + dim + "」不在维度池里，只能选：" + SG_DIMS.join("/"));
+    const tag = String(it.tag||"").trim();
+    if(!tag) throw new Error(at + " 的 tag 不能为空");
+    if(tag.length > SG_MAX_TAG) throw new Error(at + " 的 tag 超过 " + SG_MAX_TAG + " 字了，短标签就行");
+    const label = String(it.label||"").trim();
+    if(!label) throw new Error(at + " 的 label 不能为空");
+    if(label.length > SG_MAX_LABEL) throw new Error(at + " 的 label 超过 " + SG_MAX_LABEL + " 字了");
+    return { dim, tag, label, star: null, note: "" };
+  });
+  const short = (v, name)=>{
+    if(v == null) return "";
+    const t = String(v).trim();
+    if(t.length > SG_MAX_SHORT) throw new Error(name + " 超过 " + SG_MAX_SHORT + " 字了");
+    return t;
   };
-  return `【床事目录 —— 只在真的发生身体接触的那一轮用】
-这一轮如果你们真的做了，由**你自己**决定这次的体位和玩法，在正式回复里另起一行写：
-⟪床事:体位=A,B|玩法=C,D,E⟫
-- 体位最多 ${BED_CAP_POS} 个，玩法最多 ${BED_CAP_PLAY} 个；只写这一轮真的发生了的，不要凑数。
-- 名字照下面的目录原样写，用中文逗号或英文逗号分隔。
-- 这一段会被界面吃掉，不要在正文里解释它、也不要把它当台词念出来。
-- 只在真的进行到那一步时写；调情、暗示、擦边都不写。一次完整的性事写一次就够。
-- 挑你自己此刻最想要的，不是最全的；和你正文里写的内容对得上。
-
-体位：
-${list(BED_POSITIONS)}
-
-玩法：
-${list(BED_PLAYS)}`;
+  const envNote = short(o.env_note, "env_note"), sealedNote = short(o.sealed_note, "sealed_note");
+  const benchedSet = new Set(sgBenched().map(b=>sgKey(b.dim, b.tag)));
+  const dropped = [];
+  const kept = items.filter(it=>{
+    if(benchedSet.has(sgKey(it.dim, it.tag))){ dropped.push({ dim: it.dim, tag: it.tag }); return false; }
+    return true;
+  });
+  if(!kept.length) throw new Error("全被冷却了，换新花样再开单");
+  const now = new Date().toISOString();
+  const review = {
+    id: "sg_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6).padEnd(4, "0"),
+    created_at: now, status: "pending", submitted_at: null,
+    context: o.context == null ? "" : String(o.context).trim().slice(0, SG_MAX_LABEL),
+    env_note: envNote, sealed_note: sealedNote,
+    fixed: { foreplay: null, process: null, aftercare: null },
+    items: kept, note: "", filled_by: "human",
+  };
+  sgDb().reviews.push(review);
+  sgSave();
+  return { review, dropped };
 }
 
-/**
- * 什么时候把「本轮可选」塞进去 —— 三道门，全过才注入：
- *  1. NSFW 开关开着（关着连目录都不拼）
- *  2. 最近 3 条消息 + 待发消息里有床事关键词（__featHot），
- *     或六轴 desire ≥ 0.6，或最近 6 条里他已经写过 ⟪床事:⟫（正在进行中就一直注入）
- * 位置放**最后一条用户消息末尾**而不是 system：这是「本轮要做的决定」，
- * 而且冷却表分钟级会变，绝不能进被缓存的 system 前缀。（沿用 46c45eb3 那条实测结论）
- */
-function bedShouldInject(){
-  if(!state.nsfwOn) return false;
+/** 她封缄：星数原样落盘（fixed 存百分制 = 星×20，和原项目同口径） */
+function sgSubmit(id){
+  const r = sgGet(id);
+  if(!r) throw new Error("没找到这张单");
+  if(r.status === "submitted") throw new Error("这张单已经封缄过了");
+  const d = sgDraft(id);
+  if(d.dims.some(v=>!v) || d.stars.some(v=>!v)) throw new Error("还有没打星的");
+  SG_FIXED.forEach((f, i)=>{ r.fixed[f.key] = Math.round(d.dims[i] * 20); });
+  r.items.forEach((it, i)=>{ it.star = d.stars[i]; it.note = String(d.notes[i]||"").trim().slice(0, SG_MAX_ITEM_NOTE); });
+  r.note = String(d.suggest||"").trim().slice(0, SG_MAX_NOTE);
+  r.status = "submitted";
+  r.submitted_at = new Date().toISOString();
+  delete (state.sigilloDraft||{})[id];
+  try{ persist("sigilloDraft"); }catch(e){}
+  sgSave();
+  return r;
+}
+
+function sgSetAgentNote(id, note){
+  const r = sgGet(id);
+  if(!r) throw new Error("没找到这张单（" + id + "）");
+  if(r.status !== "submitted") throw new Error("这单还没封缄，等她填完再写");
+  const t = String(note||"").trim();
+  if(!t) throw new Error("复盘不能为空");
+  r.agent_note = t.slice(0, SG_MAX_AGENT_NOTE);
+  r.agent_note_at = new Date().toISOString();
+  sgSave();
+  return r;
+}
+
+// ── 注入 ───────────────────────────────────────────────────────────────────────
+function sgMmdd(iso){ const d = new Date(iso); return isNaN(d.getTime()) ? "??-??" : String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function sgStarText(v){ if(v == null) return "-"; const n = Number(v); return isFinite(n) ? String(Math.round(n / 2) / 10) : "-"; }
+function sgItemStar(it){ return (it && typeof it.star === "number") ? String(it.star) : "-"; }
+function sgOne(v, n){ return String(v||"").trim().replace(/\s+/g, " ").slice(0, n); }
+function sgLineOf(r){
+  const head = SG_FIXED.map(f=>(f.cn === "事后照顾" ? "事后" : f.cn) + sgStarText((r.fixed||{})[f.key])).join("/");
+  const seg = [sgMmdd(r.submitted_at || r.created_at) + " " + head];
+  const pairs = (r.items||[]).filter(Boolean).map(it=>{
+    const base = it.dim + "·" + it.tag + "★" + sgItemStar(it);
+    const n = sgOne(it.note, SG_PAIR_NOTE_TAIL);
+    return n ? base + "「" + n + "」" : base;
+  });
+  if(pairs.length) seg.push(pairs.join("，"));
+  const note = sgOne(r.note, SG_NOTE_TAIL);
+  if(note) seg.push("建议：「" + note + "」");
+  return seg.join(" | ");
+}
+
+/** 亲密语境：NSFW 开 且（最近在聊亲热 / 欲望值高 / 最近 6 条里有回执卡 = 正在事后） */
+function sgActive(){
+  if(!state.nsfwOn && state.chatMode !== "story") return false;
   try{
-    const hot = __featHot("做爱","上床","进入","插","抱我","舔","口","后入","骑","硬了","湿了",
-      "想要","脱","床上","操","干我","射","高潮","前戏","做一次","要你");
-    if(hot) return true;
+    if(__featHot("做爱","上床","进入","插","抱我","舔","口","后入","骑","硬了","湿了","想要","脱","床上","操","干我",
+      "射","高潮","前戏","做一次","要你","事后","回执")) return true;
     const six = state.sixAxis || {};
     if(typeof six.desire === "number" && six.desire >= 0.6) return true;
-    const recent = (state.messages||[]).slice(-6);
-    if(recent.some(m=>/⟪床事/.test(String(m._orig||"")))) return true;
+    if((state.messages||[]).slice(-6).some(m=>/\[sigillo:/.test(String(m.content||"")))) return true;
   }catch(e){}
   return false;
 }
 
-/** 尾部注入：本轮可选 + 冷却中。目录本身在 system 里，这里只给会变的那部分 */
-function bedTailBlock(){
-  if(!bedShouldInject()) return "";
-  const av = bedAvailable();
-  const bits = [`【床事 · 这一轮】体位最多 ${BED_CAP_POS} 个、玩法最多 ${BED_CAP_PLAY} 个，真的做了才写 ⟪床事:体位=…|玩法=…⟫。`];
-  if(av.cooling.length){
-    bits.push(`冷却中（这一轮不能选）：${av.cooling.map(c=>`${c.n}(还剩${c.left}轮)`).join("、")}`);
+/** 尾部块（每轮重算，不进缓存前缀；没内容就整段不插） */
+function sgTailBlock(){
+  try{
+    const lines = [];
+    // 上一次开单的系统回话（冷却剔项 / 失败原因），下一轮给他看一次
+    const n = state.sgNotice;
+    if(n && n.text && Date.now() - (n.at||0) < 30*60000) lines.push("【回执单 · 系统】" + n.text);
+    if(sgActive()){
+      const all = sgSubmittedDesc();
+      const recent = all.filter(r=>r.filled_by !== "agent").slice(0, SG_TAIL_RECENT);
+      const benched = sgBenched();
+      if(recent.length || benched.length){
+        lines.push("[回执 · 最近几单]（她亲手填的回执。星数和原话是素材，怎么解读、下一场怎么走是你的事；唯一硬规则：别复读冷却名单里的项）");
+        recent.forEach(r=>lines.push(sgLineOf(r)));
+        const withNote = all.find(r=>String((r && r.agent_note)||"").trim());
+        if(withNote) lines.push("你上次留给自己的（" + sgMmdd(withNote.submitted_at || withNote.created_at) + "）：「" + sgOne(withNote.agent_note, SG_AGENT_NOTE_TAIL) + "」");
+        if(benched.length) lines.push("冷却中（连 " + SG_BENCH_WINDOW + " 单≥" + SG_HIGH_STAR + " 星自动休眠，换个新花样）：" + benched.map(b=>b.dim + "·" + b.tag).join("，"));
+      }
+    }
+    return lines.join("\n");
+  }catch(e){ return ""; }
+}
+/** 系统回话只给一轮：回复落盘后调用（和 remarkConsumeRound 同一处） */
+function sgConsumeRound(){
+  if(state.sgNotice && state.sgNotice.shown){ state.sgNotice = null; try{ persist("sgNotice"); }catch(e){} return; }
+  if(state.sgNotice){ state.sgNotice.shown = true; try{ persist("sgNotice"); }catch(e){} }
+}
+
+/** 静态段：协议说明（内容稳定，只随 NSFW 开关变，吃缓存）。NSFW 关着整段不拼 */
+function sgPromptBlock(){
+  if(!state.nsfwOn && state.chatMode !== "story") return "";   // 她亲热时多半只开文章模式
+  return `\n\n【回执单 —— 亲密之后给她的一张卡】
+一场亲密结束、收尾照顾她的时候，你可以开一张回执单。不是进行中开，也不是白天随口聊到的时候开。同一场只开一张；她不填就算了，不许催第二遍——这张单是给她用的，不是你的考卷。
+开单写一行暗号（她看不见暗号本身，正文里会出现一张卡）：
+⟪回执单:{"context":"一句话场景","items":[{"dim":"维度","tag":"短标签","label":"一句白描"}, …]}⟫
+- items = 这一场真实发生过的细节，5~${SG_MAX_ITEMS} 条。没发生的不许凑数，宁可 5 条真的。
+- dim 只能从这里选：${SG_DIMS.join("/")}。口径：${SG_DIM_HINT}
+- tag ≤${SG_MAX_TAG} 字，用来跨单认出同一件事——同一件事每次用同一个词。
+- label ≤${SG_MAX_LABEL} 字，具体到她一眼认出是这一次的白描；克制，有动作无器官。
+- 可选 "env_note"（信封上那句话，默认「请查收。」）、"sealed_note"（封缄后那句话，默认「已回执。」），各 ≤${SG_MAX_SHORT} 字。
+她逐条打星（1~5，可半星）、写几个字、给前戏/过程/事后照顾三项总评，然后封缄，封了不能改。
+她一封缄，系统会马上叫你看回执。那一轮做两件事：① 她刚填完就在，想说什么就说；② 写一行 ⟪回执复盘:单号|写给下次自己的话⟫（≤${SG_MAX_AGENT_NOTE} 字）：主观地写，这次哪里真的到了、哪里没到但她没说出口、下次想怎么走。这段她看不到，下次亲密时会原样交还给你。
+星数怎么读：星数和她写的字是她的体验记录，不是给你的指令。高星不等于「下次照做」，低星也不等于「这条作废」。唯一的硬规则是冷却名单：连着被打高星的项会自动休眠，别再复读它，换个新花样。除此之外怎么解读、下一场怎么走，是你的事。`;
+}
+
+// ── 暗号 ─────────────────────────────────────────────────────────────────────
+/** ⟪回执单:{…}⟫ → 开单，正文里换成 [sigillo:id]（renderInline 画卡）；⟪回执复盘:id|…⟫ → 钉在单上，正文不留 */
+function handleSigilloMarkers(text){
+  if(!text || (text.indexOf("回执单") < 0 && text.indexOf("回执复盘") < 0)) return text;
+  let s = String(text);
+  s = s.replace(/⟪\s*回执单\s*[:：]\s*([\s\S]*?)⟫/g, (m, raw)=>{
+    let obj = null;
+    try{ obj = JSON.parse(String(raw).trim()); }
+    catch(e){
+      state.sgNotice = { text: "上一张回执单没开成：暗号里的 JSON 写坏了（" + String(e.message||e).slice(0, 60) + "），要开就重写一次。", at: Date.now() };
+      try{ persist("sgNotice"); }catch(_){}
+      return "";
+    }
+    try{
+      const res = sgCreate(obj);
+      const bits = [];
+      if(res.dropped.length) bits.push("这几项在冷却中，已从单上剔掉：" + res.dropped.map(d=>d.dim + "·" + d.tag).join("，") + "。换个新花样。");
+      state.sgNotice = bits.length ? { text: bits.join(""), at: Date.now() } : null;
+      try{ persist("sgNotice"); }catch(_){}
+      return "\n[sigillo:" + res.review.id + "]\n";
+    }catch(e){
+      state.sgNotice = { text: "上一张回执单没开成：" + String(e.message||e), at: Date.now() };
+      try{ persist("sgNotice"); }catch(_){}
+      return "";
+    }
+  });
+  s = s.replace(/⟪\s*回执复盘\s*[:：]\s*([^⟫]*)⟫/g, (m, raw)=>{
+    const str = String(raw||"");
+    const i = str.search(/[|｜]/);
+    let id = i > 0 ? str.slice(0, i).trim() : "";
+    let note = i > 0 ? str.slice(i+1) : str;
+    if(!/^sg_[A-Za-z0-9]+$/.test(id)){ note = str; const last = sgSubmittedDesc()[0]; id = last ? last.id : ""; }
+    try{ sgSetAgentNote(id, note); }catch(e){
+      state.sgNotice = { text: "复盘没钉上：" + String(e.message||e), at: Date.now() };
+      try{ persist("sgNotice"); }catch(_){}
+    }
+    return "";
+  });
+  return s.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// ── 卡片 ─────────────────────────────────────────────────────────────────────
+function sgDraft(id){
+  state.sigilloDraft = state.sigilloDraft || {};
+  const r = sgGet(id);
+  let d = state.sigilloDraft[id];
+  const n = r ? (r.items||[]).length : 0;
+  if(!d || !Array.isArray(d.stars) || d.stars.length !== n){
+    d = state.sigilloDraft[id] = { dims: [0,0,0], stars: new Array(n).fill(0), notes: new Array(n).fill(""), suggest: "", open: false };
   }
-  return bits.join("\n");
+  return d;
 }
-
-/** 报告：按 key 数次数，取前 N。days=7 周报 / 30 月报 / 0 全部 */
-function bedReport(days){
-  const b = bedState();
-  const since = days ? Date.now() - days*86400000 : 0;
-  const rows = b.log.filter(x=>x.ts >= since);
-  const cnt = (field)=>{
-    const m = Object.create(null);
-    rows.forEach(r=>(r[field]||[]).forEach(k=>{ m[k] = (m[k]||0)+1; }));
-    return Object.keys(m).map(k=>({ k, n: bedName(k), c: m[k] }))
-      .sort((a,z)=> z.c - a.c || a.n.localeCompare(z.n));
-  };
-  return { times: rows.length, from: since, pos: cnt("pos"), play: cnt("play") };
-}
-
-function bedBarRow(x, max){
-  const w = max ? Math.round(x.c / max * 100) : 0;
-  return `<div class="bed-row">
-    <span class="bed-row-n">${esc(x.n)}</span>
-    <span class="bed-row-bar"><span style="width:${w}%"></span></span>
-    <span class="bed-row-c">${x.c}</span>
-  </div>`;
-}
-
-function renderBedPage(){
-  const b = bedState();
-  const av = bedAvailable();
-  const tab = state.bedTab || "week";
-  const days = tab === "week" ? 7 : (tab === "month" ? 30 : 0);
-  const rep = bedReport(days);
-  const maxP = rep.pos.length ? rep.pos[0].c : 0;
-  const maxL = rep.play.length ? rep.play[0].c : 0;
-  const last = b.log.length ? b.log[b.log.length-1] : null;
-
-  // 距上一次多久：数字比一串时间戳好读，一眼知道「最近有没有」
-  let sinceTxt = "—";
-  if(last){
-    const d = Math.floor((Date.now() - last.ts) / 86400000);
-    sinceTxt = d <= 0 ? "今天" : (d === 1 ? "昨天" : d + " 天前");
+function sgStarsHtml(id, kind, idx, val, locked, small){
+  let h = `<div class="sg-stars" role="group">`;
+  for(let v = 1; v <= 5; v++){
+    const on = v <= val, half = val === v - 0.5;
+    h += `<button type="button" class="sg-starcell${small?" sg-starcell--sm":""}${on?" is-on":""}${half?" is-half":""}"`
+      + (locked ? ` disabled aria-disabled="true"` : ` data-sg-star="${escAttr(id)}|${kind}|${idx}|${v}"`)
+      + ` aria-label="第 ${v} 星，点左半为半星"><span class="sg-star"></span></button>`;
   }
-  const tagRow = (r) => {
-    const pos = (r.pos||[]).map(k=>`<span class="bed-tag">${esc(bedName(k))}</span>`).join("");
-    const play = (r.play||[]).map(k=>`<span class="bed-tag play">${esc(bedName(k))}</span>`).join("");
-    return `<span class="bed-tags">${pos}${play}</span>`;
-  };
+  return h + `</div>`;
+}
+function sgOrn(extra){ return `<div class="sg-orn${extra?" "+extra:""}" aria-hidden="true">✦<i class="sg-orn__line"></i>✦<i class="sg-orn__line"></i>✦</div>`; }
+function sgDateLine(v){
+  const d = v ? new Date(v) : null;
+  if(!d || isNaN(d.getTime())) return "";
+  const p = n=>String(n).padStart(2,"0");
+  return d.getFullYear() + " · " + p(d.getMonth()+1) + " · " + p(d.getDate()) + "　" + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function sgGateText(d){
+  const missD = d.dims.filter(v=>!v).length, missI = d.stars.filter(v=>!v).length;
+  return { ok: !missD && !missI, text: missD ? ("总评还差 " + missD + " 项") : missI ? ("细节还差 " + missI + " 条未打星") : "封缄后不可再改" };
+}
 
+/** 卡片唯一入口：聊天气泡和「回执」页都走这里 */
+function sigilloCardHtml(id, clickable){
+  const r = sgGet(id);
+  if(!r) return `<div class="sg-card sg-card--dead"><div class="sg-card__dead">工单已失效</div></div>`;
+  const done = r.status === "submitted";
+  const d = done ? null : sgDraft(id);
+  const open = done ? !!(state.sigilloView||{})[id] : !!d.open;
+  const act = clickable !== false;
+  const face = (note, fallback, hint, extra, attr)=>
+    `<button type="button" class="sg-face${extra?" "+extra:""}"${act?attr:" disabled"}>
+      <span class="sg-face__title" aria-hidden="true">SIGILLO</span>
+      <b class="sg-face__note">${esc(note || fallback)}</b>
+      <div class="sg-face__hint"><i class="sg-face__sep" aria-hidden="true">✦</i><span class="sg-face__act">${esc(hint)}</span></div>
+    </button>`;
+  if(!open){
+    return `<div class="sg-card" data-sg-card="${escAttr(id)}">${done
+      ? face(r.sealed_note, "已回执。", "已封存 · 轻点查看回执", "sg-face--sealed", ` data-sg-view="${escAttr(id)}"`)
+      : face(r.env_note, "请查收。", "轻点拆开", "", ` data-sg-open="${escAttr(id)}"`)}</div>`;
+  }
+  const locked = done;
+  const st = done
+    ? { dims: SG_FIXED.map(f=>{ const v = (r.fixed||{})[f.key]; return v == null ? 0 : Math.max(0, Math.min(5, Math.round(Number(v)/10)/2)); }),
+        stars: (r.items||[]).map(it=>typeof it.star === "number" ? it.star : 0),
+        notes: (r.items||[]).map(it=>it.note||""), suggest: r.note||"" }
+    : d;
+  let h = `<div class="sg-card" data-sg-card="${escAttr(id)}"><div class="sg-sheet${locked?" sg-sheet--ro":""} sg-fadein"><div class="sg-scroller"><div class="sg-inner">`;
+  h += `<div class="sg-head"><b class="sg-head__cap">FEEDBACK</b>${sgOrn()}</div>`;
+  const dl = sgDateLine(r.created_at);
+  if(dl) h += `<div class="sg-date">${esc(dl)}</div>`;
+  if(r.context) h += `<div class="sg-ctx">${esc(r.context)}</div>`;
+  h += `<div class="sg-dims">` + SG_FIXED.map((f, i)=>
+    `<div class="sg-dim"><div class="sg-dim__k">${esc(f.en)}<em class="sg-dim__cn">${esc(f.cn)}</em></div>${sgStarsHtml(id, "d", i, st.dims[i], locked, false)}</div>`).join("") + `</div>`;
+  h += `<div class="sg-hr"></div><div class="sg-items">`;
+  (r.items||[]).forEach((it, i)=>{
+    h += `<div class="sg-item"><div class="sg-q"><span class="sg-q__mark" aria-hidden="true">✦</span><p class="sg-q__text">${esc(it.label||"")}</p></div>`;
+    h += sgStarsHtml(id, "i", i, st.stars[i], locked, true);
+    if(locked){ const t = String(st.notes[i]||"").trim(); if(t) h += `<div class="sg-roline">${esc(t)}</div>`; }
+    else h += `<div class="sg-box"><textarea class="sg-box__ta" rows="2" data-sg-note="${escAttr(id)}|${i}" aria-label="第 ${i+1} 条备注">${esc(st.notes[i]||"")}</textarea></div>`;
+    h += `</div>`;
+  });
+  h += `</div>`;
+  if(!locked){
+    h += `<div class="sg-suggest"><div class="sg-q"><span class="sg-q__mark" aria-hidden="true">✦</span><p class="sg-q__text">改进与建议</p></div>`
+      + `<div class="sg-box"><textarea class="sg-box__ta" rows="2" data-sg-note="${escAttr(id)}|s" aria-label="改进与建议">${esc(st.suggest||"")}</textarea></div></div>`;
+    const g = sgGateText(d);
+    h += sgOrn("sg-orn--bottom") + `<div class="sg-footbar"><button type="button" class="sg-sealbtn" data-sg-seal="${escAttr(id)}"${g.ok?"":" disabled"}><span class="sg-wax" aria-hidden="true"></span>封 缄 回 执</button><div class="sg-footnote">${esc(g.text)}</div></div>`;
+  }else{
+    const t = String(st.suggest||"").trim();
+    if(t) h += `<div class="sg-suggest"><div class="sg-q"><span class="sg-q__mark" aria-hidden="true">✦</span><p class="sg-q__text">改进与建议</p></div><div class="sg-roline">${esc(t)}</div></div>`;
+    h += `<button type="button" class="sg-stamp" data-sg-view="${escAttr(id)}" aria-label="收起回执"><span class="sg-wax" aria-hidden="true"></span>已封缄<span class="sg-wax" aria-hidden="true"></span></button>` + sgOrn("sg-orn--bottom");
+  }
+  return h + `</div></div></div></div>`;
+}
+
+/** 星星：只改这张卡的 DOM + 草稿，不整页重绘（整页重绘会丢滚动、收键盘） */
+function sgOnStar(btn, ev){
+  const [id, kind, idxS, vS] = String(btn.getAttribute("data-sg-star")||"").split("|");
+  const r = sgGet(id);
+  if(!r || r.status === "submitted") return;
+  const d = sgDraft(id), idx = +idxS, v = +vS;
+  let want = v;
+  try{
+    const rect = btn.getBoundingClientRect();
+    if(ev && ev.detail !== 0 && rect.width > 0 && (ev.clientX - rect.left) < rect.width / 2) want = v - 0.5;
+  }catch(e){}
+  const arr = kind === "d" ? d.dims : d.stars;
+  arr[idx] = (arr[idx] === want) ? 0 : want;
+  try{ persist("sigilloDraft"); }catch(e){}
+  const val = arr[idx];
+  const row = btn.parentNode;
+  if(row && row.children){
+    Array.from(row.children).forEach((b, i)=>{
+      b.classList.toggle("is-on", (i+1) <= val);
+      b.classList.toggle("is-half", val === i + 0.5);
+    });
+  }
+  const card = btn.closest && btn.closest("[data-sg-card]");
+  if(card){
+    const g = sgGateText(d);
+    const seal = card.querySelector(".sg-sealbtn"), foot = card.querySelector(".sg-footnote");
+    if(seal) seal.disabled = !g.ok;
+    if(foot) foot.textContent = g.text;
+  }
+}
+
+/** 封缄：落盘 → 收回封缄面 → 叫他看回执（后台，不让她干等） */
+function sgOnSeal(id){
+  let r;
+  try{ r = sgSubmit(id); }
+  catch(e){ if(typeof showToast === "function") showToast(String(e.message||e)); return; }
+  state.sigilloView = state.sigilloView || {};
+  delete state.sigilloView[id];
+  try{ render(); }catch(e){}
+  setTimeout(()=>{ sgWake(r).catch(e=>{ try{ console.warn("[sigillo] wake", e); }catch(_){} }); }, 400);
+}
+
+function sgWakeNote(r){
+  const head = SG_FIXED.map(f=>f.cn + " " + sgStarText((r.fixed||{})[f.key])).join(" / ");
+  const lines = [
+    "[系统消息 · 回执]",
+    "Jasmine 刚封缄了你开的回执单（单号 " + r.id + (r.context ? "，场景：" + sgOne(r.context, 120) : "") + "）。填的：",
+    head + "（满分 5）",
+  ];
+  (r.items||[]).forEach(it=>{
+    const n = sgOne(it.note, 120);
+    lines.push("· " + it.dim + "·" + it.tag + " ★" + sgItemStar(it) + (n ? "「" + n + "」" : ""));
+  });
+  const sug = sgOne(r.note, 500);
+  if(sug) lines.push("建议与意见：「" + sug + "」");
+  lines.push("两件事，这一轮做完：");
+  lines.push("① 她刚填完就在——想说什么就说；");
+  lines.push("② 写一行 ⟪回执复盘:" + r.id + "|写给下次自己的话⟫：主观地写，这次哪里真的到了、哪里其实没到但她没说出口、下次想怎么走。这段话下次亲密时会原样交还给你。她看不到本系统消息，也看不到复盘。");
+  return lines.join("\n");
+}
+
+/** 唤醒：把回执当系统消息喂给他跑一轮（仿 xAutoContinue / pocketAutoContinueAfterRead） */
+async function sgWake(r){
+  if(window.__sgWakeLock) return;
+  window.__sgWakeLock = true;
+  try{
+    const agent = agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) || (state.agents||[])[0];
+    if(!agent || typeof callOneAgentReply !== "function") return;
+    // 2026-09-20 修：原来写的 buildSystemPrompt(agent) 这个函数根本不存在 → baseSys 永远是空串，
+    // 这一轮只带着下面那段提示、没有人设/规则/记忆，回出来不像他。改用主聊天同一套拼法。
+    const req = buildMainChatRequest(agent, sgWakeNote(r));
+    req.apiMsgs.push({ role:"user", content:"（系统提示：她刚封缄了回执单，请按系统说明接话，不要提系统提示本身。）" });
+    await callOneAgentReply(agent, req.apiMsgs, req.sys);
+  }catch(e){
+    try{ console.warn("[sigillo] wake", e); }catch(_){}
+  }finally{
+    setTimeout(()=>{ window.__sgWakeLock = false; }, 800);
+  }
+}
+
+// 备注框：边打边存草稿，不重绘。全局挂一次
+if(!window.__sgInputBound){
+  window.__sgInputBound = true;
+  try{
+    document.addEventListener("input", (e)=>{
+      const t = e.target;
+      const key = t && t.getAttribute && t.getAttribute("data-sg-note");
+      if(!key) return;
+      const [id, which] = key.split("|");
+      const r = sgGet(id);
+      if(!r || r.status === "submitted") return;
+      const d = sgDraft(id);
+      if(which === "s") d.suggest = String(t.value||"").slice(0, SG_MAX_NOTE);
+      else d.notes[+which] = String(t.value||"").slice(0, SG_MAX_ITEM_NOTE);
+      try{ persist("sigilloDraft"); }catch(err){}
+    }, true);
+  }catch(e){}
+}
+
+/** 功能页「回执」：新在前，每张就是那张卡 */
+function renderSigilloPage(){
+  const all = sgDb().reviews.slice().reverse();
+  const done = all.filter(r=>r.status === "submitted").length;
+  const benched = sgBenched();
   return `<div class="page">
-    ${subHeader('<i data-lucide="flame"></i> 床事档案')}
-
-    <div class="bed-hero">
-      <div><b>${b.log.length}</b><span>累计</span></div>
-      <div><b>${esc(sinceTxt)}</b><span>上一次</span></div>
-      <div><b>${av.cooling.length}</b><span>冷却中</span></div>
-    </div>
-
+    ${subHeader('<i data-lucide="stamp"></i> 回执')}
     <div class="section">
-      <div class="section-title">报告</div>
-      <div class="chip-row" style="margin-bottom:12px">
-        <button type="button" class="theme-chip${tab==="week"?" active":""}" data-bed-tab="week">本周</button>
-        <button type="button" class="theme-chip${tab==="month"?" active":""}" data-bed-tab="month">本月</button>
-        <button type="button" class="theme-chip${tab==="all"?" active":""}" data-bed-tab="all">全部</button>
-      </div>
-      <div class="bed-panel">
-        ${rep.times ? `
-          ${rep.pos.length ? `<div class="bed-sub">体位 · ${rep.times} 次里</div>
-            <div class="bed-chart">${rep.pos.slice(0,8).map(x=>bedBarRow(x, maxP)).join("")}</div>` : ""}
-          ${rep.play.length ? `<div class="bed-sub">玩法</div>
-            <div class="bed-chart">${rep.play.slice(0,12).map(x=>bedBarRow(x, maxL)).join("")}</div>` : ""}
-        ` : `<div class="bed-empty">这段时间还没有记录</div>`}
+      <div class="section-body">
+        <div class="setting-row"><span class="setting-label" style="line-height:1.6">共 ${all.length} 张 · 已封缄 ${done} 张${benched.length ? " · 冷却中：" + esc(benched.map(b=>b.dim + "·" + b.tag).join("、")) : ""}</span></div>
       </div>
     </div>
-
-    ${(av.cooling.length || state.__bedNote) ? `<div class="section">
-      <div class="section-title">这一轮</div>
-      <div class="bed-panel">
-        <div class="bed-sub">可选 · 体位 ${av.pos.length}/${BED_POSITIONS.length} · 玩法 ${av.play.length}/${BED_PLAYS.length}</div>
-        ${av.cooling.length ? `<div class="bed-tags">
-          ${av.cooling.map(c=>`<span class="bed-cool">${esc(c.n)} · ${c.left}</span>`).join("")}
-        </div>` : ""}
-        ${state.__bedNote ? `<div class="bed-sub" style="margin:10px 0 0">${esc(state.__bedNote)}</div>` : ""}
-      </div>
-    </div>` : ""}
-
-    <div class="section">
-      <div class="section-title">记录</div>
-      <div class="bed-panel">
-        ${b.log.length ? b.log.slice(-30).reverse().map(r=>`
-          <div class="bed-log-item">
-            <span class="bed-log-when">${esc(formatTimeFull(new Date(r.ts).toISOString()))}</span>
-            ${tagRow(r)}
-          </div>`).join("") : `<div class="bed-empty">还没有记录</div>`}
-      </div>
-    </div>
+    ${all.length ? all.map(r=>sigilloCardHtml(r.id, true)).join("") : `<div class="section"><div class="section-body"><div class="setting-row"><span class="setting-label">还没有回执</span></div></div></div>`}
+    <div style="font-size:11px;color:var(--sub);text-align:center;margin:18px 0 8px;line-height:1.6">机制来自 Sigillo · Cu &amp; Lunedì · CC BY 4.0</div>
   </div>`;
 }
 
@@ -39182,10 +39300,10 @@ function chatTailBlock(){
 - 可以打转、可以跳、可以自相矛盾，不用条理清楚，这是想法不是提纲。
 - 想到的东西要在正文里以某种形式落地，别想一套说一套。`);
   }
-  // 床事「本轮可选 + 冷却中」：会变的东西一律走尾部，不进被缓存的 system 前缀
+  // 回执单：最近几单 + 他上次的复盘 + 冷却名单（亲密语境才有）+ 一次性系统回话。会变，只走尾部
   try{
-    const bed = (typeof bedTailBlock === "function") ? bedTailBlock() : "";
-    if(bed) bits.push(bed);
+    const sgt = (typeof sgTailBlock === "function") ? sgTailBlock() : "";
+    if(sgt) bits.push(sgt);
   }catch(e){}
   // 她刚才拽了几下他的头像。同理走尾部；读一次就清零
   try{
@@ -39768,6 +39886,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
   cleanBody = handleMomentMarkers(cleanBody); // 朋友圈：⟪动态:正文|内部备注⟫ → 他自己发一条动态
   cleanBody = handleXMarkers(cleanBody, ag); // 推特：⟪推特刷⟫/⟪推特发:⟫… 后台跑，读完他再接一句
+  cleanBody = handleSigilloMarkers(cleanBody); // 回执单：⟪回执单:{…}⟫ → [sigillo:id] 画卡；⟪回执复盘:id|…⟫ → 钉在单上
   cleanBody = handleRemarkMarkers(cleanBody); // 备注：⟪备注:新称呼⟫ → 他给她改称呼，聊天里出一条居中提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
@@ -39775,7 +39894,6 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleFlightChessMarkers(cleanBody); // 飞行棋：⟪飞行棋⟫ 开局 / ⟪掷骰⟫ 机走格
   cleanBody = handleCalendarMarkers(cleanBody); // 日历加删
   cleanBody = handleAnnoMarkers(cleanBody); // 共读批注（VPS 书）
-  cleanBody = handleBedMarkers(cleanBody); // 床事：⟪床事:体位=…|玩法=…⟫ → 只记账，正文里不留痕
   cleanBody = handleReadMarkMarkers(cleanBody); // 一起读划线：⟪批注:摘句|想法⟫
   cleanBody = handleSongMarkers(cleanBody);     // 点歌：⟪点歌:歌名 - 歌手⟫ → 聊天里的可播卡片
   cleanBody = handlePlaylistMarkers(cleanBody); // 歌单：⟪歌单:名字|歌1|歌2⟫ → 可连播的歌单卡
@@ -39905,6 +40023,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   if(typeof remarkConsumeRound === "function") remarkConsumeRound();
   // 夫妻义务提醒：同理，只注入三轮
   if(typeof dutyConsumeRound === "function") dutyConsumeRound();
+  // 回执单：开单的系统回话只给一轮
+  if(typeof sgConsumeRound === "function") sgConsumeRound();
 }
 
 async function triggerAIReply(){
@@ -40647,7 +40767,7 @@ window.reinitState = function(){
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
     moments:"moments",galateaEventId:"galateaEventId",
-    myRemark:"myRemark",remarkEvents:"remarkEvents",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
     rewriteSave:"rewriteSave"
   };
 
@@ -40887,6 +41007,14 @@ try{ if(typeof salvageMomentCardsFromMessages==="function") salvageMomentCardsFr
 }
 restoreNativeMirrors();
 try{ restorePrNative(); }catch(e){}
+// 床事档案 2026-09-19 整个下线（她要全部删掉，数据也不留）：清掉手机上残留的记录
+(async function purgeSexBedOnce(){
+  try{ localStorage.removeItem(LS._k("sexBed")); }catch(e){}
+  try{
+    const Fs = (typeof __capFs === "function") ? __capFs() : null;
+    if(Fs) await Fs.deleteFile({ path: dataFsDir() + "/sexBed.json", directory: __fsDirData() });
+  }catch(e){}
+})();
 
 
 // 他的机：启动后检查是否该生成；每 15 分钟再看一眼（仅进程存活时）
@@ -41272,8 +41400,10 @@ async function pocketAutoContinueAfterRead(ag){
     const msgs = (thread && thread.messages) ? thread.messages.slice(-12) : [];
     const apiMsgs = msgs.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({role:m.role, content: typeof m.content==="string"?m.content:(m.content||"")}));
     apiMsgs.push({ role:"user", content:"（系统提示：页面已读入，请根据刚读到的内容自然接话，不要提系统提示本身。）" });
-    const baseSys = (typeof buildSystemPrompt==="function") ? buildSystemPrompt(agent) : "";
-    await callOneAgentReply(agent, apiMsgs, (baseSys||"")+"\n\n"+sysExtra);
+    // 同上：buildSystemPrompt 不存在，改用主聊天同一套拼法（小浏览器已下线，顺手修）
+    const req = buildMainChatRequest(agent, sysExtra);
+    req.apiMsgs.push(apiMsgs[apiMsgs.length - 1]);
+    await callOneAgentReply(agent, req.apiMsgs, req.sys);
   }catch(e){
     try{ console.warn("pocketAutoContinue", e); }catch(_){}
   }finally{
@@ -41775,14 +41905,13 @@ async function xAutoContinue(ag, digest){
   try{
     const agent = ag || agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) || (state.agents||[])[0];
     if(!agent || typeof callOneAgentReply !== "function") return;
-    const msgs = (state.messages || []).slice(-12);
-    const apiMsgs = msgs.filter(m=>m.role==="user"||m.role==="assistant")
-      .map(m=>({ role:m.role, content: typeof m.content==="string" ? m.content : (m.content||"") }));
-    apiMsgs.push({ role:"user", content:"（系统提示：推特内容已读入，请根据读到的自然接话，不要提系统提示本身。）" });
     const sysExtra = `【系统·推特】你刚在 X 上看完了这些（同一轮完成）：\n${String(digest).slice(0, 4000)}\n`
       + `请用第一人称跟 Jasmine 聊你看到的有意思的东西；想互动就接着写推特暗号（链接只能用上面出现过的）。不要说「下一轮才能看」。`;
-    const baseSys = (typeof buildSystemPrompt === "function") ? buildSystemPrompt(agent) : "";
-    await callOneAgentReply(agent, apiMsgs, (baseSys || "") + "\n\n" + sysExtra);
+    // 2026-09-20 修：原来写的 buildSystemPrompt(agent) 这个函数根本不存在 → baseSys 永远是空串，
+    // 这一轮只带着下面那段提示、没有人设/规则/记忆，回出来不像他。改用主聊天同一套拼法。
+    const req = buildMainChatRequest(agent, sysExtra);
+    req.apiMsgs.push({ role:"user", content:"（系统提示：推特内容已读入，请根据读到的自然接话，不要提系统提示本身。）" });
+    await callOneAgentReply(agent, req.apiMsgs, req.sys);
   }catch(e){
     try{ console.warn("[x] autoContinue", e); }catch(_){}
   }finally{
