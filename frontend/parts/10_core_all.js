@@ -22353,22 +22353,47 @@ function chatPushNotice(text){
   state.needChatScroll = true;
 }
 
-/** 一次性事件：备注被改、指令被接/被买断。两小时内注进系统提示词，让他知道并能自然反应。
- * 不做「读完即清」——systemPrompt 一轮会被调好几次，清在里面必然清错。用时间窗自然过期。 */
+/** 一次性事件：备注被改、指令被接/被买断。
+ * 只注入「两轮」助手回复：systemPrompt 一轮会被调好几次，不能在 remarkRecentBlock 里扣次数，
+ * 在 callOneAgentReply 真正落盘后再 remarkConsumeRound() 扣一回合。 */
 function remarkEnsure(){
   if(!state.remarkEvents || !Array.isArray(state.remarkEvents)) state.remarkEvents = [];
   return state.remarkEvents;
 }
 function remarkPushEvent(text){
   const list = remarkEnsure();
-  list.unshift({ text:String(text||""), at:Date.now() });
+  list.unshift({ text:String(text||""), at:Date.now(), roundsLeft: 2 });
   state.remarkEvents = list.slice(0, 6);
   persist("remarkEvents");
 }
 function remarkRecentBlock(){
-  const list = remarkEnsure().filter(e=> Date.now() - (e.at||0) < 2*3600000);
+  const list = remarkEnsure().filter(e=>{
+    const left = (e.roundsLeft != null) ? Number(e.roundsLeft) : 0;
+    // 兼容旧数据：只有 at、没有 roundsLeft 的，按两小时窗算一次，避免突然全没
+    if(e.roundsLeft == null && e.at){
+      return (Date.now() - (e.at||0)) < 2*3600000;
+    }
+    return left > 0;
+  });
   if(!list.length) return "";
-  return `\n\n【刚刚发生的（两小时内，只提一次，别反复念）】\n` + list.map(e=>"- "+e.text).join("\n");
+  return `\n\n【刚刚发生的（仅后续两轮回复内有效，提过就别反复念）】\n` + list.map(e=>"- "+e.text).join("\n");
+}
+/** 一轮助手回复落盘后调用：每个事件 roundsLeft -1，用尽则丢掉 */
+function remarkConsumeRound(){
+  try{
+    const list = remarkEnsure();
+    if(!list.length) return;
+    const next = [];
+    list.forEach(e=>{
+      if(!e) return;
+      // 旧数据无 roundsLeft：消耗时直接清掉，避免再拖两小时
+      if(e.roundsLeft == null) return;
+      const left = Number(e.roundsLeft) - 1;
+      if(left > 0) next.push(Object.assign({}, e, { roundsLeft: left }));
+    });
+    state.remarkEvents = next;
+    if(typeof persist === "function") persist("remarkEvents");
+  }catch(e){}
 }
 
 /** 她改了他的显示名 → 灰条 + 让他知道 */
@@ -32771,6 +32796,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   }catch(e){}
   // 飞行棋：每次真实回复消耗一格「格子内容」轮次（小机投到的内容进两轮 prompt）
   if(typeof flightChessConsumeRound === "function") flightChessConsumeRound();
+  // 备注事件：本轮助手回复已落盘，扣掉一回合注入额度
+  if(typeof remarkConsumeRound === "function") remarkConsumeRound();
 }
 
 async function triggerAIReply(){
