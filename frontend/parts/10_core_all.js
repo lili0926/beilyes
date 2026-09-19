@@ -4861,7 +4861,8 @@ function systemPrompt(ag){
   const identityAnchor = `【身份锚定】
 你是 Aries。与你对话的人是 Jasmine。
 系统说明里的「用户」均指 Jasmine；需要指你自己时用 Aries 或「我」。
-正文聊天仍用自然「我 / 你」（我=Aries，你=Jasmine），不要改成第三人称旁白。`;
+正文聊天仍用自然「我 / 你」（我=Aries，你=Jasmine），不要改成第三人称旁白。
+动作描写里提到她也一律用「你」：写 *把你抱起来*，不写 *把她抱起来*。`;
   base = identityAnchor + (base ? "\n\n" + base : "");
   const isStory = state.chatMode === "story";
   const timeHint = isStory
