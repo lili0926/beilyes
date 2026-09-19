@@ -25965,25 +25965,9 @@ function renderSettings(){
       </div>
     </div>
     <div class="section">
-      <div class="section-title"><i data-lucide="globe"></i> 小浏览器（Pocket）</div>
+      <div class="section-title"><i data-lucide="cat"></i> 桌宠</div>
       <div class="section-body">
-        <div class="setting-row"><span class="setting-label">Server URL</span>
-          <input id="pocket-serverUrl" value="${escAttr(p.serverUrl||"")}" placeholder="wss://…/pocket/ws"/></div>
-        <div class="setting-row"><span class="setting-label">Token</span>
-          <input id="pocket-token" type="password" value="${escAttr(p.token||"")}" placeholder="POCKET_TOKEN"/></div>
-        <div class="setting-row">
-          <span class="setting-label" style="line-height:1.6">给机用的小浏览器：可刷 X、查百科、打开任意网页。弹层右上角有「关闭」，不用清后台。<br/>可选：填 Server/Token 并「连接远程通道」后，登录态还能给 VPS 远程复用。</span>
-        </div>
-        <div class="setting-row"><span class="setting-label">打开网址</span>
-          <input id="pocket-open-url" value="" placeholder="https://zh.wikipedia.org 或 https://x.com"/></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-          <button type="button" id="pocket-connect" class="btn-accent2" style="padding:8px 14px">连接远程通道</button>
-          <button type="button" id="pocket-show" class="btn-accent2" style="padding:8px 14px">打开小浏览器</button>
-          <button type="button" id="pocket-show-x" class="btn-ghost" style="padding:8px 14px">打开 X 登录</button>
-          <button type="button" id="pocket-hide" class="btn-ghost" style="padding:8px 14px">关闭浏览器</button>
-          <button type="button" id="pocket-disconnect" class="btn-ghost" style="padding:8px 14px">断开通道</button>
-        </div>
-        <div id="pocket-status" style="font-size:12px;color:var(--sub);margin-top:8px;line-height:1.5">未连接</div>        <div class="setting-row"><span class="setting-label">桌宠</span>
+        <div class="setting-row"><span class="setting-label">桌宠</span>
           <div class="body-switch-row" style="margin:0">
             <div>
               <div class="body-switch-label">${state.petOn?"浮窗像素宠物":"已隐藏"}</div>
@@ -34542,6 +34526,9 @@ async function galateaGameWake(){
   finally{ __galateaWakeLock = false; }
 }
 function pocketPromptBlock(){
+  // 小浏览器 2026-09-19 她要删掉：看推改走「推特」暗号（服务器上他自己的号）。
+  // 代码先留着（截图/读页/自动接话牵连多处），只是不再注入，他就不会用。
+  return "";
   if(!pocketNative()) return "";
   let cacheBlock = "";
   const c = state.pocketPageCache;
@@ -34598,7 +34585,10 @@ async function xApi(body){
 function xPromptBlock(){
   if(state.xEnabled === false || !wakeBase()) return "";
   return `\n\n【推特（X）—— 你自己的号】
-你在 X 上有一个自己的号，可以自己刷、自己发。暗号会被系统擦掉，Jasmine 看不见，执行结果系统会告诉你们：
+你在 X 上有一个自己的号，可以自己刷、自己发。
+- 你的号：@yan_1145
+- Jasmine 的号：@Zzz1310477（昵称 imnooootfishing）。想看她发了什么就 ⟪推特主页:Zzz1310477⟫，别认错人。
+暗号会被系统擦掉，Jasmine 看不见，执行结果系统会告诉你们：
 - ⟪推特刷⟫ 刷首页；⟪推特刷:关键词⟫ 搜这个词
 - ⟪推特主页:用户名⟫ 看某人的主页
 - ⟪推特看:帖子链接⟫ 读一条帖子和下面的回复
