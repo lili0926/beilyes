@@ -8258,7 +8258,11 @@ const LS = {
       const quota = e && (e.name==="QuotaExceededError" || e.code===22 || (e.message&&/quota/i.test(e.message)));
       if(quota){
         // localStorage 5MB 配额满：落到原生 Preferences 兜底（聊天已走独立原生通道，静默即可）
-        if(!__nativeMirrorSkip(k) && __nativeMirrorWrite(k, v)) return true;
+        // 新值写不进 LS 时，LS 里那份就是过期的；留着它冷启动会先被读到，删掉
+        if(!__nativeMirrorSkip(k) && __nativeMirrorWrite(k, v)){
+          try{ localStorage.removeItem(LS._k(k)); }catch(_){}
+          return true;
+        }
         console.warn("[LS] 存储配额满，key="+k, e);
       }else{
         if(typeof showToast==="function") showToast("本地保存异常，清后台可能丢记录");
@@ -26168,6 +26172,11 @@ function migrateVpsIp(){
     if(typeof v === "string"){ if(hit(v)){ state[k] = swap(v); dirty.add(k); } }
     else if(v) rewrite(v, k);
   });
+  // 私有目录读回之前只改内存、不落盘：冷启动这时 state 里是 localStorage 那份，
+  // 而 agents/coupleInfo 带头像，LS 常年配额满写不进去 —— 那是很久以前的旧副本。
+  // 这里一 persist 就把旧副本盖进私有目录和 Preferences，她改的头像/备注每次重启都被打回去。
+  // 读回后 fsLoadAllKvIntoState 那边会再调一次，那次才落盘。
+  if(!window.__kvHydrated) return dirty.size > 0;
   dirty.forEach(k=>{ try{ persist(k); }catch(e){} try{ if(!PERSIST_MAP[k]) LS.set(k, state[k]); }catch(e){} });
   return dirty.size > 0;
 }
@@ -40672,8 +40681,8 @@ try{ restorePrNative(); }catch(e){} }catch(e){}
       try{
         if(typeof fsLoadAllKvIntoState === "function"){
           const kv = await fsLoadAllKvIntoState();
-          try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次
           window.__kvHydrated = true;       // 此后热力才允许落盘（见 mergeChatHeatMap）
+          try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次（必须在置位之后，否则不落盘）
           try{ mergeChatHeatMap(); persist("chatHeatMap"); }catch(_){}
           if(kv && kv.ok) try{ render(); }catch(e){}
         }
@@ -40748,8 +40757,8 @@ if(!window.__chatFlushBound){
     try{
       if(typeof fsLoadAllKvIntoState === "function"){
         const kv = await fsLoadAllKvIntoState();
-          try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次
           window.__kvHydrated = true;       // 此后热力才允许落盘（见 mergeChatHeatMap）
+          try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次（必须在置位之后，否则不落盘）
           try{ mergeChatHeatMap(); persist("chatHeatMap"); }catch(_){}
         if(kv && kv.ok && typeof render === "function") render();
       }
