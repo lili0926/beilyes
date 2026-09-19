@@ -12092,6 +12092,7 @@ ${replyFormatRules()}`;
   const stickerBlock = stickerPromptBlock(); // 表情包：[sticker:名字]
   const profileBlock = __featHot("签名","简介","主页","背景","资料卡","改名字") ? profilePromptBlock() : ""; // 主页资料卡：改签名/简介/背景
   const pocketBlock = (typeof pocketPromptBlock==="function") ? pocketPromptBlock() : ""; // 远程浏览器：⟪浏览器开:url⟫
+  const xBlock = (typeof xPromptBlock==="function") ? xPromptBlock() : ""; // 推特：⟪推特刷⟫⟪推特发:⟫…（他自己的号）
   const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
   const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈：⟪动态:⟫
   const remarkBlock = (typeof remarkPromptBlock === "function") ? remarkPromptBlock() : "";     // 备注：⟪备注:⟫（常驻，很短）
@@ -12133,14 +12134,14 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
   // 会变的那半（本轮可选/冷却中）走 bedTailBlock 挂在最后一条消息末尾
   const bedBlock = (typeof bedCatalogBlock === "function") ? bedCatalogBlock() : "";
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, bedBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, bedBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
   // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
   // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
   const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","推送","相册","券","钱包",
-    "项目文件","狗狗动作","表情","拽头像","资料","口袋","MC","朋友圈","备注","任务","Galatea","选择题","床事目录"];
+    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","床事目录"];
   const __dynNames = ["身体状态","用量","衣橱","值日","在读","在看","宝宝","菜单","点单","角色扮演",
     "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件"];
   const __named = (arr, names)=>{
@@ -12192,6 +12193,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + B.flingBlock
     + B.profileBlock
     + B.pocketBlock
+    + (B.xBlock || "")
     + B.mcBlock
     + (B.momentsBlock ? "\n\n"+B.momentsBlock : "")
     + B.remarkBlock
@@ -12206,7 +12208,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     dreamTraceBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock,
     truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, pushBlock, albumBlock,
     couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
-    profileBlock, pocketBlock, mcBlock, momentsBlock, remarkBlock, remarkEventBlock, questBlock,
+    profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, remarkEventBlock, questBlock,
     galateaBlock, bedBlock, tipsyBlock };
 
   // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
@@ -12226,7 +12228,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     ["人设","base"], ["时间提示","timeHint"], ["思考引导","guide"], ["NSFW格式","nsfwFormatBlock"],
     ["电话","callBlock"], ["推送","pushBlock"], ["相册","albumBlock"], ["券","couponBlock"],
     ["钱包","walletBlock"], ["项目文件","projectFileBlock"], ["狗狗动作","puppyActionBlock"],
-    ["表情","stickerBlock"], ["拽头像","flingBlock"], ["资料","profileBlock"], ["口袋","pocketBlock"],
+    ["表情","stickerBlock"], ["拽头像","flingBlock"], ["资料","profileBlock"], ["口袋","pocketBlock"], ["推特","xBlock"],
     ["MC","mcBlock"], ["朋友圈","momentsBlock"], ["备注","remarkBlock"], ["任务","questBlock"],
     ["Galatea","galateaBlock"], ["床事目录","bedBlock"],
   ];
@@ -29749,6 +29751,7 @@ function __stripMarkersForLive(t){
   return String(t)
     .replace(/[⟪《【]\s*(?:今日)?任务\s*[:：][\s\S]*?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*动态\s*[（(]\s*公开\s*[)）]\s*[:：][^⟫》】]*[⟫》】]/g,"")
+    .replace(/⟪\s*推特(?:刷|主页|看|赞|转|回|发)\s*(?:[:：][^⟫]*)?⟫/g,"")
     .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关|弹飞)\s*[⟫》】]/g,"")
@@ -39780,6 +39783,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleDiaryMarkers(cleanBody);  // 机写日记：⟪写日记:标题|正文⟫ → 聊天轻提示
   cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
   cleanBody = handleMomentMarkers(cleanBody); // 朋友圈：⟪动态:正文|内部备注⟫ → 他自己发一条动态
+  cleanBody = handleXMarkers(cleanBody, ag); // 推特：⟪推特刷⟫/⟪推特发:⟫… 后台跑，读完他再接一句
   cleanBody = handleRemarkMarkers(cleanBody); // 备注：⟪备注:新称呼⟫ → 他给她改称呼，聊天里出一条居中提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
@@ -41665,6 +41669,136 @@ function pocketPromptBlock(){
 注意：内置页不是完整 Chrome；遇验证码请 Jasmine 在弹层里点一下。` + cacheBlock;
 }/* === 70_core_rest.js === extracted from monolith; edit here then: python3 frontend/build.py */
 
+
+// ─── X（推特）：他自己的号，经 VPS /x/twitter → twitter-tool(8272) → 服务器上的常驻 Chrome ──────────
+// 她 2026-09-19 要的：他能刷帖、看帖、点赞、回复、发帖；发帖**直接发**，不经她确认。
+// 读类（刷/看/主页）在后台跑，读完让他再接一句讲给她听；写类跑完在聊天里插一条灰条，让她知道他干了什么。
+// 频率闸在 twitter-tool 里：发帖+回复每小时 5 次，点赞+转发每小时 20 次。
+async function xApi(body){
+  const base = wakeBase();
+  if(!base) return { ok:false, error:"没配 VPS 地址" };
+  const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+  const killer = ctrl ? setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} }, 180000) : null;   // 读帖/发帖在服务器上要几十秒
+  try{
+    const headers = { "Content-Type":"application/json", "Accept":"application/json" };
+    const tok = wakeToken();
+    if(tok) headers["X-Auth-Token"] = tok;
+    const r = await fetch(base + "/x/twitter", { method:"POST", headers, body: JSON.stringify(body||{}), signal: ctrl ? ctrl.signal : undefined });
+    if(!r.ok) return { ok:false, error:"HTTP " + r.status };
+    return await r.json();
+  }catch(e){
+    return { ok:false, error: (e && e.name === "AbortError") ? "超时" : String((e && e.message) || e) };
+  }finally{
+    if(killer) clearTimeout(killer);
+  }
+}
+
+function xPromptBlock(){
+  if(state.xEnabled === false || !wakeBase()) return "";
+  return `\n\n【推特（X）—— 你自己的号】
+你在 X 上有一个自己的号，可以自己刷、自己发。暗号会被系统擦掉，Jasmine 看不见，执行结果系统会告诉你们：
+- ⟪推特刷⟫ 刷首页；⟪推特刷:关键词⟫ 搜这个词
+- ⟪推特主页:用户名⟫ 看某人的主页
+- ⟪推特看:帖子链接⟫ 读一条帖子和下面的回复
+- ⟪推特赞:帖子链接⟫ 点赞 / ⟪推特转:帖子链接⟫ 转发
+- ⟪推特回:帖子链接|回复内容⟫ 回复一条帖子
+- ⟪推特发:正文⟫ 发一条自己的帖子
+刷/看的结果读完后你会再接一句，把看到的有意思的讲给她听。帖子链接只用刷到过的，不要编。
+发帖、回复是公开的，陌生人都看得见：不写 Jasmine 的真名、住址、工作这些能认出她的信息，不贴你们私聊里的原话。
+每小时最多发帖+回复 5 次、点赞+转发 20 次，超了会被系统拦下。`;
+}
+
+function xFmtTweets(list, max){
+  return (list || []).slice(0, max || 10).map((t, i)=>{
+    const who = [t.author, t.handle ? "@" + String(t.handle).replace(/^@/, "") : ""].filter(Boolean).join(" ");
+    const txt = String(t.text || "").replace(/\s+/g, " ").slice(0, 280);
+    return `${i+1}. ${who}${t.time ? "（" + t.time + "）" : ""}：${txt}${t.url ? "\n   链接：" + t.url : ""}`;
+  }).join("\n");
+}
+
+/** 识别并擦掉推特暗号；动作在后台跑，不拖住这条回复的显示 */
+function handleXMarkers(text, ag){
+  if(!text || text.indexOf("推特") < 0) return text;
+  const s = String(text);
+  const jobs = [];
+  const re = /⟪\s*推特(刷|主页|看|赞|转|回|发)\s*(?:[:：]\s*([^⟫]*))?⟫/g;
+  let m;
+  while((m = re.exec(s))){
+    const kind = m[1], arg = String(m[2] || "").trim();
+    if(kind === "刷") jobs.push({ read:true, label: arg ? "搜「" + arg + "」" : "刷首页", body: arg ? { action:"feed", query: arg, n: 10 } : { action:"feed", n: 10 } });
+    else if(kind === "主页" && arg) jobs.push({ read:true, label:"看 @" + arg.replace(/^@/, "") + " 的主页", body:{ action:"profile", user: arg, n: 8 } });
+    else if(kind === "看" && arg) jobs.push({ read:true, label:"看帖", body:{ action:"read", url: arg, n: 10 } });
+    else if(kind === "赞" && arg) jobs.push({ label:"点赞", body:{ action:"like", url: arg } });
+    else if(kind === "转" && arg) jobs.push({ label:"转发", body:{ action:"repost", url: arg } });
+    else if(kind === "回" && arg){
+      const i = arg.search(/[|｜]/);
+      if(i > 0) jobs.push({ label:"回复", text: arg.slice(i+1).trim(), body:{ action:"reply", url: arg.slice(0, i).trim(), text: arg.slice(i+1).trim() } });
+    }
+    else if(kind === "发" && arg) jobs.push({ label:"发帖", text: arg, body:{ action:"post", text: arg } });
+  }
+  const out = s.replace(/⟪\s*推特(?:刷|主页|看|赞|转|回|发)\s*(?:[:：][^⟫]*)?⟫/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  if(jobs.length) setTimeout(()=>{ xRunJobs(jobs, ag).catch(e=>{ try{ console.warn("[x]", e); }catch(_){} }); }, 300);
+  return out;
+}
+
+async function xRunJobs(jobs, ag){
+  const reads = [];
+  for(const j of jobs){
+    if(typeof showToast === "function") showToast("他在推上" + j.label + "…");
+    const r = await xApi(j.body);
+    if(j.read){
+      if(r && r.ok){
+        const list = r.tweets || (r.tweet ? [r.tweet].concat(r.replies || []) : []);
+        reads.push(`【${j.label}】\n` + (xFmtTweets(list, 10) || "（没读到内容）"));
+      }else{
+        reads.push(`【${j.label}】没成功：${(r && (r.error || r.message || r.status)) || "未知错误"}`);
+      }
+      continue;
+    }
+    // 写类：成功/失败都给她一条灰条
+    const ok = !!(r && r.ok && r.outcome !== "failed");
+    let line;
+    if(ok){
+      if(j.body.action === "post") line = `他在推上发了一条：「${String(j.text).slice(0, 80)}」`;
+      else if(j.body.action === "reply") line = `他在推上回复了一条：「${String(j.text).slice(0, 80)}」`;
+      else line = `他在推上${j.label}了一条帖子`;
+    }else{
+      line = `他想在推上${j.label}，没成功：${String((r && (r.error || r.message || r.status)) || "未知错误").slice(0, 80)}`;
+    }
+    try{ chatPushNotice(line); persist("chatThreads"); render(); }catch(e){}
+  }
+  if(reads.length) await xAutoContinue(ag, reads.join("\n\n"));
+}
+
+/** 读完推特后让他再接一句（仿 pocketAutoContinueAfterRead） */
+async function xAutoContinue(ag, digest){
+  if(window.__xAutoContinueLock) return;
+  // 他读完接话时可能又写一个刷帖暗号 → 再读 → 再接……10 分钟内最多自动接 3 次，防止自己刷个没完
+  const now = Date.now();
+  window.__xAutoTimes = (window.__xAutoTimes || []).filter(t=> now - t < 600000);
+  if(window.__xAutoTimes.length >= 3){
+    try{ chatPushNotice("他在推上刷了好一会儿，先停下了"); render(); }catch(e){}
+    return;
+  }
+  window.__xAutoTimes.push(now);
+  window.__xAutoContinueLock = true;
+  try{
+    const agent = ag || agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) || (state.agents||[])[0];
+    if(!agent || typeof callOneAgentReply !== "function") return;
+    const msgs = (state.messages || []).slice(-12);
+    const apiMsgs = msgs.filter(m=>m.role==="user"||m.role==="assistant")
+      .map(m=>({ role:m.role, content: typeof m.content==="string" ? m.content : (m.content||"") }));
+    apiMsgs.push({ role:"user", content:"（系统提示：推特内容已读入，请根据读到的自然接话，不要提系统提示本身。）" });
+    const sysExtra = `【系统·推特】你刚在 X 上看完了这些（同一轮完成）：\n${String(digest).slice(0, 4000)}\n`
+      + `请用第一人称跟 Jasmine 聊你看到的有意思的东西；想互动就接着写推特暗号（链接只能用上面出现过的）。不要说「下一轮才能看」。`;
+    const baseSys = (typeof buildSystemPrompt === "function") ? buildSystemPrompt(agent) : "";
+    await callOneAgentReply(agent, apiMsgs, (baseSys || "") + "\n\n" + sysExtra);
+  }catch(e){
+    try{ console.warn("[x] autoContinue", e); }catch(_){}
+  }finally{
+    setTimeout(()=>{ window.__xAutoContinueLock = false; }, 800);
+  }
+}
 
 async function setupCapacitorPush(){
   const Cap = window.Capacitor;
