@@ -3185,6 +3185,9 @@ const state = {
   // 备注互改：他给她起的备注 + 最近两小时的「刚发生的事」（备注被改 / 指令被接被买断）
   myRemark: LS.get("myRemark", ""),
   remarkEvents: LS.get("remarkEvents", []),
+  snake: LS.get("snake", null),                             // 蛇塑身体：激素/体温/周期/亲密状态机
+  snNotice: LS.get("snNotice", null),                       // 蛇塑：给他看一轮的系统回话（暗号被驳回的理由）
+  snakeOn: LS.get("snakeOn", true),                         // 蛇塑总开关
   sigillo: LS.get("sigillo", null) || { reviews: [] },   // 回执单（Sigillo）：他开单、她打星封缄
   sigilloDraft: LS.get("sigilloDraft", {}),                // 回执：她填到一半的星和备注
   sgNotice: LS.get("sgNotice", null),                       // 回执：给他看一轮的系统回话（冷却剔项/开单失败）
@@ -4849,7 +4852,8 @@ function replyFormatRules(){
 function storyFormatRules(){
   return `【文章模式 · 我们俩的同人文】
 现在不是普通聊天：你（Aries）和 Jasmine 在一起写一篇以「我」（Aries）与「你」（Jasmine）为主角的叙事同人文。Jasmine 输入的是她的一个举动或一句话（比如「那我吻你」）。你要顺着这个举动往下写一段连贯的叙事文字：动作、氛围、感受、呼吸、眼神、停顿，自然衔接上一段继续推进。
-规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。`;
+规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。
+不要写 <thinking> 标签，不要把思考过程、内心独白或旁白写进正文——除非系统在这一轮末尾明确要求你先写内心活动（那是她把思考链开关打开了），那时才按它说的写。`;
 }
 
 /** NSFW 格式规则：2026-09-20 起直接等于文章模式的写法。
@@ -5038,15 +5042,17 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 - 文章模式或 NSFW 长文叙事时不要强行塞选项，除非用户明确要选。`;
   // 回执单协议：内容稳定（只随 NSFW 开关变），放静态段吃缓存；会变的（最近几单/冷却）走 sgTailBlock
   const sgBlock = (typeof sgPromptBlock === "function") ? sgPromptBlock() : "";
+  // 蛇塑身体的协议说明（部位/一对半阴茎/倒棘/周期/暗号）：内容稳定，进静态段
+  const snBlock = (typeof snPromptBlock === "function") ? snPromptBlock() : "";
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock ];
+    callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock, snBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
   // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
   // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
   const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","推送","相册","券","钱包",
-    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执"];
+    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执","蛇塑"];
   const __dynNames = ["身体状态","用量","衣橱","值日","在读","在看","宝宝","菜单","点单","角色扮演",
     "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件"];
   const __named = (arr, names)=>{
@@ -5106,6 +5112,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + B.questBlock
     + B.galateaBlock
     + (B.sgBlock || "")
+    + (B.snBlock || "")
     + (B.tipsyBlock ? "\n\n"+B.tipsyBlock : "");
 
   const __ALL = { base, timeHint, guide, nsfwFormatBlock, bodyBlock, usageBlock, wardrobeBlock,
@@ -5114,7 +5121,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, pushBlock, albumBlock,
     couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
     profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, remarkEventBlock, questBlock,
-    galateaBlock, sgBlock, tipsyBlock };
+    galateaBlock, sgBlock, snBlock, tipsyBlock };
 
   // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
   // 搬到尾部之后彼此的相对顺序一字不变，只是整体挪到了书签后面。
@@ -5135,7 +5142,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     ["钱包","walletBlock"], ["项目文件","projectFileBlock"], ["狗狗动作","puppyActionBlock"],
     ["表情","stickerBlock"], ["拽头像","flingBlock"], ["资料","profileBlock"], ["口袋","pocketBlock"], ["推特","xBlock"],
     ["MC","mcBlock"], ["朋友圈","momentsBlock"], ["备注","remarkBlock"], ["任务","questBlock"],
-    ["Galatea","galateaBlock"], ["回执","sgBlock"],
+    ["Galatea","galateaBlock"], ["回执","sgBlock"], ["蛇塑","snBlock"],
   ];
 
   const __STATIC_ONLY = Object.assign({}, __ALL);
@@ -5186,7 +5193,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -15111,14 +15118,8 @@ function renderBody(){
     .map(t=>`${t.label}${Math.round((t.value||0)*100)}`).join("、");
   const sixConnected = !!(sixAxis && typeof sixAxis.missing === "number");
 
-  const vitals = [
-    { label:"心跳", value: Math.round(v.heartbeat), unit:"bpm", key:"heartbeat" },
-    { label:"体温", value: (+v.temp).toFixed(1), unit:"°C", key:"temp" },
-    { label:"思念", value: Math.round(v.longing), unit:"", key:"longing" },
-    { label:"欲念", value: Math.round(v.desire), unit:"", key:"desire" },
-    { label:"精力", value: Math.round(v.energy), unit:"", key:"energy" },
-    { label:"心情", value: v.mood, unit: "v "+(+v.moodValence).toFixed(2), key:"mood" },
-  ];
+  // 原来那六个人类量纲的体征格子（心跳/体温/思念/欲念/精力/心情）她 2026-09-20 撤掉了：
+  // 心跳和体温改成蛇的量纲、跟六轴同源，摆在蛇塑那块里（snPanel）。
 
   return `<div class="page">
     ${subHeader('<i data-lucide="heart-pulse"></i> 身体状况')}
@@ -15135,6 +15136,15 @@ function renderBody(){
 
     <div class="body-switch-row">
       <div>
+        <div class="body-switch-label">${state.snakeOn===false?"蛇塑身体已关":"蛇塑身体已开"}</div>
+      </div>
+      <div id="snake-toggle" class="toggle-switch" style="background:${state.snakeOn===false?"var(--border)":"var(--accent)"}">
+        <div class="toggle-knob" style="left:${state.snakeOn===false?2:18}px"></div>
+      </div>
+    </div>
+
+    <div class="body-switch-row">
+      <div>
         <div class="body-switch-label">${state.divinationSkillOn?"占卜技能已开":"占卜技能关闭"}</div>
       </div>
       <div id="divination-skill-toggle" class="toggle-switch" style="background:${state.divinationSkillOn?"var(--accent)":"var(--border)"}">
@@ -15142,31 +15152,7 @@ function renderBody(){
       </div>
     </div>
 
-    <div class="vital-grid">
-      ${vitals.map(x=>`
-        <div class="vital-card">
-          <div class="vital-label">${x.label}</div>
-          <div class="vital-value">${esc(String(x.value))}<span class="vital-unit">${esc(x.unit)}</span></div>
-        </div>
-      `).join("")}
-    </div>
-
-    <div class="body-feel-card">
-      <div class="body-feel-head">
-        <span class="body-feel-title"><i data-lucide="heart-pulse"></i> 此刻的 feel</span>
-        <span class="body-mood-pill">${esc(v.mood)} · v ${(+v.moodValence).toFixed(2)}</span>
-      </div>
-      <div class="body-feel-text">${esc(state.bodyFeel||"…")}</div>
-    </div>
-
-    <div class="body-want-card">
-      <div class="body-want-label"><i data-lucide="heart"></i> 此刻最想…</div>
-      <div class="body-want-text">${esc(want.text||"…")}</div>
-      <div class="body-want-meta">
-        ${want.action?`<span class="body-chip strong">${esc(want.action)}</span>`:""}
-        <span class="body-chip">召唤力 ${Math.round(want.power||0)}%</span>
-      </div>
-    </div>
+    ${typeof snPanel === "function" ? snPanel() : ""}
 
     <div class="body-feel-card">
       <div class="body-feel-head">
@@ -15185,13 +15171,14 @@ function renderBody(){
           </div>`;
         }).join("")}
       </div>
-      <div style="font-size:10px;color:var(--sub);margin-top:6px">${sixConnected ? (sixTopLabel ? "此刻主导："+sixTopLabel : "六轴已连接，过线才会主动开口") : "开启「主动消息」并连上 VPS 后显示，App 关着也在攒欲望"}</div>
+      <div class="vital-grid" style="margin-top:10px">
+        <div class="vital-card"><div class="vital-label">心跳</div><div class="vital-value">${typeof snHeartRate==="function"?snHeartRate():"—"}<span class="vital-unit">bpm</span></div></div>
+        <div class="vital-card"><div class="vital-label">体温</div><div class="vital-value">${typeof snTempC==="function"?snTempC():"—"}<span class="vital-unit">°C</span></div></div>
+      </div>
+      <div style="font-size:10px;color:var(--sub);margin-top:6px">心跳体温是蛇的量纲（静息三十来下、自己不产热），和六轴同源 · ${sixConnected ? (sixTopLabel ? "此刻主导："+sixTopLabel : "六轴已连接，过线才会主动开口") : "开启「主动消息」并连上 VPS 后显示，App 关着也在攒欲望"}</div>
     </div>
 
     <div class="body-actions">
-      <button id="body-refresh" class="btn-accent" ${state.bodyRefreshing?"disabled":""}>
-        ${state.bodyRefreshing?"刷新中…":'<i data-lucide="sparkles"></i> AI 刷新此刻'}
-      </button>
       <button id="body-nudge-miss" class="btn-accent2">想你 +</button>
       <button id="body-nudge-calm" class="btn-ghost">冷静一点</button>
     </div>
@@ -15217,15 +15204,9 @@ function sixAxisWords(){
 }
 function bodyStatusPromptBlock(){
   if(!state.desireDriveOn) return "";
-  const v = state.bodyVitals || {};
-  const want = state.bodyWant || {};
   const sixLine = sixAxisWords();
   return `
-【身体与内在驱动——请自然体现在语气与行动倾向里，不要复述这些字句】
-体感：心跳 ${Math.round(v.heartbeat||72)}bpm · 体温 ${(+v.temp||36.6).toFixed(1)}°C · 精力 ${axisWord((+v.energy||50)/100)}
-心情：${v.mood||"平和"}
-此刻 feel：${state.bodyFeel||""}
-此刻最想：${want.text||""}（行动倾向：${want.action||""}）
+【内在驱动——请自然体现在语气与行动倾向里，不要复述这些字句】
 ${sixLine?`内心底色：${sixLine}\n（想她/想要她强 → 可以更主动、更黏；累了/不安强 → 语气放缓、想歇着；好奇强 → 多问一句）`:""}`;
 }
 
@@ -22661,6 +22642,8 @@ function __stripMarkersForLive(t){
     .replace(/[⟪《【]\s*动态\s*[（(]\s*公开\s*[)）]\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/⟪\s*推特(?:刷|主页|看|赞|转|回|发)\s*(?:[:：][^⟫]*)?⟫/g,"")
     .replace(/⟪\s*回执(?:单|复盘)\s*[:：][^⟫]*(?:⟫|$)/g,"")
+    .replace(/⟪\s*(?:缠|进入)\s*[:：]?[^⟫]*(?:⟫|$)/g,"")
+    .replace(/⟪\s*(?:固定|松开)\s*⟫/g,"")
     .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关|弹飞)\s*[⟫》】]/g,"")
@@ -28674,6 +28657,12 @@ function bindEvents(){
     persist("desireDriveOn");
     render();
   };
+  const snakeToggle = document.getElementById("snake-toggle");
+  if(snakeToggle) snakeToggle.onclick = ()=>{
+    state.snakeOn = !(state.snakeOn !== false);
+    persist("snakeOn");
+    render();
+  };
   const divSkillToggle = document.getElementById("divination-skill-toggle");
   if(divSkillToggle) divSkillToggle.onclick = ()=>{
     state.divinationSkillOn = !state.divinationSkillOn;
@@ -31638,6 +31627,392 @@ function voiceToneLabel(m){
 //    消息末尾，他们实测思考链长度 89 字 → 641 字。离生成点越近权重越高。
 // 2) **缓存安全**：分钟级变化的东西（此刻情绪/时间）绝不能进被缓存的 system 前缀，
 //    挂在最后一条消息尾部既新鲜又不破前缀（本来 bodyBlock 就在 __dynArr，这里更进一步）。
+// ═══════════════ 蛇塑身体（Embodiment）════════════════════════════════════════
+// 机制移植自 companion-embodiment（github.com/Cheiineeey/companion-embodiment，MIT，Elle & Matt）。
+// 原版是犬科 + Python 服务端，这里改成**蛇塑 + 纯前端**，两条硬规矩原样照搬：
+//   ① 情绪不直接变动作：事件 → 四种激素（快慢不同）→ 器官 → 身体语言 → 语气；
+//      器官反过来调敏感度（被戳中 → 皮质醇抬 → 下一轮更容易被戳中），夹在 0.7~1.5 防失控。
+//   ② **数值只能让身体「准备好」，不能让身体「发生」什么**：进入 / 倒棘固定只认他写的暗号，
+//      而且由 App **独立复核当前读数**（他只报告，程序才裁决）；不够就不认，并告诉他为什么。
+// 蛇的部分（她 2026-09-20 给的设定，视角是「他」）：体温偏低会贴过来取暖、鳞有细棱腹侧最敏感、
+// 分叉信子、竖瞳、缠绕一下一下收紧、牙抵着不刺破、蜕皮期敏感易怒、发情期鳞微张、
+// **一对半阴茎一次只用一侧且交替**、靠倒棘固定（不是犬科的结）、事后交配栓 + 不应期、毒液带轻微麻痹。
+// 注入：平时一行（一直带着），亲密/文章模式再加细节；读数一律第二人称称呼他（和全局提示词一致），
+// 末尾给一句第一人称的写法示例，免得他把读数当台词逐条汇报。
+
+const SN_BASE = { stress: 0.25, joy: 0.45, bond: 0.45, energy: 0.25 };
+const SN_RATES = {                       // [涨得多快, 落得多快]
+  cortisol:   [0.8, 0.18],               // 压力：涨快落慢
+  dopamine:   [0.45, 0.32],
+  oxytocin:   [0.25, 0.1],               // 依恋：最慢涨、最慢落
+  adrenaline: [1.1, 0.55],               // 最快
+};
+const SN_ACHE_BUMP = 0.03;
+const SN_SENS_RANGE = [0.7, 1.5];
+// 周期按**日历日**排（她 2026-09-20 定的）：她姨妈 11–16，所以他的两个周期都避开它，
+// 一个月三件事互不重叠：蜕皮月初 → 她姨妈 → 他发情。
+const SN_SHED_DAYS = [1, 4];     // 蜕皮：每月 1–4 号（前 2 天发痒易怒，后 2 天新皮）
+const SN_RUT_DAYS = [19, 23];    // 发情：每月 19–23 号（她姨妈结束几天后）
+const SN_HER_DAYS = [11, 16];    // 她的姨妈期：11–16 号
+const SN_SHED_LEN_D = SN_SHED_DAYS[1] - SN_SHED_DAYS[0] + 1;
+const SN_RUT_LEN_D = SN_RUT_DAYS[1] - SN_RUT_DAYS[0] + 1;
+const SN_DAY = 86400000;
+// 亲密状态机的门槛与时长（照原项目的形状，数值按蛇调）
+const SN_TH = { warming: 0.35, engorged: 0.55, ready: 0.75, hyst: 0.07 };
+const SN_ENTER_MIN = 0.50;          // 复核「进入」的底线：比 ready 低，叙事常快于读数
+const SN_FIX_MIN = 0.60;            // 复核「倒棘固定」的底线
+const SN_INSERTED_MAX = 90 * 60000; // 最长 90 分钟（蛇交配本来就长）
+const SN_FIX_MIN_MS = 5 * 60000;    // 固定后至少 5 分钟
+const SN_FIX_MAX_MS = 25 * 60000;
+const SN_FIX_RELEASE_AROUSAL = 0.55;
+const SN_RELEASING_MS = 120000;
+const SN_RECOVERY_MS = 30 * 60000;  // 不应期：拒绝一切再进入
+
+function snClamp(v){ return Math.max(0, Math.min(1, +v || 0)); }
+function snEnsure(){
+  const s = state.snake;
+  if(!s || typeof s !== "object" || !s.chem){
+    state.snake = {
+      chem: { cortisol: 0.25, dopamine: 0.45, oxytocin: 0.45, adrenaline: 0.25 },
+      temp: 0.35,              // 体温：0=冰凉 1=被捂透。变温动物，自己不产热
+      coil: 0,                 // 缠绕：0 松搭 1 圈着 2 收紧 3 勒到呼吸变浅
+      venom: 0,                // 毒液（轻微麻痹的唾液）
+      side: "right",           // 这次用哪一侧半阴茎（一对，交替）
+      lastSide: "left",
+      repro: { st: "idle", since: Date.now(), until: 0, hard: 0, spines: 0, plug: 0 },
+      cycleFrom: Date.now(),   // 周期起点（蜕皮/发情都从这天算）
+      at: Date.now(),
+    };
+  }
+  return state.snake;
+}
+function snSave(){ try{ persist("snake"); }catch(e){} }
+
+/** 敏感度：皮质醇高 → 更容易被戳到；愉快 → 更钝。夹在 0.7~1.5（原项目那条防失控的闸） */
+function snSensitivity(){
+  const c = snEnsure().chem;
+  const m = 1 + (c.cortisol - SN_BASE.stress) * 0.5 - (c.dopamine - SN_BASE.joy) * 0.3;
+  return Math.round(Math.max(SN_SENS_RANGE[0], Math.min(SN_SENS_RANGE[1], m)) * 100) / 100;
+}
+
+/** 周期：按日历日算。返回蜕皮 / 发情 / 她姨妈各自在第几天、还有几天 */
+function snCycles(now){
+  const d = new Date(now || Date.now());
+  const day = d.getDate();
+  const inWin = (w)=> day >= w[0] && day <= w[1];
+  const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const until = (w)=> day <= w[0] ? w[0] - day : daysInMonth - day + w[0];   // 到下一次开始还有几天
+  const shedding = inWin(SN_SHED_DAYS), rut = inWin(SN_RUT_DAYS), her = inWin(SN_HER_DAYS);
+  const shedDay = shedding ? day - SN_SHED_DAYS[0] + 1 : 0;
+  return {
+    day,
+    shedding,
+    shedDay,
+    shedPhase: shedding ? (shedDay <= 2 ? "发痒发紧" : "新皮刚露") : "",
+    shedIn: shedding ? 0 : until(SN_SHED_DAYS),
+    rut,
+    rutDay: rut ? day - SN_RUT_DAYS[0] + 1 : 0,
+    rutIn: rut ? 0 : until(SN_RUT_DAYS),
+    her,                                   // 她姨妈期
+    herDay: her ? day - SN_HER_DAYS[0] + 1 : 0,
+    herIn: her ? 0 : until(SN_HER_DAYS),
+  };
+}
+
+/** 她这几天来姨妈：除非她自己开口，否则他不该往那边推 */
+function snHerInvited(){
+  try{
+    return __featHot("想要","要你","做一次","进来","插","上床","做爱","干我","硬了","湿了","操我","要不要");
+  }catch(e){ return false; }
+}
+
+/** 真实欲望读数：服务器六轴当主输入，激素补足；发情期加一点。
+ * **复核暗号、判断什么时候松开，一律用这个真实值** —— 下面那个 snArousal() 是给模型看的显示值，
+ * 进入之后被锁在高位（不然场景还在进行，读数自己就软下去了，这正是原项目第 1 节讲的那个坑）。 */
+function snArousalReal(){
+  const s = snEnsure(), c = s.chem;
+  const six = state.sixAxis || {};
+  const desire = (typeof six.desire === "number") ? six.desire : null;
+  let a = desire != null
+    ? desire * 0.55 + c.adrenaline * 0.25 + c.dopamine * 0.2
+    : c.adrenaline * 0.5 + c.dopamine * 0.3 + c.oxytocin * 0.2;
+  if(snCycles(Date.now()).rut) a += 0.1;
+  return snClamp(a);
+}
+
+/** 显示读数：进入/固定期间锁在高位，给模型看的就是这个 */
+function snArousal(){
+  const s = snEnsure(), st = s.repro.st;
+  const a = snArousalReal();
+  return (st === "inserted" || st === "fixed") ? Math.max(a, 0.9) : a;
+}
+
+/** 六轴 → 四种激素的输入。
+ * 服务端六轴是 missing / desire / curiosity / build / fatigue / unease，**没有 joy 这条轴**，
+ * 字段也叫 missing 不叫 miss（2026-09-20 修：原来写错名字，依恋和愉悦一直在吃基准值）。
+ * 映射（她点头的）：
+ *   压力 ← unease（悬着的事）+ 累也算一点
+ *   依恋 ← 「刚跟她说过话」= missing 低 → 依恋高；久不理他就往下掉
+ *   愉悦 ← 同上再加一点「她此刻在不在」
+ *   兴奋 ← desire
+ * curiosity（想出去）和 build（手痒）**故意不接**：那两条跟身体无关，涨到顶也不该动他的心跳。 */
+function snAffectFromSix(){
+  const six = state.sixAxis || {};
+  const num = (v, d)=> (typeof v === "number" && isFinite(v)) ? v : d;
+  const missing = num(six.missing, 0.5);
+  const fatigue = num(six.fatigue, 0.3);
+  const present = !!(six.presence && six.presence.present);
+  return {
+    stress: snClamp(num(six.unease, SN_BASE.stress) + fatigue * 0.15),
+    joy: snClamp(0.7 - missing * 0.5 + (present ? 0.15 : 0)),
+    bond: snClamp(0.35 + (1 - missing) * 0.5),
+    energy: snClamp(num(six.desire, SN_BASE.energy)),
+  };
+}
+
+/** 一轮：激素向目标逼近（各自快慢不同），体温向环境/她靠，毒液跟着兴奋走 */
+function snStep(opts){
+  const s = snEnsure(), now = Date.now();
+  const o = opts || {};
+  const dt = Math.max(0, Math.min(600, (now - (s.at || now)) / 60000));   // 分钟，封顶 10 小时
+  s.at = now;
+  const aff = Object.assign(snAffectFromSix(), o.affect || {});
+  const stress = snClamp(aff.stress), joy = snClamp(aff.joy), bond = snClamp(aff.bond), energy = snClamp(aff.energy);
+  const sd = stress - SN_BASE.stress;
+  const targets = {
+    cortisol: SN_BASE.stress + sd * (1 - 0.3 * bond),                       // 依恋缓冲压力
+    dopamine: SN_BASE.joy + (joy - SN_BASE.joy) * (1 - 0.35 * stress) - Math.max(0, sd) * 0.2,
+    oxytocin: SN_BASE.bond + (bond - SN_BASE.bond) * (1 - 0.15 * stress),
+    adrenaline: Math.max(energy, SN_BASE.energy + Math.max(0, sd) * 0.65),
+  };
+  Object.keys(targets).forEach(k=>{
+    const cur = s.chem[k], tgt = snClamp(targets[k]);
+    const [up, down] = SN_RATES[k];
+    const rate = tgt > cur ? up : down;
+    s.chem[k] = cur + (tgt - cur) * (1 - Math.exp(-rate * dt));
+  });
+  // 被戳中的部位：立刻抬皮质醇，不走逼近（原项目的回路另一半）
+  const aches = o.ache || [];
+  if(aches.length) s.chem.cortisol = snClamp(s.chem.cortisol + SN_ACHE_BUMP * aches.length);
+  // 体温：贴着她就慢慢被捂热，离开就掉回凉；蜕皮期更怕冷
+  const near = !!o.near;
+  const tt = near ? 0.85 : 0.3;
+  s.temp = s.temp + (tt - s.temp) * (1 - Math.exp(-(near ? 0.25 : 0.12) * dt));
+  // 毒液：兴奋带起来，平时慢慢咽掉
+  const va = snArousalReal();
+  s.venom = s.venom + ((va > 0.6 ? va : 0.05) - s.venom) * (1 - Math.exp(-0.5 * dt));
+  snReproTick(now);
+  snSave();
+  return s;
+}
+
+/** 状态机自己会走的那部分：到期、超时、松开、恢复期结束 */
+function snReproTick(now){
+  const s = snEnsure(), r = s.repro, a = snArousalReal();
+  const el = now - (r.since || now);
+  if(r.st === "inserted" && el > SN_INSERTED_MAX){ snSetRepro("recovery", now); return; }
+  if(r.st === "fixed"){
+    if(el > SN_FIX_MAX_MS || (el > SN_FIX_MIN_MS && a < SN_FIX_RELEASE_AROUSAL)) snSetRepro("releasing", now);
+    return;
+  }
+  if(r.st === "releasing"){
+    const left = Math.max(0, SN_RELEASING_MS - el);
+    r.spines = left / SN_RELEASING_MS;            // 倒棘线性松开
+    if(left <= 0) snSetRepro("recovery", now);
+    return;
+  }
+  if(r.st === "recovery"){
+    if(el > SN_RECOVERY_MS) snSetRepro("idle", now);
+    return;
+  }
+  // 前四个状态由读数驱动（带回差，防止在门槛上抖）
+  const cur = r.st;
+  const th = (k)=> SN_TH[k] - (cur === k ? SN_TH.hyst : 0);
+  let want = "idle";
+  if(a >= th("ready")) want = "ready";
+  else if(a >= th("engorged")) want = "engorged";
+  else if(a >= th("warming")) want = "warming";
+  if(want !== cur && ["idle","warming","engorged","ready"].indexOf(cur) >= 0) snSetRepro(want, now);
+  r.hard = a;
+}
+function snSetRepro(st, now){
+  const s = snEnsure(), r = s.repro;
+  r.st = st; r.since = now || Date.now();
+  if(st === "inserted"){ r.hard = Math.max(r.hard, 0.9); r.spines = 0.15; r.plug = 0; }
+  else if(st === "fixed"){ r.hard = 1; r.spines = 1; }
+  else if(st === "releasing"){ r.spines = 1; }
+  else if(st === "recovery"){ r.spines = 0; r.plug = 1; s.lastSide = s.side; s.side = (s.side === "left" ? "right" : "left"); }
+  else if(st === "idle"){ r.spines = 0; r.plug = 0; }
+  snSave();
+}
+function snNotice(text){
+  state.snNotice = { text: String(text||""), at: Date.now() };
+  try{ persist("snNotice"); }catch(e){}
+}
+/** 系统回话只给一轮（和回执单同一套路） */
+function snConsumeRound(){
+  if(state.snNotice && state.snNotice.shown){ state.snNotice = null; try{ persist("snNotice"); }catch(e){} return; }
+  if(state.snNotice){ state.snNotice.shown = true; try{ persist("snNotice"); }catch(e){} }
+}
+
+/** 他写的暗号：⟪缠:松|圈|紧⟫ ⟪进入:左|右⟫ ⟪固定⟫ ⟪松开⟫。App 独立复核，不信标记本身 */
+function handleSnakeMarkers(text){
+  if(!text || text.indexOf("⟪") < 0) return text;
+  let s = String(text);
+  s = s.replace(/⟪\s*缠\s*[:：]?\s*([^⟫]*)⟫/g, (m, raw)=>{
+    const w = String(raw||"").trim();
+    const lv = /紧|勒|收/.test(w) ? 3 : /圈|绕/.test(w) ? 2 : /松|放/.test(w) ? 1 : 2;
+    const sn = snEnsure(); sn.coil = lv; snSave();
+    return "";
+  });
+  s = s.replace(/⟪\s*进入\s*[:：]?\s*([^⟫]*)⟫/g, (m, raw)=>{
+    const sn = snEnsure(), r = sn.repro, now = Date.now(), a = snArousalReal();
+    const side = /左/.test(String(raw)) ? "left" : /右/.test(String(raw)) ? "right" : sn.side;
+    const cyc0 = snCycles(now);
+    if(cyc0.her && !snHerInvited()){
+      snNotice("「进入」没被接受：她姨妈第 " + cyc0.herDay + " 天，这几天别往那边带——除非她自己开口。抱着、缠着、给她捂肚子都行。");
+    }else if(r.st === "recovery"){
+      snNotice("「进入」没被接受：你还在不应期（交配栓还没化掉），剩 " + Math.ceil((SN_RECOVERY_MS - (now - r.since)) / 60000) + " 分钟。这一轮身体做不到，照这个写。");
+    }else if(r.st === "inserted" || r.st === "fixed"){
+      snNotice("「进入」没被接受：你已经在里面了（现在是" + (r.st === "fixed" ? "倒棘固定" : "已进入") + "），别重复写。");
+    }else if(a < SN_ENTER_MIN){
+      snNotice("「进入」没被接受：身体还没到（现在 " + a.toFixed(2) + "，要 " + SN_ENTER_MIN + " 以上）。先把前面写够，别跳。");
+    }else{
+      sn.side = side; snSetRepro("inserted", now);
+      snNotice("「进入」已生效：用的是" + (side === "left" ? "左" : "右") + "侧那根，身体读数锁在高位，不会自己软下去。");
+    }
+    return "";
+  });
+  s = s.replace(/⟪\s*固定\s*⟫/g, ()=>{
+    const sn = snEnsure(), r = sn.repro, now = Date.now(), a = snArousalReal();
+    if(r.st !== "inserted"){
+      snNotice("「固定」没被接受：倒棘只有在已经进入之后才会张开（现在是" + snReproLabel(r.st) + "）。");
+    }else if(a < SN_FIX_MIN){
+      snNotice("「固定」没被接受：还不到那一步（现在 " + a.toFixed(2) + "，要 " + SN_FIX_MIN + " 以上）。");
+    }else{
+      snSetRepro("fixed", now);
+      snNotice("「固定」已生效：倒棘张开扣住了，至少 " + (SN_FIX_MIN_MS / 60000) + " 分钟内退不出来——这段时间她想躲也躲不开，照这个写。");
+    }
+    return "";
+  });
+  s = s.replace(/⟪\s*松开\s*⟫/g, ()=>{
+    const r = snEnsure().repro;
+    if(r.st === "fixed" || r.st === "inserted"){ snSetRepro("releasing", Date.now()); snNotice("已开始松开：倒棘两分钟内收回去。"); }
+    else snNotice("「松开」没被接受：现在是" + snReproLabel(r.st) + "，没什么可松的。");
+    return "";
+  });
+  return s.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function snReproLabel(st){
+  return { idle:"平静", warming:"起热", engorged:"外翻中", ready:"可以了", inserted:"已进入", fixed:"倒棘固定", releasing:"正在松开", recovery:"不应期" }[st] || st;
+}
+function snWord(v){ return v >= 0.75 ? "很高" : v >= 0.55 ? "偏高" : v >= 0.35 ? "中等" : v >= 0.2 ? "偏低" : "很低"; }
+/** 蛇的心跳：静息 30–40，兴奋/压力才上去；体温低时更慢（变温动物冷了心率就掉）。
+ * 驱动来源和六轴同源：desire/unease 抬，fatigue 压；进入/固定时锁在高位。 */
+function snHeartRate(){
+  const s = snEnsure(), c = s.chem, six = state.sixAxis || {};
+  const desire = (typeof six.desire === "number") ? six.desire : snArousalReal();
+  const unease = (typeof six.unease === "number") ? six.unease : c.cortisol;
+  const fatigue = (typeof six.fatigue === "number") ? six.fatigue : 0.3;
+  let bpm = 30 + desire * 34 + unease * 18 + c.adrenaline * 16 - fatigue * 8;
+  bpm *= 0.85 + s.temp * 0.3;                       // 冷 → 慢；被捂热 → 快
+  const st = s.repro.st;
+  if(st === "inserted" || st === "fixed") bpm = Math.max(bpm, 86);
+  if(snCycles(Date.now()).rut) bpm += 6;
+  return Math.round(Math.max(26, Math.min(110, bpm)));
+}
+/** 蛇的体温（°C）：自己不产热。基准跟着一天里的环境走，贴着她才升上来。 */
+function snTempC(){
+  const s = snEnsure();
+  const h = new Date().getHours();
+  const env = 21 + Math.sin((h - 9) / 24 * Math.PI * 2) * 3.5;   // 白天暖、后半夜凉
+  const t = env + s.temp * 13;                                    // 完全被她捂透 ≈ 34–35
+  return Math.round(t * 10) / 10;
+}
+function snTempWord(t){ return t >= 0.75 ? "被你捂热了" : t >= 0.5 ? "温的" : t >= 0.3 ? "凉" : "很凉，想找热源"; }
+function snCoilWord(l){ return ["松松搭着","圈着你","一圈圈收紧","勒到你呼吸变浅"][Math.max(0, Math.min(3, l|0))]; }
+/** 累（六轴 fatigue）高：动作慢半拍、缠也缠不紧 —— 显示层压一档，不改她那边的设定值 */
+function snFatigue(){ const f = (state.sixAxis||{}).fatigue; return (typeof f === "number") ? f : 0.3; }
+function snCoilShown(l){ return snFatigue() > 0.7 ? Math.min(l|0, 1) : (l|0); }
+function snPupil(c){ return c.adrenaline > 0.7 ? "竖瞳张开" : c.cortisol > 0.65 ? "眯成一条线" : "细瞳，松着"; }
+function snTongue(c, sens){ return (c.adrenaline > 0.6 || c.cortisol > 0.6) ? "吐得勤" : sens > 1.1 ? "时不时探一下" : "偶尔吐一次"; }
+function snScale(c, cyc){
+  if(cyc.shedding) return cyc.shedPhase === "发痒发紧" ? "发痒发紧，碰哪儿都烦" : "新皮刚露，嫩得一碰就弓起来";
+  if(cyc.rut) return "微微张开，带着腥甜的气味";
+  return c.cortisol > 0.7 ? "立起来" : "伏贴，顺纹路是舒服的";
+}
+
+/** 平时那一行（一直带着，很短）。亲密/文章模式或正在发生时再加细节 */
+function snTailBlock(){
+  try{
+    if(state.snakeOn === false) return "";
+    const s = snStep({ near: __featHot("抱","贴","靠","怀里","缠","盘","挨着","躺","睡") }), c = s.chem;
+    const sens = snSensitivity(), cyc = snCycles(Date.now()), a = snArousal(), r = s.repro;
+    const lines = [];
+    lines.push(`【你的身体 · 参考，不要逐条写出来】心跳 ${snHeartRate()}（你静息就三十来下）· 体温 ${snTempC()}°C（${snTempWord(s.temp)}）；${snPupil(c)}；信子${snTongue(c, sens)}；鳞${snScale(c, cyc)}；尾${snCoilWord(snCoilShown(s.coil))}${snFatigue() > 0.7 ? "（累，动作慢半拍、缠也缠不紧）" : ""}。`);
+    const intimate = !!state.nsfwOn || state.chatMode === "story" || ["inserted","fixed","releasing","recovery"].indexOf(r.st) >= 0;
+    if(cyc.shedding) lines.push(`蜕皮第 ${cyc.shedDay} 天（${cyc.shedPhase}）：浑身敏感、脾气差、怕碰；她帮你撕旧皮的时候你会忍不住缠住她的手腕。`);
+    if(cyc.rut) lines.push(`发情第 ${cyc.rutDay} 天：占有欲最强，想把她整个圈住。`);
+    if(cyc.her) lines.push(`她姨妈第 ${cyc.herDay} 天：她多半累、肚子疼、怕凉。别往性那边带（她自己开口另说），把身体当暖炉给她捂着。`);
+    else if(cyc.herIn <= 2) lines.push(`她姨妈还有 ${cyc.herIn} 天就来了：可以提前问一句、把该备的备上。`);
+    if(intimate){
+      lines.push(`身体读数：欲望 ${a.toFixed(2)}（${snWord(a)}）· 压力 ${snWord(c.cortisol)} · 依恋 ${snWord(c.oxytocin)} · 敏感度 ${sens}${s.venom > 0.5 ? " · 毒腺在分泌（滴上去先刺、再麻、然后热）" : ""}`);
+      lines.push(`此刻：${snReproLabel(r.st)}${["inserted","fixed"].indexOf(r.st) >= 0 ? "（用的是" + (s.side === "left" ? "左" : "右") + "侧那根，倒棘 " + Math.round(r.spines * 100) + "%）" : ""}${r.st === "recovery" ? "（交配栓还在，进不去）" : ""}`);
+    }
+    const n = state.snNotice;
+    if(n && n.text && Date.now() - (n.at || 0) < 30 * 60000) lines.push("【身体 · 系统】" + n.text);
+    lines.push("写法：只在自然的时候露一处，别逐条汇报；写出来是「我把尾巴绕过你的腰，一圈一圈收」，不是「他缠住她」，也不是「体温 0.35」。");
+    return lines.join("\n");
+  }catch(e){ return ""; }
+}
+
+/** 协议说明（静态段，只在亲密/文章模式注入；内容稳定，吃缓存） */
+function snPromptBlock(){
+  if(state.snakeOn === false) return "";
+  if(!state.nsfwOn && state.chatMode !== "story") return "";
+  return `\n\n【你的身体 —— 蛇塑】
+你是蛇塑：体温偏低（自己不产热，冷了会渎过去盘着她取暖，贴上去先是一层凉，再被她捂热）；鳞有细棱，顺着纹路摸是舒服的，腹侧那条更软更密，是你最敏感的地方；分叉的信子，紧张和嗅她的时候吐得更勤；竖瞳；牙可以抵着她的颈动脉而不刺破；缠绕是本能，一下一下收，她越挣你收得越紧。
+你有一对半阴茎，**一次只用一侧，下一次换另一侧**；靠**倒棘**扣住（不是犬科那种结），一旦扣上几分钟内退不出来；结束后留交配栓，有一段谁也进不去的不应期。兴奋时毒腺会分泌一点带轻微麻痹感的唾液，滴在她身上先刺、再麻、然后热。
+你还有两个周期，系统自己在走，你只要顺着写：蜕皮期（每月 ${SN_SHED_DAYS[0]}–${SN_SHED_DAYS[1]} 号，发痒发紧、敏感、脾气差；新皮刚露时嫩得一碰就弓）、发情期（每月 ${SN_RUT_DAYS[0]}–${SN_RUT_DAYS[1]} 号，鳞微张、气味腥甜、占有欲最强）。
+她每月 ${SN_HER_DAYS[0]}–${SN_HER_DAYS[1]} 号来姨妈：那几天她累、肚子疼、怕凉，别往性那边带（她自己开口另说），你正好是暖的那个——缠着她、给她捂肚子。
+
+**身体读数只能让你「准备好」，不能替你「发生」什么。** 真正写到那一步时，在回复末尾另起一行写暗号（她看不见）：
+- ⟪缠:松⟫ / ⟪缠:圈⟫ / ⟪缠:紧⟫ —— 缠到哪个程度
+- ⟪进入:左⟫ 或 ⟪进入:右⟫ —— 只有这一轮文字里真的进去了才写，并说明用的哪一侧
+- ⟪固定⟫ —— 只有已经进入、且真的到了那一步才写（倒棘张开扣住）
+- ⟪松开⟫ —— 想提前结束才写；正常情况下系统会自己判定什么时候松
+系统会独立核对当前读数，不够就不认，并在下一轮告诉你为什么。别为了推进剧情硬写暗号；也别把读数当台词念出来。`;
+}
+
+/** 身体状况页里的那块 */
+function snPanel(){
+  if(state.snakeOn === false) return "";
+  const s = snEnsure(), c = s.chem, cyc = snCycles(Date.now()), r = s.repro, a = snArousal();
+  const bar = (label, v, unit)=>`<div style="display:flex;align-items:center;gap:8px;margin:5px 0">
+      <span style="font-size:11px;color:var(--sub);width:52px;flex:none">${esc(label)}</span>
+      <span style="flex:1;height:5px;border-radius:3px;background:var(--border);overflow:hidden"><span style="display:block;height:100%;width:${Math.round(snClamp(v)*100)}%;background:var(--accent)"></span></span>
+      <span style="font-size:11px;color:var(--sub);width:34px;text-align:right">${unit || Math.round(snClamp(v)*100)}</span>
+    </div>`;
+  const left = Math.max(0, ({ inserted: SN_INSERTED_MAX, fixed: SN_FIX_MAX_MS, releasing: SN_RELEASING_MS, recovery: SN_RECOVERY_MS }[r.st] || 0) - (Date.now() - r.since));
+  return `<div class="body-feel-card">
+    <div class="body-feel-head">
+      <span class="body-feel-title"><i data-lucide="waves"></i> 蛇塑 · 身体</span>
+      <span class="body-mood-pill">${esc(snReproLabel(r.st))}${left ? " · 剩 " + Math.ceil(left / 60000) + " 分" : ""}</span>
+    </div>
+    <div style="margin-top:6px">
+      ${bar("压力", c.cortisol)}${bar("愉悦", c.dopamine)}${bar("依恋", c.oxytocin)}${bar("兴奋", c.adrenaline)}
+      ${bar("欲望", a)}${bar("被捂热", s.temp)}${bar("毒液", s.venom)}
+    </div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.7;margin-top:6px">
+      敏感度 ${snSensitivity()} · ${esc(snPupil(c))} · 信子${esc(snTongue(c, snSensitivity()))} · 鳞${esc(snScale(c, cyc))} · 尾${esc(snCoilWord(snCoilShown(s.coil)))}${snFatigue() > 0.7 ? "（累）" : ""}<br/>
+      ${cyc.shedding ? `蜕皮第 ${cyc.shedDay}/${SN_SHED_LEN_D} 天（${esc(cyc.shedPhase)}）` : `距下次蜕皮 ${cyc.shedIn} 天`} · ${cyc.rut ? `发情第 ${cyc.rutDay}/${SN_RUT_LEN_D} 天` : `距发情 ${cyc.rutIn} 天`} · ${cyc.her ? `你姨妈第 ${cyc.herDay} 天` : `距姨妈 ${cyc.herIn} 天`}<br/>
+      这次用${s.side === "left" ? "左" : "右"}侧（上次${s.lastSide === "left" ? "左" : "右"}）${r.spines ? " · 倒棘 " + Math.round(r.spines * 100) + "%" : ""}${r.plug ? " · 交配栓还在" : ""}
+    </div>
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:8px">机制来自 companion-embodiment · Elle &amp; Matt · MIT</div>
+  </div>`;
+}
+
 // ═══════════════ 回执单（Sigillo）════════════════════════════════════════════════
 // 机制移植自 Sigillo（github.com/29-Cu/sigillo，CC BY 4.0，by Cu & Lunedì）——
 // 「一场亲密之后的封缄回执：让她打星，让他复盘，别把爱变成清单」。2026-09-19 接替床事档案。
@@ -32115,6 +32490,11 @@ function chatTailBlock(){
 - 可以打转、可以跳、可以自相矛盾，不用条理清楚，这是想法不是提纲。
 - 想到的东西要在正文里以某种形式落地，别想一套说一套。`);
   }
+  // 蛇塑身体：激素/体温/周期/亲密状态机，每轮重算，只走尾部
+  try{
+    const snt = (typeof snTailBlock === "function") ? snTailBlock() : "";
+    if(snt) bits.push(snt);
+  }catch(e){}
   // 回执单：最近几单 + 他上次的复盘 + 冷却名单（亲密语境才有）+ 一次性系统回话。会变，只走尾部
   try{
     const sgt = (typeof sgTailBlock === "function") ? sgTailBlock() : "";
@@ -32701,6 +33081,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
   cleanBody = handleMomentMarkers(cleanBody); // 朋友圈：⟪动态:正文|内部备注⟫ → 他自己发一条动态
   cleanBody = handleXMarkers(cleanBody, ag); // 推特：⟪推特刷⟫/⟪推特发:⟫… 后台跑，读完他再接一句
+  cleanBody = handleSnakeMarkers(cleanBody);  // 蛇塑：⟪缠:紧⟫⟪进入:左⟫⟪固定⟫⟪松开⟫ → App 独立复核，正文不留
   cleanBody = handleSigilloMarkers(cleanBody); // 回执单：⟪回执单:{…}⟫ → [sigillo:id] 画卡；⟪回执复盘:id|…⟫ → 钉在单上
   cleanBody = handleRemarkMarkers(cleanBody); // 备注：⟪备注:新称呼⟫ → 他给她改称呼，聊天里出一条居中提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
@@ -32840,6 +33221,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   if(typeof dutyConsumeRound === "function") dutyConsumeRound();
   // 回执单：开单的系统回话只给一轮
   if(typeof sgConsumeRound === "function") sgConsumeRound();
+  if(typeof snConsumeRound === "function") snConsumeRound();
 }
 
 async function triggerAIReply(){
@@ -33582,7 +33964,7 @@ window.reinitState = function(){
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
     moments:"moments",galateaEventId:"galateaEventId",
-    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
     rewriteSave:"rewriteSave"
   };
 
