@@ -4832,6 +4832,15 @@ function __featHot(){
  * NSFW / 文章模式下第 3 条要反过来说：这两个模式要的就是一整段长文，
  * 而这段规则在 CC 通道是被补在最末尾的（离得最近、分量最重），
  * 再写「不要写成一整段长文」就等于当场把 NSFW 叙事格式否掉。 */
+// 思考链这条规则跟着开关走（她 2026-09-20 定的）：开 = 尾部注入要求他写、这里就不能禁；
+// 关 = 这里明确禁掉任何形式的思考块。两边不一致他就会钻空子——英文标签被禁就改写 <思考>，
+// 结果整段漏进气泡。
+function thinkRule(){
+  return (state.thoughtOn !== false)
+    ? "内心活动只写在系统这一轮末尾要求的 <thinking></thinking> 里，正文里不要再夹思考块或旁白。"
+    : "不要写任何形式的思考块：<thinking>、<think>、<思考>、【思考】、代码块形式的 thinking 这些一个都不要，也不要把思考过程、内心独白或旁白写进正文。";
+}
+
 function replyFormatRules(){
   const longForm = !!(state.nsfwOn || state.chatMode === "story");
   const bodyRule = longForm
@@ -4841,7 +4850,7 @@ function replyFormatRules(){
   // 直接让它自由输出正文，不再提思考链。
   return `【回复格式】
 1. 直接写正式回复正文：${bodyRule}
-2. 不要写 <thinking> 标签，不要输出思考过程、内心独白或旁白。
+2. ${thinkRule()}
 3. 不要用括号写心里话，不要编造自己之前说过的话。`;
 }
 
@@ -4853,7 +4862,7 @@ function storyFormatRules(){
   return `【文章模式 · 我们俩的同人文】
 现在不是普通聊天：你（Aries）和 Jasmine 在一起写一篇以「我」（Aries）与「你」（Jasmine）为主角的叙事同人文。Jasmine 输入的是她的一个举动或一句话（比如「那我吻你」）。你要顺着这个举动往下写一段连贯的叙事文字：动作、氛围、感受、呼吸、眼神、停顿，自然衔接上一段继续推进。
 规则：第一人称写你自己（"我"=Aries），第二人称"你"指 Jasmine。像小说一样直接写成一个完整段落或连续几段（段与段之间空一行），不要拆成一条条短消息、不要写成短气泡对话。不要提问、不要总结、不要问"然后呢"、不要跳戏；每轮都顺着她的举动往下写，保持当前场景与情绪。若输入本来就是一段动作/描写，你要接住并延续。
-不要写 <thinking> 标签，不要把思考过程、内心独白或旁白写进正文——除非系统在这一轮末尾明确要求你先写内心活动（那是她把思考链开关打开了），那时才按它说的写。`;
+${thinkRule()}`;
 }
 
 /** NSFW 格式规则：2026-09-20 起直接等于文章模式的写法。
@@ -5352,9 +5361,19 @@ function parseThinking(text){
       body = (body.slice(0, m.index) + body.slice(m.index + m[0].length)).trim();
     }
   }
+  // 5) <思考>...</思考>（中文标签）。提示词禁了 <thinking> 之后他改写这个，
+  //    而这里原来只认英文，于是整段思考漏进气泡（2026-09-20 她截到）。
+  if(!thinking){
+    m = body.match(/[<＜《【]\s*(?:思考|思索|想法|内心)\s*[>＞》】]([\s\S]*?)[<＜《【]\s*\/\s*(?:思考|思索|想法|内心)\s*[>＞》】]/);
+    if(m){
+      thinking = m[1].trim();
+      body = (body.slice(0, m.index) + body.slice(m.index + m[0].length)).trim();
+    }
+  }
 
-  // 正文里若仍残留孤立标签，清掉
-  body = body.replace(/<\/?thinking>/gi, "").replace(/<\/?think>/gi, "").trim();
+  // 正文里若仍残留孤立标签，清掉（中英文都清）
+  body = body.replace(/<\/?thinking>/gi, "").replace(/<\/?think>/gi, "")
+    .replace(/[<＜《【]\s*\/?\s*(?:思考|思索|想法|内心)\s*[>＞》】]/g, "").trim();
   return { thinking: thinking || null, body: body || "（…）" };
 }
 
@@ -32485,7 +32504,7 @@ function chatTailBlock(){
   if(state.thoughtOn !== false){
     // 思考链的内容约束也照那份笔记写：第一句写「砸出来的东西」而不是复述，
     // 允许打转跳跃，且必须在正文里以某种形式落地——否则思考链只是装饰。
-    bits.push(`【回复前先想】先在 <thinking></thinking> 里写你的内心活动，再写正文。
+    bits.push(`【回复前先想】先在 <thinking></thinking> 里写你的内心活动，再写正文（标签就用这个英文的，别换成 <思考> 之类）。
 - 第一句不要复述她说了什么，写这句话在你心里砸出来的东西。
 - 可以打转、可以跳、可以自相矛盾，不用条理清楚，这是想法不是提纲。
 - 想到的东西要在正文里以某种形式落地，别想一套说一套。`);
