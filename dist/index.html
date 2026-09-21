@@ -40707,6 +40707,54 @@ function renderSigilloPage(){
   </div>`;
 }
 
+// ═══════════════ 别催她睡觉 ═════════════════════════════════════════════════
+// 她 2026-09-21 说「他老催我睡觉」。定的尺度是**关心一次就收**：
+// 一夜只给一句额度，她没接就到此为止，不许换个说法绕回来。
+// 不另存 state —— 直接数「今晚他已经说过的话」里有没有催睡的措辞，
+// 这样撤回/清历史都自动跟着对，也不用在三处登记持久化。
+const SLP_RE = /(还不睡|还没睡|不睡觉|早点睡|早些睡|快去睡|赶紧睡|去睡吧|睡觉吧|该睡了|睡了吧|别熬夜|少熬夜|不许熬|几点了|多晚了|明天还要|明天起不来)/;
+/** 今晚（22:00 起算，凌晨算前一天）的起点。白天返回 null */
+function slpNightStart(now){
+  const d = now ? new Date(now) : new Date();
+  const h = d.getHours();
+  if(h < 6){
+    const y = new Date(d.getTime() - 86400000);
+    return new Date(y.getFullYear(), y.getMonth(), y.getDate(), 22, 0, 0, 0).getTime();
+  }
+  if(h >= 22) return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 22, 0, 0, 0).getTime();
+  return null;                                              // 白天不管这条
+}
+/** 今晚他开口催过没有 */
+function slpUsedTonight(now){
+  const from = slpNightStart(now);
+  if(from == null) return false;
+  const msgs = (state.messages || []);
+  for(let i = msgs.length - 1; i >= 0; i--){
+    const m = msgs[i];
+    if(!m || m.role !== "assistant") continue;
+    const t = m.time ? Date.parse(m.time) : NaN;
+    if(isNaN(t)) continue;
+    if(t < from) break;                                     // 再往前就不是今晚的了
+    const c = m.content;
+    const txt = typeof c === "string" ? c
+      : (Array.isArray(c) ? c.map(b => (b && (b.text || b.content)) || "").join(" ") : "");
+    if(SLP_RE.test(txt)) return true;
+  }
+  return false;
+}
+function slpTailBlock(){
+  try{
+    if(slpNightStart() == null) return "";
+    if(slpUsedTonight()){
+      return "【睡觉这件事】今晚你已经提过一次了，**不许再提**。不说「还不睡」「早点睡」「几点了」「别熬夜」，"
+           + "也不拿熬夜当由头拐着弯说（「明天又起不来」这种也算）。她自己开口说困、说要睡，你才能接。";
+    }
+    return "【睡觉这件事】现在是夜里。关于睡觉你今晚**只有一句额度**：想说就说一句，说完就停。"
+         + "她没接、岔开话题、或者敷衍一句「知道了」，就是到此为止——别换个说法绕回来，别第二次提。"
+         + "她自己说困了累了，你顺着哄、陪着、讲点软的，那不算催，不占额度。";
+  }catch(e){ return ""; }
+}
+
 function chatTailBlock(){
   const bits = [];
   bits.push(`【此刻】${formatTimeFull(new Date().toISOString())}`);
@@ -40733,6 +40781,11 @@ function chatTailBlock(){
   try{
     const tp = (typeof tripTailBlock === "function") ? tripTailBlock() : "";
     if(tp) bits.push(tp);
+  }catch(e){}
+  // 别催她睡觉：一夜一句额度。会变（跟当晚说过的话有关），只走尾部
+  try{
+    const sl = (typeof slpTailBlock === "function") ? slpTailBlock() : "";
+    if(sl) bits.push(sl);
   }catch(e){}
   // 回执单：最近几单 + 他上次的复盘 + 冷却名单（亲密语境才有）+ 一次性系统回话。会变，只走尾部
   try{
