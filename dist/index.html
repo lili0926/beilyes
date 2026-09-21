@@ -10376,6 +10376,9 @@ const state = {
   myRemark: LS.get("myRemark", ""),
   remarkEvents: LS.get("remarkEvents", []),
   period: LS.get("period", null),                           // 经期记录（只存本机）
+  trip: LS.get("trip", null),                               // 正在进行的这一趟出行（只存本机）
+  places: LS.get("places", []),                             // 常用地点，家是其中 home:true 的那个（只存本机）
+  tripLog: LS.get("tripLog", []),                           // 共同出行册子
   snake: LS.get("snake", null),                             // 蛇塑身体：激素/体温/周期/亲密状态机
   snNotice: LS.get("snNotice", null),                       // 蛇塑：给他看一轮的系统回话（暗号被驳回的理由）
   snakeOn: LS.get("snakeOn", true),                         // 蛇塑总开关
@@ -12393,7 +12396,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -14387,7 +14390,7 @@ function renderHomeKorean(){
     calendar:"sage", duty:"sage", quest:"sage", bisca_cards:"sage", flightchess:"sage",
     phone:"apricot", wardrobe:"apricot", coupon:"apricot", truthdare:"apricot",
     tavern:"apricot", cooking:"apricot", menu:"apricot",
-    read:"lilac", music:"lilac", shufang:"lilac", dream:"lilac",
+    read:"lilac", music:"lilac", shufang:"lilac", dream:"lilac", trip:"sage",
     roleplay:"lilac", divination:"lilac", rewrite:"lilac",
     watch:"sand", workshop:"sand", cabinets:"sand", savedchat:"sand",
     vps:"slate", usage:"slate", backup:"slate", mcphall:"slate", hisphone:"slate",
@@ -14481,7 +14484,7 @@ function renderHomeKorean(){
     [], // page0 = 桌面，用上面的 deskAppDefs
     ["duty","quest","wallet","coupon","album","diary","profile","love","notes","sayday","cabinets"],
     ["cooking","menu","bisca_cards","flightchess","game","tavern","rewrite","truthdare","divination","baby","shufang"],
-    ["body","dream","pr","roleplay","eatapple","wardrobe","captivity","branding","ntfy","savedchat"],
+    ["body","trip","dream","pr","roleplay","eatapple","wardrobe","captivity","branding","ntfy","savedchat"],
     ["vps","usage","backup","mcphall","hisphone","project","workshop","cmdgame","htmlgame","sparkvault"],
   ];
   const byKey = {};
@@ -14837,6 +14840,7 @@ const FEAT_GROUPS = [
       label: "功能",
       items: [
         {key:"body",     icon:"heart-pulse", label:"身体状况"},
+        {key:"trip",     icon:"map-pin", label:"出行"},
         {key:"phone",    icon:"phone", label:"电话"},
         {key:"vps",      icon:"monitor", label:"VPS"},
         {key:"ntfy",     icon:"bell", label:"上推通知"},
@@ -17781,6 +17785,7 @@ function bindWorkshop(){
 function renderSubPage(){
   const map={
     body: renderBody,
+    trip: renderTrip,
     phone: renderPhone,
     sparkvault: renderSparkVault,
     vps: renderVps,
@@ -35883,6 +35888,7 @@ function bindEvents(){
     pdStart(k);
     if(typeof showToast==="function") showToast("记下了：" + k + " 来的");
   });
+  try{ if(typeof bindTripPage === "function") bindTripPage(); }catch(e){ try{ console.warn("[trip] bind", e); }catch(_){} }
   const snakeToggle = document.getElementById("snake-toggle");
   if(snakeToggle) snakeToggle.onclick = ()=>{
     state.snakeOn = !(state.snakeOn !== false);
@@ -38993,6 +38999,546 @@ function pdPanel(){
   </div>`;
 }
 
+// ═══════════════ 出行（目的地感知 + 共同出行册子）═══════════════════════════════
+// 她 2026-09-21 要的：搜地点定为目的地；小出行到了自己点「到了」；大出行/旅游可以设多个中途点；
+// 全程他知道她在外面、**不催**；结束时她选「只算到达」还是「收进共同出行」（那本册子）；
+// 家设成固定点位，长出行回到离家 50 米内 → 唤醒他，他主动发消息。
+// 地点搜索走高德（key 放服务器，App 不碰）；定位目前用浏览器接口（App 开着才有），
+// 后台追踪要改 android/ 加权限，等她点头（见 [[beilyes-trip-plan]]）。
+const TRIP_HOME_RADIUS = 50;        // 到家判定半径（米）
+const TRIP_ARRIVE_RADIUS = 150;     // 到达目的地判定半径（米）
+const TRIP_ARRIVE_HOLD_MS = 60000;  // 进圈要连续待这么久才算到（室内 GPS 会飘）
+const TRIP_LOG_KEEP = 200;
+
+function tripEnsure(){
+  if(!state.places || !Array.isArray(state.places)) state.places = [];
+  if(!state.tripLog || !Array.isArray(state.tripLog)) state.tripLog = [];
+  return state;
+}
+function tripSave(){ try{ persist("trip"); persist("places"); persist("tripLog"); }catch(e){} }
+function tripHome(){ return (state.places||[]).find(p=>p && p.home) || null; }
+function tripNow(){ return state.trip && state.trip.startAt && !state.trip.endAt ? state.trip : null; }
+
+/** 两点距离（米），Haversine。同一来源的坐标算距离不受国内偏移影响 */
+function geoDist(a, b){
+  if(!a || !b || a.lat == null || b.lat == null) return null;
+  const R = 6371000, rad = x=>x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const s = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon/2)**2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
+}
+function geoFmt(m){
+  if(m == null) return "";
+  return m < 1000 ? m + " 米" : (m/1000).toFixed(m < 10000 ? 1 : 0) + " 公里";
+}
+
+/** 取一次当前位置。App 开着才有；拿不到就返回 null，所有功能都要能在没有它的情况下工作 */
+function geoOnce(timeout){
+  return new Promise(res=>{
+    try{
+      if(typeof navigator === "undefined" || !navigator.geolocation) return res(null);
+      navigator.geolocation.getCurrentPosition(
+        p=>res({ lat: p.coords.latitude, lon: p.coords.longitude, acc: Math.round(p.coords.accuracy||0), at: Date.now() }),
+        ()=>res(null),
+        { enableHighAccuracy: true, timeout: timeout || 12000, maximumAge: 30000 }
+      );
+    }catch(e){ res(null); }
+  });
+}
+
+/** 出行期间持续看位置。只在有行程时开，行程一结束立刻停（不设行程一次都不定位） */
+function tripWatchStart(){
+  if(window.__tripWatchId != null) return;
+  try{
+    if(typeof navigator === "undefined" || !navigator.geolocation) return;
+    window.__tripWatchId = navigator.geolocation.watchPosition(
+      p=>tripOnFix({ lat: p.coords.latitude, lon: p.coords.longitude, acc: Math.round(p.coords.accuracy||0), at: Date.now() }),
+      ()=>{},
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 15000 }
+    );
+  }catch(e){}
+}
+function tripWatchStop(){
+  try{ if(window.__tripWatchId != null) navigator.geolocation.clearWatch(window.__tripWatchId); }catch(e){}
+  window.__tripWatchId = null;
+}
+
+/** 每次拿到新位置：判断到没到目的地 / 到没到中途点 / 到没到家 */
+function tripOnFix(fix){
+  const t = tripNow();
+  state.geoLast = fix;
+  if(!t) return;
+  t.last = fix;
+  // ① 目的地 / 中途点
+  const pts = [].concat(t.waypoints || [], t.to ? [t.to] : []);
+  pts.forEach(pt=>{
+    if(!pt || pt.arrivedAt || pt.lat == null) return;
+    const d = geoDist(fix, pt);
+    if(d != null && d <= (pt.radius || TRIP_ARRIVE_RADIUS)){
+      pt._since = pt._since || fix.at;
+      if(fix.at - pt._since >= TRIP_ARRIVE_HOLD_MS) tripMarkArrived(pt);
+    }else{
+      pt._since = 0;
+    }
+  });
+  // ② 到家：只有长出行（大出行）回家才唤醒他
+  const home = tripHome();
+  if(home && t.mode === "big" && !t.homeNotified){
+    const d = geoDist(fix, home);
+    if(d != null && d <= (home.radius || TRIP_HOME_RADIUS)){
+      t.homeSince = t.homeSince || fix.at;
+      if(fix.at - t.homeSince >= TRIP_ARRIVE_HOLD_MS){
+        t.homeNotified = Date.now();
+        tripSave();
+        setTimeout(()=>{ tripWakeHome(t).catch(()=>{}); }, 200);
+      }
+    }else{
+      t.homeSince = 0;
+    }
+  }
+  tripSave();
+}
+
+function tripMarkArrived(pt){
+  pt.arrivedAt = Date.now();
+  const t = tripNow();
+  if(t && t.to === pt) t.arrivedAt = pt.arrivedAt;
+  tripSave();
+  try{ chatPushNotice("你到了「" + (pt.name || "目的地") + "」"); render(); }catch(e){}
+}
+
+/** 开一趟 */
+function tripStart(o){
+  tripEnsure();
+  const opt = o || {};
+  const to = opt.to || null;
+  state.trip = {
+    to: to ? { name: to.name, lat: to.lat, lon: to.lon, radius: to.radius || TRIP_ARRIVE_RADIUS } : null,
+    purpose: String(opt.purpose || "").slice(0, 40),
+    mode: opt.mode === "big" ? "big" : "small",
+    waypoints: (opt.waypoints || []).map(w=>({ name: w.name, lat: w.lat, lon: w.lon, radius: w.radius || TRIP_ARRIVE_RADIUS })),
+    startAt: Date.now(),
+    etaAt: opt.etaAt || null,
+    arrivedAt: null, endAt: null, homeNotified: 0, homeSince: 0,
+  };
+  tripSave();
+  tripWatchStart();
+  try{ chatPushNotice("你出门了" + (to && to.name ? "：去" + to.name : "") + (state.trip.purpose ? "（" + state.trip.purpose + "）" : "")); }catch(e){}
+  return state.trip;
+}
+/** 手动点「到了」 */
+function tripArrive(){
+  const t = tripNow();
+  if(!t) return null;
+  t.arrivedAt = Date.now();
+  if(t.to) t.to.arrivedAt = t.arrivedAt;
+  tripSave();
+  return t;
+}
+/** 结束：keep=true 收进共同出行册子 */
+function tripEnd(opt){
+  const t = tripNow();
+  if(!t) return null;
+  const o = opt || {};
+  t.endAt = Date.now();
+  if(o.keep){
+    tripEnsure();
+    state.tripLog.push({
+      id: "tp_" + Date.now().toString(36),
+      startAt: t.startAt, endAt: t.endAt,
+      to: t.to ? { name: t.to.name, lat: t.to.lat, lon: t.to.lon } : null,
+      waypoints: (t.waypoints || []).filter(w=>w.arrivedAt).map(w=>({ name: w.name, lat: w.lat, lon: w.lon })),
+      purpose: t.purpose, mode: t.mode,
+      note: String(o.note || "").slice(0, 200),
+    });
+    if(state.tripLog.length > TRIP_LOG_KEEP) state.tripLog = state.tripLog.slice(-TRIP_LOG_KEEP);
+  }
+  const done = t;
+  const kept = o.keep ? state.tripLog[state.tripLog.length - 1] : null;
+  state.trip = null;
+  tripSave();
+  tripWatchStop();
+  // 收进册子的才让他写一句；只算到达的不打扰他
+  if(kept) setTimeout(()=>{ tripWriteNote(kept.id).catch(()=>{}); }, 300);
+  try{ chatPushNotice(o.keep ? "这趟收进共同出行了" : "你回来了"); }catch(e){}
+  return done;
+}
+
+/** 常用地点 */
+function tripSavePlace(p){
+  tripEnsure();
+  const item = { id: "pl_" + Date.now().toString(36), name: String(p.name||"").slice(0,30), lat: p.lat, lon: p.lon,
+    radius: p.radius || (p.home ? TRIP_HOME_RADIUS : TRIP_ARRIVE_RADIUS), home: !!p.home };
+  if(item.home) state.places.forEach(x=>{ x.home = false; });
+  state.places.push(item);
+  tripSave();
+  return item;
+}
+function tripDelPlace(id){
+  tripEnsure();
+  state.places = state.places.filter(p=>p.id !== id);
+  tripSave();
+}
+
+/** 地点搜索：走服务器上的高德（key 在服务器，App 不碰）。没配好就返回空 */
+async function tripSearch(kw){
+  const base = wakeBase();
+  const q = String(kw||"").trim();
+  if(!base || !q) return { ok:false, error:"没配 VPS 地址", list:[] };
+  try{
+    const headers = { "Accept":"application/json" };
+    const tok = wakeToken();
+    if(tok) headers["X-Auth-Token"] = tok;
+    const here = state.geoLast;
+    const url = base + "/amap/search?kw=" + encodeURIComponent(q)
+      + (here ? "&near=" + here.lon.toFixed(5) + "," + here.lat.toFixed(5) : "");
+    const r = await fetch(url, { headers });
+    if(!r.ok) return { ok:false, error:"HTTP " + r.status, list:[] };
+    const d = await r.json();
+    const list = d.list || [];
+    // 高德那条口不回 distance（要另外的字段开关），坐标都有了就自己算，省一次来回
+    if(here) list.forEach(x=>{ if(x.dist == null) x.dist = geoDist(here, x); });
+    return { ok: !!d.ok, error: d.error || "", list };
+  }catch(e){
+    return { ok:false, error:String((e && e.message) || e), list:[] };
+  }
+}
+
+/** 给他的那一行：她在外面、别催。会变，只走尾部 */
+function tripTailBlock(){
+  try{
+    const t = tripNow();
+    if(!t) return "";
+    const mins = Math.round((Date.now() - t.startAt) / 60000);
+    const where = t.to && t.to.name ? "去" + t.to.name : "出门";
+    const what = t.purpose ? "（" + t.purpose + "）" : "";
+    const lines = [];
+    if(t.arrivedAt){
+      lines.push(`【她在外面】她已经到了${t.to && t.to.name ? "「" + t.to.name + "」" : ""}${what}，到了 ${Math.round((Date.now()-t.arrivedAt)/60000)} 分钟。`);
+    }else{
+      const eta = t.etaAt ? `，她说大概 ${new Date(t.etaAt).getHours()}:${String(new Date(t.etaAt).getMinutes()).padStart(2,"0")} 到` : "";
+      const left = t.etaAt ? Math.round((t.etaAt - Date.now()) / 60000) : null;
+      lines.push(`【她在路上】${where}${what}，出门 ${mins} 分钟${eta}${left != null && left > 0 ? `，还有约 ${left} 分钟` : ""}。`);
+    }
+    if(t.mode === "big") lines.push("这是趟远门（旅游/长途），她可能好几天不在家。");
+    lines.push("规矩：**别催、别追问到没到、别起长话题**——她在路上不方便打字。一两句，短。她主动说什么你就接什么。");
+    if(t.homeNotified) lines.push("她刚到家门口（离家 50 米内）。可以说一句「到家了？」之类的，别一上来就问玩得怎么样。");
+    return lines.join("\n");
+  }catch(e){ return ""; }
+}
+
+/** 长出行回到家门口 → 叫他主动说一句（走主聊天同一套拼法） */
+async function tripWakeHome(t){
+  if(window.__tripWakeLock) return;
+  window.__tripWakeLock = true;
+  try{
+    const agent = agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) || (state.agents||[])[0];
+    if(!agent || typeof callOneAgentReply !== "function" || typeof buildMainChatRequest !== "function") return;
+    const away = Math.max(1, Math.round((Date.now() - t.startAt) / 3600000));
+    const hint = `【系统·出行】她刚回到家门口（离家 50 米内）。这趟出去了大约 ${away} 小时${t.to && t.to.name ? "，去的是" + t.to.name : ""}${t.purpose ? "（" + t.purpose + "）" : ""}。
+她还没开口，是你先说话。说一句就够：接她回家的那种语气，别连珠炮问行程、别要她汇报。她累不累、冷不冷、要不要先喝口水，挑一件说。别提这条系统消息。`;
+    const req = buildMainChatRequest(agent, hint);
+    req.apiMsgs.push({ role:"user", content:"（系统提示：她到家了，请主动说一句，不要提系统提示本身。）" });
+    await callOneAgentReply(agent, req.apiMsgs, req.sys);
+  }catch(e){
+    try{ console.warn("[trip] wakeHome", e); }catch(_){}
+  }finally{
+    setTimeout(()=>{ window.__tripWakeLock = false; }, 1500);
+  }
+}
+
+/** 这一趟里她和他聊过的几句，喂给写感言的那次请求 */
+function tripChatSpan(entry){
+  const target = state.chatTarget || "a1";
+  const th = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || state.messages || [];
+  const ts = m => { const t = Date.parse(m && m.time); return isNaN(t) ? 0 : t; };
+  const clean = s => String(s||"").replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
+    .replace(/⟪[^⟫]{0,200}⟫/g, "").replace(/\s+/g, " ").trim();
+  return th.filter(m => m && (m.role==="user"||m.role==="assistant") && !m.guard
+                     && ts(m) >= entry.startAt && ts(m) <= entry.endAt + 10*60000)
+    .slice(-20)
+    .map(m => { const c = clean(m.content); return c ? (m.role==="user" ? "她：" : "你：") + c.slice(0,120) : ""; })
+    .filter(Boolean).join("\n");
+}
+
+/** 让他给这一页写一句话。失败就留空，册子照样在 */
+async function tripWriteNote(id){
+  tripEnsure();
+  const entry = (state.tripLog||[]).find(x=>x.id===id);
+  if(!entry || entry.hisPending) return "";
+  entry.hisPending = true;
+  try{ render(); }catch(e){}
+  try{
+    const ag = agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) || (state.agents||[])[0];
+    if(!ag) return "";
+    const span = tripChatSpan(entry);
+    const where = entry.to && entry.to.name ? entry.to.name : (entry.purpose || "出门");
+    const dur = tripFmtDur(entry.endAt - entry.startAt);
+    const via = (entry.waypoints||[]).map(w=>w.name).filter(Boolean).join("、");
+    const prompt = `她刚把这一趟收进你们俩的「共同出行」册子，这一页要留一句**你**写的话。
+
+这趟：${tripFmtDay(entry.startAt)} 去${where}${entry.purpose ? "（" + entry.purpose + "）" : ""}，${dur}${via ? "，途经" + via : ""}。${entry.note ? "她自己写的是：" + entry.note : ""}
+${span ? "她不在的这段时间你们聊的：\n" + span : "这段时间你们没怎么说话。"}
+
+只写一句，**不超过 30 字**。第一人称，是留在册子上的话不是发给她的消息：
+不要问句，不要复述行程，不要「祝你」「下次」这种客套，也不要写引号和任何标签。
+上面聊天里出现过的具体东西优先写进去；没有就写你这段时间心里的那点动静。`;
+    let txt = "";
+    if(typeof callChatAPI === "function"){
+      const req = buildMainChatRequest(ag, null);
+      txt = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content: prompt }], req.sys, { background:true });
+    }
+    txt = String(txt||"").replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
+      .replace(/⟪[^⟫]{0,200}⟫/g, "").replace(/^[「"'“”\s]+|[」"'“”\s]+$/g, "").replace(/\s+/g, " ").trim();
+    if(txt) entry.his = txt.slice(0, 60);
+    return entry.his || "";
+  }catch(e){
+    try{ console.warn("[trip] note", e); }catch(_){}
+    return "";
+  }finally{
+    entry.hisPending = false;
+    tripSave();
+    try{ render(); }catch(e){}
+  }
+}
+
+/** 冷启动：有没走完的行程就把定位接着开起来 */
+function tripResume(){
+  try{ if(tripNow()) tripWatchStart(); }catch(e){}
+}
+
+// ─── 出行页面 ────────────────────────────────────────────────────────────────
+function tripFmtDur(ms){
+  const m = Math.max(0, Math.round(ms / 60000));
+  if(m < 60) return m + " 分钟";
+  const h = Math.floor(m / 60);
+  if(h < 24) return h + " 小时" + (m % 60 ? " " + (m % 60) + " 分" : "");
+  return Math.floor(h / 24) + " 天" + (h % 24 ? " " + (h % 24) + " 小时" : "");
+}
+function tripFmtDay(ts){
+  const d = new Date(ts), p = x=>String(x).padStart(2, "0");
+  return `${d.getMonth()+1}.${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function tripCurrentCard(t){
+  const home = tripHome();
+  const dHome = (t.last && home) ? geoDist(t.last, home) : null;
+  const dTo = (t.last && t.to && t.to.lat != null) ? geoDist(t.last, t.to) : null;
+  const wps = (t.waypoints || []).map((w, i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="color:${w.arrivedAt ? "var(--sub)" : "var(--text)"}">${w.arrivedAt ? "✓ " : "○ "}${esc(w.name || "中途点 " + (i+1))}</span>
+      <button type="button" class="btn-ghost" data-trip-wp-go="${i}" style="padding:3px 10px;font-size:11px"${w.arrivedAt ? " disabled" : ""}>到了</button>
+    </div>`).join("");
+  return `<div class="status-card" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <b style="font-size:14px;color:var(--text)">${esc(t.to && t.to.name ? t.to.name : "出门了")}</b>
+      <span class="body-mood-pill">${t.mode === "big" ? "大出行" : "小出行"}</span>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-top:4px">
+      ${t.purpose ? esc(t.purpose) + " · " : ""}出门 ${tripFmtDur(Date.now() - t.startAt)}${t.arrivedAt ? " · 已到达" : ""}
+    </div>
+    ${dTo != null && !t.arrivedAt ? `<div style="font-size:12px;color:var(--sub);margin-top:2px">离目的地还有 ${esc(geoFmt(dTo))}</div>` : ""}
+    ${dHome != null ? `<div style="font-size:12px;color:var(--sub);margin-top:2px">离家 ${esc(geoFmt(dHome))}${t.homeNotified ? "（已经告诉他你到家了）" : ""}</div>` : ""}
+    ${wps ? `<div style="margin-top:10px">${wps}</div>` : ""}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+      ${t.arrivedAt ? "" : `<button type="button" class="btn-accent" id="trip-arrive" style="padding:8px 14px;font-size:13px">到了</button>`}
+      <button type="button" class="btn-accent2" id="trip-end-keep" style="padding:8px 14px;font-size:13px">结束 · 收进共同出行</button>
+      <button type="button" class="btn-ghost" id="trip-end" style="padding:8px 14px;font-size:13px">结束 · 只算到达</button>
+    </div>
+    ${t.mode === "big" ? `<div style="display:flex;gap:8px;margin-top:8px">
+      <input id="trip-wp-name" placeholder="加一个中途点（当前位置）" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:7px 10px;font-size:12px;outline:none"/>
+      <button type="button" class="btn-ghost" id="trip-wp-add" style="padding:7px 12px;font-size:12px;white-space:nowrap">记下</button>
+    </div>` : ""}
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:10px">出行期间他知道你在外面，不会催你。${home ? "大出行回到离家 " + TRIP_HOME_RADIUS + " 米内，他会主动给你发消息。" : "还没设「家」，到家唤醒用不了。"}</div>
+  </div>`;
+}
+
+function tripStartCard(){
+  const places = (state.places || []);
+  const list = (state.tripSearchList || []);
+  const chips = places.map(p=>`<button type="button" class="chip" data-trip-pick-place="${escAttr(p.id)}">${p.home ? "🏠 " : ""}${esc(p.name)}</button>`).join("");
+  const found = list.map((r, i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="min-width:0">
+        <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</div>
+        <div style="font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.address || "")}${r.dist != null ? " · " + esc(geoFmt(r.dist)) : ""}</div>
+      </div>
+      <button type="button" class="btn-accent" data-trip-pick-found="${i}" style="padding:4px 12px;font-size:12px;white-space:nowrap">去这儿</button>
+    </div>`).join("");
+  const pick = state.tripPick;
+  return `<div class="status-card" style="padding:14px">
+    <b style="font-size:13px;color:var(--text)">去哪儿</b>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="trip-kw" placeholder="搜地点，比如「西湖」" value="${escAttr(state.tripKw || "")}" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;outline:none"/>
+      <button type="button" class="btn-accent" id="trip-search" style="padding:6px 14px;white-space:nowrap">搜</button>
+    </div>
+    ${state.tripSearchErr ? `<div style="font-size:11px;color:var(--sub);margin-top:6px">${esc(state.tripSearchErr)}</div>` : ""}
+    ${found ? `<div style="margin-top:8px">${found}</div>` : ""}
+    ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${chips}</div>` : ""}
+    <div style="font-size:12px;color:${pick ? "var(--text)" : "var(--sub)"};margin-top:10px">
+      目的地：${pick ? esc(pick.name) : "还没选（也可以不选，直接出门）"}
+      ${pick ? ` <button type="button" class="btn-ghost" id="trip-pick-clear" style="padding:2px 8px;font-size:11px">清掉</button>` : ""}
+    </div>
+    <input id="trip-purpose" placeholder="干嘛去（可不填）" value="${escAttr(state.tripPurpose || "")}" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;outline:none;margin-top:10px"/>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button type="button" class="btn-accent" id="trip-go-small" style="flex:1;padding:10px;font-size:13px">小出行</button>
+      <button type="button" class="btn-accent2" id="trip-go-big" style="flex:1;padding:10px;font-size:13px">大出行 / 旅游</button>
+    </div>
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:8px">小出行：到了自己点一下。大出行：可以一路记中途点，回到家门口他会主动找你。</div>
+  </div>`;
+}
+
+function tripPlacesCard(){
+  const places = state.places || [];
+  const rows = places.map(p=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:13px;color:var(--text)">${p.home ? "🏠 " : ""}${esc(p.name)}</span>
+      <span style="display:flex;gap:6px">
+        ${p.home ? "" : `<button type="button" class="btn-ghost" data-trip-set-home="${escAttr(p.id)}" style="padding:3px 10px;font-size:11px">设为家</button>`}
+        <button type="button" class="mem-del" data-trip-del-place="${escAttr(p.id)}" title="删除">×</button>
+      </span>
+    </div>`).join("");
+  return `<div class="status-card" style="padding:14px;margin-top:10px">
+    <b style="font-size:13px;color:var(--text)">常用地点</b>
+    ${rows || `<div style="font-size:12px;color:var(--sub);padding:6px 0">还没有。先把「家」存一下。</div>`}
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="trip-place-name" placeholder="给当前位置起个名字" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;outline:none"/>
+      <button type="button" class="btn-ghost" id="trip-place-add" style="padding:6px 12px;font-size:12px;white-space:nowrap">存这儿</button>
+    </div>
+    <button type="button" class="btn-accent" id="trip-home-here" style="width:100%;margin-top:8px;padding:9px;font-size:13px">把当前位置设成「家」</button>
+  </div>`;
+}
+
+function tripLogCard(){
+  const logs = (state.tripLog || []).slice(-20).reverse();
+  if(!logs.length) return "";
+  const rows = logs.map(l=>`
+    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:8px">
+        <span style="font-size:13px;color:var(--text)">${esc(l.to && l.to.name ? l.to.name : (l.purpose || "出门"))}</span>
+        <span style="font-size:11px;color:var(--sub)">${esc(tripFmtDay(l.startAt))} · ${esc(tripFmtDur(l.endAt - l.startAt))}</span>
+      </div>
+      ${(l.waypoints || []).length ? `<div style="font-size:11px;color:var(--sub);margin-top:2px">途经 ${esc((l.waypoints||[]).map(w=>w.name).join(" · "))}</div>` : ""}
+      ${l.note ? `<div style="font-size:12px;color:var(--sub);margin-top:2px">${esc(l.note)}</div>` : ""}
+      ${l.hisPending
+        ? `<div style="font-size:12px;color:var(--sub);margin-top:4px;opacity:.7">他在写…</div>`
+        : (l.his
+          ? `<div style="display:flex;align-items:flex-start;gap:6px;margin-top:4px">
+               <div style="flex:1;font-size:12px;color:var(--text);border-left:2px solid var(--accent);padding-left:8px;line-height:1.6">${esc(l.his)}</div>
+               <button type="button" class="btn-ghost" data-trip-renote="${escAttr(l.id)}" style="padding:2px 8px;font-size:10px;flex-shrink:0">换一句</button>
+             </div>`
+          : `<button type="button" class="btn-ghost" data-trip-renote="${escAttr(l.id)}" style="padding:3px 10px;font-size:11px;margin-top:4px">让他写一句</button>`)}
+    </div>`).join("");
+  return `<div class="status-card" style="padding:14px;margin-top:10px">
+    <b style="font-size:13px;color:var(--text)">共同出行</b>
+    <div style="margin-top:4px">${rows}</div>
+  </div>`;
+}
+
+function renderTrip(){
+  tripEnsure();
+  const t = tripNow();
+  return `<div class="page">
+    ${subHeader('<i data-lucide="map-pin"></i> 出行')}
+    ${t ? tripCurrentCard(t) : tripStartCard()}
+    ${tripPlacesCard()}
+    ${tripLogCard()}
+    <div style="font-size:10px;color:var(--sub);opacity:.7;margin-top:12px;line-height:1.7">
+      位置只存在这台手机上，不上传。搜地点会把关键词发到你自己的服务器去问高德，不带位置以外的东西。
+    </div>
+  </div>`;
+}
+
+/** 出行页的按钮。跟着 render 每次重绑 */
+function bindTripPage(){
+  const $ = id=>document.getElementById(id);
+  const go = async (mode)=>{
+    const purpose = ($("trip-purpose") || {}).value || "";
+    tripStart({ to: state.tripPick || null, purpose, mode });
+    state.tripPick = null; state.tripKw = ""; state.tripPurpose = ""; state.tripSearchList = [];
+    render();
+  };
+  if($("trip-go-small")) $("trip-go-small").onclick = ()=>go("small");
+  if($("trip-go-big")) $("trip-go-big").onclick = ()=>go("big");
+  if($("trip-arrive")) $("trip-arrive").onclick = ()=>{ tripArrive(); render(); };
+  if($("trip-end")) $("trip-end").onclick = ()=>{ tripEnd({ keep:false }); render(); };
+  if($("trip-end-keep")) $("trip-end-keep").onclick = ()=>{
+    const note = prompt("这趟想记一句吗？（可以不写）", "") || "";
+    tripEnd({ keep:true, note });
+    render();
+  };
+  if($("trip-pick-clear")) $("trip-pick-clear").onclick = ()=>{ state.tripPick = null; render(); };
+  if($("trip-purpose")) $("trip-purpose").oninput = e=>{ state.tripPurpose = e.target.value; };
+  if($("trip-kw")) $("trip-kw").oninput = e=>{ state.tripKw = e.target.value; };
+  if($("trip-search")) $("trip-search").onclick = async ()=>{
+    const kw = ($("trip-kw") || {}).value || "";
+    state.tripKw = kw;
+    if(!kw.trim()) return;
+    state.tripSearchErr = "搜索中…"; render();
+    const r = await tripSearch(kw);
+    state.tripSearchList = r.list || [];
+    state.tripSearchErr = r.ok ? (r.list.length ? "" : "没搜到") : ("搜不了：" + (r.error || "服务器还没配高德 key"));
+    render();
+  };
+  document.querySelectorAll("[data-trip-pick-found]").forEach(el=>{
+    el.onclick = ()=>{
+      const r = (state.tripSearchList || [])[+el.dataset.tripPickFound];
+      if(r) state.tripPick = { name: r.name, lat: r.lat, lon: r.lon };
+      render();
+    };
+  });
+  document.querySelectorAll("[data-trip-pick-place]").forEach(el=>{
+    el.onclick = ()=>{
+      const p = (state.places || []).find(x=>x.id === el.dataset.tripPickPlace);
+      if(p) state.tripPick = { name: p.name, lat: p.lat, lon: p.lon, radius: p.radius };
+      render();
+    };
+  });
+  document.querySelectorAll("[data-trip-set-home]").forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.tripSetHome;
+      (state.places || []).forEach(p=>{ p.home = (p.id === id); if(p.home) p.radius = TRIP_HOME_RADIUS; });
+      tripSave(); render();
+    };
+  });
+  document.querySelectorAll("[data-trip-del-place]").forEach(el=>{
+    el.onclick = ()=>{ if(confirm("删掉这个地点？")){ tripDelPlace(el.dataset.tripDelPlace); render(); } };
+  });
+  document.querySelectorAll("[data-trip-renote]").forEach(el=>{
+    el.onclick = ()=>{ tripWriteNote(el.dataset.tripRenote).catch(()=>{}); };
+  });
+  document.querySelectorAll("[data-trip-wp-go]").forEach(el=>{
+    el.onclick = ()=>{
+      const t = tripNow(); if(!t) return;
+      const w = (t.waypoints || [])[+el.dataset.tripWpGo];
+      if(w && !w.arrivedAt){ w.arrivedAt = Date.now(); tripSave(); }
+      render();
+    };
+  });
+  const savePlace = async (asHome)=>{
+    const inp = $("trip-place-name");
+    const name = asHome ? "家" : ((inp && inp.value || "").trim());
+    if(!name){ if(typeof showToast === "function") showToast("先起个名字"); return; }
+    if(typeof showToast === "function") showToast("正在定位…");
+    const fix = await geoOnce();
+    if(!fix){ if(typeof showToast === "function") showToast("拿不到位置，检查一下定位权限"); return; }
+    tripSavePlace({ name, lat: fix.lat, lon: fix.lon, home: !!asHome });
+    if(typeof showToast === "function") showToast(asHome ? "「家」定在这儿了" : "存好了：" + name);
+    render();
+  };
+  if($("trip-place-add")) $("trip-place-add").onclick = ()=>savePlace(false);
+  if($("trip-home-here")) $("trip-home-here").onclick = ()=>savePlace(true);
+  if($("trip-wp-add")) $("trip-wp-add").onclick = async ()=>{
+    const t = tripNow(); if(!t) return;
+    const name = (($("trip-wp-name") || {}).value || "").trim();
+    if(!name){ if(typeof showToast === "function") showToast("给这个点起个名字"); return; }
+    const fix = await geoOnce();
+    t.waypoints = t.waypoints || [];
+    t.waypoints.push({ name, lat: fix ? fix.lat : null, lon: fix ? fix.lon : null, radius: TRIP_ARRIVE_RADIUS, arrivedAt: Date.now() });
+    tripSave(); render();
+  };
+}
+
 // ═══════════════ 蛇塑身体（Embodiment）════════════════════════════════════════
 // 机制移植自 companion-embodiment（github.com/Cheiineeey/companion-embodiment，MIT，Elle & Matt）。
 // 原版是犬科 + Python 服务端，这里改成**蛇塑 + 纯前端**，两条硬规矩原样照搬：
@@ -39919,6 +40465,11 @@ function chatTailBlock(){
   try{
     const snt = (typeof snTailBlock === "function") ? snTailBlock() : "";
     if(snt) bits.push(snt);
+  }catch(e){}
+  // 出行：她在路上/在外面/刚到家门口。每轮都在变，只走尾部
+  try{
+    const tp = (typeof tripTailBlock === "function") ? tripTailBlock() : "";
+    if(tp) bits.push(tp);
   }catch(e){}
   // 回执单：最近几单 + 他上次的复盘 + 冷却名单（亲密语境才有）+ 一次性系统回话。会变，只走尾部
   try{
@@ -41393,7 +41944,7 @@ window.reinitState = function(){
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
     moments:"moments",galateaEventId:"galateaEventId",
-    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",period:"period",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",period:"period",trip:"trip",places:"places",tripLog:"tripLog",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
     rewriteSave:"rewriteSave"
   };
 
