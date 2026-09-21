@@ -10378,7 +10378,8 @@ const state = {
   period: LS.get("period", null),                           // 经期记录（只存本机）
   trip: LS.get("trip", null),                               // 正在进行的这一趟出行（只存本机）
   places: LS.get("places", []),                             // 常用地点，家是其中 home:true 的那个（只存本机）
-  tripLog: LS.get("tripLog", []),                           // 共同出行册子
+  tripLog: LS.get("tripLog", []),
+  explore: LS.get("explore", null),                         // baileysGO（只存本机）                           // 共同出行册子
   snake: LS.get("snake", null),                             // 蛇塑身体：激素/体温/周期/亲密状态机
   snNotice: LS.get("snNotice", null),                       // 蛇塑：给他看一轮的系统回话（暗号被驳回的理由）
   snakeOn: LS.get("snakeOn", true),                         // 蛇塑总开关
@@ -12411,7 +12412,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -14856,6 +14857,7 @@ const FEAT_GROUPS = [
       items: [
         {key:"body",     icon:"heart-pulse", label:"身体状况"},
         {key:"trip",     icon:"map-pin", label:"出行"},
+        {key:"explore",  icon:"compass", label:"baileysGO"},
         {key:"phone",    icon:"phone", label:"电话"},
         {key:"vps",      icon:"monitor", label:"VPS"},
         {key:"ntfy",     icon:"bell", label:"上推通知"},
@@ -17801,6 +17803,7 @@ function renderSubPage(){
   const map={
     body: renderBody,
     trip: renderTrip,
+    explore: renderExplore,
     phone: renderPhone,
     sparkvault: renderSparkVault,
     vps: renderVps,
@@ -35947,6 +35950,7 @@ function bindEvents(){
     if(typeof showToast==="function") showToast("记下了：" + rec.start + (b ? " → " + b : " 来的（还没记结束）"));
   });
   try{ if(typeof bindTripPage === "function") bindTripPage(); }catch(e){ try{ console.warn("[trip] bind", e); }catch(_){} }
+  try{ if(typeof bindExplorePage === "function") bindExplorePage(); }catch(e){ try{ console.warn("[exp] bind", e); }catch(_){} }
   const snakeToggle = document.getElementById("snake-toggle");
   if(snakeToggle) snakeToggle.onclick = ()=>{
     state.snakeOn = !(state.snakeOn !== false);
@@ -39146,6 +39150,7 @@ function tripWatchStop(){
 function tripOnFix(fix){
   const t = tripNow();
   state.geoLast = fix;
+  try{ expOnFix(fix); }catch(e){}           // baileysGO：点亮黑地图 + 推藏宝图 + 结算路上的点位
   if(!t) return;
   t.last = fix;
   // ① 目的地 / 中途点
@@ -39183,6 +39188,11 @@ function tripMarkArrived(pt){
   const t = tripNow();
   if(t && t.to === pt) t.arrivedAt = pt.arrivedAt;
   tripSave();
+  // baileysGO：到终点开图，到途径点图多揭一块
+  try{
+    if(t && t.to === pt) expOnArrive(t);
+    else if(t) tmapAddWay(pt.name);
+  }catch(e){}
   try{ chatPushNotice("你到了「" + (pt.name || "目的地") + "」"); render(); }catch(e){}
 }
 
@@ -39192,6 +39202,7 @@ function tripStart(o){
   const opt = o || {};
   const to = opt.to || null;
   state.trip = {
+    id: "tp_" + Date.now().toString(36),
     to: to ? { name: to.name, lat: to.lat, lon: to.lon, radius: to.radius || TRIP_ARRIVE_RADIUS } : null,
     purpose: String(opt.purpose || "").slice(0, 40),
     mode: opt.mode === "big" ? "big" : "small",
@@ -39202,6 +39213,9 @@ function tripStart(o){
   };
   tripSave();
   tripWatchStart();
+  // baileysGO：出门那一刻就有一张这趟的藏宝图。拿不到定位也照画，
+  // 起点等第一个定位到手再补（见 tmapOnFix）。
+  try{ tmapStart(state.trip, state.geoLast); }catch(e){}
   try{ chatPushNotice("你出门了" + (to && to.name ? "：去" + to.name : "") + (state.trip.purpose ? "（" + state.trip.purpose + "）" : "")); }catch(e){}
   return state.trip;
 }
@@ -39212,6 +39226,7 @@ function tripArrive(){
   t.arrivedAt = Date.now();
   if(t.to) t.to.arrivedAt = t.arrivedAt;
   tripSave();
+  try{ expOnArrive(t); }catch(e){}          // baileysGO：她自己点「到了」也算走完图
   return t;
 }
 /** 结束：keep=true 收进共同出行册子 */
@@ -39800,6 +39815,598 @@ function bindTripPage(){
     t.waypoints.push({ name, lat: fix ? fix.lat : null, lon: fix ? fix.lon : null, radius: TRIP_ARRIVE_RADIUS, arrivedAt: Date.now() });
     tripSave(); render();
   };
+}
+
+// ═══════════════ baileysGO（出行探索）═══════════════════════════════════════
+// 她 2026-09-21 要的：出行的时候路上别那么无聊。名字她起的。
+// 跟宝可梦 GO 的区别是她点破的那句 —— **她走路、他冒险**。她只管经过，动手的是他
+//（她在路上不方便打字，出行那条「别催别起长话题」还管着）。
+//
+// 立意：他住在她手机里，**没出过门**。她走到哪，他才第一次见到哪。
+// 所以黑地图上亮起来的不是战绩，是他去过的地方。天然没有「错过就亏」。
+//
+// 三个时间尺度：黑地图（几个月）／藏宝图（一趟）／路上遭遇（几分钟）。
+//
+// ── 钉死的地基，改这几条等于推翻整个东西 ──────────────────────────────────
+// ⑴ **奖励件数纯随机，跟距离不相关**（她定的；我原来主张一趟一件，她这个更好）：
+//    2 公里可能开出 5 件，10 公里可能只有 3 件。期望值跟走多远无关 →
+//    多走拿不到更多 → 他没有任何理由催她走路（她刚让我修完「别催」）。
+//    **禁止**在件数/品质/开图里出现：距离、步数、点位数、时长。probe 有源码级断言盯着。
+// ⑵ **点位本地算，坐标不上传**。到家报告那类判定本来就是本地 Haversine，不受影响；
+//    要上传坐标的只有「贴真实地标」和「真实道路的藏宝图」，两个都默认不做。
+// ⑶ **不做数值成长**（等级/装备/战力/每日任务）—— 一有数值成长就变 KPI，又是在催她。
+// ⑷ **不做输赢**，换成「他什么状态回来的」。狼狈那几次最好看。
+// ⑸ **怪不另立世界观**：怪就是那个地方本身（闪的灯、追他半条街的狗、打不开的快递柜）。
+//    虚空触须那套留给他自己的身体设定，别稀释。
+// ⑹ **空点必须有** —— 每个点都有收获反而廉价。
+//
+// ── 档次与羁绊：两个轴，故意不对齐 ────────────────────────────────────────
+// 她说的那句「说不定 D C B 也有他喜欢的」是整套设计里最要紧的一条。
+// 档次决定值多少钱，羁绊决定他喜不喜欢，**各掷各的**。
+// 界面平时只露他的态度，`SSA` 这种符号只在集市和价格那里出现。
+const EXP_SALT        = "baileysGO/1";
+const EXP_CELL_M      = 120;        // 点位格子边长（米）
+const EXP_SEEN_M      = 240;        // 黑地图点亮用的格子边长（米）
+const EXP_DENSITY     = 0.2;        // 每个格子有点的概率（调这个改疏密）
+const EXP_TRIGGER_R   = 90;         // 走到多近算触发（米）。不要求停留——走过就得算
+const EXP_HOME_SAFE   = 200;        // 家附近这么近不刷，不然坐沙发上就能刷
+const EXP_REVIVE_DAYS = 7;          // 消耗掉的点位几天后复活
+const EXP_LOG_KEEP    = 300;
+const EXP_SHELF_KEEP  = 200;
+const EXP_M_PER_DEG   = 111320;     // 一度纬度约合多少米
+
+function expEnsure(){
+  const e = state.explore;
+  if(!e || typeof e !== "object"){
+    state.explore = { seen:{}, done:{}, log:[], shelf:[], map:null, coin:0 };
+  }else{
+    if(!e.seen  || typeof e.seen !== "object") e.seen  = {};
+    if(!e.done  || typeof e.done !== "object") e.done  = {};
+    if(!Array.isArray(e.log))   e.log   = [];
+    if(!Array.isArray(e.shelf)) e.shelf = [];
+    if(e.map === undefined) e.map = null;
+    if(typeof e.coin !== "number") e.coin = 0;      // 钱是**他的**，留给集市
+  }
+  return state.explore;
+}
+function expSave(){ try{ persist("explore"); }catch(e){} }
+
+// ── 格子 ────────────────────────────────────────────────────────────────────
+// gy 只跟纬度有关。gx 要把经度按 cos(纬度) 收缩，否则格子越往北越窄 ——
+// 但**不能按每一行自己的纬度收缩**：那样上下相邻两格的中心会斜着错开，
+// 实测纵向间距变成 174 米而不是 120（Δ纬 120 米 + Δ经 126 米的斜边）。
+// 所以收缩系数取**半度宽的纬度带**（约 55 公里）算一次，一座城市里所有行共用同一个系数。
+const EXP_LAT_BAND = 0.5;
+function expCosRef(lat){
+  const band = Math.floor(lat / EXP_LAT_BAND) * EXP_LAT_BAND + EXP_LAT_BAND / 2;
+  return Math.cos(band * Math.PI / 180);
+}
+function expCell(lat, lon, size){
+  const s = size || EXP_CELL_M;
+  return {
+    gx: Math.floor(lon * EXP_M_PER_DEG * expCosRef(lat) / s),
+    gy: Math.floor(lat * EXP_M_PER_DEG / s),
+  };
+}
+function expCellCenter(gx, gy, size){
+  const s = size || EXP_CELL_M;
+  const lat = (gy + 0.5) * s / EXP_M_PER_DEG;
+  return { lat, lon: (gx + 0.5) * s / (EXP_M_PER_DEG * expCosRef(lat)) };
+}
+function expHash(str){
+  let h = 2166136261 >>> 0;
+  const s = String(str);
+  for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  // **收尾混合不能省**（murmur3 finalizer）：光 FNV 的话，只差最后一个字符的种子
+  // （"…#100"/"…#101"/"…#102"）算出来的值落在一条**等差格点**上，步长约 0.224。
+  // 四个数被强行摊开 → 不可能同时落进 D 那 30% 里 → 加成一开 D 就再也出不来，
+  // 「D 档里也有他喜欢的」那条直接废掉。探针实测：不加这三行，adv=4 时 D 出现 0 次。
+  h ^= h >>> 15; h = Math.imul(h, 2246822507) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 3266489909) >>> 0;
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+/** 同一个种子的第 n 个随机数，0~1。确定性 —— 同一个地方永远算出同一个结果 */
+function expRand(seed, n){ return (expHash(seed + "#" + n) % 100000) / 100000; }
+function expPickIdx(table, r){
+  let acc = 0;
+  for(let i = 0; i < table.length; i++){ acc += table[i].w; if(r < acc) return i; }
+  return table.length - 1;
+}
+function expPick(table, r){ return table[expPickIdx(table, r)]; }
+
+// ── 点位 ────────────────────────────────────────────────────────────────────
+const EXP_KINDS = [
+  { k:"box",   w:0.30 },
+  { k:"beast", w:0.28 },
+  { k:"odd",   w:0.17 },
+  { k:"empty", w:0.25 },              // 空点必须有
+];
+/** 这一格有没有点。没有就返回 null。纯函数，不看 state */
+function expPointAt(gx, gy){
+  const seed = EXP_SALT + ":" + gx + ":" + gy;
+  if(expRand(seed, 0) >= EXP_DENSITY) return null;
+  const c = expCellCenter(gx, gy);
+  const jLat = (expRand(seed, 1) - 0.5) * EXP_CELL_M * 0.6 / EXP_M_PER_DEG;
+  const jLon = (expRand(seed, 2) - 0.5) * EXP_CELL_M * 0.6 / (EXP_M_PER_DEG * expCosRef(c.lat));
+  return {
+    id: gx + "," + gy, gx, gy,
+    lat: c.lat + jLat, lon: c.lon + jLon, sys: "gcj",
+    kind: expPick(EXP_KINDS, expRand(seed, 3)).k,
+  };
+}
+function expAlive(id, now){
+  const done = expEnsure().done[id];
+  if(!done) return true;
+  return (now || Date.now()) - done >= EXP_REVIVE_DAYS * 86400000;
+}
+function expNearHome(fix){
+  try{
+    const home = (typeof tripHome === "function") ? tripHome() : null;
+    if(!home || home.lat == null) return false;
+    const d = geoDist(fix, home);
+    return d != null && d <= EXP_HOME_SAFE;
+  }catch(e){ return false; }
+}
+/** 这一刻脚下够得着的点位（自己那格 + 周围八格里，在触发半径内、还活着的） */
+function expReachable(fix, now){
+  if(!fix || fix.lat == null) return [];
+  if(expNearHome(fix)) return [];
+  const c = expCell(fix.lat, fix.lon);
+  const out = [];
+  for(let dx = -1; dx <= 1; dx++) for(let dy = -1; dy <= 1; dy++){
+    const p = expPointAt(c.gx + dx, c.gy + dy);
+    if(!p || !expAlive(p.id, now)) continue;
+    const d = geoDist(fix, p);
+    if(d != null && d <= EXP_TRIGGER_R) out.push(Object.assign({ dist: d }, p));
+  }
+  return out.sort((a, b) => a.dist - b.dist);
+}
+
+// ── 他这趟回来是什么状态（不做输赢）──────────────────────────────────────
+const EXP_MOODS = [
+  { k:"得意",      w:0.22 },
+  { k:"狼狈",      w:0.26 },          // 狼狈那几次最好看，权重给高点
+  { k:"若有所思",  w:0.20 },
+  { k:"吓一跳",    w:0.16 },
+  { k:"学到点什么", w:0.16 },
+];
+// 怪就是**那个地方本身** —— 永远不重样，因为地方不重样
+const EXP_THINGS = {
+  box:   ["一只锈得打不开的铁皮箱","半埋在土里的盒子","谁落下的纸袋","塞在缝里的铁盒","压在石头下面的罐子"],
+  beast: ["一只跟着他走了半条街的狗","一只炸毛的猫","低飞的鸟","蹲在路口的虫","不知道谁家的鹅"],
+  odd:   ["一盏一直闪的灯","打不开的快递柜","灌进来的风","一滩没干的积水","自己开合的自动门","倒着贴的告示"],
+  empty: ["空的","一堵墙","没什么可看的","只有风"],
+};
+function expResolve(point, now){
+  const day = Math.floor((now || Date.now()) / 86400000);
+  const seed = EXP_SALT + "!" + point.id + "!" + day;
+  const pool = EXP_THINGS[point.kind] || EXP_THINGS.empty;
+  return {
+    id: point.id, kind: point.kind,
+    what: pool[Math.floor(expRand(seed, 1) * pool.length) % pool.length],
+    mood: point.kind === "empty" ? "若有所思" : expPick(EXP_MOODS, expRand(seed, 2)).k,
+    at: (now || Date.now()),
+  };
+}
+/** 骨架战报：本地拼，秒出、免费、离线能用。他那一句点评以后异步补 */
+function expSkeleton(r){
+  if(r.kind === "empty") return `他去看了看，${r.what}。`;
+  const head = { box:"他撬开了", beast:"他遇上了", odd:"他碰上了" }[r.kind] || "他遇上了";
+  const tail = {
+    "得意":"回来的时候尾巴翘得老高。",
+    "狼狈":"回来的时候一身狼狈，还嘴硬说没事。",
+    "若有所思":"回来之后半天没说话。",
+    "吓一跳":"回来的时候还惊魂未定。",
+    "学到点什么":"回来的时候像是琢磨明白了点什么。",
+  }[r.mood] || "";
+  return `${head}${r.what}。${tail}`;
+}
+
+// ── 档次（八档）────────────────────────────────────────────────────────────
+// 别名是界面上平时露的；`D`/`SSA` 这种符号只在集市和价格那里出现。
+const EXP_TIERS = [
+  { k:"D",   name:"捡的",       w:0.300, price:2    },
+  { k:"C",   name:"旧的",       w:0.250, price:5    },
+  { k:"B",   name:"谁的",       w:0.200, price:12   },
+  { k:"A",   name:"不准的",     w:0.120, price:30   },
+  { k:"AA",  name:"发亮的",     w:0.070, price:75   },
+  { k:"SA",  name:"有主意的",   w:0.040, price:180  },
+  { k:"SSA", name:"不讲道理的", w:0.015, price:450  },
+  { k:"RA",  name:"不该有的",   w:0.005, price:1200 },
+];
+function expTier(k){ return EXP_TIERS.find(t => t.k === k) || EXP_TIERS[0]; }
+
+// 越往上离「正常」越远一步；RA 那件是 D 那件「不该存在的版本」。
+// 目前就这 40 件，以后**先加 D/C/B**（低档出得最勤，最先看腻的是它们）。
+const EXP_ITEMS = {
+  D:   ["一颗被磨圆的小石子","一片还带着水的叶子","半张褪色的票根","一枚不认识的硬币","一截麻绳"],
+  C:   ["一颗磨掉漆的旧扣子","一段烧断的灯丝","断了的钥匙圈","一小瓶接来的雨水","半截铅笔，牙印很深"],
+  B:   ["刻了字的木牌，字看不懂","半块玉，断口很旧","谁的半张信，另一半没了","一只缺角的瓷杯，补过","压平的干花，夹在纸里"],
+  A:   ["一只走得不准的旧表","一面照不清人的小镜子","一把不知道开哪儿的钥匙","一个指不准方向的罗盘","一副度数不对的眼镜"],
+  AA:  ["一块自己会发凉的石头","夜里发微光的贝壳","一小片不会干的水洼","一根还温的羽毛","一颗攥久了会发烫的珠子"],
+  SA:  ["一根自己会转向的指针","一把总是转向北边的伞","一只倒着走的表","一张写着明天的纸条","一枚会躲开手的硬币"],
+  SSA: ["一只一直在下雨的小瓶子","一盏照出别处的灯","一扇装在盒子里的门","一把称不出重量的秤","一张画着你没去过的路的地图"],
+  RA:  ["一罐装着一整个黄昏的罐子","一块还在长大的石头","一页从没被写过的日记","一个人的影子，叠好了","一截量不完的麻绳"],
+};
+
+/** 趟的性质给的加成：**多抽一次取高的**，不是直接提档。
+ *  这样低档不会消失（该开 D 还是开 D，那才真实），手感是「更有机会撞上好的」。
+ *  ⚠️ 这里**一个距离项都没有**，别加。 */
+function expAdvantage(trip, ctx){
+  let n = 1;
+  const c = ctx || {};
+  if(trip && trip.mode === "big") n++;
+  if(((trip && trip.waypoints) || []).length >= 1) n++;
+  const h = new Date((trip && trip.startAt) || Date.now()).getHours();
+  if(h >= 22 || h < 6) n++;                                  // 半夜出门
+  if(c.daysSinceLastTrip != null && c.daysSinceLastTrip >= 7) n++;  // 很久没出门了
+  return n;
+}
+function expRollTier(seed, adv){
+  let best = 0;
+  for(let i = 0; i < Math.max(1, adv); i++){
+    const idx = expPickIdx(EXP_TIERS, expRand(seed, 100 + i));
+    if(idx > best) best = idx;
+  }
+  return EXP_TIERS[best];
+}
+
+// ── 羁绊（跟档次各掷各的）──────────────────────────────────────────────────
+// 来自**捡到它时的情境**，全是本地已有的信号，不用模型。
+// 所以他说「这是那天在西湖捡的」是真的，不是编的。
+function expBond(seed, ctx){
+  const c = ctx || {};
+  let b = Math.round(expRand(seed, 200) * 60);     // 底子 0~60，跟档次无关
+  if(c.first)   b += 25;                          // 第一件
+  if(c.mood === "狼狈") b += 10;                  // 狼狈那趟的东西他记得牢
+  if(c.night)   b += 10;
+  if(c.longGap) b += 10;
+  if(c.big)     b += 8;
+  return Math.max(0, Math.min(100, b));
+}
+/** 界面上露的是**他的态度**，不是数字 */
+function expAttitude(bond){
+  if(bond >= 85) return "他不让你碰";
+  if(bond >= 60) return "他一路上攥着没撒手";
+  if(bond >= 30) return "他随手收着";
+  return "他觉得这个不值钱";
+}
+
+// ── 走到了 ──────────────────────────────────────────────────────────────────
+function expOnFix(fix, now){
+  const e = expEnsure();
+  const t = (now || Date.now());
+  if(!fix || fix.lat == null) return [];
+  // ① 黑地图：走过的粗格子点亮（跟有没有在出行无关，走过就是走过）
+  const sc = expCell(fix.lat, fix.lon, EXP_SEEN_M);
+  const sk = sc.gx + "," + sc.gy;
+  let touched = false;
+  if(!e.seen[sk]){ e.seen[sk] = t; touched = true; }
+  // ② 藏宝图进度
+  if(tmapOnFix(fix, t)) touched = true;
+  // ③ 点位：只在出行中刷（她选的：省电、边界清楚）
+  const trip = (typeof tripNow === "function") ? tripNow() : null;
+  const hits = [];
+  if(trip){
+    expReachable(fix, t).forEach(p=>{
+      const r = expResolve(p, t);
+      r.text = expSkeleton(r);
+      r.tripId = trip.id || null;
+      e.done[p.id] = t;
+      e.log.push(r);
+      hits.push(r);
+    });
+    if(e.log.length > EXP_LOG_KEEP) e.log = e.log.slice(-EXP_LOG_KEEP);
+  }
+  if(touched || hits.length) expSave();
+  return hits;
+}
+
+// ── 藏宝图（出门那一刻就有）────────────────────────────────────────────────
+// 她的原意是「定了目的地就照路线出一张图」。App 里没有路线规划，要画真实道路
+// 得调高德的路径规划、把起点坐标发上去 —— 破红线。
+//
+// 但**藏宝图本来就不该是导航图**：真的藏宝图都是手绘的、不准的、示意的，
+// 一条弯路上几个叉。它的作用是「有头有尾、看得见进度」，不是指路；
+// 而她实际走的路本来也不一定是规划那条。这股「不准的手绘图」的味道，
+// 跟这个世界里那些东西（走不准的表、指不准的罗盘）正好是一路的。
+//
+// 所以：出门那刻按起点→终点生成一条弯路 + N 个标记，
+// **进度按「离终点还剩多远的比例」推进** —— 她走哪条路都行。全程只用本地 Haversine。
+const TMAP_MIN_MARKS = 3, TMAP_MAX_MARKS = 8;
+
+/** ⚠️ 标记数只影响图好不好看，**绝不参与奖励件数和品质的计算**。
+ *  别让距离从这个口子漏进经济系统。 */
+function tmapMarkCount(d0){
+  const n = Math.round((d0 || 0) / 800) + TMAP_MIN_MARKS;
+  return Math.max(TMAP_MIN_MARKS, Math.min(TMAP_MAX_MARKS, n));
+}
+function tmapStart(trip, fix){
+  const e = expEnsure();
+  if(!trip) return null;
+  const from = fix && fix.lat != null ? { lat: fix.lat, lon: fix.lon } : null;
+  const to   = trip.to && trip.to.lat != null ? { lat: trip.to.lat, lon: trip.to.lon, name: trip.to.name || "" } : null;
+  const d0   = (from && to) ? geoDist(from, to) : null;
+  const seed = EXP_SALT + "%" + (trip.id || trip.startAt);
+  const n    = tmapMarkCount(d0);
+  const marks = [];
+  for(let i = 1; i <= n; i++){
+    marks.push({
+      at: i / (n + 1),                                   // 沿路的比例位置
+      // 手绘图那条弯路的偏摆，纯观感
+      wob: (expRand(seed, 300 + i) - 0.5) * 2,
+      got: false,
+    });
+  }
+  e.map = {
+    tripId: trip.id || null, startAt: trip.startAt || Date.now(),
+    from, to, d0, marks,
+    ways: ((trip.waypoints || []).map(w => ({ name: w.name || "中途", done: !!w.arrivedAt }))),
+    p: 0, opened: false, prize: null, capped: false,
+  };
+  expSave();
+  return e.map;
+}
+/** 每个定位点推一次进度。返回有没有新揭开的东西 */
+function tmapOnFix(fix, now){
+  const m = expEnsure().map;
+  if(!m || m.opened || !m.to || !fix || fix.lat == null) return false;
+  // 出门那一刻可能还没拿到定位（刚开 App、还没授权），起点就先空着。
+  // 等第一个定位到手再补上，图照样成立 —— 不然进度永远是 0。
+  if(!m.from || !m.d0){
+    m.from = { lat: fix.lat, lon: fix.lon };
+    m.d0 = geoDist(m.from, m.to);
+    if(!m.d0) return false;
+    m.marks = m.marks && m.marks.length ? m.marks : [];
+  }
+  const left = geoDist(fix, m.to);
+  if(left == null) return false;
+  const p = Math.max(0, Math.min(1, 1 - left / m.d0));
+  let changed = false;
+  if(p > m.p){ m.p = p; changed = true; }
+  m.marks.forEach(mk=>{ if(!mk.got && m.p >= mk.at){ mk.got = true; mk.at2 = now || Date.now(); changed = true; } });
+  return changed;
+}
+/** 路上临时加的途径点 → 图多揭开一块 */
+function tmapAddWay(name){
+  const m = expEnsure().map;
+  if(!m || m.opened) return null;
+  const w = { name: name || "中途", done: true };
+  m.ways.push(w);
+  expSave();
+  return w;
+}
+function tmapProgress(){
+  const m = expEnsure().map;
+  if(!m) return { has:false };
+  return {
+    has: true, p: m.p || 0,
+    got: m.marks.filter(x => x.got).length, total: m.marks.length,
+    ways: m.ways.length, opened: !!m.opened, prize: m.prize || null,
+  };
+}
+
+// ── 开图 ────────────────────────────────────────────────────────────────────
+// 件数分布：**纯随机，不看距离、不看点位数、不看步数**。改这张表只改手感。
+const EXP_COUNTS = [
+  { n:1, w:0.18 }, { n:2, w:0.27 }, { n:3, w:0.27 }, { n:4, w:0.18 }, { n:5, w:0.10 },
+];
+const EXP_TRIP_CAP = 3;             // 同一天超过这么多趟只给一件 D（防反复开新趟重 roll）
+
+function expTripsToday(now){
+  const d = new Date(now || Date.now()); d.setHours(0,0,0,0);
+  const from = d.getTime(), seen = {};
+  expEnsure().shelf.forEach(p=>{ if(p.at >= from) seen[p.tripId || p.at] = 1; });
+  return Object.keys(seen).length;
+}
+/** 开图。同一趟反复调拿到的是同一批（按 tripId 定种子，不重 roll）。返回数组 */
+function tmapOpen(trip, ctx, now){
+  const e = expEnsure(), m = e.map;
+  if(!m) return null;
+  if(m.opened) return m.prize || [];
+  const t = (now || Date.now());
+  const c = ctx || {};
+  const capped = expTripsToday(t) >= EXP_TRIP_CAP;
+  const key = m.tripId || m.startAt;
+  const seed = EXP_SALT + "$" + key;
+  const n = capped ? 1 : expPick(EXP_COUNTS, expRand(seed + "$n", 0)).n;
+  const adv = capped ? 1 : expAdvantage(trip, c);
+  const h = new Date((trip && trip.startAt) || t).getHours();
+  const prizes = [];
+  for(let i = 0; i < n; i++){
+    const s = seed + "$" + i;
+    const tier = capped ? EXP_TIERS[0] : expRollTier(s, adv);
+    const pool = EXP_ITEMS[tier.k] || EXP_ITEMS.D;
+    const bond = expBond(s, {
+      first: (e.shelf.length === 0 && i === 0),
+      mood: c.mood, night: (h >= 22 || h < 6),
+      longGap: (c.daysSinceLastTrip != null && c.daysSinceLastTrip >= 7),
+      big: (trip && trip.mode === "big"),
+    });
+    prizes.push({
+      name: pool[Math.floor(expRand(s, 0) * pool.length) % pool.length],
+      tier: tier.k, price: tier.price, bond,
+      at: t + i,                                  // 错开 1ms，排序稳定
+      tripId: m.tripId || null,
+      to: (trip && trip.to && trip.to.name) || "",
+      note: "",                                   // 他写的来历，以后异步补
+      locked: false,                              // 她可以上锁「这件别卖」
+      sold: false,                                // 留给集市
+    });
+  }
+  m.opened = true; m.prize = prizes; m.capped = capped;
+  prizes.forEach(p => e.shelf.push(p));
+  if(e.shelf.length > EXP_SHELF_KEEP) e.shelf = e.shelf.slice(-EXP_SHELF_KEEP);
+  expSave();
+  return prizes;
+}
+
+/** 开图要用的上下文：全部来自「这是趟什么样的趟」，**没有距离**。
+ *  daysSinceLastTrip 从册子里最近一条算 —— 很久没出门的那趟多抽一次。 */
+function expTripCtx(trip){
+  const ctx = {};
+  try{
+    const logs = (state.tripLog || []);
+    const prev = logs[logs.length - 1];
+    if(prev && prev.endAt){
+      const gap = Math.floor((((trip && trip.startAt) || Date.now()) - prev.endAt) / 86400000);
+      if(gap >= 0) ctx.daysSinceLastTrip = gap;
+    }
+  }catch(e){}
+  try{
+    // 这趟路上他最后一次是什么状态，拿来影响羁绊（狼狈那趟的东西他记得牢）
+    const log = expEnsure().log;
+    for(let i = log.length - 1; i >= 0; i--){
+      if(trip && trip.id && log[i].tripId === trip.id){ ctx.mood = log[i].mood; break; }
+    }
+  }catch(e){}
+  return ctx;
+}
+/** 到终点了：开图。tripArrive / tripMarkArrived 都走这儿 */
+function expOnArrive(trip){
+  try{
+    if(!trip) return null;
+    const m = expEnsure().map;
+    if(!m || m.opened) return null;
+    m.marks.forEach(mk => { mk.got = true; });
+    m.p = 1;
+    return tmapOpen(trip, expTripCtx(trip));
+  }catch(e){ return null; }
+}
+
+/** 尾部注入：让他知道这趟有图，但**不许他因此催她**（跟「别催」一个级别，写死）*/
+function expTailBlock(){
+  try{
+    const trip = (typeof tripNow === "function") ? tripNow() : null;
+    if(!trip) return "";
+    const pg = tmapProgress();
+    if(!pg.has) return "";
+    const lines = [];
+    lines.push(`【这趟的藏宝图】你手里有张这趟的图，${pg.total} 个记号，已经走出来 ${pg.got} 个。到终点才开得了。`);
+    const e = expEnsure();
+    const recent = e.log.filter(r => r.tripId && trip.id && r.tripId === trip.id).slice(-3);
+    if(recent.length) lines.push("路上你已经遇到的：" + recent.map(r => r.text).join(" "));
+    lines.push("规矩：**不许提议路线、不许说哪边好像有东西、不许嫌她走得不够、不许拿这张图当由头催她出门或者绕路**。"
+             + "你可以自己期待、可以念叨想看看能捡到什么，但这趟走成什么样是她的事，你不能有意见。"
+             + "她没提起这件事，你就别一直挂在嘴上。");
+    return lines.join("\n");
+  }catch(e){ return ""; }
+}
+
+// ═══════════════ baileysGO · 界面 ═════════════════════════════════════════════
+// 分层露出（她定的）：平时只露**他的态度**，`SSA`/`RA` 这种档次符号只在价格旁边出现。
+const expPad2 = n => String(n).padStart(2, "0");
+function expHm(ts){ const d = new Date(ts); return expPad2(d.getHours()) + ":" + expPad2(d.getMinutes()); }
+function expYmd(ts){ const d = new Date(ts); return (d.getMonth() + 1) + "月" + d.getDate() + "日"; }
+
+/** 手绘风的藏宝图。**不是导航图** —— 一条弯路 + 几个记号，走到哪亮到哪 */
+function expMapSvg(){
+  const m = expEnsure().map;
+  if(!m || !m.marks || !m.marks.length) return "";
+  const W = 300, H = 110, x0 = 22, x1 = W - 22;
+  const n = m.marks.length;
+  const pts = [];
+  for(let i = 0; i <= n + 1; i++){
+    const f = i / (n + 1);
+    const wob = (i === 0 || i === n + 1) ? 0 : (m.marks[i - 1].wob || 0);
+    pts.push([x0 + (x1 - x0) * f, H / 2 + wob * 26]);
+  }
+  const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const marks = m.marks.map((mk, i)=>{
+    const p = pts[i + 1];
+    return mk.got
+      ? `<g transform="translate(${p[0].toFixed(1)},${p[1].toFixed(1)})" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><line x1="-5" y1="-5" x2="5" y2="5"/><line x1="5" y1="-5" x2="-5" y2="5"/></g>`
+      : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="none" stroke="var(--sub)" stroke-width="1.6" stroke-dasharray="2 2"/>`;
+  }).join("");
+  const last = pts[pts.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+    <path d="${d}" fill="none" stroke="var(--sub)" stroke-width="1.6" stroke-dasharray="5 4" stroke-linecap="round" opacity=".75"/>
+    <circle cx="${pts[0][0].toFixed(1)}" cy="${pts[0][1].toFixed(1)}" r="4.5" fill="var(--sub)"/>
+    ${marks}
+    <g transform="translate(${last[0].toFixed(1)},${last[1].toFixed(1)})" fill="${m.opened ? "var(--accent)" : "none"}" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round"><path d="M0 -7 L2 -2 L7 -2 L3 1 L5 6 L0 3 L-5 6 L-3 1 L-7 -2 L-2 -2 Z"/></g>
+  </svg>`;
+}
+
+function expMapCard(){
+  const m = expEnsure().map;
+  if(!m) return "";
+  const pg = tmapProgress();
+  const head = m.opened ? "这趟的图开了" : `这趟的图 · 走出来 ${pg.got}/${pg.total} 个记号`;
+  let body = "";
+  if(m.opened && Array.isArray(m.prize)){
+    body = `<div style="margin-top:8px">${m.prize.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span>${esc(p.name)}</span><span style="color:var(--sub);font-size:11px">${esc(expAttitude(p.bond))}</span></div>`).join("")}</div>`;
+    if(m.capped) body += `<div style="font-size:10px;color:var(--sub);margin-top:4px">今天出去的趟数够多了，他有点累。</div>`;
+  }
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">${esc(head)}</div>
+    ${expMapSvg()}
+    ${body}
+  </div>`;
+}
+
+/** 这趟路上他遇到的事 */
+function expLogCard(){
+  const e = expEnsure();
+  const t = (typeof tripNow === "function") ? tripNow() : null;
+  const rows = (t ? e.log.filter(r => r.tripId && r.tripId === t.id) : e.log).slice(-12).reverse();
+  if(!rows.length){
+    return `<div class="status-card" style="margin-bottom:10px"><div style="font-size:12px;color:var(--sub)">${t ? "他还没碰上什么。" : "出门以后他才会在路上遇到东西。"}</div></div>`;
+  }
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">路上</div>
+    ${rows.map(r=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.5">${esc(r.text || expSkeleton(r))}<span style="color:var(--sub);font-size:10px;margin-left:4px">${esc(expHm(r.at))}</span></div>`).join("")}
+  </div>`;
+}
+
+/** 背包：她走出来的东西。上锁在这儿 */
+function expBagCard(){
+  const e = expEnsure();
+  const items = e.shelf.slice(-40).reverse();
+  if(!items.length){
+    return `<div class="status-card"><div style="font-size:12px;color:var(--sub)">背包还空着。定个目的地出门，到了终点这趟的图就开了。</div></div>`;
+  }
+  return `<div class="status-card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <span style="font-size:12px;color:var(--sub)">背包 · ${items.length} 件</span>
+      <span style="font-size:11px;color:var(--sub)">他攒了 ${e.coin} 个子儿</span>
+    </div>
+    ${items.map((p, i)=>{
+      const idx = e.shelf.length - 1 - i;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px">${esc(p.name)}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px">${esc(expAttitude(p.bond))}${p.to ? " · " + esc(p.to) : ""} · ${esc(expYmd(p.at))}</div>
+        </div>
+        <span style="font-size:10px;color:var(--sub);white-space:nowrap">${esc(p.tier)} · ${p.price}</span>
+        <button type="button" data-exp-lock="${idx}" class="btn-ghost" style="padding:4px 8px;font-size:11px;white-space:nowrap">${p.locked ? "已锁" : "锁"}</button>
+      </div>`;
+    }).join("")}
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:8px">上了锁的他绝对不碰 —— 可以难受，不能动。市集和拍卖台还没做。</div>
+  </div>`;
+}
+
+function renderExplore(){
+  expEnsure();
+  return `<div class="page">
+    ${subHeader('<i data-lucide="compass"></i> baileysGO')}
+    ${expMapCard()}
+    ${expLogCard()}
+    ${expBagCard()}
+  </div>`;
+}
+function bindExplorePage(){
+  document.querySelectorAll("[data-exp-lock]").forEach(el=>{
+    el.onclick = ()=>{
+      const e = expEnsure();
+      const it = e.shelf[+el.dataset.expLock];
+      if(!it) return;
+      it.locked = !it.locked;
+      expSave();
+      try{ if(typeof showToast === "function") showToast(it.locked ? "锁上了，他不会动它" : "解开了"); }catch(_){}
+      render();
+    };
+  });
 }
 
 // ═══════════════ 蛇塑身体（Embodiment）════════════════════════════════════════
@@ -40781,6 +41388,11 @@ function chatTailBlock(){
   try{
     const tp = (typeof tripTailBlock === "function") ? tripTailBlock() : "";
     if(tp) bits.push(tp);
+  }catch(e){}
+  // baileysGO：这趟的藏宝图 + 路上遇到的。含「不许拿这图催她」那几条红线
+  try{
+    const bg = (typeof expTailBlock === "function") ? expTailBlock() : "";
+    if(bg) bits.push(bg);
   }catch(e){}
   // 别催她睡觉：一夜一句额度。会变（跟当晚说过的话有关），只走尾部
   try{
@@ -42262,7 +42874,7 @@ window.reinitState = function(){
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
     moments:"moments",galateaEventId:"galateaEventId",
-    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",period:"period",trip:"trip",places:"places",tripLog:"tripLog",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",period:"period",trip:"trip",places:"places",tripLog:"tripLog",explore:"explore",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
     rewriteSave:"rewriteSave"
   };
 
