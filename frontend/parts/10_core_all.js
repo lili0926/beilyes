@@ -32412,6 +32412,19 @@ function sgTailBlock(){
     // 上一次开单的系统回话（冷却剔项 / 失败原因），下一轮给他看一次
     const n = state.sgNotice;
     if(n && n.text && Date.now() - (n.at||0) < 30*60000) lines.push("【回执单 · 系统】" + n.text);
+    // 刚完事、正在收尾：只看他身体的状态，不走关键词那道门（她 2026-09-21：他手打了一张）
+    try{
+      const st = ((state.snake || {}).repro || {}).st;
+      const justDone = st === "releasing" || st === "recovery"
+        || __featHot("射了","结束","收尾","擦干净","抱着我","事后","睡吧","累死了","缓过来");
+      const gateOk = !!state.nsfwOn || state.chatMode === "story";
+      const openPending = sgDb().reviews.some(r=>r.status === "pending" && Date.now() - Date.parse(r.created_at || 0) < 6*3600000);
+      const done0 = sgSubmittedDesc()[0];
+      const justSubmitted = done0 && Date.now() - Date.parse(done0.submitted_at || done0.created_at || 0) < 3*3600000;
+      if(gateOk && justDone && !openPending && !justSubmitted){
+        lines.push("【现在正合适】刚收尾，可以给她开一张回执单：只写一行 ⟪回执单:{\"context\":\"…\",\"items\":[{\"dim\":\"…\",\"tag\":\"…\",\"label\":\"…\"}]}⟫（5~8 条这一场真发生的细节）。别手打成文字，也别用写卡工具——只有这个暗号才会变成她能点星的卡。她不填就算了，别催第二遍。");
+      }
+    }catch(e){}
     if(sgActive()){
       const all = sgSubmittedDesc();
       const recent = all.filter(r=>r.filled_by !== "agent").slice(0, SG_TAIL_RECENT);
@@ -32438,7 +32451,7 @@ function sgPromptBlock(){
   if(!state.nsfwOn && state.chatMode !== "story") return "";   // 她亲热时多半只开文章模式
   return `\n\n【回执单 —— 亲密之后给她的一张卡】
 一场亲密结束、收尾照顾她的时候，你可以开一张回执单。不是进行中开，也不是白天随口聊到的时候开。同一场只开一张；她不填就算了，不许催第二遍——这张单是给她用的，不是你的考卷。
-开单写一行暗号（她看不见暗号本身，正文里会出现一张卡）：
+开单**只写一行暗号**（她看不见暗号本身，正文里会出现一张卡）。不要自己手打一张「回执单」贴在正文里，也不要用写卡工具代替——那两种她都点不了星、系统也记不上账：
 ⟪回执单:{"context":"一句话场景","items":[{"dim":"维度","tag":"短标签","label":"一句白描"}, …]}⟫
 - items = 这一场真实发生过的细节，5~${SG_MAX_ITEMS} 条。没发生的不许凑数，宁可 5 条真的。
 - dim 只能从这里选：${SG_DIMS.join("/")}。口径：${SG_DIM_HINT}
@@ -32488,6 +32501,12 @@ function handleSigilloMarkers(text){
     }
     return "";
   });
+  // 他把回执单手打成正文（截到过：自己排了「日期/地点/服务方/签收人」那种）——
+  // 那样她点不了星、系统也记不上账。当场纠正一次，下一轮他就会照格式写。
+  if(/回执单|回执 ?单/.test(s) && s.indexOf("[sigillo:") < 0 && !state.sgNotice){
+    state.sgNotice = { text: "你刚把回执单手打成正文了——那样她点不了星、也存不进记录。要开单只写一行暗号：⟪回执单:{\"context\":\"一句话场景\",\"items\":[{\"dim\":\"体位\",\"tag\":\"短标签\",\"label\":\"一句白描\"}]}⟫，系统会把它变成一张她能点的卡。也别用写卡工具代替。", at: Date.now() };
+    try{ persist("sgNotice"); }catch(e){}
+  }
   return s.replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -32991,19 +33010,23 @@ async function compressThreadIfNeeded(){
     // 分工清楚之后它能瘦一半。**约定必须豁免 24 小时** —— 30 小时前答应的事，
     // 摘要里没有、检索又没命中，就真的丢了。
     const cutoff = formatTimeFull(new Date(Date.now() - 24*60*60*1000).toISOString());
-    const prompt = `把下面这段已发生的对话，覆盖式压缩成一段中文摘要。分两块写：
+    // 她 2026-09-21：「做简略一点，比如 20号23点 做爱了什么什么，就一个时间一句话」——
+    // 原来那版要「关键事件/关系进展/情绪走向」，模型就写成一大段散文，每轮都发、又长又贵。
+    // 现在固定成流水账：一行一件事，行数和字数都封死。
+    const prompt = `把下面这段已发生的对话，覆盖式压缩成一份**流水账**。只用这两块，别写别的：
 
-【最近一天】只写 ${cutoff} 之后发生的事：关键事件、关系进展、情绪走向、正在进行的话题。删掉寒暄。
-每件事带上时间（写成「2026/09/01 周一 21:30」这样，同一天的多件事可以合并到一个日期下）。时间顺序不许乱。
-比这更早的事不要写进这一块 —— 它们已经进了记忆库，不用在这里重复。
+【最近一天】只写 ${cutoff} 之后的事。**一行一件事**，格式固定：
+MM-DD HH:mm 一句话
+例：09-20 23:15 做爱了，她第二次到的时候咬着嘴唇没叫出来
+要求：每行不超过 30 字；最多 12 行；按时间从早到晚；寒暄、附和、没结果的闲聊一律不写；
+不要形容词堆砌，不要写「关系更亲密了」这种总结句，只写发生了什么。
+比 ${cutoff} 更早的事不要写（已经进了记忆库）。
 
-【还没兑现的约定】不受时间限制：任何一方答应过、但还没做完/没验证的事，以及明确说了以后要做的安排。
-每条带上是谁答应的、什么时候答应的。已经兑现或已经作废的就删掉。没有就写「（无）」。
+【还没兑现的约定】不受时间限制。**一行一条**：谁 + 答应了什么 + 什么时候说的，每行不超过 20 字。
+已经做完或作废的删掉。没有就写「（无）」。
 
-这是对「上一次摘要」的整体更新，不是追加：
-- 上一次摘要里【最近一天】那块，凡是已经超过 ${cutoff} 的，这次要删掉；
-- 【还没兑现的约定】那块要原样带过来，再加上新对话里新出现的。
-总长不超过 400 字。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,20000)}`;
+这是对「上一次摘要」的整体更新，不是追加：上一次里超过 ${cutoff} 的行删掉，约定那块原样带过来再补新的。
+**全文不超过 220 字**，不许写开场白、结束语或任何解释。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,20000)}`;
     // 兜底优先挑非 CC 的通道：CC 是共享终端，摘要和她刚发的消息撞在一起会互相串
     // （hub 的回复没有请求 id）—— 「换官方订阅渠道就把摘要发出来了」就是这么来的。
     const ag = (typeof bgChatAgent==="function" ? bgChatAgent() : null) || agentById(target) || (state.agents||[])[0];
@@ -33015,8 +33038,8 @@ async function compressThreadIfNeeded(){
     }
     // 空摘要绝不能覆盖上一份，否则压缩点白推进、旧对话就真丢了
     if(!String(summary||"").trim()) return;
-    // 1200 → 900：提示词要的是 400 字，留点余量就够；这一段每轮都进 system，越短越省
-    thread.compressed = { summary: (summary||"").slice(0,900), upToIndex: compressTo, at: new Date().toISOString() };
+    // 900 → 400：提示词要的是 220 字的流水账，留点余量就够（这一段每轮都发）
+    thread.compressed = { summary: (summary||"").trim().slice(0,400), upToIndex: compressTo, at: new Date().toISOString() };
     saveActiveThread();
   }catch(e){ /* 压缩失败不阻塞聊天 */ }
 }
