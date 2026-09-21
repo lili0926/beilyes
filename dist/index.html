@@ -39038,7 +39038,8 @@ function geoOnce(timeout){
     try{
       if(typeof navigator === "undefined" || !navigator.geolocation) return res(null);
       navigator.geolocation.getCurrentPosition(
-        p=>res({ lat: p.coords.latitude, lon: p.coords.longitude, acc: Math.round(p.coords.accuracy||0), at: Date.now() }),
+        p=>{ const g = wgs2gcj(p.coords.latitude, p.coords.longitude);
+             res({ lat: g.lat, lon: g.lon, acc: Math.round(p.coords.accuracy||0), at: Date.now(), sys:"gcj" }); },
         ()=>res(null),
         { enableHighAccuracy: true, timeout: timeout || 12000, maximumAge: 30000 }
       );
@@ -39052,7 +39053,8 @@ function tripWatchStart(){
   try{
     if(typeof navigator === "undefined" || !navigator.geolocation) return;
     window.__tripWatchId = navigator.geolocation.watchPosition(
-      p=>tripOnFix({ lat: p.coords.latitude, lon: p.coords.longitude, acc: Math.round(p.coords.accuracy||0), at: Date.now() }),
+      p=>{ const g = wgs2gcj(p.coords.latitude, p.coords.longitude);
+           tripOnFix({ lat: g.lat, lon: g.lon, acc: Math.round(p.coords.accuracy||0), at: Date.now(), sys:"gcj" }); },
       ()=>{},
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 15000 }
     );
@@ -39307,6 +39309,168 @@ function tripResume(){
   try{ if(tripNow()) tripWatchStart(); }catch(e){}
 }
 
+// ─── 坐标系：手机 GPS 是 WGS-84，高德（搜索结果、地图）是 GCJ-02 ─────────────
+// 两者在杭州差 300～600 米。搜来的目的地是 GCJ-02，如果拿它跟原始 GPS 比距离，
+// 「到了没」会整整差半个街区 —— 所以**所有坐标统一存 GCJ-02**，GPS 一拿到就换算。
+// 自己存的地点（家）是从 GPS 来的，换算之后跟搜来的点就在同一个系里了。
+const GCJ_A = 6378245.0, GCJ_EE = 0.00669342162296594323;
+function __gcjOut(lat, lon){
+  return lon < 72.004 || lon > 137.8347 || lat < 0.8293 || lat > 55.8271;   // 国外不偏移
+}
+function __trLat(x, y){
+  let r = -100 + 2*x + 3*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x));
+  r += (20*Math.sin(6*x*Math.PI) + 20*Math.sin(2*x*Math.PI)) * 2/3;
+  r += (20*Math.sin(y*Math.PI) + 40*Math.sin(y/3*Math.PI)) * 2/3;
+  r += (160*Math.sin(y/12*Math.PI) + 320*Math.sin(y*Math.PI/30)) * 2/3;
+  return r;
+}
+function __trLon(x, y){
+  let r = 300 + x + 2*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x));
+  r += (20*Math.sin(6*x*Math.PI) + 20*Math.sin(2*x*Math.PI)) * 2/3;
+  r += (20*Math.sin(x*Math.PI) + 40*Math.sin(x/3*Math.PI)) * 2/3;
+  r += (150*Math.sin(x/12*Math.PI) + 300*Math.sin(x/30*Math.PI)) * 2/3;
+  return r;
+}
+/** WGS-84 → GCJ-02 */
+function wgs2gcj(lat, lon){
+  if(lat == null || lon == null) return { lat, lon };
+  if(__gcjOut(lat, lon)) return { lat, lon };
+  const dLat0 = __trLat(lon - 105, lat - 35), dLon0 = __trLon(lon - 105, lat - 35);
+  const rad = lat / 180 * Math.PI;
+  let magic = Math.sin(rad); magic = 1 - GCJ_EE * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  const dLat = (dLat0 * 180) / ((GCJ_A * (1 - GCJ_EE)) / (magic * sqrtMagic) * Math.PI);
+  const dLon = (dLon0 * 180) / (GCJ_A / sqrtMagic * Math.cos(rad) * Math.PI);
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
+// ─── 高德地图（JS API 2.0）─────────────────────────────────────────────────
+// key 不写进代码：找服务器要（服务器 .env 里那把 Web端 key），拿到只留在内存。
+let __amapKey = "", __amapLoading = null;
+async function amapJsKey(){
+  if(__amapKey) return __amapKey;
+  const base = wakeBase();
+  if(!base) return "";
+  try{
+    const headers = { "Accept":"application/json" };
+    const tok = wakeToken();
+    if(tok) headers["X-Auth-Token"] = tok;
+    const r = await fetch(base + "/amap/jskey", { headers });
+    if(!r.ok) return "";
+    const d = await r.json();
+    __amapKey = d.key || "";
+  }catch(e){ __amapKey = ""; }
+  return __amapKey;
+}
+/** 把 JS API 拉进来。拉不到就返回 null，地图那块退化成一行提示，别的功能照常 */
+function amapLoad(){
+  if(window.AMap) return Promise.resolve(window.AMap);
+  if(__amapLoading) return __amapLoading;
+  __amapLoading = (async()=>{
+    const key = await amapJsKey();
+    if(!key) throw new Error("服务器没给地图 key");
+    await new Promise((res, rej)=>{
+      const s = document.createElement("script");
+      s.src = "https://webapi.amap.com/maps?v=2.0&key=" + encodeURIComponent(key);
+      s.onload = res;
+      s.onerror = ()=>rej(new Error("地图脚本没加载出来"));
+      document.head.appendChild(s);
+      setTimeout(()=>rej(new Error("地图脚本超时")), 15000);
+    });
+    if(!window.AMap) throw new Error("地图脚本加载了但没初始化");
+    return window.AMap;
+  })().catch(e=>{ __amapLoading = null; throw e; });
+  return __amapLoading;
+}
+
+/** 这一屏要画哪些点：家、目的地、中途点、她此刻的位置 */
+function tripMapPoints(){
+  const pts = [];
+  const home = tripHome();
+  if(home && home.lat != null) pts.push({ ...home, kind:"home", label:"家" });
+  const t = tripNow();
+  if(t){
+    (t.waypoints || []).forEach((w, i)=>{ if(w.lat != null) pts.push({ ...w, kind:"way", label: w.name || ("中途 " + (i+1)) }); });
+    if(t.to && t.to.lat != null) pts.push({ ...t.to, kind:"dest", label: t.to.name || "目的地" });
+  }else if(state.tripPick && state.tripPick.lat != null){
+    pts.push({ ...state.tripPick, kind:"dest", label: state.tripPick.name || "目的地" });
+  }
+  const me = (t && t.last) || state.geoLast;
+  if(me && me.lat != null) pts.push({ ...me, kind:"me", label:"我" });
+  return pts;
+}
+
+const TRIP_PIN = { home:"#4a9e6f", dest:"#d8663f", way:"#c9a227", me:"#3b82f6" };
+
+/** 画地图。render 是整页重绘，所以每次都要认一下容器还在不在 */
+async function tripMapDraw(){
+  const el = document.getElementById("trip-map");
+  if(!el) return;
+  if(window.__tripMapEl === el && window.__tripMap){ tripMapPaint(); return; }
+  const note = document.getElementById("trip-map-note");
+  try{
+    const AMap = await amapLoad();
+    if(document.getElementById("trip-map") !== el) return;   // 画的过程中页面又重绘了
+    const pts = tripMapPoints();
+    const center = pts.length ? [pts[0].lon, pts[0].lat] : [120.1551, 30.2741];
+    window.__tripMap = new AMap.Map(el, { zoom: pts.length ? 14 : 11, center, resizeEnable:true });
+    window.__tripMapEl = el;
+    window.__tripMapMarks = [];
+    if(note) note.textContent = "";
+    tripMapPaint();
+  }catch(e){
+    window.__tripMap = null; window.__tripMapEl = null;
+    if(note) note.textContent = String((e && e.message) || e);
+  }
+}
+
+/** 往地图上放点。目的地那颗可以拖，拖完就是新的目的地 */
+function tripMapPaint(){
+  const map = window.__tripMap;
+  if(!map || !window.AMap) return;
+  (window.__tripMapMarks || []).forEach(m=>{ try{ map.remove(m); }catch(e){} });
+  window.__tripMapMarks = [];
+  const pts = tripMapPoints();
+  const t = tripNow();
+  pts.forEach(p=>{
+    const color = TRIP_PIN[p.kind] || "#888";
+    const dot = document.createElement("div");
+    dot.style.cssText = `width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)`;
+    const marker = new window.AMap.Marker({
+      position: [p.lon, p.lat], content: dot, offset: new window.AMap.Pixel(-7, -7),
+      title: p.label,
+      // 还没出发的时候，目的地那颗可以拖着微调；已经在路上了就钉死
+      draggable: p.kind === "dest" && !t,
+    });
+    if(p.kind === "dest" && !t){
+      marker.on("dragend", ev=>{
+        const ll = ev.lnglat;
+        if(state.tripPick){ state.tripPick.lat = ll.getLat(); state.tripPick.lon = ll.getLng(); state.tripPick.moved = true; }
+        try{ render(); }catch(e){}
+      });
+    }
+    map.add(marker);
+    window.__tripMapMarks.push(marker);
+  });
+  if(pts.length > 1){
+    try{ map.setFitView(window.__tripMapMarks, false, [40, 40, 40, 40]); }catch(e){}
+  }else if(pts.length === 1){
+    try{ map.setCenter([pts[0].lon, pts[0].lat]); }catch(e){}
+  }
+}
+
+/** 出行页上的地图卡片 */
+function tripMapCard(){
+  const has = tripMapPoints().length > 0;
+  return `<div class="status-card" style="padding:0;overflow:hidden;margin-bottom:10px">
+    <div id="trip-map" style="height:200px;width:100%;background:var(--bg)"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px">
+      <span id="trip-map-note" style="font-size:11px;color:var(--sub)">${has ? "" : "还没有点可以画"}</span>
+      <span style="font-size:10px;color:var(--sub);opacity:.8">绿=家 橙=目的地 蓝=你此刻${tripNow() ? "" : " · 橙点可以拖"}</span>
+    </div>
+  </div>`;
+}
+
 // ─── 出行页面 ────────────────────────────────────────────────────────────────
 function tripFmtDur(ms){
   const m = Math.max(0, Math.round(ms / 60000));
@@ -39440,6 +39604,7 @@ function renderTrip(){
   const t = tripNow();
   return `<div class="page">
     ${subHeader('<i data-lucide="map-pin"></i> 出行')}
+    ${tripMapCard()}
     ${t ? tripCurrentCard(t) : tripStartCard()}
     ${tripPlacesCard()}
     ${tripLogCard()}
@@ -39452,6 +39617,7 @@ function renderTrip(){
 /** 出行页的按钮。跟着 render 每次重绑 */
 function bindTripPage(){
   const $ = id=>document.getElementById(id);
+  try{ tripMapDraw(); }catch(e){ try{ console.warn("[trip] map", e); }catch(_){} }
   const go = async (mode)=>{
     const purpose = ($("trip-purpose") || {}).value || "";
     tripStart({ to: state.tripPick || null, purpose, mode });
