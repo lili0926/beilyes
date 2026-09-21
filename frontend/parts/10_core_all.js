@@ -32485,10 +32485,30 @@ function renderTrip(){
   </div>`;
 }
 
+/** 没在行程里的时候也要有蓝点：进出行页单独定一次位，写进 state.geoLast 再补画。
+ *  行程期间有 watchPosition 一直在喂，这里就不重复要了。两分钟内定过也不重复要。 */
+function tripMeLocate(){
+  if(tripNow()) return;                                   // 行程中：watch 在喂
+  if(window.__tripMeBusy) return;
+  const last = state.geoLast;
+  if(last && last.at && Date.now() - last.at < 120000) return;
+  window.__tripMeBusy = true;
+  geoOnce().then(fix=>{
+    window.__tripMeBusy = false;
+    if(!fix) return;
+    state.geoLast = fix;
+    if(!document.getElementById("trip-map")) return;       // 人已经翻到别的页了
+    const note = document.getElementById("trip-map-note");
+    if(note && note.textContent === "还没有点可以画") note.textContent = "";
+    try{ tripMapPaint(); }catch(e){}
+  }).catch(()=>{ window.__tripMeBusy = false; });
+}
+
 /** 出行页的按钮。跟着 render 每次重绑 */
 function bindTripPage(){
   const $ = id=>document.getElementById(id);
   try{ tripMapDraw(); }catch(e){ try{ console.warn("[trip] map", e); }catch(_){} }
+  try{ tripMeLocate(); }catch(e){}
   const go = async (mode)=>{
     const purpose = ($("trip-purpose") || {}).value || "";
     tripStart({ to: state.tripPick || null, purpose, mode });
