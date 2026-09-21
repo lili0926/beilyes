@@ -28753,11 +28753,13 @@ function bindEvents(){
   pdBtn("pd-end", ()=>pdEnd());
   pdBtn("pd-undo", ()=>{ if(confirm("撤销最近一条记录？")) pdUndo(); });
   pdBtn("pd-backfill", ()=>{
-    const inp = document.getElementById("pd-date");
-    const k = inp && inp.value;
-    if(!k) return;
-    pdStart(k);
-    if(typeof showToast==="function") showToast("记下了：" + k + " 来的");
+    const a = (document.getElementById("pd-date") || {}).value;
+    const b = (document.getElementById("pd-date-end") || {}).value;
+    if(!a) throw new Error("先选来的那天");
+    const rec = pdStart(a);
+    if(!rec) throw new Error("没记上，日期再看一眼");
+    if(b) pdEnd(b, rec.start);
+    if(typeof showToast==="function") showToast("记下了：" + rec.start + (b ? " → " + b : " 来的（还没记结束）"));
   });
   try{ if(typeof bindTripPage === "function") bindTripPage(); }catch(e){ try{ console.warn("[trip] bind", e); }catch(_){} }
   const snakeToggle = document.getElementById("snake-toggle");
@@ -31757,29 +31759,44 @@ function pdKey(d){
 function pdParse(k){ const d = new Date(String(k||"") + "T00:00:00"); return isNaN(d.getTime()) ? null : d; }
 function pdDiffDays(a, b){ const x = pdParse(a), y = pdParse(b); return (x && y) ? Math.round((y - x) / PD_DAY) : null; }
 
-/** 她点「今天来了」。同一天重复点不会记两次；上一次没结束就先给它补个结束 */
+/** 她点「今天来了」，或者补记以前的某一天。
+ *  logs 约定「新的在后」，所以补记老日期要**按 start 排序插进去**，不能直接 push 到末尾
+ *  （否则 pdPhase/pdEnd 都会把那条老的当成最近一次）。 */
 function pdStart(dateKey){
   const db = pdEnsure(), k = dateKey || pdKey();
+  if(!pdParse(k)) throw new Error("日期不对：" + k);
+  const same = db.logs.find(l => l.start === k);
+  if(same) return same;                                       // 同一天不记两条
   const last = db.logs[db.logs.length - 1];
-  if(last && last.start === k) return last;
-  if(last && !last.end){
-    const gap = pdDiffDays(last.start, k);
-    if(gap != null && gap <= 12) return last;                 // 12 天内多半是点错了，不当新一次
+  const fwd = last ? pdDiffDays(last.start, k) : null;
+  // 「点错了」只可能发生在往后走的方向；补记老日期（fwd < 0）不适用这条
+  if(last && !last.end && fwd != null && fwd > 0){
+    if(fwd <= 12) return last;                                // 12 天内多半是点错了，不当新一次
     last.end = pdKey(new Date(pdParse(last.start).getTime() + (pdStats().len - 1) * PD_DAY));
   }
-  db.logs.push({ start: k, end: null });
+  const rec = { start: k, end: null };
+  db.logs.push(rec);
+  db.logs.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0));
   if(db.logs.length > PD_KEEP) db.logs = db.logs.slice(-PD_KEEP);
   pdSave();
-  return db.logs[db.logs.length - 1];
+  return rec;
 }
-/** 她点「结束了」 */
-function pdEnd(dateKey){
+/** 她点「结束了」。不给 startKey 就结束**最近一条还没结束的**（补记完老的那条也能结束）*/
+function pdEnd(dateKey, startKey){
   const db = pdEnsure(), k = dateKey || pdKey();
-  const last = db.logs[db.logs.length - 1];
-  if(!last) return null;
-  last.end = k;
+  let rec = null;
+  if(startKey){
+    rec = db.logs.find(l => l.start === startKey) || null;
+  }else{
+    for(let i = db.logs.length - 1; i >= 0; i--){ if(!db.logs[i].end){ rec = db.logs[i]; break; } }
+  }
+  if(!rec) return null;
+  const d = pdDiffDays(rec.start, k);
+  if(d == null) throw new Error("日期不对：" + k);
+  if(d < 0) throw new Error("结束那天不能早于开始那天（" + rec.start + "）");
+  rec.end = k;
   pdSave();
-  return last;
+  return rec;
 }
 function pdUndo(){
   const db = pdEnsure();
@@ -31858,12 +31875,16 @@ function pdPanel(){
     ${sub ? `<div style="font-size:11px;color:var(--sub);margin-top:6px">${esc(sub)}</div>` : ""}
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
       <button type="button" class="btn-accent" id="pd-start" style="padding:8px 14px;font-size:13px">今天来了</button>
-      <button type="button" class="btn-accent2" id="pd-end" style="padding:8px 14px;font-size:13px"${ph.on ? "" : " disabled"}>结束了</button>
+      <button type="button" class="btn-accent2" id="pd-end" style="padding:8px 14px;font-size:13px"${pdEnsure().logs.some(l=>!l.end) ? "" : " disabled"}>结束了</button>
       <button type="button" class="btn-ghost" id="pd-undo" style="padding:8px 14px;font-size:13px"${pdEnsure().logs.length ? "" : " disabled"}>撤销上一条</button>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-      <input type="date" id="pd-date" value="${escAttr(pdKey())}" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--bg);color:var(--text);font-size:12px"/>
-      <button type="button" class="btn-ghost" id="pd-backfill" style="padding:7px 12px;font-size:12px">补记这天来的</button>
+      <input type="date" id="pd-date" value="${escAttr(pdKey())}" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--bg);color:var(--text);font-size:12px"/>
+      <span style="font-size:12px;color:var(--sub)">到</span>
+      <input type="date" id="pd-date-end" value="" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--bg);color:var(--text);font-size:12px"/>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button type="button" class="btn-ghost" id="pd-backfill" style="padding:7px 12px;font-size:12px">补记这一次</button>
     </div>
     ${rows ? `<div style="margin-top:12px">${rows}</div>` : ""}
     <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:10px">只存在这台手机上，不上传、不进聊天记录。他只知道「来了 / 快来了 / 晚了」，看不到具体日期。</div>
