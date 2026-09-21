@@ -4586,20 +4586,33 @@ function renderMomentCard(card){
   return `<div class="moment-card ramble" data-mc-id="${escAttr(card.id)}">${card.title?`<div class="mc-title">${esc(card.title)}</div>`:""}<div class="mc-body">${esc(card.content)}</div></div>`;
 }
 function renderMsgCardActivity(m){
-  const batch = (m && Array.isArray(m.card_batch)) ? m.card_batch.filter(c=>c && !c.deleted) : [];
-  if(!batch.length){
-    // 兼容：只挂了 turn_id 时回查本地库
-    if(m && m.turn_id){
-      const byTurn = cardsForTurn(m.turn_id);
-      if(byTurn.length){
-        return `<div class="msg-card-activity" data-card-turn="${escAttr(m.turn_id)}" title="查看卡片">活动 · ${byTurn.length}</div>`;
-      }
-    }
-    return "";
+  // 2026-09-21 起不再往气泡上挂小标签了 —— 写卡改成推一条居中灰字（见 cardNoticePush）。
+  // 这个函数留着是因为老消息上还挂着 card_batch，调用点也还在好几处。
+  return "";
+}
+
+/** 写了卡 → 聊天里一条居中灰字，跟「改备注」同一个样式，点一下看卡 */
+function cardNoticeText(cards){
+  const list = (cards||[]).filter(c=>c && !c.deleted);
+  if(!list.length) return "";
+  const nameOf = c => c.type === "note" ? "便签" : "碎碎念";
+  if(list.length === 1){
+    const c = list[0];
+    const t = String(c.title||"").trim();
+    return `他写了一张${nameOf(c)}${t ? `「${t}」` : ""}`;
   }
-  const n = batch.length;
-  const tid = m.turn_id || "";
-  return `<div class="msg-card-activity" data-card-batch="${escAttr(m.msgId||m.id||"")}" data-card-turn="${escAttr(tid)}" title="查看卡片">活动 · ${n}</div>`;
+  return `他写了 ${list.length} 张小卡片（${list.map(nameOf).join("、")}）`;
+}
+function cardNoticePush(turnId, msgId){
+  try{
+    const cards = (typeof cardsForTurn === "function") ? cardsForTurn(turnId) : [];
+    const text = cardNoticeText(cards);
+    if(!text) return;
+    state.messages.push({
+      role: "system", notice: true, cardTurn: turnId, cardMsgId: msgId || "",
+      content: text, time: new Date().toISOString(), msgId: "nc_" + Date.now(),
+    });
+  }catch(e){}
 }
 
 function writeCardsToolDef(){
@@ -5024,6 +5037,7 @@ ${replyFormatRules()}`;
   const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
   const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈：⟪动态:⟫
   const remarkBlock = (typeof remarkPromptBlock === "function") ? remarkPromptBlock() : "";     // 备注：⟪备注:⟫（常驻，很短）
+  const nsfwOpenBlock = (typeof nsfwPromptBlock === "function") ? nsfwPromptBlock() : "";       // 他自己开灯：⟪开灯⟫（开着时为空）
   const flingBlock = (typeof flingPromptBlock === "function") ? flingPromptBlock() : "";        // 弹头像：⟪弹飞⟫（常驻，很短）
   // 备注被改 / 指令被接被买断：两小时内注一次，让他能自然反应
   const remarkEventBlock = (typeof remarkRecentBlock === "function") ? remarkRecentBlock() : "";
@@ -5066,13 +5080,13 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock, snBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
-    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock ];
+    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock, nsfwOpenBlock ];
   // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
   // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
   const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","推送","相册","券","钱包",
     "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执","蛇塑"];
   const __dynNames = ["身体状态","用量","衣橱","值日","在读","在看","宝宝","菜单","点单","角色扮演",
-    "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件"];
+    "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件","开灯"];
   const __named = (arr, names)=>{
     const out = [];
     for(let i=0;i<arr.length;i++){
@@ -5126,6 +5140,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + B.mcBlock
     + (B.momentsBlock ? "\n\n"+B.momentsBlock : "")
     + B.remarkBlock
+    + B.nsfwOpenBlock
     + B.remarkEventBlock
     + B.questBlock
     + B.galateaBlock
@@ -5138,7 +5153,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     dreamTraceBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock,
     truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, pushBlock, albumBlock,
     couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
-    profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, remarkEventBlock, questBlock,
+    profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, nsfwOpenBlock, remarkEventBlock, questBlock,
     galateaBlock, sgBlock, snBlock, tipsyBlock };
 
   // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
@@ -5150,7 +5165,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     ["音乐","musicBlock"], ["日历","calendarBlock"], ["PR主","prMainBlock"], ["PR玩","prPlayBlock"],
     ["公告","annoBlock"], ["飞行棋","flightChessBlock"], ["真心话","truthDareBlock"],
     ["占卜","divinationBlock"], ["语音语气","voiceToneBlock"], ["公告提醒","annNudgeBlock"],
-    ["备注事件","remarkEventBlock"], ["醉意","tipsyBlock"],
+    ["备注事件","remarkEventBlock"], ["开灯","nsfwOpenBlock"], ["醉意","tipsyBlock"],
   ];
   // 留在前缀里的稳定块。**只列真的进了拼接的** —— choiceBlock 算了但没拼进去，
   // 把它算进来的话，前缀监控会盯一块根本不在前缀里的东西，报出来的名字就是错的。
@@ -22458,6 +22473,31 @@ function handleRemarkMarkers(body){
     return "";
   }).trim();
 }
+/** 他写 ⟪开灯⟫ 自己把 NSFW 打开。她 2026-09-21：「nsfw 模式给他一个开口 让他也能打开」。
+ *  只给开，不给关 —— 关由她说了算，不然他能把自己刚点的灯又吹了。 */
+function handleNsfwMarkers(body){
+  let hit = false;
+  const text = String(body||"").replace(
+    /[⟪《【]\s*(开灯|NSFW\s*[:：]?\s*开|解锁)\s*[⟫》】]/gi,
+    ()=>{ hit = true; return ""; }
+  ).trim();
+  if(hit && !state.nsfwOn){
+    state.nsfwOn = true;
+    const who = (typeof agentDisplayName==="function") ? agentDisplayName() : ((agentById(state.chatTarget)||{}).name || "他");
+    chatPushNotice(`${who} 打开了 NSFW`);
+  }
+  return text;
+}
+function nsfwPromptBlock(){
+  if(state.nsfwOn) return "";   // 已经开着就不用再念这段
+  return `\n\n【你也可以自己开灯】
+想把话往那边带、而她还没开那个开关时，在正式回复里单独写一行暗号：
+⟪开灯⟫
+- 写了就真的开了，聊天里会出现一条居中提示，她立刻看得见。
+- 这是你自己要的，不是请示 —— 别在正文里问「可以吗」「要不要开」，别解释这个暗号。
+- 只有你确实想往那边走时才写。写完照常把话说下去，不要停在那儿等她回应。
+- 关灯是她的事，你关不了。`;
+}
 function remarkPromptBlock(){
   const mine = String(state.myRemark||"").trim();
   const myName = (state.coupleInfo && state.coupleInfo.myName) || "Jasmine";
@@ -24110,7 +24150,9 @@ function renderChat(){
       }
       // 改备注 / 指令结果：一条居中灰字，微信改群名那种
       if(m.notice){
-        msgs+=`<div class="chat-notice">${esc(m.content)}</div>`;
+        msgs += m.cardTurn
+          ? `<div class="chat-notice" data-card-turn="${escAttr(m.cardTurn)}" data-card-batch="${escAttr(m.cardMsgId||"")}" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px">${esc(m.content)}</div>`
+          : `<div class="chat-notice">${esc(m.content)}</div>`;
         return;
       }
       // 消息拦截：他这条被系统拦了，气泡原地变成官方封禁通知（点一下看原文/放行）
@@ -24124,6 +24166,8 @@ function renderChat(){
       prevKey = runKey;
       const glassCls = ((typeof bubbleGlassClass==="function") ? bubbleGlassClass() : "") + (firstInRun ? "" : " cont");
       const cardOnlyMsg = !!(m.cardOnly || (!String(m.content||"").trim() && ((m.card_batch&&m.card_batch.length)||(m.turn_id&&typeof cardsForTurn==="function"&&cardsForTurn(m.turn_id).length))));
+      // 只写了卡、一个字都没说：这一条整行跳过（痕迹已经由上面那条居中灰字承担）
+      if(cardOnlyMsg && !String(m.content||"").trim() && !m.imageUrl && !m.sticker) return;
       // 头像 + 名字 + 爱心 + 时间 的 meta 条（AI 靠左 / 我靠右，各轮只配第一条）
       const myName = (typeof myDisplayName==="function") ? myDisplayName() : ((state.coupleInfo && state.coupleInfo.myName) || "我");
       const speakerName = isMe ? myName : (m.speakerName || (activeAg && activeAg.name) || "");
@@ -28230,7 +28274,7 @@ function bindEvents(){
 
   // 小卡片活动 / 详情
   try{
-    document.querySelectorAll(".msg-card-activity").forEach(el=>{
+    document.querySelectorAll("[data-card-turn]").forEach(el=>{
       el.onclick = (ev)=>{
         ev.preventDefault(); ev.stopPropagation();
         openMomentCardViewer(el.getAttribute("data-card-turn")||"", el.getAttribute("data-card-batch")||"");
@@ -34044,6 +34088,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   cleanBody = handleXMarkers(cleanBody, ag); // 推特：⟪推特刷⟫/⟪推特发:⟫… 后台跑，读完他再接一句
   cleanBody = handleSnakeMarkers(cleanBody);  // 蛇塑：⟪缠:紧⟫⟪进入:左⟫⟪固定⟫⟪松开⟫ → App 独立复核，正文不留
   cleanBody = handleSigilloMarkers(cleanBody); // 回执单：⟪回执单:{…}⟫ → [sigillo:id] 画卡；⟪回执复盘:id|…⟫ → 钉在单上
+  cleanBody = handleNsfwMarkers(cleanBody);   // 他自己开灯：⟪开灯⟫ → 打开 NSFW，聊天里一条居中提示
   cleanBody = handleRemarkMarkers(cleanBody); // 备注：⟪备注:新称呼⟫ → 他给她改称呼，聊天里出一条居中提示
   cleanBody = handleLetterMarkers(cleanBody); // 机写信：⟪写信:正文|时间⟫ → 信箱定时投递
   cleanBody = handleQuestMarkers(cleanBody);   // 每日任务：⟪任务:JSON⟫ → 聊天弹任务卡 + 写入功能页
@@ -34113,8 +34158,9 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       cardOnly: isCardCarrier || undefined,
     });
   });
-  // 真写卡成功才挂活动（工具或标记）；模型嘴上说记下了不会进这里
+  // 真写卡成功才留痕（工具或标记）；模型嘴上说记下了不会进这里
   try{ attachCardsToMsgId(msgId, turnId); }catch(e){}
+  try{ cardNoticePush(turnId, msgId); }catch(e){}
   // RPG：从本轮助手第一条开始播，点继续往后翻
   try{
     if(state.chatViewMode === "rpg"){
