@@ -40294,6 +40294,118 @@ function expTailBlock(){
   }catch(e){ return ""; }
 }
 
+// ═══════════════ baileysGO · 黑地图（他的世界）═══════════════════════════════
+// 一开始整张是黑的，她走过的地方才亮。亮起来的不是战绩，是**他去过的地方**。
+//
+// **故意不画在高德地图上**：它不该是张真实地图 —— 他没出过门，他画出来的当然是歪的、
+// 抽象的。顺带三个好处：完全离线、不依赖地图 key、上千格也不会卡。
+//
+// 格子来自 expOnFix 里点亮的 EXP_SEEN_M（240 米）粗格。格子多了不能一个个画方块，
+// 所以超过阈值就**按 2 的幂合并**（四格并一格），保证画出来的方块数有上限。
+const EXP_WORLD_MAX_CELLS = 1200;      // 画出来的方块数上限，超了就合并
+const EXP_WORLD_MIN_SPAN  = 12;        // 最少铺这么多格宽，免得只走过三格时画成三个大方块
+const EXP_WORLD_FRESH_MS  = 7 * 86400000;
+
+/** 把 seen 揉成一张能画的网格。纯函数（只读 state），方便探针验 */
+function expWorldGrid(now){
+  const seen = expEnsure().seen;
+  const keys = Object.keys(seen);
+  if(!keys.length) return null;
+  const raw = keys.map(k=>{
+    const p = k.split(",");
+    return { gx: +p[0], gy: +p[1], t: seen[k] || 0 };
+  }).filter(c => isFinite(c.gx) && isFinite(c.gy));
+  if(!raw.length) return null;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  raw.forEach(c=>{
+    if(c.gx < minX) minX = c.gx; if(c.gx > maxX) maxX = c.gx;
+    if(c.gy < minY) minY = c.gy; if(c.gy > maxY) maxY = c.gy;
+  });
+
+  // 合并：四格并一格，直到方块数落回上限以内
+  let step = 1;
+  const count = (s)=>{
+    const m = {};
+    raw.forEach(c => { m[Math.floor(c.gx/s) + "," + Math.floor(c.gy/s)] = 1; });
+    return Object.keys(m).length;
+  };
+  while(count(step) > EXP_WORLD_MAX_CELLS && step < 1024) step *= 2;
+
+  const agg = {};
+  raw.forEach(c=>{
+    const k = Math.floor(c.gx/step) + "," + Math.floor(c.gy/step);
+    if(!agg[k] || c.t > agg[k]) agg[k] = c.t;
+  });
+  let aX0 = Math.floor(minX/step), aX1 = Math.floor(maxX/step);
+  let aY0 = Math.floor(minY/step), aY1 = Math.floor(maxY/step);
+  // 撑到最小尺寸，免得走过的地方太少时画成几个大方块
+  const padTo = (lo, hi)=>{
+    let need = EXP_WORLD_MIN_SPAN - (hi - lo + 1);
+    if(need > 0){ const a = Math.floor(need/2); lo -= a; hi += (need - a); }
+    return [lo, hi];
+  };
+  [aX0, aX1] = padTo(aX0, aX1);
+  [aY0, aY1] = padTo(aY0, aY1);
+
+  const t = now || Date.now();
+  const cells = Object.keys(agg).map(k=>{
+    const p = k.split(",");
+    return {
+      x: +p[0] - aX0,
+      y: aY1 - (+p[1]),                            // 纬度往上，SVG 的 y 往下，翻过来
+      fresh: (t - agg[k]) < EXP_WORLD_FRESH_MS,
+    };
+  });
+  const mark = (fix)=>{
+    if(!fix || fix.lat == null) return null;
+    const c = expCell(fix.lat, fix.lon, EXP_SEEN_M);
+    const x = Math.floor(c.gx/step) - aX0, y = aY1 - Math.floor(c.gy/step);
+    if(x < 0 || y < 0 || x > (aX1 - aX0) || y > (aY1 - aY0)) return null;
+    return { x, y };
+  };
+  let home = null;
+  try{ home = mark((typeof tripHome === "function") ? tripHome() : null); }catch(e){}
+  return {
+    cols: aX1 - aX0 + 1, rows: aY1 - aY0 + 1, step, cells,
+    home, me: mark(state.geoLast),
+    lit: raw.length,                                // 真正走过的格子数（不是合并后的）
+    km2: +(raw.length * (EXP_SEEN_M/1000) * (EXP_SEEN_M/1000)).toFixed(2),
+  };
+}
+
+function expWorldCard(){
+  const g = expWorldGrid();
+  if(!g){
+    return `<div class="status-card" style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--sub)">他的图还是全黑的。你走过的地方才会亮起来。</div>
+    </div>`;
+  }
+  const u = 6, gap = 1, W = g.cols * u, H = g.rows * u;
+  const rects = g.cells.map(c=>
+    `<rect x="${c.x*u}" y="${c.y*u}" width="${u-gap}" height="${u-gap}" rx="1" fill="var(--accent)" opacity="${c.fresh ? 0.95 : 0.45}"/>`
+  ).join("");
+  const dot = (p, color)=> p
+    ? `<circle cx="${p.x*u + (u-gap)/2}" cy="${p.y*u + (u-gap)/2}" r="${u*0.42}" fill="none" stroke="${color}" stroke-width="1.4"/>`
+    : "";
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <span style="font-size:12px;color:var(--sub)">他的图</span>
+      <span style="font-size:11px;color:var(--sub)">亮了 ${g.lit} 块 · 约 ${g.km2} 平方公里</span>
+    </div>
+    <div style="background:var(--bg);border-radius:8px;padding:8px;overflow:hidden">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+        ${rects}
+        ${dot(g.home, "var(--sub)")}
+        ${dot(g.me, "#3b82f6")}
+      </svg>
+    </div>
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:6px">
+      浓=最近七天走过 · 灰圈=家 · 蓝圈=你此刻${g.step > 1 ? ` · 走得够多了，${g.step * g.step} 格并一格在画` : ""}
+    </div>
+  </div>`;
+}
+
 // ═══════════════ baileysGO · 界面 ═════════════════════════════════════════════
 // 分层露出（她定的）：平时只露**他的态度**，`SSA`/`RA` 这种档次符号只在价格旁边出现。
 const expPad2 = n => String(n).padStart(2, "0");
@@ -40390,6 +40502,7 @@ function renderExplore(){
   expEnsure();
   return `<div class="page">
     ${subHeader('<i data-lucide="compass"></i> baileysGO')}
+    ${expWorldCard()}
     ${expMapCard()}
     ${expLogCard()}
     ${expBagCard()}
