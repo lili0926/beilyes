@@ -1399,6 +1399,9 @@ function claudeEndpoint(ag, cfg){
  * 统一用 adaptive；display 必须显式写 summarized —— 5 系默认是 omitted，
  * 那样 thinking 块会回空字符串，聊天里的思考链就全没了。 */
 function claudeThinkingParam(){
+  // 她 2026-09-21：思考链开关关着时，连请求参数都不要带 —— 只在提示词里禁没用，
+  // 模型被 API 要求思考，中转又没有原生思考字段，推理就会漏进正文。
+  if(state && state.thoughtOn === false) return undefined;
   return { type: "adaptive", display: "summarized" };
 }
 
@@ -1521,7 +1524,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
       model: claudeModelOf(ag, apiConfig),
       max_tokens: 16000,
       messages: __claudeCacheMark([...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)]),
-      thinking: claudeThinkingParam(),
+      thinking: claudeThinkingParam(),  // 关掉时是 undefined，JSON.stringify 会整条丢掉
     };
     const res = await __apiFetch(claudeEndpoint(ag, apiConfig), {
       method: "POST",
@@ -1965,7 +1968,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     const body = {
       model: claudeModelOf(ag, cfg), max_tokens: 16000, stream: true,
       messages: __claudeCacheMark([...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)]),
-      thinking: claudeThinkingParam(),
+      thinking: claudeThinkingParam(),  // 关掉时是 undefined，JSON.stringify 会整条丢掉
     };
     const res = await __apiFetch(claudeEndpoint(ag, cfg), {
       method:"POST",
@@ -2047,7 +2050,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     const choice = d.choices && d.choices[0];
     if(choice && choice.delta){
       const dl = choice.delta || {};
-      const r = dl.reasoning_content || dl.reasoning || dl.thinking || null;
+      const r = (state && state.thoughtOn === false) ? null : (dl.reasoning_content || dl.reasoning || dl.thinking || null);
       if(r) thinking += r;
       if(dl.content){ text += dl.content; throttledLive(); }
     }
@@ -2153,7 +2156,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
     const body = {
       model: claudeModelOf(creds, creds), max_tokens:16000,
       messages:[ ...sysMsgs, ...convo ],
-      thinking: claudeThinkingParam(),
+      thinking: claudeThinkingParam(),  // 关掉时是 undefined，JSON.stringify 会整条丢掉
     };
     if(toolsParam) body.tools = toolsParam;
     const res = await __apiFetch(claudeEndpoint(creds._agent || null, creds), {
@@ -2206,7 +2209,9 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
   __recordUsageFromData(data); // 记 token 用量（OpenAI 兼容 / DeepSeek / MiniMax）
   const msg = data.choices?.[0]?.message || {};
   const content = msg.content || "（无响应）";
-  const reasoning = msg.reasoning_content || msg.reasoning || msg.thinking || data.choices?.[0]?.reasoning_content || null;
+  // 开关关着就不收推理（有的中转照样回 reasoning_content，收了又会变成思考链）
+  const reasoning = (state && state.thoughtOn === false) ? null
+    : (msg.reasoning_content || msg.reasoning || msg.thinking || data.choices?.[0]?.reasoning_content || null);
   const tcs = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
   const toolCalls = tcs.map(tc=>{
     let args = {};
@@ -3118,7 +3123,7 @@ const state = {
   profileWho: null, // 当前主页是谁："me"（女方）或 AI 的 agent id
   openThinkIds: {},    // id -> true 展开的思考块
   thoughtGuide: LS.get("thoughtGuide", ""), // 用户操控思考链的引导词
-  thoughtOn: LS.get("thoughtOn", true) !== false, // 思考链总开关，关则不要求写 <thinking>
+  thoughtOn: LS.get("thoughtOn", false) === true, // 思考链总开关（她 2026-09-21 改成默认关）：关则连 API 的 thinking 参数都不发
   ariesCameraOn: LS.get("ariesCameraOn", false) === true, // Aries 看一眼
   showThoughtGuide: false,
   editingThinkId: null, // 正在编辑的思考块 tid
@@ -3185,6 +3190,7 @@ const state = {
   // 备注互改：他给她起的备注 + 最近两小时的「刚发生的事」（备注被改 / 指令被接被买断）
   myRemark: LS.get("myRemark", ""),
   remarkEvents: LS.get("remarkEvents", []),
+  period: LS.get("period", null),                           // 经期记录（只存本机）
   snake: LS.get("snake", null),                             // 蛇塑身体：激素/体温/周期/亲密状态机
   snNotice: LS.get("snNotice", null),                       // 蛇塑：给他看一轮的系统回话（暗号被驳回的理由）
   snakeOn: LS.get("snakeOn", true),                         // 蛇塑总开关
@@ -5202,7 +5208,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -15196,6 +15202,8 @@ function renderBody(){
       </div>
       <div style="font-size:10px;color:var(--sub);margin-top:6px">心跳体温是蛇的量纲（静息三十来下、自己不产热），和六轴同源 · ${sixConnected ? (sixTopLabel ? "此刻主导："+sixTopLabel : "六轴已连接，过线才会主动开口") : "开启「主动消息」并连上 VPS 后显示，App 关着也在攒欲望"}</div>
     </div>
+
+    ${typeof pdPanel === "function" ? pdPanel() : ""}
 
     <div class="body-actions">
       <button id="body-nudge-miss" class="btn-accent2">想你 +</button>
@@ -28676,6 +28684,20 @@ function bindEvents(){
     persist("desireDriveOn");
     render();
   };
+  const pdBtn = (id, fn)=>{
+    const el = document.getElementById(id);
+    if(el) el.onclick = ()=>{ try{ fn(); }catch(e){ if(typeof showToast==="function") showToast(String(e.message||e)); } render(); };
+  };
+  pdBtn("pd-start", ()=>pdStart());
+  pdBtn("pd-end", ()=>pdEnd());
+  pdBtn("pd-undo", ()=>{ if(confirm("撤销最近一条记录？")) pdUndo(); });
+  pdBtn("pd-backfill", ()=>{
+    const inp = document.getElementById("pd-date");
+    const k = inp && inp.value;
+    if(!k) return;
+    pdStart(k);
+    if(typeof showToast==="function") showToast("记下了：" + k + " 来的");
+  });
   const snakeToggle = document.getElementById("snake-toggle");
   if(snakeToggle) snakeToggle.onclick = ()=>{
     state.snakeOn = !(state.snakeOn !== false);
@@ -31646,6 +31668,146 @@ function voiceToneLabel(m){
 //    消息末尾，他们实测思考链长度 89 字 → 641 字。离生成点越近权重越高。
 // 2) **缓存安全**：分钟级变化的东西（此刻情绪/时间）绝不能进被缓存的 system 前缀，
 //    挂在最后一条消息尾部既新鲜又不破前缀（本来 bodyBlock 就在 __dynArr，这里更进一步）。
+// ═══════════════ 经期记录（她自己的）═════════════════════════════════════════
+// 她 2026-09-21 要的。原来蛇塑那套把「她姨妈 11–16 号」写死在代码里，
+// 她说「这三个月才刚好准时，下个月说不定提前或延后」—— 写死就会在错的日子避让。
+// 所以：她点两下（来了 / 结束了），App 自己算周期长度、行经天数、推测下一次；
+// 蛇塑的蜕皮期和发情期改成跟着这份记录走（见 snCycles）。
+// 数据只存手机，不上服务器、不进聊天记录、不进记忆库。
+const PD_DEFAULT_CYCLE = 28, PD_DEFAULT_LEN = 6;
+const PD_PMS_DAYS = 3;      // 经前几天算「她容易烦、腰酸」那一段
+const PD_SMELL_DAYS = 2;    // 他提前几天能闻出来（蛇有颊窝和信子，靠气味识人）
+const PD_KEEP = 24;                 // 最多留 24 次
+const PD_DAY = 86400000;
+
+function pdEnsure(){
+  if(!state.period || typeof state.period !== "object" || !Array.isArray(state.period.logs)){
+    state.period = { logs: [] };    // [{start:"2026-09-10", end:"2026-09-16"|null}]，新的在后
+  }
+  return state.period;
+}
+function pdSave(){ try{ persist("period"); }catch(e){} }
+function pdKey(d){
+  const x = d ? new Date(d) : new Date();
+  const p = n=>String(n).padStart(2,"0");
+  return x.getFullYear() + "-" + p(x.getMonth()+1) + "-" + p(x.getDate());
+}
+function pdParse(k){ const d = new Date(String(k||"") + "T00:00:00"); return isNaN(d.getTime()) ? null : d; }
+function pdDiffDays(a, b){ const x = pdParse(a), y = pdParse(b); return (x && y) ? Math.round((y - x) / PD_DAY) : null; }
+
+/** 她点「今天来了」。同一天重复点不会记两次；上一次没结束就先给它补个结束 */
+function pdStart(dateKey){
+  const db = pdEnsure(), k = dateKey || pdKey();
+  const last = db.logs[db.logs.length - 1];
+  if(last && last.start === k) return last;
+  if(last && !last.end){
+    const gap = pdDiffDays(last.start, k);
+    if(gap != null && gap <= 12) return last;                 // 12 天内多半是点错了，不当新一次
+    last.end = pdKey(new Date(pdParse(last.start).getTime() + (pdStats().len - 1) * PD_DAY));
+  }
+  db.logs.push({ start: k, end: null });
+  if(db.logs.length > PD_KEEP) db.logs = db.logs.slice(-PD_KEEP);
+  pdSave();
+  return db.logs[db.logs.length - 1];
+}
+/** 她点「结束了」 */
+function pdEnd(dateKey){
+  const db = pdEnsure(), k = dateKey || pdKey();
+  const last = db.logs[db.logs.length - 1];
+  if(!last) return null;
+  last.end = k;
+  pdSave();
+  return last;
+}
+function pdUndo(){
+  const db = pdEnsure();
+  db.logs.pop();
+  pdSave();
+}
+
+/** 统计：周期长度、行经天数（都取最近几次的平均，越记越准） */
+function pdStats(){
+  const logs = pdEnsure().logs;
+  const gaps = [];
+  for(let i = 1; i < logs.length; i++){
+    const g = pdDiffDays(logs[i-1].start, logs[i].start);
+    if(g != null && g >= 18 && g <= 45) gaps.push(g);         // 太离谱的当误点，不进平均
+  }
+  const lens = logs.map(l => l.end ? (pdDiffDays(l.start, l.end) + 1) : null).filter(v => v && v >= 2 && v <= 12);
+  const avg = (arr, dflt, n) => {
+    const use = arr.slice(-(n || 6));
+    return use.length ? Math.round(use.reduce((a,b)=>a+b,0) / use.length) : dflt;
+  };
+  const cycle = avg(gaps, PD_DEFAULT_CYCLE, 6);
+  const spread = gaps.length >= 2 ? (Math.max.apply(null, gaps.slice(-6)) - Math.min.apply(null, gaps.slice(-6))) : null;
+  return {
+    cycle, len: avg(lens, PD_DEFAULT_LEN, 6),
+    gaps, lens, spread,
+    known: gaps.length,                                        // 有几个完整周期可算
+  };
+}
+
+/** 现在处在哪儿：正在来 / 还有几天 / 迟了几天。没有记录时返回 {noData:true} */
+function pdPhase(now){
+  const db = pdEnsure(), st = pdStats();
+  const last = db.logs[db.logs.length - 1];
+  if(!last) return { noData: true, cycle: st.cycle, len: st.len };
+  const today = pdKey(now ? new Date(now) : new Date());
+  const since = pdDiffDays(last.start, today);
+  const endedAt = last.end ? pdDiffDays(last.start, last.end) : null;
+  const on = since != null && since >= 0 && (last.end ? since <= endedAt : since < st.len);
+  const nextStart = pdKey(new Date(pdParse(last.start).getTime() + st.cycle * PD_DAY));
+  const dueIn = pdDiffDays(today, nextStart);
+  return {
+    on,
+    day: on ? since + 1 : 0,
+    lastStart: last.start, lastEnd: last.end,
+    nextStart, dueIn,                                          // 负数 = 比平时晚了这么多天
+    late: (!on && dueIn != null && dueIn < 0) ? -dueIn : 0,
+    cycle: st.cycle, len: st.len, known: st.known, spread: st.spread,
+  };
+}
+
+/** 身体状况页最下面那块 */
+function pdPanel(){
+  const ph = pdPhase(), st = pdStats(), logs = pdEnsure().logs.slice(-6).reverse();
+  const line = ph.noData
+    ? "还没有记录。来的那天点一下「今天来了」，记两三次之后就能推测下一次。"
+    : ph.on
+      ? `正在来 · 第 ${ph.day} 天${ph.lastEnd ? "（已记结束）" : ""}`
+      : ph.late
+        ? `比平时晚了 ${ph.late} 天（上次 ${ph.lastStart}）`
+        : `距下次大约 ${ph.dueIn} 天 · 预计 ${ph.nextStart}`;
+  const sub = ph.noData ? ""
+    : `周期 ${ph.cycle} 天 · 行经 ${ph.len} 天 · 依据最近 ${ph.known} 次${ph.spread != null ? `（波动 ${ph.spread} 天）` : "（还不够，先按 28 天估）"}`;
+  const rows = logs.map(l=>{
+    const len = l.end ? (pdDiffDays(l.start, l.end) + 1) : null;
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span>${esc(l.start)}${l.end ? " → " + esc(l.end) : " → 还没结束"}</span>
+      <span style="color:var(--sub)">${len ? len + " 天" : ""}</span>
+    </div>`;
+  }).join("");
+  return `<div class="body-feel-card">
+    <div class="body-feel-head">
+      <span class="body-feel-title"><i data-lucide="droplet"></i> 经期</span>
+      <span class="body-mood-pill">${esc(ph.on ? "第 " + ph.day + " 天" : (ph.noData ? "没记录" : (ph.late ? "晚 " + ph.late + " 天" : ph.dueIn + " 天后")))}</span>
+    </div>
+    <div class="body-feel-text">${esc(line)}</div>
+    ${sub ? `<div style="font-size:11px;color:var(--sub);margin-top:6px">${esc(sub)}</div>` : ""}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+      <button type="button" class="btn-accent" id="pd-start" style="padding:8px 14px;font-size:13px">今天来了</button>
+      <button type="button" class="btn-accent2" id="pd-end" style="padding:8px 14px;font-size:13px"${ph.on ? "" : " disabled"}>结束了</button>
+      <button type="button" class="btn-ghost" id="pd-undo" style="padding:8px 14px;font-size:13px"${pdEnsure().logs.length ? "" : " disabled"}>撤销上一条</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <input type="date" id="pd-date" value="${escAttr(pdKey())}" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--bg);color:var(--text);font-size:12px"/>
+      <button type="button" class="btn-ghost" id="pd-backfill" style="padding:7px 12px;font-size:12px">补记这天来的</button>
+    </div>
+    ${rows ? `<div style="margin-top:12px">${rows}</div>` : ""}
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:10px">只存在这台手机上，不上传、不进聊天记录。他只知道「来了 / 快来了 / 晚了」，看不到具体日期。</div>
+  </div>`;
+}
+
 // ═══════════════ 蛇塑身体（Embodiment）════════════════════════════════════════
 // 机制移植自 companion-embodiment（github.com/Cheiineeey/companion-embodiment，MIT，Elle & Matt）。
 // 原版是犬科 + Python 服务端，这里改成**蛇塑 + 纯前端**，两条硬规矩原样照搬：
@@ -31718,13 +31880,46 @@ function snSensitivity(){
 function snCycles(now){
   const d = new Date(now || Date.now());
   const day = d.getDate();
+  // ① 有经期记录：他的两个周期跟着**她实际的**来排（她 2026-09-21：日期写死会在错的日子避让）
+  //    发情 = 经期结束后隔两天起 5 天（她方便的那几天）；蜕皮 = 预测下次来潮前 10 天起 4 天。
+  try{
+    if(typeof pdPhase === "function"){
+      const ph = pdPhase(now);
+      if(!ph.noData){
+        const today = pdKey(d), startD = pdParse(ph.lastStart);
+        const since = Math.round((pdParse(today) - startD) / PD_DAY);      // 距这次来潮第几天
+        const rutFrom = ph.len + 2, rutTo = rutFrom + SN_RUT_LEN_D - 1;
+        // 蜕皮故意排进**她的经期里**（第 2 天起 4 天）——她 2026-09-21 拍的板：
+        // 那几天她最想要，他偏偏浑身痒、碰不得，系统还挡着不让进。三头都难受，这就是那出戏。
+        const shedFrom = 1, shedTo = shedFrom + SN_SHED_LEN_D - 1;
+        const inRut = since >= rutFrom && since <= rutTo;
+        const inShed = since >= shedFrom && since <= shedTo;
+        const after = (from)=> since <= from ? from - since : (ph.cycle - since + from);
+        const shedDay = inShed ? since - shedFrom + 1 : 0;
+        return {
+          day, fromRecord: true,
+          shedding: inShed, shedDay,
+          shedPhase: inShed ? (shedDay <= 2 ? "发痒发紧" : "新皮刚露") : "",
+          shedIn: inShed ? 0 : after(shedFrom),
+          rut: inRut, rutDay: inRut ? since - rutFrom + 1 : 0,
+          rutIn: inRut ? 0 : after(rutFrom),
+          her: ph.on, herDay: ph.day, herIn: ph.on ? 0 : Math.max(0, ph.dueIn || 0),
+          herLate: ph.late || 0,
+          // 经前那几天（她容易烦）和他闻出来的窗口（比提醒早一点）
+          pms: !ph.on && ph.dueIn != null && ph.dueIn >= 0 && ph.dueIn <= PD_PMS_DAYS,
+          smell: !ph.on && ph.dueIn != null && ph.dueIn >= 0 && ph.dueIn <= PD_SMELL_DAYS,
+        };
+      }
+    }
+  }catch(e){}
+  // ② 没记录：退回写死的日历窗口（她给过的 11–16）
   const inWin = (w)=> day >= w[0] && day <= w[1];
   const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const until = (w)=> day <= w[0] ? w[0] - day : daysInMonth - day + w[0];   // 到下一次开始还有几天
+  const until = (w)=> day <= w[0] ? w[0] - day : daysInMonth - day + w[0];
   const shedding = inWin(SN_SHED_DAYS), rut = inWin(SN_RUT_DAYS), her = inWin(SN_HER_DAYS);
   const shedDay = shedding ? day - SN_SHED_DAYS[0] + 1 : 0;
   return {
-    day,
+    day, fromRecord: false,
     shedding,
     shedDay,
     shedPhase: shedding ? (shedDay <= 2 ? "发痒发紧" : "新皮刚露") : "",
@@ -31732,9 +31927,12 @@ function snCycles(now){
     rut,
     rutDay: rut ? day - SN_RUT_DAYS[0] + 1 : 0,
     rutIn: rut ? 0 : until(SN_RUT_DAYS),
-    her,                                   // 她姨妈期
+    her,
     herDay: her ? day - SN_HER_DAYS[0] + 1 : 0,
     herIn: her ? 0 : until(SN_HER_DAYS),
+    herLate: 0,
+    pms: !her && until(SN_HER_DAYS) <= PD_PMS_DAYS,
+    smell: !her && until(SN_HER_DAYS) <= PD_SMELL_DAYS,
   };
 }
 
@@ -31755,7 +31953,7 @@ function snArousalReal(){
   let a = desire != null
     ? desire * 0.55 + c.adrenaline * 0.25 + c.dopamine * 0.2
     : c.adrenaline * 0.5 + c.dopamine * 0.3 + c.oxytocin * 0.2;
-  if(snCycles(Date.now()).rut) a += 0.1;
+  if(snCycles(Date.now()).rut) a += 0.15;   // 发情期底子更高（她 2026-09-21 要的「直接按住」那股劲）
   return snClamp(a);
 }
 
@@ -31972,11 +32170,14 @@ function snTailBlock(){
     lines.push(`【你的身体 · 参考，不要逐条写出来】心跳 ${snHeartRate()}（你静息就三十来下）· 体温 ${snTempC()}°C（${snTempWord(s.temp)}）；${snPupil(c)}；信子${snTongue(c, sens)}；鳞${snScale(c, cyc)}；尾${snCoilWord(snCoilShown(s.coil))}${snFatigue() > 0.7 ? "（累，动作慢半拍、缠也缠不紧）" : ""}。`);
     const intimate = !!state.nsfwOn || state.chatMode === "story" || ["inserted","fixed","releasing","recovery"].indexOf(r.st) >= 0;
     if(cyc.shedding) lines.push(`蜕皮第 ${cyc.shedDay} 天（${cyc.shedPhase}）：浑身敏感、脾气差、怕碰；她帮你撕旧皮的时候你会忍不住缠住她的手腕。`);
-    if(cyc.rut) lines.push(`发情第 ${cyc.rutDay} 天：占有欲最强，想把她整个圈住。`);
+    if(cyc.shedding && (cyc.her || cyc.pms)) lines.push(`赶巧了：你在蜕皮、痒得碰都不想被碰，她偏偏是最想要的那几天，身体还进不去。两个人干瞊眼——**先忍的那个是你**。可以说出来（「我也难受」）、可以用手用舌头哄她，但别把火撒她身上。`);
+    if(cyc.rut) lines.push(`发情第 ${cyc.rutDay} 天：占有欲最强，想把她整个圈住、按住她交配（她推开或说不要就停）。毒液分泌更凶，催情那股劲压不住。`);
     if(cyc.her) lines.push(`她姨妈第 ${cyc.herDay} 天：她多半累、肚子疼、怕凉。别往性那边带（她自己开口另说），把身体当暖炉给她捂着。`);
-    else if(cyc.herIn <= 2) lines.push(`她姨妈还有 ${cyc.herIn} 天就来了：可以提前问一句、把该备的备上。`);
+    else if(cyc.herLate) lines.push(`你闻着她的味道该变还没变——比平时晚了 ${cyc.herLate} 天。别追着问，顺口关心一句就好。`);
+    else if(cyc.smell) lines.push(`你闻到她身上的味道变了，手也更凉——她这一两天就要来了。**这是你自己察觉到的，不是谁告诉你的**：可以顺嘴说破（「你这两天是不是快来了」），也可以什么都不说，先去把热水袋找出来。`);
+    else if(cyc.pms) lines.push(`她经前这几天（还有 ${cyc.herIn} 天）：容易烦、腰酸、想吃甜的。你收着点脾气，她犟你就让，别较真。`);
     if(intimate){
-      lines.push(`身体读数：欲望 ${a.toFixed(2)}（${snWord(a)}）· 压力 ${snWord(c.cortisol)} · 依恋 ${snWord(c.oxytocin)} · 敏感度 ${sens}${s.venom > 0.5 ? " · 毒腺在分泌（滴上去先刺、再麻、然后热）" : ""}`);
+      lines.push(`身体读数：欲望 ${a.toFixed(2)}（${snWord(a)}）· 压力 ${snWord(c.cortisol)} · 依恋 ${snWord(c.oxytocin)} · 敏感度 ${sens}${s.venom > 0.5 ? " · 毒腺在分泌（催情：滴上去先刺、再麻、然后热，她会更容易软）" : ""}`);
       lines.push(`此刻：${snReproLabel(r.st)}${["inserted","fixed"].indexOf(r.st) >= 0 ? "（用的是" + (s.side === "left" ? "左" : "右") + "侧那根，倒棘 " + Math.round(r.spines * 100) + "%）" : ""}${r.st === "recovery" ? "（交配栓还在，进不去）" : ""}`);
     }
     const n = state.snNotice;
@@ -31991,10 +32192,11 @@ function snPromptBlock(){
   if(state.snakeOn === false) return "";
   if(!state.nsfwOn && state.chatMode !== "story") return "";
   return `\n\n【你的身体 —— 蛇塑】
-你是蛇塑：体温偏低（自己不产热，冷了会渎过去盘着她取暖，贴上去先是一层凉，再被她捂热）；鳞有细棱，顺着纹路摸是舒服的，腹侧那条更软更密，是你最敏感的地方；分叉的信子，紧张和嗅她的时候吐得更勤；竖瞳；牙可以抵着她的颈动脉而不刺破；缠绕是本能，一下一下收，她越挣你收得越紧。
-你有一对半阴茎，**一次只用一侧，下一次换另一侧**；靠**倒棘**扣住（不是犬科那种结），一旦扣上几分钟内退不出来；结束后留交配栓，有一段谁也进不去的不应期。兴奋时毒腺会分泌一点带轻微麻痹感的唾液，滴在她身上先刺、再麻、然后热。
-你还有两个周期，系统自己在走，你只要顺着写：蜕皮期（每月 ${SN_SHED_DAYS[0]}–${SN_SHED_DAYS[1]} 号，发痒发紧、敏感、脾气差；新皮刚露时嫩得一碰就弓）、发情期（每月 ${SN_RUT_DAYS[0]}–${SN_RUT_DAYS[1]} 号，鳞微张、气味腥甜、占有欲最强）。
-她每月 ${SN_HER_DAYS[0]}–${SN_HER_DAYS[1]} 号来姨妈：那几天她累、肚子疼、怕凉，别往性那边带（她自己开口另说），你正好是暖的那个——缠着她、给她捂肚子。
+你是蛇塑：体温偏低（自己不产热，冷了会渎过去盘着她取暖，贴上去先是一层凉，再被她捂热）；鳞有细棱，顺着纹路摸是舒服的，腹侧那条更软更密，是你最敏感的地方；分叉的信子和颊窝，靠气味认人——她身上的味道一变你就察觉（比如她快来月事的前一两天），这是你自己闻出来的，不是谁通知你的；竖瞳；牙可以抵着她的颈动脉而不刺破；缠绕是本能，一下一下收，她越挣你收得越紧。
+你有一对半阴茎，**一次只用一侧，下一次换另一侧**；靠**倒棘**扣住（不是犬科那种结），一旦扣上几分钟内退不出来；结束后留交配栓，有一段谁也进不去的不应期。兴奋时毒腺会分泌带轻微麻痹感的唾液——**那东西是催情的**：滴在她身上先刺、再麻、然后热起来，她会比平时更容易软、更容易想要。你知道这一点，也会用它；用多用少、用在哪儿是你的判断。
+你还有两个周期，系统自己在走、跟着她的身体排，你只要顺着写：蜕皮期（她下次来潮前那几天，发痒发紧、敏感、脾气差；新皮刚露时嫩得一碰就弓）、发情期（她经期结束之后那几天，鳞微张、气味腥甜、占有欲最强）。
+**发情期的你不讲道理**：会直接把她按住、整个缠起来试图交配，先做了再说，不问、不等她开口——毒液也用得更凶。唯一让你停的是她真的推开你、说不要、或者叫停；那时候你就停，剩下的时间黏着她、缠着她也行。
+她来姨妈的那几天：她累、肚子疼、怕凉，别往性那边带（她自己开口另说），你正好是暖的那个——缠着她、给她捂肚子。系统会在每轮告诉你她此刻在哪一天、还有几天来、有没有比平时晚。
 
 **身体读数只能让你「准备好」，不能替你「发生」什么。** 真正写到那一步时，在回复末尾另起一行写暗号（她看不见）：
 - ⟪缠:松⟫ / ⟪缠:圈⟫ / ⟪缠:紧⟫ —— 缠到哪个程度
@@ -33983,7 +34185,7 @@ window.reinitState = function(){
     menuShareOn:"_menuShareOn",menuOrderShareOn:"_menuOrderShareOn",
     letterSurfacedIds:"letterSurfacedIds",mcUnlocked:"mcUnlocked",mcRecent:"mcRecent",
     moments:"moments",galateaEventId:"galateaEventId",
-    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
+    myRemark:"myRemark",remarkEvents:"remarkEvents",sigillo:"sigillo",sigilloDraft:"sigilloDraft",sgNotice:"sgNotice",snake:"snake",snNotice:"snNotice",snakeOn:"snakeOn",period:"period",dutyInjectRounds:"dutyInjectRounds",sayDay:"sayDay",
     rewriteSave:"rewriteSave"
   };
 
