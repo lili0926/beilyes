@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- baileysGO 出行定位。ACCESS_BACKGROUND_LOCATION 在安卓 11+ 只能由用户去
+         设置页选「始终允许」，弹窗要不到（TripLocPlugin.openSettings 负责把她送过去）。 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 常驻推送连接。specialUse 而非 dataSync：Android 15 给 dataSync
          前台服务加了每天 6 小时上限，扛不住 24 小时常驻。 -->
@@ -46,6 +52,11 @@
             android:name=".CameraService"
             android:exported="false"
             android:foregroundServiceType="camera" />
+
+        <service
+            android:name=".TripLocService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <service
             android:name=".AriesPushService"

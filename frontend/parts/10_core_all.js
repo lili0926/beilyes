@@ -28767,6 +28767,9 @@ function bindEvents(){
     if(typeof showToast==="function") showToast("记下了：" + rec.start + (b ? " → " + b : " 来的（还没记结束）"));
   });
   try{ if(typeof bindTripPage === "function") bindTripPage(); }catch(e){ try{ console.warn("[trip] bind", e); }catch(_){} }
+  try{ if(typeof tlBind === "function") tlBind(); }catch(e){}
+  try{ if(typeof tlTimerSync === "function") tlTimerSync(); }catch(e){}
+  try{ if(typeof tlInit === "function") tlInit(); }catch(e){}
   try{ if(typeof bindExplorePage === "function") bindExplorePage(); }catch(e){ try{ console.warn("[exp] bind", e); }catch(_){} }
   try{ if(typeof bindMarketPage === "function") bindMarketPage(); }catch(e){ try{ console.warn("[mk] bind", e); }catch(_){} }
   try{ if(typeof bindAuctionPage === "function") bindAuctionPage(); }catch(e){ try{ console.warn("[au] bind", e); }catch(_){} }
@@ -32031,7 +32034,18 @@ function tripStart(o){
     arrivedAt: null, endAt: null, homeNotified: 0, homeSince: 0,
   };
   tripSave();
-  tripWatchStart();
+  // 后台定位：原生前台服务优先（锁屏揣兜里也记）。要不到就退回网页定位（App 开着才走）
+  let __tlOk = false;
+  try{
+    if(typeof tlHas === "function" && tlHas()){
+      tlStart().then(r=>{
+        state.tlStatus = null;                       // 让卡片重新问一遍状态
+        if(!r || !r.ok) tripWatchStart();            // 原生没起来，退回网页定位
+      }).catch(()=>{ tripWatchStart(); });
+      __tlOk = true;
+    }
+  }catch(e){}
+  if(!__tlOk) tripWatchStart();
   // baileysGO：出门那一刻就有一张这趟的藏宝图。拿不到定位也照画，
   // 起点等第一个定位到手再补（见 tmapOnFix）。
   try{ tmapStart(state.trip, state.geoLast); }catch(e){}
@@ -32071,6 +32085,8 @@ function tripEnd(opt){
   state.trip = null;
   tripSave();
   tripWatchStop();
+  try{ if(typeof tlStop === "function") tlStop(); }catch(e){}   // 不出行一次都不定位，省电
+  try{ if(typeof tlTimerSync === "function") tlTimerSync(); }catch(e){}
   // 收进册子的才让他写一句；只算到达的不打扰他
   if(kept) setTimeout(()=>{ tripWriteNote(kept.id).catch(()=>{}); }, 300);
   try{ chatPushNotice(o.keep ? "这趟收进共同出行了" : "你回来了"); }catch(e){}
@@ -32515,6 +32531,7 @@ function renderTrip(){
   const t = tripNow();
   return `<div class="page">
     ${subHeader('<i data-lucide="map-pin"></i> 出行')}
+    ${(function(){ try{ return tlCard(); }catch(e){ return ""; } })()}
     ${tripMapCard()}
     ${t ? tripCurrentCard(t) : tripStartCard()}
     ${tripPlacesCard()}
@@ -34082,6 +34099,147 @@ function wtGiftCard(){
     ${g.fact ? `<div style="font-size:10px;color:var(--sub);margin-top:8px">${esc(g.fact)}</div>` : ""}
     ${g.confess ? `<div style="font-size:12px;line-height:1.7;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);color:var(--sub)">${esc(g.confess)}</div>` : ""}
   </div>`;
+}
+
+// ═══════════════ baileysGO · 后台定位（原生桥）═════════════════════════════════
+// 原生那边是自己写的前台服务 TripLocService（没装第三方插件，见那个文件开头的原因）。
+// 服务把定位点**排进队列**，这边一次取走、逐个喂给 tripOnFix ——
+// 所以她揣着手机走完一路、回头打开 App，黑地图一次点亮、藏宝图一次推进、
+// 路上的点位一次结算。**回放正好是这个游戏要的。**
+//
+// ⚠️ 服务给的是**原始 WGS-84**。全套坐标统一存 GCJ-02（不然「到没到」差半个街区），
+// 所以取走之后必须先 wgs2gcj 再喂 —— 跟 watchPosition 那条路一样。
+function tlPlugin(){
+  try{
+    const p = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TripLoc;
+    return (p && typeof p.drain === "function") ? p : null;
+  }catch(e){ return null; }
+}
+function tlHas(){ return !!tlPlugin(); }
+
+async function tlStart(){
+  const p = tlPlugin();
+  if(!p) return { ok:false, why:"no-plugin" };
+  try{ return await p.start(); }
+  catch(e){ return { ok:false, why: String((e && e.message) || e) }; }
+}
+async function tlStop(){
+  const p = tlPlugin();
+  if(!p) return;
+  try{ await p.stop(); }catch(e){}
+}
+async function tlStatus(){
+  const p = tlPlugin();
+  if(!p) return { running:false, queued:0, fine:false, background:false, plugin:false };
+  try{ const s = await p.status(); s.plugin = true; return s; }
+  catch(e){ return { running:false, queued:0, fine:false, background:false, plugin:true }; }
+}
+async function tlOpenSettings(){
+  const p = tlPlugin();
+  if(!p) return;
+  try{ await p.openSettings(); }catch(e){}
+}
+
+/** 取走排着的点，逐个喂进去。返回喂了几个、路上撞见几件事 */
+async function tlPump(){
+  const p = tlPlugin();
+  if(!p) return { n:0, hits:0 };
+  let list = [];
+  try{
+    const r = await p.drain();
+    list = (r && r.fixes) || [];
+  }catch(e){ return { n:0, hits:0 }; }
+  if(!list.length) return { n:0, hits:0 };
+  // 按时间排好再回放 —— 藏宝图进度只认「离终点更近」，顺序错了会少揭记号
+  list.sort((a, b)=> (a.at || 0) - (b.at || 0));
+  let hits = 0;
+  list.forEach(f=>{
+    if(f == null || f.lat == null) return;
+    const g = wgs2gcj(f.lat, f.lon);                    // ⚠️ 服务给的是 WGS-84
+    const fix = { lat:g.lat, lon:g.lon, acc: Math.round(f.acc || 0), at: f.at || Date.now(), sys:"gcj" };
+    try{ const h = tripOnFix(fix); if(Array.isArray(h)) hits += h.length; }catch(e){}
+  });
+  return { n:list.length, hits };
+}
+
+/** 回前台就把这一路补上。定时器只在出行期间开着 */
+function tlWake(){
+  if(window.__tlPumping) return;
+  window.__tlPumping = true;
+  tlPump().then(r=>{
+    window.__tlPumping = false;
+    if(r.n){ try{ render(); }catch(e){} }
+  }).catch(()=>{ window.__tlPumping = false; });
+}
+function tlTimerSync(){
+  const on = !!(typeof tripNow === "function" && tripNow()) && tlHas();
+  if(on && window.__tlTimer == null){
+    window.__tlTimer = setInterval(tlWake, 20000);       // App 开着时也顺手取一下，图能跟着走
+  }else if(!on && window.__tlTimer != null){
+    clearInterval(window.__tlTimer); window.__tlTimer = null;
+  }
+}
+function tlInit(){
+  if(window.__tlInited) return;
+  window.__tlInited = true;
+  try{
+    document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) tlWake(); });
+    const app = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if(app && typeof app.addListener === "function"){
+      app.addListener("appStateChange", st=>{ if(st && st.isActive) tlWake(); });
+    }
+  }catch(e){}
+  tlWake();
+}
+
+/** 出行页/baileysGO 页上那张「后台定位」的卡片 */
+function tlCard(){
+  const st = state.tlStatus;
+  if(!tlHas()){
+    return `<div class="status-card" style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--sub);line-height:1.6">
+        这台不是 App（或者还是旧版本），走的是网页定位 —— <b>App 开着才记</b>。
+      </div>
+    </div>`;
+  }
+  if(!st){
+    return `<div class="status-card" style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--sub)">正在看后台定位的状态…</div>
+    </div>`;
+  }
+  const bad = !st.fine || !st.background;
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span style="font-size:12px;color:var(--sub)">后台定位</span>
+      <span style="font-size:11px;color:var(--sub)">${st.running ? "跟着你" : "没在跑"}${st.queued ? " · 排了 " + st.queued : ""}</span>
+    </div>
+    ${bad ? `<div style="font-size:11px;line-height:1.7;margin-top:8px">
+        ${!st.fine ? "定位权限还没给。" : ""}
+        ${st.fine && !st.background ? "只给了「使用时允许」—— 锁屏揣兜里就不记了。要一直记得去设置里改成<b>始终允许</b>。" : ""}
+        <div style="font-size:10px;color:var(--sub);margin-top:6px">华为管家那边还要给「后台不受限」，不然服务会被掐。</div>
+      </div>
+      <button type="button" id="tl-settings" class="btn-ghost" style="margin-top:8px;padding:6px 12px;font-size:11px">去设置</button>`
+    : `<div style="font-size:10px;color:var(--sub);margin-top:6px">锁屏揣兜里也记着。位置只写在这台手机上。</div>`}
+  </div>`;
+}
+function tlBind(){
+  const b = document.getElementById("tl-settings");
+  if(b) b.onclick = ()=>{ tlOpenSettings(); };
+  // 状态是异步拿的：拿到之后重绘一次。**不能只拿一次** —— 她去设置里改完权限
+  // 回来得能看到变化。所以十秒之内不重复问，超过十秒就再问一遍。
+  if(tlHas() && !window.__tlStatusBusy){
+    const last = window.__tlStatusAt || 0;
+    if(Date.now() - last > 10000){
+      window.__tlStatusBusy = true;
+      window.__tlStatusAt = Date.now();
+      tlStatus().then(s=>{
+        window.__tlStatusBusy = false;
+        const changed = JSON.stringify(s) !== JSON.stringify(state.tlStatus);
+        state.tlStatus = s;
+        if(changed){ try{ render(); }catch(e){} }
+      }).catch(()=>{ window.__tlStatusBusy = false; });
+    }
+  }
 }
 
 // ═══════════════ 蛇塑身体（Embodiment）════════════════════════════════════════
