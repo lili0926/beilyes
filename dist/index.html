@@ -17805,6 +17805,7 @@ function renderSubPage(){
     trip: renderTrip,
     explore: renderExplore,
     market: renderMarket,
+    auction: renderAuction,
     phone: renderPhone,
     sparkvault: renderSparkVault,
     vps: renderVps,
@@ -35953,6 +35954,7 @@ function bindEvents(){
   try{ if(typeof bindTripPage === "function") bindTripPage(); }catch(e){ try{ console.warn("[trip] bind", e); }catch(_){} }
   try{ if(typeof bindExplorePage === "function") bindExplorePage(); }catch(e){ try{ console.warn("[exp] bind", e); }catch(_){} }
   try{ if(typeof bindMarketPage === "function") bindMarketPage(); }catch(e){ try{ console.warn("[mk] bind", e); }catch(_){} }
+  try{ if(typeof bindAuctionPage === "function") bindAuctionPage(); }catch(e){ try{ console.warn("[au] bind", e); }catch(_){} }
   const snakeToggle = document.getElementById("snake-toggle");
   if(snakeToggle) snakeToggle.onclick = ()=>{
     state.snakeOn = !(state.snakeOn !== false);
@@ -40087,6 +40089,8 @@ function expOnFix(fix, now){
   if(!e.seen[sk]){ e.seen[sk] = t; touched = true; }
   // ② 藏宝图进度
   if(tmapOnFix(fix, t)) touched = true;
+  // 顺手看看拍卖台有没有该落锤的（不用她进页面才结算）
+  try{ if(auTick(t).length) touched = true; }catch(err){}
   // ③ 点位：只在出行中刷（她选的：省电、边界清楚）
   const trip = (typeof tripNow === "function") ? tripNow() : null;
   const hits = [];
@@ -40512,6 +40516,11 @@ function renderExplore(){
       <span style="display:flex;align-items:center;gap:8px"><i data-lucide="store"></i> 市集</span>
       <span style="font-size:11px;color:var(--sub)">他攒了 ${expEnsure().coin || 0}</span>
     </button>
+    <button type="button" class="btn-ghost feat-card" data-sub="auction"
+      style="width:100%;padding:11px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:8px"><i data-lucide="gavel"></i> 拍卖台</span>
+      <span style="font-size:11px;color:var(--sub)">${(function(){ try{ const p = auPending().length; return p ? "台上有 " + p + " 件" : "只收最上面两档"; }catch(e){ return ""; } })()}</span>
+    </button>
     ${expBagCard()}
   </div>`;
 }
@@ -40652,6 +40661,7 @@ function mkPrice(npcId, item, idx, now){
 function mkWilling(item){
   if(!item) return { can:false, why:"没有这件东西" };
   if(item.sold) return { can:false, why:"已经卖掉了" };
+  if(item.listed) return { can:false, why:"listed", line:"这件正挂在拍卖台上。" };
   if(item.locked) return { can:false, why:"lock", line:"你锁了这件，他不会动它。" };
   const b = item.bond || 0;
   if(b >= 85) return { can:true, need:"urge", line:"他把它攥在手里不撒手。要卖得劝他。" };
@@ -40869,6 +40879,207 @@ function bindMarketPage(){
     el.onclick = ()=>{
       const r = mkBuyback(+el.dataset.mkBuyback);
       toast(r.ok ? r.line : (r.line || r.why));
+      render();
+    };
+  });
+}
+
+// ═══════════════ baileysGO · 拍卖台 ═══════════════════════════════════════════
+// 跟「卖给 NPC」必须有明确分工，否则是重复功能：
+//   卖给 NPC  —— 当场成交，价格确定，没风险，什么都能卖
+//   上拍卖台  —— **要等**，价格看有几个人抢，**可能流拍**，只收最高两档
+//
+// 「等」这件事天然适合这个 App：挂上去，睡一觉，他回来告诉她结果。
+// **流拍不损失东西**（退回背包，只损失时间），所以敢赌。
+//
+// 结果在**挂上那一刻就定死了**（listedAt + 物件名 → 哈希），只是到点才揭晓。
+// 不这么做的话反复读一次就能重 roll，跟市集出价那条一个道理。
+const AU_MIN_TIER   = 6;                  // 只收 EXP_TIERS 第 7 个起（SSA、RA）
+const AU_WAIT_MIN   = 8 * 3600000;        // 最少等这么久
+const AU_WAIT_MAX   = 20 * 3600000;
+const AU_LOTS_KEEP  = 60;
+
+function auEnsure(){
+  const e = expEnsure();
+  if(!e.auction || typeof e.auction !== "object") e.auction = { lots: [] };
+  if(!Array.isArray(e.auction.lots)) e.auction.lots = [];
+  return e.auction;
+}
+/** 这件东西够不够格上台 */
+function auEligible(item){
+  if(!item || item.sold || item.listed) return false;
+  if(item.locked) return false;            // 上了锁的他绝对不碰，拍卖也是卖
+  return mkTierIdx(item.tier) >= AU_MIN_TIER;
+}
+
+// 买家数按档次给；**流拍是真的会发生**，不然就没有赌的成分了
+const AU_TABLE = {
+  SSA: { flop: 0.20, maxBidders: 4 },
+  RA:  { flop: 0.08, maxBidders: 5 },
+};
+/** 挂上台。结果这一刻就算好了，存着，到点才给她看 */
+function auList(idx, now){
+  const e = expEnsure(), a = auEnsure();
+  const item = e.shelf[idx];
+  if(!auEligible(item)) return { ok:false, why: item && item.locked ? "你锁了这件。" : "拍卖台只收最上面两档。" };
+  const t = now || Date.now();
+  const seed = EXP_SALT + "#au#" + t + "#" + item.name;
+  const cfg = AU_TABLE[item.tier] || AU_TABLE.SSA;
+  const base = item.price || 1;
+
+  // 有几个人来。0 个就是流拍
+  const flop = expRand(seed, 0) < cfg.flop;
+  let bidders = flop ? 0 : 1 + Math.floor(expRand(seed, 1) * cfg.maxBidders);
+  // 每人出一个价，取最高。人多的时候自然就溢价
+  let top = 0;
+  for(let i = 0; i < bidders; i++){
+    const bid = base * (0.9 + expRand(seed, 10 + i) * 1.3);
+    if(bid > top) top = bid;
+  }
+  // 半只眼会来抢他舍不得的那件 —— 他看得出来，所以他出得起价。他来就一定拿下
+  const bond = item.bond || 0;
+  const eye = !flop && bond >= 60 && expRand(seed, 2) < (bond / 100) * 0.8;
+  if(eye){
+    const emo = base * 1.5 + Math.round((bond - 50) / 50 * 400);
+    if(emo > top) top = emo;
+    bidders += 1;
+  }
+  const lot = {
+    id: "au_" + t.toString(36),
+    shelfIdx: idx, name: item.name, tier: item.tier, bond, base,
+    listedAt: t,
+    endAt: t + Math.round(AU_WAIT_MIN + expRand(seed, 3) * (AU_WAIT_MAX - AU_WAIT_MIN)),
+    settled: false,
+    // 下面这几项是**已经定好但还没揭晓**的
+    _sold: !flop && top > 0, _price: Math.max(1, Math.round(top)), _bidders: bidders, _eye: eye,
+  };
+  item.listed = true;
+  a.lots.push(lot);
+  if(a.lots.length > AU_LOTS_KEEP) a.lots = a.lots.slice(-AU_LOTS_KEEP);
+  expSave();
+  return { ok:true, lot };
+}
+
+/** 到点的都结算掉。返回这次刚落锤的几笔（好让界面报一声）*/
+function auTick(now){
+  const e = expEnsure(), a = auEnsure();
+  const t = now || Date.now();
+  const done = [];
+  a.lots.forEach(lot=>{
+    if(lot.settled || t < lot.endAt) return;
+    lot.settled = true;
+    lot.settledAt = t;
+    const item = e.shelf[lot.shelfIdx];
+    if(lot._sold){
+      lot.sold = true; lot.price = lot._price; lot.bidders = lot._bidders; lot.eye = lot._eye;
+      e.coin = (e.coin || 0) + lot.price;
+      if(item){ item.sold = true; item.listed = false; item.soldAt = t; item.soldFor = lot.price;
+                item.soldTo = lot._eye ? "eye" : "auction"; }
+      // 落到半只眼手里的，也进「卖掉的」名单 —— 她还能赎回来
+      try{
+        const m = mkEnsure(t);
+        m.sold.push({ name: lot.name, tier: lot.tier, bond: lot.bond, price: lot.price,
+                      npc: lot._eye ? "eye" : "auction", at: t, shelfIdx: lot.shelfIdx });
+      }catch(err){}
+    }else{
+      lot.sold = false; lot.bidders = 0;
+      if(item) item.listed = false;            // 流拍：**东西退回背包，不损失**
+    }
+    done.push(lot);
+  });
+  if(done.length) expSave();
+  return done;
+}
+function auPending(now){
+  const t = now || Date.now();
+  return auEnsure().lots.filter(l => !l.settled && t < l.endAt);
+}
+
+// ═══════════════ baileysGO · 拍卖台界面 ═══════════════════════════════════════
+function auLeftText(ms){
+  if(ms <= 0) return "该落锤了";
+  const h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
+  return h > 0 ? `还有 ${h} 小时${m ? m + " 分" : ""}` : `还有 ${m} 分`;
+}
+
+function auPendingCard(){
+  const pend = auPending();
+  if(!pend.length) return "";
+  const now = Date.now();
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">台上</div>
+    ${pend.slice().reverse().map(l=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px">${esc(l.name)}</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">底价 ${l.base} · ${esc(l.tier)}</div>
+      </div>
+      <span style="font-size:11px;color:var(--sub);white-space:nowrap">${esc(auLeftText(l.endAt - now))}</span>
+    </div>`).join("")}
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:8px">落锤之前看不出行情。没人要就退回背包，不损失。</div>
+  </div>`;
+}
+
+/** 能上台的（只有最上面两档） */
+function auListCard(){
+  const e = expEnsure();
+  const rows = [];
+  e.shelf.forEach((it, idx)=>{ if(auEligible(it)) rows.push({ it, idx }); });
+  const locked = e.shelf.filter(it => it.locked && mkTierIdx(it.tier) >= AU_MIN_TIER).length;
+  if(!rows.length){
+    return `<div class="status-card" style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--sub);line-height:1.6">
+        拍卖台只收最上面两档（${esc(EXP_TIERS[6].k)}、${esc(EXP_TIERS[7].k)}）。背包里现在没有够格的。
+        ${locked ? `<br>有 ${locked} 件够格但你锁了。` : ""}
+      </div>
+    </div>`;
+  }
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">可以挂上去</div>
+    ${rows.slice().reverse().map(({ it, idx })=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px">${esc(it.name)}</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">${esc(expAttitude(it.bond))} · ${esc(it.tier)} · 底价 ${it.price}</div>
+      </div>
+      <button type="button" data-au-list="${idx}" class="btn-accent2" style="padding:4px 10px;font-size:11px;white-space:nowrap">挂上去</button>
+    </div>`).join("")}
+  </div>`;
+}
+
+/** 落过锤的 */
+function auHistoryCard(){
+  const lots = auEnsure().lots.filter(l => l.settled);
+  if(!lots.length) return "";
+  return `<div class="status-card">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">落过锤的</div>
+    ${lots.slice(-20).reverse().map(l=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <span style="font-size:13px">${esc(l.name)}</span>
+        <span style="font-size:12px;white-space:nowrap">${l.sold ? l.price : "没人要"}</span>
+      </div>
+      <div style="font-size:10px;color:var(--sub);margin-top:2px">
+        ${l.sold
+          ? (l.eye ? "半只眼抬手抢走的。他知道他舍不得。" : `${l.bidders} 个人抢`) + " · " + esc(expYmd(l.settledAt))
+          : "退回背包了 · " + esc(expYmd(l.settledAt))}
+      </div>
+    </div>`).join("")}
+  </div>`;
+}
+
+function renderAuction(){
+  expEnsure(); auEnsure();
+  try{ auTick(); }catch(e){}
+  return `<div class="page">
+    ${subHeader('<i data-lucide="gavel"></i> 拍卖台')}
+    ${auPendingCard()}
+    ${auListCard()}
+    ${auHistoryCard()}
+  </div>`;
+}
+function bindAuctionPage(){
+  document.querySelectorAll("[data-au-list]").forEach(el=>{
+    el.onclick = ()=>{
+      const r = auList(+el.dataset.auList);
+      try{ if(typeof showToast === "function") showToast(r.ok ? "挂上去了。等落锤。" : r.why); }catch(_){}
       render();
     };
   });
