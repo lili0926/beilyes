@@ -39257,6 +39257,7 @@ function tripEnd(opt){
     tripEnsure();
     state.tripLog.push({
       id: "tp_" + Date.now().toString(36),
+      tripId: t.id || null,          // baileysGO 要靠它把路上的遭遇对回这一趟
       startAt: t.startAt, endAt: t.endAt,
       to: t.to ? { name: t.to.name, lat: t.to.lat, lon: t.to.lon } : null,
       waypoints: (t.waypoints || []).filter(w=>w.arrivedAt).map(w=>({ name: w.name, lat: w.lat, lon: w.lon })),
@@ -39393,6 +39394,11 @@ async function tripWriteNote(id){
 
 这趟：${tripFmtDay(entry.startAt)} 去${where}${entry.purpose ? "（" + entry.purpose + "）" : ""}，${dur}${via ? "，途经" + via : ""}。${entry.note ? "她自己写的是：" + entry.note : ""}
 ${span ? "她不在的这段时间你们聊的：\n" + span : "这段时间你们没怎么说话。"}
+${(function(){ try{
+  const rows = expEnsure().log.filter(x => entry.tripId && x.tripId === entry.tripId);
+  if(!rows.length) return "";
+  return "这一路上你碰到的：" + rows.slice(-6).map(x => x.what + (x.note ? "（" + x.note + "）" : "")).join("；");
+}catch(e){ return ""; } })()}
 
 只写一句，**不超过 30 字**。第一人称，是留在册子上的话不是发给她的消息：
 不要问句，不要复述行程，不要「祝你」「下次」这种客套，也不要写引号和任何标签。
@@ -40097,10 +40103,14 @@ const EXP_ITEMS = {
     { id:"ssa3", name:"一扇装在盒子里的门" },     { id:"ssa4", name:"一把称不出重量的秤" },
     { id:"ssa5", name:"一张画着你没去过的路的地图" },
   ],
+  // RA 就这四件（她 2026-09-22 定的数量表里 RA=4），都有她的图。
+  // 生图时外面那圈光晕接近纯白，抠底时被当背景去掉了 —— 物件本身完好。
+  // 想让高档物品「发光」，正路是界面上加一层 CSS 光晕，不用重新生图。
   RA: [
-    { id:"ra1", name:"一罐装着一整个黄昏的罐子" }, { id:"ra2", name:"一块还在长大的石头" },
-    { id:"ra3", name:"一页从没被写过的日记" },     { id:"ra4", name:"一个人的影子，叠好了" },
-    { id:"ra5", name:"一截量不完的麻绳" },
+    { id:"xingyuebiao", name:"星月表" },
+    { id:"yinhe",       name:"银河" },
+    { id:"taiyangshi",  name:"太阳石" },
+    { id:"xiyangping",  name:"夕阳瓶" },
   ],
 };
 
@@ -40186,6 +40196,8 @@ function expOnFix(fix, now){
       hits.push(r);
     });
     if(e.log.length > EXP_LOG_KEEP) e.log = e.log.slice(-EXP_LOG_KEEP);
+    // 他那一句：异步补，补不上就只剩骨架。一次只挑一条，别并发
+    try{ expNoteMaybe(hits, t); }catch(err){}
   }
   if(touched || hits.length) expSave();
   return hits;
@@ -40556,7 +40568,19 @@ function expLogCard(){
   }
   return `<div class="status-card" style="margin-bottom:10px">
     <div style="font-size:12px;color:var(--sub);margin-bottom:6px">路上</div>
-    ${rows.map(r=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.5">${esc(r.text || expSkeleton(r))}<span style="color:var(--sub);font-size:10px;margin-left:4px">${esc(expHm(r.at))}</span></div>`).join("")}
+    ${rows.map(r=>{
+      const i = e.log.indexOf(r);
+      return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;line-height:1.5">${esc(r.text || expSkeleton(r))}<span style="color:var(--sub);font-size:10px;margin-left:4px">${esc(expHm(r.at))}</span></div>
+        ${r.note
+          ? `<div style="font-size:12px;line-height:1.6;margin-top:4px;color:var(--sub)">「${esc(r.note)}」
+              <button type="button" data-exp-renote="${i}" class="btn-ghost" style="padding:1px 6px;font-size:10px;margin-left:4px"${r.notePending ? " disabled" : ""}>换一句</button>
+             </div>`
+          : (r.notePending
+              ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">他在想怎么说…</div>`
+              : (r.kind === "empty" ? "" : `<button type="button" data-exp-renote="${i}" class="btn-ghost" style="padding:2px 7px;font-size:10px;margin-top:4px">让他说一句</button>`))}
+      </div>`;
+    }).join("")}
   </div>`;
 }
 
@@ -40610,6 +40634,9 @@ function renderExplore(){
   </div>`;
 }
 function bindExplorePage(){
+  document.querySelectorAll("[data-exp-renote]").forEach(el=>{
+    el.onclick = ()=>{ expWriteNote(+el.dataset.expRenote, true).catch(()=>{}); };
+  });
   document.querySelectorAll("[data-exp-lock]").forEach(el=>{
     el.onclick = ()=>{
       const e = expEnsure();
@@ -41351,6 +41378,101 @@ function wtGiftCard(){
     ${g.fact ? `<div style="font-size:10px;color:var(--sub);margin-top:8px">${esc(g.fact)}</div>` : ""}
     ${g.confess ? `<div style="font-size:12px;line-height:1.7;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);color:var(--sub)">${esc(g.confess)}</div>` : ""}
   </div>`;
+}
+
+// ═══════════════ baileysGO · 他那一句 ═════════════════════════════════════════
+// 这是**整套里唯一会调模型的地方**。前五步一次都没调过。
+//
+// 骨架（expSkeleton）本地秒出、免费、离线能用；他那一句**异步补上来**，
+// 补不上就只剩骨架 —— 所以没网、没额度、模型抽风，游戏照样完整。
+//
+// 省额度的三道闸（她明确在意额度）：
+//   ⑴ **空点不写** —— 「他去看了看，一堵墙。」这种没什么可点评的
+//   ⑵ 一趟最多 EXP_NOTE_MAX 句
+//   ⑶ 两句之间至少隔 EXP_NOTE_GAP_MS，免得走一段路连着刷出好几次
+// 算下来一趟最多三次 background 调用，加上回家那段总结一共四次。
+//
+// **模型返空或报错，绝不覆盖已有的那句**（跟 tripWriteNote 一个规矩）。
+const EXP_NOTE_MAX = 3;
+const EXP_NOTE_GAP_MS = 6 * 60000;
+
+/** 这趟已经写了几句、上一句是什么时候 */
+function expNoteStat(tripId){
+  const log = expEnsure().log;
+  let n = 0, last = 0;
+  log.forEach(r=>{
+    if(tripId && r.tripId !== tripId) return;
+    if(r.note){ n++; if((r.noteAt || r.at) > last) last = (r.noteAt || r.at); }
+  });
+  return { n, last };
+}
+/** 这一条该不该让他开口 */
+function expNoteWanted(r, tripId, now){
+  if(!r || r.note || r.notePending) return false;
+  if(r.kind === "empty") return false;
+  const st = expNoteStat(tripId);
+  if(st.n >= EXP_NOTE_MAX) return false;
+  if(st.last && (now || Date.now()) - st.last < EXP_NOTE_GAP_MS) return false;
+  return true;
+}
+
+/** 让他给路上这一条写一句。force=true 是她手动点「换一句」 */
+async function expWriteNote(idx, force){
+  const e = expEnsure();
+  const r = e.log[idx];
+  if(!r || r.notePending) return "";
+  if(!force && !expNoteWanted(r, r.tripId)) return "";
+  r.notePending = true;
+  try{ render(); }catch(err){}
+  try{
+    const ag = (typeof agentById === "function")
+      ? (agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) || (state.agents||[])[0])
+      : null;
+    if(!ag || typeof callChatAPI !== "function" || typeof buildMainChatRequest !== "function") return "";
+    const t = (typeof tripNow === "function") ? tripNow() : null;
+    const where = (t && t.to && t.to.name) ? t.to.name : "";
+    const prompt = `她带你出门，路上你刚碰上一件事。这一句是记在你们那本探索记录上的。
+
+碰上的：${r.what}
+你回来时的样子：${r.mood}
+${where ? "她这趟是去" + where + "。" : ""}
+
+只写一句，**不超过 20 字**。第一人称，是你自己嘟囔的一句，不是发给她的消息：
+- 不要复述「我碰上了什么」——上面那行已经写了，你写的是你的反应
+- 不要问句，不要跟她搭话，不要引号和任何标签
+- **不要提她走了多远、走了多久，也不要催她、不要建议她去哪** —— 这趟怎么走是她的事
+- 不写数字，不写等级稀有度这种东西`;
+    const req = buildMainChatRequest(ag, null);
+    let txt = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content: prompt }], req.sys, { background:true });
+    txt = String(txt||"").replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
+      .replace(/⟪[^⟫]{0,200}⟫/g, "").replace(/^[「"'“”\s]+|[」"'“”\s]+$/g, "")
+      .replace(/\s+/g, " ").trim();
+    // **返空绝不覆盖** —— 宁可只剩骨架，也不要把已有的那句擦掉
+    if(txt){ r.note = txt.slice(0, 40); r.noteAt = Date.now(); expSave(); }
+    return r.note || "";
+  }catch(err){
+    try{ console.warn("[exp] note", err); }catch(_){}
+    return "";
+  }finally{
+    r.notePending = false;
+    try{ render(); }catch(err){}
+  }
+}
+
+/** expOnFix 撞上新的一条之后顺手挑一条去写。**一次只挑一条**，别并发几个请求 */
+function expNoteMaybe(hits, now){
+  try{
+    if(!Array.isArray(hits) || !hits.length) return;
+    const e = expEnsure();
+    const t = now || Date.now();
+    for(let i = e.log.length - 1; i >= 0 && i >= e.log.length - hits.length; i--){
+      const r = e.log[i];
+      if(expNoteWanted(r, r.tripId, t)){
+        setTimeout(()=>{ expWriteNote(i).catch(()=>{}); }, 400);
+        return;
+      }
+    }
+  }catch(e){}
 }
 
 // ═══════════════ baileysGO · 后台定位（原生桥）═════════════════════════════════
