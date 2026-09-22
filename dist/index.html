@@ -40040,16 +40040,79 @@ function expTier(k){ return EXP_TIERS.find(t => t.k === k) || EXP_TIERS[0]; }
 
 // 越往上离「正常」越远一步；RA 那件是 D 那件「不该存在的版本」。
 // 目前就这 40 件，以后**先加 D/C/B**（低档出得最勤，最先看腻的是它们）。
+// 每条是 { id, name }：
+//   id   —— **稳定键**，图片文件名（dist/img/go/<id>.webp）就是它，存档里也记它。
+//           以后换显示名只改 name，图和存档都不用动。
+//   name —— 界面上显示的名字。她 2026-09-22 起在陆续生图 + 给名字，来一批换一批。
+// 没有配图的条目照样能用：`expImg` 拿不到图就把 <img> 自己隐藏掉，只剩文字。
+// 目前 D 档 18 张是她的真图，其余仍是占位（id 用 c1/b1… 这种，等她的图和名字）。
 const EXP_ITEMS = {
-  D:   ["一颗被磨圆的小石子","一片还带着水的叶子","半张褪色的票根","一枚不认识的硬币","一截麻绳"],
-  C:   ["一颗磨掉漆的旧扣子","一段烧断的灯丝","断了的钥匙圈","一小瓶接来的雨水","半截铅笔，牙印很深"],
-  B:   ["刻了字的木牌，字看不懂","半块玉，断口很旧","谁的半张信，另一半没了","一只缺角的瓷杯，补过","压平的干花，夹在纸里"],
-  A:   ["一只走得不准的旧表","一面照不清人的小镜子","一把不知道开哪儿的钥匙","一个指不准方向的罗盘","一副度数不对的眼镜"],
-  AA:  ["一块自己会发凉的石头","夜里发微光的贝壳","一小片不会干的水洼","一根还温的羽毛","一颗攥久了会发烫的珠子"],
-  SA:  ["一根自己会转向的指针","一把总是转向北边的伞","一只倒着走的表","一张写着明天的纸条","一枚会躲开手的硬币"],
-  SSA: ["一只一直在下雨的小瓶子","一盏照出别处的灯","一扇装在盒子里的门","一把称不出重量的秤","一张画着你没去过的路的地图"],
-  RA:  ["一罐装着一整个黄昏的罐子","一块还在长大的石头","一页从没被写过的日记","一个人的影子，叠好了","一截量不完的麻绳"],
+  D: [
+    { id:"eluanshi",     name:"鹅卵石" },
+    { id:"dianyingpiao", name:"电影票" },
+    { id:"yinxingye",    name:"银杏叶" },
+    { id:"yingbi",       name:"硬币" },
+    { id:"faqia",        name:"发卡" },
+    { id:"tanzhu",       name:"弹珠" },
+    { id:"erhuan",       name:"耳环" },
+    { id:"hailuo",       name:"海螺" },
+    { id:"yinni",        name:"印泥" },
+    { id:"xiangqi",      name:"象棋" },
+    { id:"huaibiao",     name:"钟表" },
+    { id:"tiehe",        name:"铁盒" },
+    { id:"daobing",      name:"刀柄" },
+    { id:"koushao",      name:"口哨" },
+    { id:"gupai",        name:"骨牌" },
+    { id:"tanmushu",     name:"檀木梳" },
+    { id:"lingdang",     name:"铃铛" },
+    { id:"paimaichui",   name:"拍卖锤" },
+  ],
+  C: [
+    { id:"c1", name:"一颗磨掉漆的旧扣子" }, { id:"c2", name:"一段烧断的灯丝" },
+    { id:"c3", name:"断了的钥匙圈" },       { id:"c4", name:"一小瓶接来的雨水" },
+    { id:"c5", name:"半截铅笔，牙印很深" },
+  ],
+  B: [
+    { id:"b1", name:"刻了字的木牌，字看不懂" }, { id:"b2", name:"半块玉，断口很旧" },
+    { id:"b3", name:"谁的半张信，另一半没了" }, { id:"b4", name:"一只缺角的瓷杯，补过" },
+    { id:"b5", name:"压平的干花，夹在纸里" },
+  ],
+  A: [
+    { id:"a1", name:"一只走得不准的旧表" }, { id:"a2", name:"一面照不清人的小镜子" },
+    { id:"a3", name:"一把不知道开哪儿的钥匙" }, { id:"a4", name:"一个指不准方向的罗盘" },
+    { id:"a5", name:"一副度数不对的眼镜" },
+  ],
+  AA: [
+    { id:"aa1", name:"一块自己会发凉的石头" }, { id:"aa2", name:"夜里发微光的贝壳" },
+    { id:"aa3", name:"一小片不会干的水洼" },   { id:"aa4", name:"一根还温的羽毛" },
+    { id:"aa5", name:"一颗攥久了会发烫的珠子" },
+  ],
+  SA: [
+    { id:"sa1", name:"一根自己会转向的指针" }, { id:"sa2", name:"一把总是转向北边的伞" },
+    { id:"sa3", name:"一只倒着走的表" },       { id:"sa4", name:"一张写着明天的纸条" },
+    { id:"sa5", name:"一枚会躲开手的硬币" },
+  ],
+  SSA: [
+    { id:"ssa1", name:"一只一直在下雨的小瓶子" }, { id:"ssa2", name:"一盏照出别处的灯" },
+    { id:"ssa3", name:"一扇装在盒子里的门" },     { id:"ssa4", name:"一把称不出重量的秤" },
+    { id:"ssa5", name:"一张画着你没去过的路的地图" },
+  ],
+  RA: [
+    { id:"ra1", name:"一罐装着一整个黄昏的罐子" }, { id:"ra2", name:"一块还在长大的石头" },
+    { id:"ra3", name:"一页从没被写过的日记" },     { id:"ra4", name:"一个人的影子，叠好了" },
+    { id:"ra5", name:"一截量不完的麻绳" },
+  ],
 };
+
+/** 物品小图。**没有配图就自己隐藏**，只剩文字 —— 187 张是陆续来的，
+ *  缺图必须不影响任何功能。图在 dist/img/go/<id>.webp（透明底，深浅色都能用）。 */
+function expImg(id, px){
+  if(!id) return "";
+  const s = px || 34;
+  return `<img src="img/go/${encodeURIComponent(id)}.webp" alt="" loading="lazy"`
+       + ` style="width:${s}px;height:${s}px;object-fit:contain;flex:none"`
+       + ` onerror="this.style.display='none'">`;
+}
 
 /** 趟的性质给的加成：**多抽一次取高的**，不是直接提档。
  *  这样低档不会消失（该开 D 还是开 D，那才真实），手感是「更有机会撞上好的」。
@@ -40249,8 +40312,9 @@ function tmapOpen(trip, ctx, now){
       longGap: (c.daysSinceLastTrip != null && c.daysSinceLastTrip >= 7),
       big: (trip && trip.mode === "big"),
     });
+    const row = pool[Math.floor(expRand(s, 0) * pool.length) % pool.length];
     prizes.push({
-      name: pool[Math.floor(expRand(s, 0) * pool.length) % pool.length],
+      id: row.id, name: row.name,
       tier: tier.k, price: tier.price, bond,
       at: t + i,                                  // 错开 1ms，排序稳定
       tripId: m.tripId || null,
@@ -40472,7 +40536,7 @@ function expMapCard(){
   const head = m.opened ? "这趟的图开了" : `这趟的图 · 走出来 ${pg.got}/${pg.total} 个记号`;
   let body = "";
   if(m.opened && Array.isArray(m.prize)){
-    body = `<div style="margin-top:8px">${m.prize.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span>${esc(p.name)}</span><span style="color:var(--sub);font-size:11px">${esc(expAttitude(p.bond))}</span></div>`).join("")}</div>`;
+    body = `<div style="margin-top:8px">${m.prize.map(p=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="flex:1;font-size:13px">${esc(p.name)}</span><span style="color:var(--sub);font-size:11px">${esc(expAttitude(p.bond))}</span>${expImg(p.id, 46)}</div>`).join("")}</div>`;
     if(m.capped) body += `<div style="font-size:10px;color:var(--sub);margin-top:4px">今天出去的趟数够多了，他有点累。</div>`;
   }
   return `<div class="status-card" style="margin-bottom:10px">
@@ -40511,6 +40575,7 @@ function expBagCard(){
     ${items.map((p, i)=>{
       const idx = e.shelf.length - 1 - i;
       return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+        ${expImg(p.id, 38)}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px">${esc(p.name)}</div>
           <div style="font-size:10px;color:var(--sub);margin-top:2px">${esc(expAttitude(p.bond))}${p.to ? " · " + esc(p.to) : ""} · ${esc(expYmd(p.at))}</div>
@@ -40803,6 +40868,7 @@ function mkSellCard(){
       const best = MK_NPCS.map(n=>({ n, p: mkPrice(n.id, it, idx) })).filter(x=>x.p != null)
                           .sort((a,b)=>b.p-a.p)[0];
       const head = `<div style="display:flex;align-items:center;gap:8px;padding:7px 0">
+        ${expImg(it.id, 34)}
         <button type="button" data-mk-pick="${idx}" class="btn-ghost"
           style="flex:1;min-width:0;text-align:left;padding:2px 0;background:none;border:none">
           <div style="font-size:13px">${esc(it.name)}${it.locked ? " 🔒" : ""}</div>
@@ -41058,6 +41124,7 @@ function auListCard(){
   return `<div class="status-card" style="margin-bottom:10px">
     <div style="font-size:12px;color:var(--sub);margin-bottom:6px">可以挂上去</div>
     ${rows.slice().reverse().map(({ it, idx })=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      ${expImg(it.id, 34)}
       <div style="flex:1;min-width:0">
         <div style="font-size:13px">${esc(it.name)}</div>
         <div style="font-size:10px;color:var(--sub);margin-top:2px">${esc(expAttitude(it.bond))} · ${esc(it.tier)} · 底价 ${it.price}</div>
