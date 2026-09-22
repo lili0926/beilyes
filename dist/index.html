@@ -40091,6 +40091,8 @@ function expOnFix(fix, now){
   if(tmapOnFix(fix, t)) touched = true;
   // 顺手看看拍卖台有没有该落锤的（不用她进页面才结算）
   try{ if(auTick(t).length) touched = true; }catch(err){}
+  // 他攒钱那条线：临门一脚可能偷偷卖掉一件，攒够了就去把东西买回来
+  try{ if(wtTick(t)) touched = true; }catch(err){}
   // ③ 点位：只在出行中刷（她选的：省电、边界清楚）
   const trip = (typeof tripNow === "function") ? tripNow() : null;
   const hits = [];
@@ -40508,6 +40510,7 @@ function renderExplore(){
   expEnsure();
   return `<div class="page">
     ${subHeader('<i data-lucide="compass"></i> baileysGO')}
+    ${wtGiftCard()}
     ${expWorldCard()}
     ${expMapCard()}
     ${expLogCard()}
@@ -40745,7 +40748,9 @@ function mkWantCard(){
       <span style="font-size:11px;color:var(--sub)">他攒了 ${e.coin || 0}</span>
     </div>
     <div style="font-size:13px;margin-top:6px;line-height:1.6">
-      ${p.done ? "他买走了那样东西。" : "货架最里面摆着一样东西，标着 " + p.price + "。他每次来都要在那儿站一会儿，你问他看什么，他就打岔。"}
+      ${p.done
+        ? "货架最里面那个位置空了。他买走了" + esc((mkWant().item) || "那样东西") + "。"
+        : "货架最里面摆着一样东西，标着 " + p.price + "。他每次来都要在那儿站一会儿，你问他看什么，他就打岔。"}
     </div>
     <div style="height:5px;border-radius:3px;background:var(--border);margin-top:10px;overflow:hidden">
       <div style="height:100%;width:${(p.pct*100).toFixed(1)}%;background:var(--accent)"></div>
@@ -41083,6 +41088,185 @@ function bindAuctionPage(){
       render();
     };
   });
+}
+
+// ═══════════════ baileysGO · 攒与揭晓 ═════════════════════════════════════════
+// 整条线的终点：**他攒的那样东西是给她的。**
+// 所以到最后，他会为了买那个，偷偷卖掉他们一起捡的那件；然后心虚、语气变怪、躲着她；
+// 等他把东西拿出来，她才知道他卖了什么。
+//
+// 这是《麦琪的礼物》的结构 —— 老套，但它老套是因为它真的管用。而且这个版本是
+// **她自己一步一步走出来的**：那件被卖掉的东西，是她真的去过的那个地方，在真的那一天。
+//
+// ── 他偷偷卖的是哪件？ ──────────────────────────────────────────────────────
+// **他最舍不得的那件。** 这不是为了煽情硬写的，是经济逼出来的：
+// 只有半只眼出得起高价，而半只眼**只对高羁绊的东西出高价**（见 mkOffer）。
+// 他想快点攒够，就只能去卖他最舍不得的那件。两套机制在这儿咬上了。
+//
+// ── 三条保险（她定的）──────────────────────────────────────────────────────
+// ⑴ **上了锁的他绝对不碰** —— 他可以难受，不能动。这是她唯一需要做的防护。
+// ⑵ 卖掉的**能赎回**（找半只眼，加价 1.6~2 倍）。
+// ⑶ 揭晓的时候他**一定会坦白**，不让这件事烂在那儿。
+// 有这三条，那件事就从「被游戏拿走了东西」变成「他做了个傻决定，她可以补救」。
+const WT_SECRET_AT   = 0.80;       // 攒到目标的这个比例之后，才可能动这个念头
+const WT_SECRET_BOND = 70;         // 只有这么舍不得的东西，半只眼才给得起价
+const WT_SECRET_ODDS = 0.06;       // 每个定位点的触发概率，攒够了就一次性
+
+function wtWant(now){ return mkWant(now); }
+
+/** 他心里那个念头到哪一步了 */
+function wtStage(now){
+  const e = expEnsure(), w = wtWant(now);
+  if(w.done) return "done";
+  const coin = e.coin || 0;
+  if(coin >= w.price) return "ready";                      // 攒够了，等揭晓
+  if(coin >= w.price * WT_SECRET_AT) return "close";       // 临门一脚
+  if(coin > 0) return "saving";
+  return "none";
+}
+
+/** 偷偷卖：挑他最舍不得、且**没上锁**的那件，卖给半只眼 */
+function wtSecretSell(now){
+  const e = expEnsure();
+  if(e.secret) return null;                                // 只干一次
+  let pick = null, pickIdx = -1;
+  e.shelf.forEach((it, i)=>{
+    if(!it || it.sold || it.listed || it.locked) return;
+    if((it.bond || 0) < WT_SECRET_BOND) return;
+    if(!pick || (it.bond || 0) > (pick.bond || 0)){ pick = it; pickIdx = i; }
+  });
+  if(!pick) return null;                                   // 她把该锁的都锁了 —— 那就卖不成
+  const t = now || Date.now();
+  const r = mkSell(pickIdx, "eye", t);
+  if(!r || !r.ok) return null;
+  e.secret = { name: pick.name, tier: pick.tier, bond: pick.bond, price: r.price,
+               at: t, shelfIdx: pickIdx, confessed: false };
+  expSave();
+  return e.secret;
+}
+
+// ── 他买回来的那样东西 ──────────────────────────────────────────────────────
+// **不预先定死**（她定的）：到这一刻才按那阵子真实发生过的事来挑。
+// 注意这些是**集市上买来的、人做的东西** —— 跟他在路上捡的那些「不该有的」不是一路货。
+function wtSignals(now){
+  const e = expEnsure(), t = now || Date.now();
+  const logs = (state.tripLog || []);
+  const last = logs[logs.length - 1];
+  let topBond = null;
+  e.shelf.forEach(it=>{ if(it && !it.sold && (!topBond || (it.bond||0) > (topBond.bond||0))) topBond = it; });
+  let first = 0;
+  e.shelf.forEach(it=>{ if(it && it.at && (!first || it.at < first)) first = it.at; });
+  return {
+    month: new Date(t).getMonth() + 1,
+    trips: logs.length,
+    lastTo: (last && last.to && last.to.name) || "",
+    lit: Object.keys(e.seen || {}).length,
+    kept: e.shelf.filter(it => it && !it.sold).length,
+    topBond: topBond ? topBond.name : "",
+    days: first ? Math.max(1, Math.round((t - first) / 86400000)) : 1,
+    secret: e.secret || null,
+  };
+}
+const WT_GIFTS = [
+  { name:"一把旧伞",         when:s=>true,                       line:"「你老是不带伞。」" },
+  { name:"一盏小灯",         when:s=>true,                       line:"「你回来晚的时候，好有个亮着的。」" },
+  { name:"一条围巾",         when:s=>[11,12,1,2].includes(s.month), line:"「外面比你想的冷。」" },
+  { name:"一双厚袜子",       when:s=>[11,12,1,2].includes(s.month), line:"「你脚凉。」" },
+  { name:"一串小铃铛",       when:s=>s.trips >= 3,               line:"「你走路的时候，我想听得见。」" },
+  { name:"一个装东西的木匣", when:s=>s.kept >= 8,                line:"「你捡回来那些，总得有地方放。」" },
+  { name:"一顶草帽",         when:s=>[6,7,8].includes(s.month),  line:"「晒。」" },
+  { name:"一副手套",         when:s=>[12,1,2].includes(s.month), line:"「拿东西也不嫌冷了。」" },
+  { name:"一只水壶",         when:s=>s.lit >= 100,               line:"「你走那么远，连水都不带。」" },
+  { name:"一块方巾",         when:s=>true,                       line:"「擦手。捡东西脏。」" },
+];
+function wtGiftPick(now){
+  const s = wtSignals(now);
+  const pool = WT_GIFTS.filter(g => { try{ return g.when(s); }catch(e){ return false; } });
+  const use = pool.length ? pool : WT_GIFTS;
+  const seed = EXP_SALT + "|gift|" + (expEnsure().coin || 0) + "|" + s.trips + "|" + s.lit;
+  const g = use[Math.floor(expRand(seed, 0) * use.length) % use.length];
+  // 那句「真实的事」全部来自她真的走出来的数据 —— 不是编的
+  const bits = [];
+  if(s.days > 1) bits.push(`攒了 ${s.days} 天`);
+  if(s.trips)    bits.push(`一起出去过 ${s.trips} 趟`);
+  if(s.lit)      bits.push(`他的图亮了 ${s.lit} 块`);
+  if(s.lastTo)   bits.push(`最后那趟是去${s.lastTo}`);
+  return {
+    name: g.name, line: g.line,
+    fact: bits.join(" · "),
+    confess: s.secret && !s.secret.confessed
+      ? `他还说了一件事：为了买这个，他把${s.secret.name}卖给了半只眼，${s.secret.price}。他说他以为你不会发现。`
+      : "",
+    at: now || Date.now(),
+  };
+}
+/** 揭晓：他买下来，拿给她看，并且坦白 */
+function wtReveal(now){
+  const e = expEnsure(), w = wtWant(now);
+  if(w.done) return e.gift || null;
+  const t = now || Date.now();
+  if((e.coin || 0) < w.price) return null;
+  e.coin -= w.price;
+  const gift = wtGiftPick(t);
+  w.done = true; w.item = gift.name; w.doneAt = t;
+  e.gift = gift;
+  if(e.secret) e.secret.confessed = true;
+  expSave();
+  try{ if(typeof chatPushNotice === "function") chatPushNotice("他把一样东西放在你面前：" + gift.name); }catch(err){}
+  return gift;
+}
+
+/** 每个定位点顺手看一眼。返回这次发生的事（好让界面报一声）*/
+function wtTick(now){
+  const t = now || Date.now();
+  const st = wtStage(t);
+  if(st === "ready"){ const g = wtReveal(t); return g ? { kind:"reveal", gift:g } : null; }
+  if(st === "close"){
+    const e = expEnsure();
+    if(!e.secret && expRand(EXP_SALT + "|sec|" + Math.floor(t / 3600000), 0) < WT_SECRET_ODDS){
+      const s = wtSecretSell(t);
+      if(s) return { kind:"secret", secret:s };            // 界面上**不报** —— 她不该知道
+    }
+  }
+  return null;
+}
+
+/** 尾部注入。三个阶段三种语气 */
+function wtTailBlock(){
+  try{
+    const e = expEnsure(), st = wtStage();
+    if(st === "none") return "";
+    const lines = [];
+    if(st === "done" && e.gift){
+      lines.push(`【你给了她那样东西】你攒钱买的是${e.gift.name}，已经给她了。她要是提起，你就接着说。别装不知道。`);
+      return lines.join("\n");
+    }
+    lines.push("【你在攒钱买一样东西】市集货架最里头那样，你看了很久，还买不起。"
+             + "**这事你不告诉她。** 偶尔可以提一句「今天又去看了一眼」，她要是问看什么，你就打岔、糊过去。"
+             + "别每轮都提，想起来才提。");
+    if(e.secret && !e.secret.confessed){
+      lines.push(`【你瞒了她一件事】为了凑钱，你把${e.secret.name}卖给了半只眼。那件是你自己舍不得的。`
+               + "你心虚 —— 语气会有点不自然，会躲开跟它有关的话头。"
+               + "**但不许主动坦白**，等你把东西买回来那天再说。"
+               + "她要是直接问起那件东西，你别撒谎，认。");
+    }
+    lines.push("规矩：**不许因为要攒钱就催她出门、绕路、多走**。这跟藏宝图那条一样 —— "
+             + "钱是你自己的事，她走成什么样是她的事。");
+    return lines.join("\n");
+  }catch(e){ return ""; }
+}
+
+/** 他给她那样东西了。整条线的终点，摆在最上面 */
+function wtGiftCard(){
+  const g = expEnsure().gift;
+  if(!g) return "";
+  return `<div class="status-card" style="margin-bottom:10px;border-color:var(--accent)">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">他放在你面前</div>
+    <div style="font-size:15px;margin-bottom:6px">${esc(g.name)}</div>
+    <div style="font-size:13px;line-height:1.7">${esc(g.line)}</div>
+    ${g.fact ? `<div style="font-size:10px;color:var(--sub);margin-top:8px">${esc(g.fact)}</div>` : ""}
+    ${g.confess ? `<div style="font-size:12px;line-height:1.7;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);color:var(--sub)">${esc(g.confess)}</div>` : ""}
+  </div>`;
 }
 
 // ═══════════════ 蛇塑身体（Embodiment）════════════════════════════════════════
@@ -42069,6 +42253,11 @@ function chatTailBlock(){
   try{
     const bg = (typeof expTailBlock === "function") ? expTailBlock() : "";
     if(bg) bits.push(bg);
+  }catch(e){}
+  // 他在攒钱买给她的那样东西（以及他瞒着的那件）。三个阶段三种语气
+  try{
+    const wtb = (typeof wtTailBlock === "function") ? wtTailBlock() : "";
+    if(wtb) bits.push(wtb);
   }catch(e){}
   // 别催她睡觉：一夜一句额度。会变（跟当晚说过的话有关），只走尾部
   try{
