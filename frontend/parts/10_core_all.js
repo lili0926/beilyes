@@ -10619,6 +10619,7 @@ function renderSubPage(){
     body: renderBody,
     trip: renderTrip,
     explore: renderExplore,
+    market: renderMarket,
     phone: renderPhone,
     sparkvault: renderSparkVault,
     vps: renderVps,
@@ -28766,6 +28767,7 @@ function bindEvents(){
   });
   try{ if(typeof bindTripPage === "function") bindTripPage(); }catch(e){ try{ console.warn("[trip] bind", e); }catch(_){} }
   try{ if(typeof bindExplorePage === "function") bindExplorePage(); }catch(e){ try{ console.warn("[exp] bind", e); }catch(_){} }
+  try{ if(typeof bindMarketPage === "function") bindMarketPage(); }catch(e){ try{ console.warn("[mk] bind", e); }catch(_){} }
   const snakeToggle = document.getElementById("snake-toggle");
   if(snakeToggle) snakeToggle.onclick = ()=>{
     state.snakeOn = !(state.snakeOn !== false);
@@ -33320,6 +33322,11 @@ function renderExplore(){
     ${expWorldCard()}
     ${expMapCard()}
     ${expLogCard()}
+    <button type="button" class="btn-ghost feat-card" data-sub="market"
+      style="width:100%;padding:11px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:8px"><i data-lucide="store"></i> 市集</span>
+      <span style="font-size:11px;color:var(--sub)">他攒了 ${expEnsure().coin || 0}</span>
+    </button>
     ${expBagCard()}
   </div>`;
 }
@@ -33332,6 +33339,351 @@ function bindExplorePage(){
       it.locked = !it.locked;
       expSave();
       try{ if(typeof showToast === "function") showToast(it.locked ? "锁上了，他不会动它" : "解开了"); }catch(_){}
+      render();
+    };
+  });
+}
+
+// ═══════════════ baileysGO · 市集 ═════════════════════════════════════════════
+// 卖东西是**他去卖、他去讲价**，她只选「让他试试」还是「算了」（她在路上不方便打字）。
+// 钱是**他的**，不是她的 —— 他有他自己惦记的东西。这让市集不是「多了个背包和商店界面」，
+// 而是他有了自己的生活：他终于有了一样她没给他的东西。
+//
+// **出价按天定死**（`MK_DAY` + npc + 物件 → 哈希）。不这么做的话，她反复进出页面
+// 就能刷到高价 —— 那整个经济就废了。讲价同理：一件东西一天只能讲一次，
+// 结果也是确定性的，刷不出来。
+const MK_HAGGLE_KEEP = 200;
+
+function mkDay(now){
+  const d = new Date(now || Date.now());
+  return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
+}
+function mkEnsure(now){
+  const e = expEnsure();
+  if(!e.market || typeof e.market !== "object") e.market = { day:"", haggled:{}, sold:[], want:null };
+  const m = e.market;
+  if(!m.haggled || typeof m.haggled !== "object") m.haggled = {};
+  if(!Array.isArray(m.sold)) m.sold = [];
+  if(m.want === undefined) m.want = null;
+  const day = mkDay(now);
+  if(m.day !== day){ m.day = day; m.haggled = {}; }      // 每天重置：昨天讲过的价今天能再讲
+  return m;
+}
+
+// ── 四个 NPC ────────────────────────────────────────────────────────────────
+// 四个刚好覆盖四个位置：稳定的底 / 道德压力 / 高档出口 / 内容出口。
+const MK_NPCS = [
+  { id:"cheng", name:"老秤",       blurb:"什么都收，价钱公道偏低。不讲价。" },
+  { id:"eye",   name:"半只眼",     blurb:"瞎了一只眼，什么都看得见。" },
+  { id:"odd",   name:"收怪东西的", blurb:"只要「发亮的」以上，低档看都不看。" },
+  { id:"talk",  name:"话多的",     blurb:"价钱一般，但每次卖东西会多讲点什么。" },
+];
+function mkNpc(id){ return MK_NPCS.find(n => n.id === id) || MK_NPCS[0]; }
+
+const MK_ODD_MIN_TIER = 4;          // 收怪东西的只收 AA（EXP_TIERS 第 5 个）以上
+function mkTierIdx(k){ const i = EXP_TIERS.findIndex(t => t.k === k); return i < 0 ? 0 : i; }
+
+/** 这个 NPC 收不收这件东西 */
+function mkAccepts(npcId, item){
+  if(!item) return false;
+  if(npcId === "odd") return mkTierIdx(item.tier) >= MK_ODD_MIN_TIER;
+  return true;
+}
+/** 他此刻是什么状态（拿这趟路上最后一次遭遇）。讲价硬不硬看这个 */
+function mkMood(){
+  try{
+    const log = expEnsure().log;
+    return log.length ? log[log.length - 1].mood : "";
+  }catch(e){ return ""; }
+}
+const MK_MOOD_MUL = { "得意":1.10, "狼狈":0.85 };
+
+/** 出价。**按天定死，不可刷**。
+ *  半只眼那条是整个设计的关键：他看得出他舍不得，**所以他出得起价** ——
+ *  一颗值 2 块的石子，羁绊高的时候他能出到三位数，别人不会。
+ *  于是「他喜欢」这件事本身变成了可以被出价的东西，再低的档次也能变成真正的两难。
+ *  反过来，羁绊低的东西他没兴趣，压价。 */
+function mkOffer(npcId, item, idx, now){
+  if(!mkAccepts(npcId, item)) return null;
+  const m = mkEnsure(now);
+  const base = item.price || 1;
+  const seed = EXP_SALT + "@" + m.day + "@" + npcId + "@" + idx + "@" + item.name;
+  const jitter = 0.92 + expRand(seed, 0) * 0.16;          // ±8% 的日常波动
+  let price;
+  if(npcId === "cheng"){
+    price = base * 0.9;
+  }else if(npcId === "eye"){
+    const b = item.bond || 0;
+    price = b > 50
+      ? base * 1.2 + Math.round((b - 50) / 50 * 220)      // 吃的就是这口情绪
+      : base * 0.8;                                        // 没情绪的东西他不给钱
+  }else if(npcId === "odd"){
+    price = base * 1.6;
+  }else{
+    price = base * 1.0;
+  }
+  return Math.max(1, Math.round(price * jitter));
+}
+
+/** 讲价。一件东西一天一次，结果确定性 —— 刷不出来。
+ *  老秤不讲价；半只眼会反将一军压更低（他吃的就是情绪）；
+ *  收怪东西的真想要，所以成功率最高；话多的不加钱，加信息。 */
+function mkHaggle(npcId, item, idx, now){
+  const m = mkEnsure(now);
+  const key = npcId + "|" + idx;
+  if(npcId === "cheng") return { ok:false, why:"nope", price: mkOffer(npcId, item, idx, now), line:"「我这儿不讲价。」" };
+  if(m.haggled[key])    return { ok:false, why:"done", price: m.haggled[key], line:"今天已经讲过一回了。" };
+  const from = mkOffer(npcId, item, idx, now);
+  if(from == null) return null;
+  const seed = EXP_SALT + "&" + m.day + "&" + npcId + "&" + idx;
+  const roll = expRand(seed, 1);
+  const moodMul = MK_MOOD_MUL[mkMood()] || 1;
+  let mul = 1, line = "";
+  if(npcId === "eye"){
+    // 反将一军：她让他去讲，结果被压得更低
+    mul = 0.8; line = "「你要是不舍得，那就别卖。」—— 他反倒把价压下去了。";
+  }else if(npcId === "odd"){
+    if(roll < 0.72 * moodMul){ mul = 1.25; line = "他真想要，抬了价。"; }
+    else { mul = 1; line = "没谈下来，价钱照旧。"; }
+  }else{
+    if(roll < 0.45 * moodMul){ mul = 1.12; line = "磨了半天，多给了一点。"; }
+    else { mul = 1; line = "价钱没动，但他多说了两句闲话。"; }
+  }
+  const price = Math.max(1, Math.round(from * mul * (npcId === "eye" ? 1 : moodMul)));
+  m.haggled[key] = price;
+  expSave();
+  return { ok: mul > 1, price, from, line, mood: mkMood() };
+}
+/** 现在这件东西在这个 NPC 那儿实际能卖多少（讲过价就按讲完的算）*/
+function mkPrice(npcId, item, idx, now){
+  const m = mkEnsure(now);
+  const k = m.haggled[npcId + "|" + idx];
+  return k != null ? k : mkOffer(npcId, item, idx, now);
+}
+
+// ── 他愿不愿意卖 ────────────────────────────────────────────────────────────
+// 上了锁的他绝对不碰（她定的）。羁绊高的他会犹豫、会拒绝 —— 但她坚持的话还是会卖，
+// 只是难受。**不做成不可逆的丢失**：卖掉的能去半只眼那儿赎回来。
+function mkWilling(item){
+  if(!item) return { can:false, why:"没有这件东西" };
+  if(item.sold) return { can:false, why:"已经卖掉了" };
+  if(item.locked) return { can:false, why:"lock", line:"你锁了这件，他不会动它。" };
+  const b = item.bond || 0;
+  if(b >= 85) return { can:true, need:"urge", line:"他把它攥在手里不撒手。要卖得劝他。" };
+  if(b >= 60) return { can:true, need:"confirm", line:"他抬头看了你一眼 —— 这件真要卖？" };
+  return { can:true, need:null, line:"" };
+}
+
+/** 卖。钱进他兜里（`coin`）。返回这笔的记录 */
+function mkSell(idx, npcId, now){
+  const e = expEnsure(), m = mkEnsure(now);
+  const item = e.shelf[idx];
+  const w = mkWilling(item);
+  if(!w.can) return { ok:false, why: w.why, line: w.line };
+  const price = mkPrice(npcId, item, idx, now);
+  if(price == null) return { ok:false, why:"这位不收这件东西" };
+  const t = now || Date.now();
+  item.sold = true; item.soldAt = t; item.soldTo = npcId; item.soldFor = price;
+  e.coin = (e.coin || 0) + price;
+  m.sold.push({ name:item.name, tier:item.tier, bond:item.bond, price, npc:npcId, at:t, shelfIdx:idx });
+  if(m.sold.length > MK_HAGGLE_KEEP) m.sold = m.sold.slice(-MK_HAGGLE_KEEP);
+  expSave();
+  return { ok:true, price, npc:npcId, item, regret: (item.bond || 0) >= 60 };
+}
+
+// ── 赎回（只找半只眼，他会加价，还要说风凉话）────────────────────────────────
+const MK_BUYBACK_MIN = 1.6, MK_BUYBACK_MAX = 2.0;
+function mkBuybackPrice(rec){
+  if(!rec) return null;
+  const seed = EXP_SALT + "^" + rec.at + "^" + rec.name;
+  return Math.max(1, Math.round(rec.price * (MK_BUYBACK_MIN + expRand(seed, 0) * (MK_BUYBACK_MAX - MK_BUYBACK_MIN))));
+}
+function mkBuyback(soldIdx, now){
+  const e = expEnsure(), m = mkEnsure(now);
+  const rec = m.sold[soldIdx];
+  if(!rec) return { ok:false, why:"没有这笔" };
+  const cost = mkBuybackPrice(rec);
+  if((e.coin || 0) < cost) return { ok:false, why:"short", cost, line:`他攒的钱还不够 —— 要 ${cost}，手里只有 ${e.coin || 0}。` };
+  const item = e.shelf[rec.shelfIdx];
+  if(!item || !item.sold) return { ok:false, why:"这件已经不在他那儿了" };
+  e.coin -= cost;
+  item.sold = false; item.soldAt = null; item.soldTo = null; item.soldFor = null;
+  item.boughtBack = (item.boughtBack || 0) + 1;
+  m.sold.splice(soldIdx, 1);
+  expSave();
+  return { ok:true, cost, item, line:"「早说啊。」半只眼收钱的时候笑了一下。" };
+}
+
+// ── 货架：他一直在看、但买不起的那样东西 ──────────────────────────────────
+// **不预先定死是什么**（她定的）。到他真攒够的时候，再按那阵子真实发生过的事来挑。
+// 所以这儿只定价位，物品留空。
+const MK_WANT_MIN = 1800, MK_WANT_MAX = 3200;
+function mkWant(now){
+  const m = mkEnsure(now);
+  if(!m.want){
+    const seed = EXP_SALT + "~want~" + (m.day || "");
+    m.want = {
+      price: Math.round(MK_WANT_MIN + expRand(seed, 0) * (MK_WANT_MAX - MK_WANT_MIN)),
+      seenAt: Date.now(),
+      item: null,                        // 留空 —— 揭晓那一步才挑
+      done: false,
+    };
+    expSave();
+  }
+  return m.want;
+}
+function mkWantProgress(now){
+  const w = mkWant(now), coin = expEnsure().coin || 0;
+  return { price: w.price, coin, left: Math.max(0, w.price - coin), pct: Math.min(1, coin / w.price), done: !!w.done };
+}
+
+// ═══════════════ baileysGO · 市集界面 ═════════════════════════════════════════
+// 她只做两件事：挑一件东西、决定让不让他去讲价。讲价、开口、丢脸都是他的事。
+
+/** 货架：他一直在看的那样东西。**不说是什么** —— 到攒够了才揭晓 */
+function mkWantCard(){
+  const p = mkWantProgress();
+  const e = expEnsure();
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span style="font-size:12px;color:var(--sub)">货架</span>
+      <span style="font-size:11px;color:var(--sub)">他攒了 ${e.coin || 0}</span>
+    </div>
+    <div style="font-size:13px;margin-top:6px;line-height:1.6">
+      ${p.done ? "他买走了那样东西。" : "货架最里面摆着一样东西，标着 " + p.price + "。他每次来都要在那儿站一会儿，你问他看什么，他就打岔。"}
+    </div>
+    <div style="height:5px;border-radius:3px;background:var(--border);margin-top:10px;overflow:hidden">
+      <div style="height:100%;width:${(p.pct*100).toFixed(1)}%;background:var(--accent)"></div>
+    </div>
+    <div style="font-size:10px;color:var(--sub);margin-top:5px">${p.done ? "" : "还差 " + p.left}</div>
+  </div>`;
+}
+
+function mkNpcsCard(){
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">摊子</div>
+    ${MK_NPCS.map(n=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:13px">${esc(n.name)}</div>
+      <div style="font-size:10px;color:var(--sub);margin-top:2px">${esc(n.blurb)}</div>
+    </div>`).join("")}
+  </div>`;
+}
+
+/** 背包里能卖的。点开一件，才显示四家的报价 */
+function mkSellCard(){
+  const e = expEnsure();
+  const rows = [];
+  e.shelf.forEach((it, idx)=>{ if(!it.sold) rows.push({ it, idx }); });
+  if(!rows.length){
+    return `<div class="status-card" style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--sub)">背包里没有能卖的东西。</div>
+    </div>`;
+  }
+  const open = state.mkPick;
+  return `<div class="status-card" style="margin-bottom:10px">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">要卖点什么</div>
+    ${rows.slice(-30).reverse().map(({ it, idx })=>{
+      const best = MK_NPCS.map(n=>({ n, p: mkPrice(n.id, it, idx) })).filter(x=>x.p != null)
+                          .sort((a,b)=>b.p-a.p)[0];
+      const head = `<div style="display:flex;align-items:center;gap:8px;padding:7px 0">
+        <button type="button" data-mk-pick="${idx}" class="btn-ghost"
+          style="flex:1;min-width:0;text-align:left;padding:2px 0;background:none;border:none">
+          <div style="font-size:13px">${esc(it.name)}${it.locked ? " 🔒" : ""}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px">${esc(expAttitude(it.bond))} · ${esc(it.tier)}</div>
+        </button>
+        <span style="font-size:11px;color:var(--sub);white-space:nowrap">${best ? "最高 " + best.p : "没人收"}</span>
+      </div>`;
+      if(open !== idx) return head + `<div style="border-bottom:1px solid var(--border)"></div>`;
+      const w = mkWilling(it);
+      const m = mkEnsure();
+      return head + `<div style="padding:2px 0 10px;border-bottom:1px solid var(--border)">
+        ${w.line ? `<div style="font-size:11px;color:var(--sub);margin-bottom:6px">${esc(w.line)}</div>` : ""}
+        ${MK_NPCS.map(n=>{
+          const p = mkPrice(n.id, it, idx);
+          if(p == null) return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--sub)"><span>${esc(n.name)}</span><span>不收</span></div>`;
+          const hag = m.haggled[n.id + "|" + idx] != null;
+          return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <span style="flex:1;font-size:12px">${esc(n.name)}</span>
+            <span style="font-size:12px;min-width:44px;text-align:right">${p}</span>
+            <button type="button" data-mk-haggle="${idx}|${n.id}" class="btn-ghost"
+              style="padding:3px 7px;font-size:10px"${n.id === "cheng" || hag ? " disabled" : ""}>讲价</button>
+            <button type="button" data-mk-sell="${idx}|${n.id}" class="btn-accent2"
+              style="padding:3px 9px;font-size:10px"${w.can ? "" : " disabled"}>卖</button>
+          </div>`;
+        }).join("")}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+/** 卖掉的。能去半只眼那儿赎回来 —— 他会加价，还要说风凉话 */
+function mkSoldCard(){
+  const m = mkEnsure();
+  if(!m.sold.length) return "";
+  return `<div class="status-card">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">卖掉的</div>
+    ${m.sold.slice(-20).reverse().map((rec, i)=>{
+      const idx = m.sold.length - 1 - i;
+      const cost = mkBuybackPrice(rec);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px">${esc(rec.name)}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px">卖给${esc(mkNpc(rec.npc).name)} · ${rec.price} · ${esc(expYmd(rec.at))}</div>
+        </div>
+        <button type="button" data-mk-buyback="${idx}" class="btn-ghost"
+          style="padding:4px 8px;font-size:10px;white-space:nowrap">赎回 ${cost}</button>
+      </div>`;
+    }).join("")}
+    <div style="font-size:10px;color:var(--sub);opacity:.75;margin-top:8px">赎回只能找半只眼，他会加价。</div>
+  </div>`;
+}
+
+function renderMarket(){
+  expEnsure(); mkEnsure();
+  return `<div class="page">
+    ${subHeader('<i data-lucide="store"></i> 市集')}
+    ${mkWantCard()}
+    ${mkSellCard()}
+    ${mkNpcsCard()}
+    ${mkSoldCard()}
+  </div>`;
+}
+
+function bindMarketPage(){
+  const toast = s=>{ try{ if(typeof showToast === "function") showToast(s); }catch(_){} };
+  document.querySelectorAll("[data-mk-pick]").forEach(el=>{
+    el.onclick = ()=>{ const i = +el.dataset.mkPick; state.mkPick = (state.mkPick === i ? null : i); render(); };
+  });
+  document.querySelectorAll("[data-mk-haggle]").forEach(el=>{
+    el.onclick = ()=>{
+      const [i, npcId] = el.dataset.mkHaggle.split("|");
+      const it = expEnsure().shelf[+i];
+      const r = mkHaggle(npcId, it, +i);
+      if(r) toast(r.line);
+      render();
+    };
+  });
+  document.querySelectorAll("[data-mk-sell]").forEach(el=>{
+    el.onclick = ()=>{
+      const [i, npcId] = el.dataset.mkSell.split("|");
+      const idx = +i;
+      const it = expEnsure().shelf[idx];
+      const w = mkWilling(it);
+      if(!w.can){ toast(w.line || w.why); return; }
+      // 羁绊高的要多问一道 —— 他攥着不撒手的时候，得她亲口说卖
+      if(w.need === "urge" && !confirm((w.line || "") + "\n\n还是要卖？")) return;
+      if(w.need === "confirm" && !confirm("这件他挺在意的。确定卖？")) return;
+      const r = mkSell(idx, npcId);
+      if(!r.ok){ toast(r.line || r.why); return; }
+      state.mkPick = null;
+      toast(r.regret ? `卖了 ${r.price}。他一路没说话。` : `卖了 ${r.price}。`);
+      render();
+    };
+  });
+  document.querySelectorAll("[data-mk-buyback]").forEach(el=>{
+    el.onclick = ()=>{
+      const r = mkBuyback(+el.dataset.mkBuyback);
+      toast(r.ok ? r.line : (r.line || r.why));
       render();
     };
   });
