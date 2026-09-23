@@ -6677,6 +6677,45 @@
       background-size: 66.3px 60.8px; background-position: -37.2px 0;
     }
 
+
+    /* ---- 蕾丝十字架 / 蝴蝶：装饰边框图，9-slice；me 用水平翻转图 ---- */
+    body.bubble-skin-lace .bubble.them.skin-lace,
+    body.bubble-skin-lace .bubble.me.skin-lace,
+    body.bubble-skin-butterfly .bubble.them.skin-butterfly,
+    body.bubble-skin-butterfly .bubble.me.skin-butterfly {
+      background: transparent !important;
+      background-image: none !important;
+      border-style: solid !important;
+      border-color: transparent !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      border-image-repeat: stretch !important;
+      color: #4a4450 !important;
+    }
+    body.bubble-skin-lace .bubble.them.skin-lace,
+    body.bubble-skin-lace .bubble.me.skin-lace {
+      padding: 6px 10px !important;
+      border-width: 18px 48px !important;
+      border-image-slice: 90 220 90 220 fill !important;
+      border-image-width: 18px 48px !important;
+    }
+    body.bubble-skin-lace .bubble.them.skin-lace { border-image-source: url("bubbles/lace/them-01.png") !important; }
+    body.bubble-skin-lace .bubble.them.skin-lace.cont { border-image-source: url("bubbles/lace/them-02.png") !important; }
+    body.bubble-skin-lace .bubble.me.skin-lace { border-image-source: url("bubbles/lace/me-01.png") !important; }
+    body.bubble-skin-lace .bubble.me.skin-lace.cont { border-image-source: url("bubbles/lace/me-02.png") !important; }
+
+    body.bubble-skin-butterfly .bubble.them.skin-butterfly,
+    body.bubble-skin-butterfly .bubble.me.skin-butterfly {
+      padding: 8px 14px !important;
+      border-width: 22px 36px !important;
+      border-image-slice: 120 160 120 160 fill !important;
+      border-image-width: 22px 36px !important;
+    }
+    body.bubble-skin-butterfly .bubble.them.skin-butterfly { border-image-source: url("bubbles/butterfly/them-01.png") !important; }
+    body.bubble-skin-butterfly .bubble.them.skin-butterfly.cont { border-image-source: url("bubbles/butterfly/them-02.png") !important; }
+    body.bubble-skin-butterfly .bubble.me.skin-butterfly { border-image-source: url("bubbles/butterfly/me-01.png") !important; }
+    body.bubble-skin-butterfly .bubble.me.skin-butterfly.cont { border-image-source: url("bubbles/butterfly/me-02.png") !important; }
+
     body[class*="bubble-skin-"] .bubble[class*="skin-"] {
       max-width: 92% !important;
     }

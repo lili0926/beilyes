@@ -4412,11 +4412,13 @@ function applyThemeVars(){
     else if(typeof isBubbleImageSkin==="function" && isBubbleImageSkin()) app.classList.add("ui-bubble-soft");
     try{
       const bs = isBp ? "solid" : (state.bubbleStyle || "solid");
-      document.body.classList.remove("bubble-skin-soft","bubble-skin-suisei","bubble-skin-cool","bubble-skin-fish","bubble-skin-rainbow");
+      document.body.classList.remove("bubble-skin-soft","bubble-skin-suisei","bubble-skin-cool","bubble-skin-fish","bubble-skin-rainbow","bubble-skin-lace","bubble-skin-butterfly");
       if(bs==="soft"||bs==="suisei") document.body.classList.add("bubble-skin-suisei");
       else if(bs==="cool") document.body.classList.add("bubble-skin-cool");
       else if(bs==="fish") document.body.classList.add("bubble-skin-fish");
       else if(bs==="rainbow") document.body.classList.add("bubble-skin-rainbow");
+      else if(bs==="lace") document.body.classList.add("bubble-skin-lace");
+      else if(bs==="butterfly") document.body.classList.add("bubble-skin-butterfly");
     }catch(e){}
     app.style.backgroundColor=t.bg;
     if(isBp){
@@ -4745,11 +4747,13 @@ function bubbleGlassClass(raw){
   if(s === "cool") return " skin-cool";
   if(s === "fish") return " skin-fish";
   if(s === "rainbow") return " skin-rainbow";
+  if(s === "lace") return " skin-lace";
+  if(s === "butterfly") return " skin-butterfly";
   return "";
 }
 function isBubbleImageSkin(s){
   s = s || state.bubbleStyle || "solid";
-  return s==="soft"||s==="suisei"||s==="cool"||s==="fish"||s==="rainbow";
+  return s==="soft"||s==="suisei"||s==="cool"||s==="fish"||s==="rainbow"||s==="lace"||s==="butterfly";
 }
 
 function daysSince(){ return Math.floor((Date.now()-new Date(state.coupleInfo.startDate))/86400000); }
@@ -25502,6 +25506,8 @@ function renderTheme(){
         <button type="button" class="sw-chip${bStyle==="cool"?" on":""}" data-bubble-style="cool">轻松熊</button>
         <button type="button" class="sw-chip${bStyle==="fish"?" on":""}" data-bubble-style="fish">鱼饼熊</button>
         <button type="button" class="sw-chip${bStyle==="rainbow"?" on":""}" data-bubble-style="rainbow">彩虹熊</button>
+        <button type="button" class="sw-chip${bStyle==="lace"?" on":""}" data-bubble-style="lace">蕾丝</button>
+        <button type="button" class="sw-chip${bStyle==="butterfly"?" on":""}" data-bubble-style="butterfly">蝴蝶</button>
       </div>
       <div class="sw-slider-row">
         <span>气泡透明度</span>
