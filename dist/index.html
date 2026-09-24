@@ -8649,11 +8649,70 @@ function claudeThinkingParam(){
  * 1 小时档只在「隔 5–60 分钟回一句」那种间隔才回本（写入贵一倍：1.25× → 2×）。
  * 她的间隔就是那一档 —— VPS 那边实测过 60 分钟是道极陡的悬崖（命中率 86–97% → 2%）。
  *
+ * ⚠️ **别把人设改成规范的顶层 `system` 字段**（看着更干净，但会把缓存全废掉）。
+ * 2026-09-24 在她的中转（九十 `[AG2缓存按量]claude-opus-4-6`）上实测三组，
+ * 每组第二发都让对话增长、动态块变化：
+ *   X 断点打在顶层 `system` 上         → read = 0      **不认**
+ *   Y 断点打在 messages[0]（假 ack）   → read = 6727   命中
+ *   Z 同时打 messages[0] 和 len-2      → read = 6742   命中
+ * 也就是说这套「假 ack」结构不是历史包袱，是**这家中转唯一吃得到缓存的摆法**。
+ * 另外：OpenAI 兼容口（/chat/completions）的自动缓存**只在整个请求逐字节相同时**才命中，
+ * 对增长中的对话等于没有 —— 主聊天要吃到缓存就得走 Claude 通道 + claudeBase。
+ *
  * ⚠️ 最小可缓存前缀随模型变，而且**不是越新越小**：Opus 5 是 512 token，
  * 但**默认的 Opus 4.6 要 4096**（Haiku 4.5 也是 4096）。低于这个数不报错、也不建条目，
  * 只是 cache_creation_input_tokens 一直是 0。所以 ① 在 4.6 上很可能是空转（人设不够长），
  * 真正吃到缓存的是 ②（人设 + 整段历史，稳稳过线）。
  */
+/**
+ * 把 `{static, dynamic}` 的 systemPrompt 拆成「进前缀的」和「必须排到断点之后的」。
+ *
+ * **2026-09-24 修的那条大 bug**：`buildCachedSys` 费了很大劲把 system 拆成
+ * static（人设/规则，稳定）和 dynamic（身体状态/用量/衣橱/检索记忆…），
+ * 注释还写着「每轮变，绝不能进缓存前缀」—— 但**六个调用点在用的时候全都拼回去了**：
+ *     sysText = static + "\n\n" + dynamic
+ * 然后整段塞进 `messages[0]`（Claude 通道的假 ack）或 system 消息（OpenAI 通道）。
+ * 而 `bodyBlock` 每 45 秒 tick 一次、检索记忆每轮按最近三条重算 ——
+ * **messages[0] 每一轮的字节都不一样**，断点① 落在它末尾，于是①必 miss；
+ * 缓存是字节级前缀匹配，①之后的②也一起废。那套「阶梯前进、绝不 slice(-30)」
+ * 的稳定前缀工程，一轮都没兑现过。实测表现就是账单那行常年「没走缓存」。
+ *
+ * 现在：head 进前缀，tail 挂到**最后一条消息**的尾巴。
+ * 为什么是最后一条而不是单开一条尾部消息：断点② 打在 `len-2`，
+ * 所以最后一条本来就在缓存前缀之外，挂在那儿最省事，也不会出现
+ * 连续两条同 role 的消息（有些上游会报 roles must alternate）。
+ * 下一轮重建 apiMsgs 时 tail 不会被带上，而**它所在的那条已经在前缀之外**，
+ * 所以前缀依旧逐字节稳定 —— 这一步别想歪，想歪了就是白改。
+ */
+function __sysCacheSplit(systemPrompt){
+  if(systemPrompt != null && typeof systemPrompt === "object" && systemPrompt.static != null){
+    return { head: String(systemPrompt.static || ""), tail: String(systemPrompt.dynamic || "") };
+  }
+  return { head: systemPrompt ? String(systemPrompt) : "", tail: "" };
+}
+/** 把会变的那段挂到最后一条消息尾部。返回**新数组**，不动传进来的那份。 */
+function __appendVolatile(msgs, tail){
+  const t = String(tail || "").trim();
+  if(!t || !Array.isArray(msgs) || !msgs.length) return msgs;
+  const out = msgs.slice();
+  const i = out.length - 1;
+  const m = out[i];
+  const c = m && m.content;
+  if(typeof c === "string"){
+    out[i] = Object.assign({}, m, { content: c + "\n\n" + t });
+  }else if(Array.isArray(c)){
+    const blocks = c.slice();
+    // 挂在最后一个 text 块后面；一个都没有（比如纯图片）就新加一块
+    let last = -1;
+    for(let j = blocks.length - 1; j >= 0; j--){ if(blocks[j] && blocks[j].type === "text"){ last = j; break; } }
+    if(last >= 0) blocks[last] = Object.assign({}, blocks[last], { text: String(blocks[last].text || "") + "\n\n" + t });
+    else blocks.push({ type:"text", text: t });
+    out[i] = Object.assign({}, m, { content: blocks });
+  }else{
+    out[i] = Object.assign({}, m, { content: t });
+  }
+  return out;
+}
 const CLAUDE_CACHE_TTL = "1h";
 function __claudeCacheMark(msgs){
   try{
@@ -8740,14 +8799,16 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
 
   if (channel === "claude") {
     // 还原为原「假 ack」结构（systemPrompt 作为首条 user 消息 + assistant 确认），保思考链稳定。
-    const sysText = (typeof systemPrompt === "object" && systemPrompt.static != null)
-      ? (systemPrompt.static || "") + (systemPrompt.dynamic ? "\n\n"+systemPrompt.dynamic : "")
-      : (systemPrompt ? String(systemPrompt) : "");
+    // **会变的那段不进这条** —— 见 __sysCacheSplit，拼回去就等于把缓存前缀废掉。
+    const __sp = __sysCacheSplit(systemPrompt);
+    const sysText = __sp.head;
     const sysMsgs = sysText ? [{ role:"user", content:sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
       model: claudeModelOf(ag, apiConfig),
       max_tokens: 16000,
-      messages: __claudeCacheMark([...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)]),
+      messages: __claudeCacheMark(__appendVolatile(
+        [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
+        __sp.tail)),
       thinking: claudeThinkingParam(),  // 关掉时是 undefined，JSON.stringify 会整条丢掉
     };
     const res = await __apiFetch(claudeEndpoint(ag, apiConfig), {
@@ -8797,12 +8858,15 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
       signal: chatAbortSignal(),
-      body: JSON.stringify({
-        model: openaiModel || "gpt-4o",
-        messages: systemPrompt
-          ? [{ role: "system", content: systemPrompt }, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m)]
-          : messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m),
-      }),
+      // OpenAI 兼容口：system 只放稳定段，会变的挂到最后一条消息尾部。
+      // 实测九十中转这条口**不用 cache_control 也会自动缓存**（第二发 cached_tokens 6752），
+      // 前提就是 system + 历史逐字节稳定 —— 以前把 dynamic 拼进 system，等于自己把它关了。
+      body: JSON.stringify((()=>{
+        const sp = __sysCacheSplit(systemPrompt);
+        const conv = messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m);
+        const msgs = sp.head ? [{ role:"system", content: sp.head }, ...conv] : conv;
+        return { model: openaiModel || "gpt-4o", messages: __appendVolatile(msgs, sp.tail) };
+      })()),
     }, __timeoutMs);
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
@@ -9218,13 +9282,14 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
 
   // —— Claude 官方（adaptive thinking 流式；adaptive 自带交错思考，不用再加 beta 头）——
   if(channel === "claude"){
-    const sysText = (systemPrompt != null && typeof systemPrompt === "object")
-      ? (systemPrompt.static || "") + (systemPrompt.dynamic ? "\n\n"+systemPrompt.dynamic : "")
-      : (systemPrompt ? String(systemPrompt) : "");
+    const __sp = __sysCacheSplit(systemPrompt);   // 会变的那段不进前缀，见 __sysCacheSplit
+    const sysText = __sp.head;
     const sysMsgs = sysText ? [{ role:"user", content:sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
       model: claudeModelOf(ag, cfg), max_tokens: 16000, stream: true,
-      messages: __claudeCacheMark([...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)]),
+      messages: __claudeCacheMark(__appendVolatile(
+        [...sysMsgs, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("claude", m) } : m)],
+        __sp.tail)),
       thinking: claudeThinkingParam(),  // 关掉时是 undefined，JSON.stringify 会整条丢掉
     };
     const res = await __apiFetch(claudeEndpoint(ag, cfg), {
@@ -9287,11 +9352,13 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   }
 
   // —— OpenAI 兼容（含 DeepSeek / MiniMax）——
+  const __spO = __sysCacheSplit(systemPrompt);     // system 只放稳定段，见 __sysCacheSplit
+  const __convO = messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m);
   const body = {
     model: openaiModel, stream: true, stream_options: { include_usage: true },
-    messages: systemPrompt
-      ? [{ role:"system", content: systemPrompt }, ...messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m)]
-      : messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m),
+    messages: __appendVolatile(
+      __spO.head ? [{ role:"system", content: __spO.head }, ...__convO] : __convO,
+      __spO.tail),
   };
   const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
@@ -9316,7 +9383,9 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   let u = null;
   if(usageObj){
     const pd = usageObj.prompt_tokens_details || {};
-    u = { input: usageObj.prompt_tokens||0, output: usageObj.completion_tokens||0, cache_read: pd.cached_tokens || usageObj.prompt_cache_hit_tokens || 0, cache_write: pd.cache_creation_input_tokens || usageObj.prompt_cache_miss_tokens || 0, ts: Date.now() };
+    u = { input: usageObj.prompt_tokens||0, output: usageObj.completion_tokens||0,
+          cache_read: pd.cached_tokens || usageObj.prompt_cache_hit_tokens || 0,
+          cache_write: __oaiCacheWrite(usageObj), ts: Date.now() };
   }
   return finish(u);
 }
@@ -9406,13 +9475,15 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
   if(channel === "claude"){
     const { claudeKey } = creds;
     // 还原为「假 ack」结构，保思考链稳定
-    const sysText = (typeof systemPrompt === "object" && systemPrompt.static != null)
-      ? (systemPrompt.static || "") + (systemPrompt.dynamic ? "\n\n"+systemPrompt.dynamic : "")
-      : (systemPrompt ? String(systemPrompt) : "");
+    // ⚠️ **这条才是主聊天真正走的路**：`callOneAgentReply` 里 `cardsOn = !isCC` 恒为真，
+    // 所以非 CC 的每一轮都走 callChatAPIAdvanced → 这里，而不是上面那两个函数。
+    // 这里原来既把 dynamic 拼进了前缀、**又完全没打 cache_control** —— 两头都漏。
+    const __sp = __sysCacheSplit(systemPrompt);
+    const sysText = __sp.head;
     const sysMsgs = sysText ? [{ role:"user", content: sysText }, { role:"assistant", content:"好的，我记住了。" }] : [];
     const body = {
       model: claudeModelOf(creds, creds), max_tokens:16000,
-      messages:[ ...sysMsgs, ...convo ],
+      messages: __claudeCacheMark(__appendVolatile([ ...sysMsgs, ...convo ], __sp.tail)),
       thinking: claudeThinkingParam(),  // 关掉时是 undefined，JSON.stringify 会整条丢掉
     };
     if(toolsParam) body.tools = toolsParam;
@@ -9450,9 +9521,14 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
   }
   // OpenAI 兼容
   const { openaiKey, openaiBase, openaiModel } = creds;
+  // system 只放稳定段，会变的挂到最后一条尾部（见 __sysCacheSplit）。
+  // 这条口不用 cache_control 也会自动缓存，前提是前缀逐字节稳定。
+  const __spO = __sysCacheSplit(systemPrompt);
   const body = {
     model: openaiModel || "gpt-4o",
-    messages: systemPrompt ? [{ role:"system", content: systemPrompt }, ...convo] : convo,
+    messages: __appendVolatile(
+      __spO.head ? [{ role:"system", content: __spO.head }, ...convo] : convo,
+      __spO.tail),
   };
   if(toolsParam){ body.tools = toolsParam; body.tool_choice = "auto"; }
   const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
@@ -12470,6 +12546,35 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     dynBlocks: __dynPicked.map(b=>({ name:b.name, len:b.len, h:b.h })),
   };
   return __full;
+}
+/**
+ * OpenAI 兼容口的「缓存写入」到底记在哪个字段。
+ *
+ * 原来只读 `prompt_tokens_details.cache_creation_input_tokens` —— 那是 OpenAI 的形状，
+ * **她的中转（九十 `[AG2缓存按量]`）不用这个**。2026-09-24 实测那条 usage 长这样：
+ *   { prompt_tokens, prompt_tokens_details:{cached_tokens}, input_tokens,
+ *     claude_cache_creation_5_m_tokens, claude_cache_creation_1_h_tokens, usage_source:"anthropic" }
+ * 写入量在**顶层**的 `claude_cache_creation_*`，所以旧代码永远读到 0，
+ * 于是第一发（真的在写缓存）被印成「没走缓存」—— 那行字撒了很久的谎。
+ * 顺带这两个字段还能白拿一个信息：**这次写的是 5 分钟档还是 1 小时档**，
+ * 也就是文章里「排查第一步：先确认档位」那件事，一分钱不花就看得到。
+ */
+function __oaiCacheWrite(u){
+  if(!u || typeof u !== "object") return 0;
+  const pd = u.prompt_tokens_details || {};
+  const n = (x)=> (typeof x === "number" && isFinite(x)) ? x : 0;
+  return n(pd.cache_creation_input_tokens)
+    + n(u.claude_cache_creation_5_m_tokens)
+    + n(u.claude_cache_creation_1_h_tokens)
+    + n(u.cache_creation_input_tokens)
+    + n(u.prompt_cache_miss_tokens);
+}
+/** 这次的缓存写入落在哪个档：返回 "1h" / "5m" / "" */
+function __oaiCacheTier(u){
+  if(!u || typeof u !== "object") return "";
+  if((u.claude_cache_creation_1_h_tokens || 0) > 0) return "1h";
+  if((u.claude_cache_creation_5_m_tokens || 0) > 0) return "5m";
+  return "";
 }
 /** 32 位字符串哈希（FNV-1a）。只用来比「这轮和上轮是不是同一段字节」，不做安全用途。 */
 function __strHash(s){
@@ -43703,7 +43808,7 @@ function __recordUsageFromData(data){
       input: u.prompt_tokens || 0,
       output: u.completion_tokens || 0,
       cache_read: pd.cached_tokens || u.prompt_cache_hit_tokens || 0,
-      cache_write: pd.cache_creation_input_tokens || u.prompt_cache_miss_tokens || 0,
+      cache_write: __oaiCacheWrite(u),
       ts: Date.now(),
     });
   } else if(u.input_tokens != null || u.output_tokens != null){
