@@ -1646,6 +1646,10 @@ function __ccConnect(wsUrl, pin){
   ws.onmessage = (ev)=>{
     let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
     if(!m || !m.type) return;
+    // `cc_since` = hub 报的「CC 这条命的起点」（MCP 桥连上的时刻）。CC 重启过它就变，
+    // `__ccEnsureModel` 拿它当判据决定要不要重发 /model（重发 = 缓存全 miss）。
+    // 旧 hub 不给这个字段，那边退到 24 小时兜底。
+    if(m.cc_since != null) __cc.ccSince = String(m.cc_since);
     if(m.type==="auth_ok"){ __cc.ready=true; __cc.authFail=""; __cc.ccAlive=!!m.cc_alive; __cc._retry=0; __cc._statusCbs.forEach(f=>{try{f(__cc.ccAlive)}catch(e){}}); return; }
     // **PIN 不对时服务端会明说 auth_fail，这里以前一个字都没接**：
     // ready 永远留在 false，trySend 每 300ms 安静重试，180 秒后报「CC 回复超时」——
@@ -1805,18 +1809,47 @@ function __ccModelAlias(id){
   if(m === "sonnet" || m.includes("sonnet")) return "sonnet";
   return raw;
 }
+// ── CC 的 /model 注入必须省着用（2026-09-24）─────────────────────────────────
+// **切换模型会让整段前缀缓存失效**（订阅内主对话是 1 小时档，一次 miss 实测要重写约 100K）。
+// 原来的判重只记在 `__cc._lastModel` 这个**内存变量**里 —— App 一冷启动就是空，
+// 于是**每次开 App 发第一条消息都会先注入一次 `/model`**，把缓存打掉一次。
+// 实测那条会话每轮上下文 125K，命中时只写 2.7K、miss 时写 100K，所以这一刀很值。
+//
+// 现在把「上次给这台 hub 设成了什么」落到 LS，两道失效条件：
+//   1. `ccSince` 变了 —— 那是 hub 报的「CC 这条命的起点」（MCP 桥连上的时刻）。
+//      CC 重启过就一定变，而 CC 重启后模型会回默认 Sonnet，必须重设。
+//      **hub 还没打这个补丁时它是 undefined**，这时退到第 2 条。
+//   2. 超过 24 小时 —— 兜底，免得旧 hub 上永远不重设。
+// 故意**不进 PERSIST_MAP**：PERSIST_MAP 里的键只写 LS 会被冷启动的私有目录旧值盖回去
+// （思考链开关那个坑），而这个键只有 LS 一个来源，反而稳。
+const CC_MODEL_MEMO_KEY = "ccModelMemo";
+const CC_MODEL_MEMO_TTL = 24 * 3600 * 1000;
+function __ccModelMemo(){
+  try{ const v = LS.get(CC_MODEL_MEMO_KEY, {}); return (v && typeof v === "object") ? v : {}; }
+  catch(e){ return {}; }
+}
 /** 发消息前确保 CC 会话已切到目标模型（避免只改了前端下拉、会话仍停在 Sonnet） */
 async function __ccEnsureModel(wsUrl, pin, modelId){
   const alias = __ccModelAlias(modelId);
   if(!alias) return false;
-  // 同一模型且 30s 内已确认过则跳过，避免每条都刷 /model
   const now = Date.now();
+  // 同一模型且 30s 内已确认过则跳过，避免每条都刷 /model
   if(__cc._lastModel === alias && __cc.ready && __cc.ccAlive && __cc._lastModelAt && (now - __cc._lastModelAt < 30000))
     return true;
+  const memo = __ccModelMemo();
+  const rec = memo[wsUrl];
+  const sameLife = rec && (rec.ccSince || "") === (__cc.ccSince || "");
+  if(rec && rec.alias === alias && sameLife && rec.at && (now - rec.at < CC_MODEL_MEMO_TTL)){
+    // 这台 hub 上、CC 这条命里已经设成这个模型了 —— **别再注入，注入就是一次缓存全 miss**
+    __cc._lastModel = alias; __cc._lastModelAt = now;
+    return true;
+  }
   try{
     await __ccSendCommand("/model " + alias, wsUrl, pin);
     __cc._lastModel = alias;
     __cc._lastModelAt = now;
+    memo[wsUrl] = { alias, at: now, ccSince: __cc.ccSince || "" };
+    try{ LS.set(CC_MODEL_MEMO_KEY, memo); }catch(e){}
     return true;
   }catch(e){
     console.warn("[cc model]", e);
