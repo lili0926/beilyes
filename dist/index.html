@@ -28743,6 +28743,7 @@ async function mcpRpc(method, params){
 async function mcpConnect(){
   const cfg = mcpEnsureConfig();
   if(!(cfg.url||"").trim()){ alert("请填写 MCP Server URL"); return; }
+  window.__mcpUserOff = false;        // 连上了就把「她手动断过」那个记号清掉
   state.mcpStatus = "connecting";
   state.mcpError = "";
   state.mcpTools = [];
@@ -28789,8 +28790,41 @@ function mcpDisconnect(){
   state.mcpError = "";
   __mcpSseEndpoint = null;
   state.mcpSessionId = "";
+  window.__mcpUserOff = true;          // 她手动断的，这一程别自动连回来
   mcpLog("已断开");
   render();
+}
+/**
+ * 保证 MCP 是连上的。**这是 2026-09-24 那个「MCP 一直不调用」的修法。**
+ *
+ * 坑在这儿：`mcpStatus` / `mcpTools` **不在 PERSIST_MAP 里**（只有 mcpConfig 是），
+ * 而 `mcpConnect()` 原来**只有 MCP 大厅页上那两个点击**会调 ——
+ * 所以 App 每次冷启动、或者被系统从任务列表划掉再开，状态都回到 idle，
+ * 聊天注入工具的闸门（`mcpInChat` 要 status==="ready" && mcpTools.length>0）就永远不成立。
+ * 表现是「她配好了、书签也在，但他从来不调工具」，而且**界面上一个字都不提示**。
+ *
+ * 所以：配置在 + inChat 开着 + 不是她手动断的 → 自己连。
+ * 失败不吵她（原因写进 mcpLog，MCP 大厅页看得到），60 秒内不重试。
+ */
+let __mcpEnsureAt = 0;
+let __mcpEnsureInflight = null;
+async function mcpEnsureReady(opts){
+  const o = opts || {};
+  const cfg = (typeof mcpEnsureConfig === "function") ? mcpEnsureConfig() : (state.mcpConfig || {});
+  if(!cfg || !(cfg.url || "").trim()) return false;      // 没配就不管
+  if(cfg.inChat === false) return false;                 // 她关了「参与聊天」
+  if(window.__mcpUserOff && !o.force) return false;      // 她刚手动断开
+  if(state.mcpStatus === "ready" && (state.mcpTools||[]).length) return true;
+  if(__mcpEnsureInflight) return __mcpEnsureInflight;     // 正在连，别并发开第二条
+  const now = Date.now();
+  if(!o.force && now - __mcpEnsureAt < 60000) return false;
+  __mcpEnsureAt = now;
+  __mcpEnsureInflight = (async ()=>{
+    try{ await mcpConnect(); }catch(e){ try{ mcpLog("自动连接失败: " + (e && e.message || e)); }catch(_){} }
+    return state.mcpStatus === "ready" && (state.mcpTools||[]).length > 0;
+  })();
+  try{ return await __mcpEnsureInflight; }
+  finally{ __mcpEnsureInflight = null; }
 }
 function mcpSchemaFields(schema){
   if(!schema || typeof schema !== "object") return [];
@@ -40088,17 +40122,39 @@ function expSkeleton(r){
 
 // ── 档次（八档）────────────────────────────────────────────────────────────
 // 别名是界面上平时露的；`D`/`SSA` 这种符号只在集市和价格那里出现。
+// 价格是**区间不是定价**（她 2026-09-24 要的）：同一档里，这块石子可以比那块值钱。
+//   lo/hi —— 区间两头。**相邻档故意留重叠**（C 最高 9 > B 最低 7）：一件好的 C 能压过
+//            一件差的 B，讲价和出价才有得讲，档位也不至于变成八个固定标价。
+//   step  —— 定价粒度。低档一块一块地来，高档取整到十/五十，
+//            不然会冒出「1187」这种一眼假的数。
+//   区间的几何中位数就是原来那八个定价（2/5/12/30/75/180/450/1200），
+//   所以市集、拍卖台、攒钱那几套的手感不用重调。
 const EXP_TIERS = [
-  { k:"D",   name:"捡的",       w:0.300, price:2    },
-  { k:"C",   name:"旧的",       w:0.250, price:5    },
-  { k:"B",   name:"谁的",       w:0.200, price:12   },
-  { k:"A",   name:"不准的",     w:0.120, price:30   },
-  { k:"AA",  name:"发亮的",     w:0.070, price:75   },
-  { k:"SA",  name:"有主意的",   w:0.040, price:180  },
-  { k:"SSA", name:"不讲道理的", w:0.015, price:450  },
-  { k:"RA",  name:"不该有的",   w:0.005, price:1200 },
+  { k:"D",   name:"捡的",       w:0.300, lo:1,   hi:4,    step:1  },
+  { k:"C",   name:"旧的",       w:0.250, lo:3,   hi:9,    step:1  },
+  { k:"B",   name:"谁的",       w:0.200, lo:7,   hi:20,   step:1  },
+  { k:"A",   name:"不准的",     w:0.120, lo:18,  hi:48,   step:2  },
+  { k:"AA",  name:"发亮的",     w:0.070, lo:45,  hi:120,  step:5  },
+  { k:"SA",  name:"有主意的",   w:0.040, lo:110, hi:300,  step:10 },
+  { k:"SSA", name:"不讲道理的", w:0.015, lo:280, hi:750,  step:10 },
+  { k:"RA",  name:"不该有的",   w:0.005, lo:700, hi:2000, step:50 },
 ];
 function expTier(k){ return EXP_TIERS.find(t => t.k === k) || EXP_TIERS[0]; }
+/**
+ * 这一件底价多少。**捡到的时候定死并存进战利品**（`p.price`），
+ * 所以反复进出页面、重读存档都是同一个数 —— 跟市集「出价按天定死」是同一条地基。
+ * 两个随机数取平均 = 三角分布：多数落在中段，偶尔一件特别值钱或特别不值钱。
+ * 用 300/301 两个下标，别跟档次（100+）/羁绊（200）撞。
+ */
+function expPriceOf(tier, seed){
+  const t = tier || EXP_TIERS[0];
+  const lo   = Math.max(1, t.lo || t.price || 1);
+  const hi   = Math.max(lo, t.hi || lo);
+  const step = Math.max(1, t.step || 1);
+  const r = (expRand(seed, 300) + expRand(seed, 301)) / 2;
+  const v = Math.round((lo + (hi - lo) * r) / step) * step;
+  return Math.max(lo, Math.min(hi, v));
+}
 
 // 越往上离「正常」越远一步；RA 那件是 D 那件「不该存在的版本」。
 // 目前就这 40 件，以后**先加 D/C/B**（低档出得最勤，最先看腻的是它们）。
@@ -40395,7 +40451,7 @@ function tmapOpen(trip, ctx, now){
     const row = pool[Math.floor(expRand(s, 0) * pool.length) % pool.length];
     prizes.push({
       id: row.id, name: row.name,
-      tier: tier.k, price: tier.price, bond,
+      tier: tier.k, price: expPriceOf(tier, s), bond,
       at: t + i,                                  // 错开 1ms，排序稳定
       tripId: m.tripId || null,
       to: (trip && trip.to && trip.to.name) || "",
@@ -43670,6 +43726,10 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   const isCC = ag.channel === "cc";
   const turnId = "turn_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
   window.__currentTurnId = turnId;
+  // 发消息之前补一次连接。**没配 / 关了 inChat / 已经 ready 的话这行是零成本的**
+  // （mcpEnsureReady 立刻返回），只有「配了但掉线了」才真去连一次。
+  // 有它之后就不再依赖「她记得先去 MCP 大厅点一下」。
+  if(!isCC){ try{ await mcpEnsureReady(); }catch(e){} }
   const mcpInChat = !isCC
     && state.mcpStatus === "ready"
     && state.mcpConfig && state.mcpConfig.inChat !== false
@@ -43721,6 +43781,27 @@ async function callOneAgentReply(ag, apiMsgs, sys){
           sysCam = { static: (sys.static||"")+tip, dynamic: sys.dynamic||"" };
         } else {
           sysCam = (sys||"")+tip;
+        }
+      }
+      // MCP 工具提示。**以前这块是空的** —— 相机有【本机相机·必读】、卡片有【小卡片·必读】，
+      // MCP 只把 tool 定义扔过去、一句话都不说，于是「连上了他也不主动用」。
+      // 不写死工具清单（她接什么服务器都算），名字和描述现场从 state.mcpTools 拿。
+      // **缓存代价**：这段随「连没连 MCP」变，但工具定义本来就一起变，所以没有额外损失；
+      // 别把它做成随每轮波动的东西（那样会天天打掉前缀缓存）。
+      if(mcpInChat){
+        const names = (state.mcpTools||[]).map(t=>t.name).filter(Boolean).slice(0, 24);
+        if(names.length){
+          const mtip = "\n\n【外部工具·必读】你这会儿接着一台工具服务器，下面这些是**真能用**的，不是设定："
+            + "\n" + names.join("、")
+            + "\n- 需要查真实数据、要真的做一件事、或者她问的东西你手上没有 → 直接调对应的工具，别凭印象答。"
+            + "\n- 参数不确定就先调一次看返回，报错了照错误提示改参数重试，不要放弃后改成「我做不到」。"
+            + "\n- 调完用第一人称自然接话，别念工具名、别报告「我调用了某某接口」。"
+            + "\n- 没有合适的工具就正常说话，**不要硬凑一个来调**。";
+          if(typeof sysCam==="object" && sysCam && (sysCam.static!=null||sysCam.dynamic!=null)){
+            sysCam = { static: (sysCam.static||"")+mtip, dynamic: sysCam.dynamic||"" };
+          } else {
+            sysCam = (sysCam||sys||"")+mtip;
+          }
         }
       }
       // 卡片协议提示（工具优先；无工具时也可用 ⟪写卡:…⟫）
@@ -45013,7 +45094,10 @@ if(!window.__proactiveBoot){
   window.__proactiveBoot = true;
   setTimeout(()=>{
     try{ if(typeof mcPollDeliveredLetters === "function") mcPollDeliveredLetters(); }catch(e){}
-    try{ if(typeof galateaGameWake === "function") setTimeout(galateaGameWake, 4000); }catch(e){}
+    // MCP 自动连回来（状态不持久化，冷启动一定是 idle）。放在 galatea 唤醒前面 ——
+    // 那条也要 mcpStatus==="ready"，以前在开机这一刻永远不成立。
+    try{ if(typeof mcpEnsureReady === "function") mcpEnsureReady(); }catch(e){}
+    try{ if(typeof galateaGameWake === "function") setTimeout(galateaGameWake, 6000); }catch(e){}
     try{
       if(typeof postAppEvent === "function") postAppEvent("app_open", { tab: state.tab });
     }catch(e){}
@@ -45086,6 +45170,9 @@ if(!window.__proactiveTimer){
       try{ if(typeof proactiveOpenerRefill === "function") proactiveOpenerRefill(false); }catch(e){}
       return;
     }
+    // 回前台先把 MCP 连回来。WebView 被冻过之后那条连接经常已经断了，
+    // 而 mcpEnsureReady 自己有 60 秒节流，切来切去不会反复连。
+    try{ if(typeof mcpEnsureReady === "function") mcpEnsureReady(); }catch(e){}
     if(Date.now() - (window.__proactiveLastTick || 0) < 60000) return; // 来回切前台防抖
     proactiveTick();
     // 回到前台顺手收一下后台引擎生成好的那条
