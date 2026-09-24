@@ -26511,6 +26511,63 @@ function migrateVpsIp(){
 }
 try{ migrateVpsIp(); }catch(e){}   // 启动就跑一次，不等打开电话页
 
+/**
+ * 一次性迁移：把走「OpenAI 兼容 + 九十中转」的联系人切到 Claude 通道。
+ *
+ * 为什么非切不可（2026-09-24 在她的中转上实测的，别再重测，那是花钱买的）：
+ *   - OpenAI 兼容口（/chat/completions）的自动缓存**只在整个请求逐字节相同时**才命中，
+ *     对增长中的对话等于没有缓存。
+ *   - 原生 /messages + 打在 messages[0] 的 cache_control：对话增长、动态块变化，
+ *     第二发照样 read=6727。**只有这条路吃得到缓存。**
+ * 同一把 key、同一个 base、同一个模型名都能用，换的只是请求格式。
+ *
+ * 三条保险，免得把她的设置弄丢：
+ *   1. **切之前把原样子存成一张「渠道预设」**（她本来就有这个功能），点一下就能切回去；
+ *   2. 只动「channel==="openai" 且 base 指向九十」的那些，别的通道一个字不碰；
+ *   3. 跑一次就记账（`ccApiMigrated`），之后她想改回 OpenAI 兼容我们绝不再抢。
+ * 模型名留空的话就不猜，只切通道 —— 猜错模型比不切更糟。
+ */
+const JIUSHI_HOST = "api.jiushi.xin";
+const JIUSHI_CACHE_MODEL = "[AG2缓存按量]claude-opus-4-6";
+function migrateApiToClaudeChannel(){
+  try{
+    if(LS.get("ccApiMigrated", 0)) return false;
+    if(!Array.isArray(state.agents) || !state.agents.length) return false;
+    let changed = 0;
+    state.agents.forEach(ag=>{
+      if(!ag || ag.channel !== "openai") return;
+      const base = String(ag.openaiBase || "");
+      if(base.indexOf(JIUSHI_HOST) < 0) return;          // 别的中转/官方一律不碰
+      if(!ag.openaiKey) return;                           // 没 key 的空壳跳过
+      // ① 先把现状存成预设，随时一键切回
+      try{
+        state.apiPresets = state.apiPresets || [];
+        const snap = (typeof apSnapshot === "function") ? apSnapshot(ag) : null;
+        if(snap && !state.apiPresets.some(p => (typeof apMatches === "function") && apMatches(p, ag))){
+          state.apiPresets.push(Object.assign({ name: "切缓存前 · OpenAI兼容" }, snap));
+        }
+      }catch(e){}
+      // ② 同一把 key / 同一个 base，只换请求格式
+      ag.claudeBase  = base;
+      ag.claudeKey   = ag.openaiKey;
+      if(!ag.claudeModel){
+        // 原来填的是 [AG2缓存按量]… 就原样带过去；填的是别的（比如按次那档）才换成缓存那档
+        ag.claudeModel = /AG2缓存按量/.test(String(ag.openaiModel||""))
+          ? String(ag.openaiModel) : JIUSHI_CACHE_MODEL;
+      }
+      ag.channel = "claude";
+      changed++;
+    });
+    LS.set("ccApiMigrated", 1);
+    if(changed){
+      try{ persist("agents"); }catch(e){}
+      try{ persist("apiPresets"); }catch(e){}
+      try{ if(typeof showToast === "function") showToast("API 渠道已切到 Claude 通道（缓存才吃得到）；原设置存成了预设"); }catch(e){}
+    }
+    return changed > 0;
+  }catch(e){ return false; }
+}
+
 function ensureCallConfig(){
   try{ if(typeof migrateVpsIp === "function") migrateVpsIp(); }catch(e){}
   // 来电轮询(Callhome 网关)默认指 VPS；AIcall 语音网关(wsUrl/httpUrl)是另一套，保持局域网默认
@@ -45013,6 +45070,9 @@ try{ restorePrNative(); }catch(e){} }catch(e){}
           const kv = await fsLoadAllKvIntoState();
           window.__kvHydrated = true;       // 此后热力才允许落盘（见 mergeChatHeatMap）
           try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次（必须在置位之后，否则不落盘）
+          // 渠道迁移**必须在 hydrate 之后**：hydrate 之前 state 里是 LS 那份旧副本，
+          // 这时候落盘就等于把旧副本盖回私有目录（migrateVpsIp 踩过这个坑，见 a25cec3c）。
+          try{ migrateApiToClaudeChannel(); }catch(_){}
           try{ mergeChatHeatMap(); persist("chatHeatMap"); }catch(_){}
           if(kv && kv.ok) try{ render(); }catch(e){}
         }
@@ -45089,6 +45149,9 @@ if(!window.__chatFlushBound){
         const kv = await fsLoadAllKvIntoState();
           window.__kvHydrated = true;       // 此后热力才允许落盘（见 mergeChatHeatMap）
           try{ migrateVpsIp(); }catch(_){}   // 私有目录里读回来的旧 IP 再换一次（必须在置位之后，否则不落盘）
+          // 渠道迁移**必须在 hydrate 之后**：hydrate 之前 state 里是 LS 那份旧副本，
+          // 这时候落盘就等于把旧副本盖回私有目录（migrateVpsIp 踩过这个坑，见 a25cec3c）。
+          try{ migrateApiToClaudeChannel(); }catch(_){}
           try{ mergeChatHeatMap(); persist("chatHeatMap"); }catch(_){}
         if(kv && kv.ok && typeof render === "function") render();
       }
