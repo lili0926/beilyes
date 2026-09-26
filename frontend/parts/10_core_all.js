@@ -24853,7 +24853,7 @@ async function mcRefresh(){
   if(d && d.diaries) state.mcDiaries = d.diaries;
   if(l && l.letters) state.mcLetters = l.letters;
   // 顺手把他写过的补进防重清单：这个改动之前的历史也得算数
-  try{ mcRecentSeed(state.mcNotes, state.mcDiaries); }catch(e){}
+  try{ mcRecentSeed(state.mcNotes, state.mcDiaries, state.mcLetters); }catch(e){}
 }
 async function mcSendNote(){
   const text = (state.mcNoteDraft||"").trim();
@@ -38551,7 +38551,7 @@ function mcRecentPush(kind, title, content){
   try{ persist("mcRecent"); }catch(e){}
 }
 /** 从 VPS 拉回来的列表里补进清单 —— 这个改动之前写的那些，也得算数 */
-function mcRecentSeed(notes, diaries){
+function mcRecentSeed(notes, diaries, letters){
   const list = mcRecentEnsure();
   const seen = new Set(list.map(r=> mcNorm(r.c)));
   const add = (kind, arr, pick)=>{
@@ -38560,11 +38560,12 @@ function mcRecentSeed(notes, diaries){
       const key = mcNorm(c);
       if(!c || seen.has(key)) return;
       seen.add(key);
-      list.push({ k:kind, t:String(r.title||"").slice(0,20), c, at: Date.parse(r.date||"") || 0 });
+      list.push({ k:kind, t:String(r.title||"").slice(0,20), c, at: Date.parse(r.date||r.scheduledAt||r.deliveredAt||"") || 0 });
     });
   };
   add("note", notes, r=> r.content);
   add("diary", diaries, r=> r.content);
+  add("letter", letters, r=> r.content);
   list.sort((a,b)=> (b.at||0) - (a.at||0));
   state.mcRecent = list.slice(0, 12);
   try{ persist("mcRecent"); }catch(e){}
