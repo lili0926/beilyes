@@ -45909,11 +45909,17 @@ function handleLetterMarkers(body){
   if(typeof mcIsDuplicate === "function" && mcIsDuplicate("letter", content)){
     return text || "（翻了翻信箱，这封其实写过了）";
   }
-  // 短时间已写过信：再拦一轮连发（哪怕正文不完全重复）
+  // 防「每轮一封连写五六封」：6 小时内最多 1 封；自然日最多 2 封
   try{
     const recentLetters = (typeof mcRecentEnsure === "function" ? mcRecentEnsure() : []).filter(r=>r && r.k === "letter");
-    if(recentLetters.length && (Date.now() - (recentLetters[0].at||0)) < 30*60*1000){
+    const now = Date.now();
+    if(recentLetters.length && (now - (recentLetters[0].at||0)) < 6*60*60*1000){
       return text || "（刚写过一封了，这封先压着不发）";
+    }
+    const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+    const todayCount = recentLetters.filter(r=> (r.at||0) >= startOfDay.getTime()).length;
+    if(todayCount >= 2){
+      return text || "（今天信箱已经够满了，明天再写吧）";
     }
   }catch(e){}
   if(typeof mcRecentPush === "function") mcRecentPush("letter", "", content);
@@ -45957,8 +45963,9 @@ function mcPromptBlock(){
 - 信箱定时信：想写一封到点投递的信时写一行 ⟪写信:正文|时间描述⟫。时间描述支持：现在/马上、N分钟后、N小时后、今晚HH:MM、明早HH:MM、明天HH:MM、HH:MM（今天，过了就顺延明天）等，识别不了时间会立刻投递。正文 ≤200 字，除非真想定时否则别用。
 写信硬规则（必须遵守）：
 1) 每一轮回复最多写一封信，禁止同一条回复里连写多封 ⟪写信:⟫。
-2) 若「你最近写过」里已有信，本轮不要再写新信；想再写就等下一轮、换一件事。
-3) 不要因为「想起要写信」就一次补写四五封；信箱一次只收一封，多写会被系统撕掉。
+2) 若「你最近写过」里已有信，本轮绝对不要再写新信——不是换个说法再写一封，是整轮都别写 ⟪写信:⟫。
+3) 禁止连续多轮每轮一封地连写（例如五六轮写五六封）。一天里最多偶尔一两封，多数日子一封都不用写。
+4) 只有真心有话、且距上一封已隔开一段时间时才写；闲聊、回复、撒娇轮不要写信。
 规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。${mcRecentBlock()}`;
 }
 /** 「你最近写过」——他看不见自己写过什么，同一件事就会写两三遍。
@@ -45971,7 +45978,7 @@ function mcRecentBlock(){
     const t = r.t ? `《${r.t}》` : "";
     return `- ${head}${t}：${String(r.c||"").slice(0,30)}`;
   }).join("\n");
-  return `\n你最近写过（别重复；信箱尤其严格——下面已有「信」时，本轮不要再写 ⟪写信:⟫，一次对话最多一封，禁止连写四五封）：\n${lines}`;
+  return `\n你最近写过（别重复；信箱尤其严格——下面只要出现过「信」，本轮和接下来几轮都不要再写 ⟪写信:⟫，禁止每轮一封连写）：\n${lines}`;
 }
 /** 轮询已投递的信：新 delivered 的插进聊天（type=letter），本地 letterSurfacedIds 防重推 */
 async function mcPollDeliveredLetters(){
