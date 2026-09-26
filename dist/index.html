@@ -45891,22 +45891,42 @@ async function mcUnlockDiariesByHints(hints){
 function handleLetterMarkers(body){
   let text = String(body||"");
   if(!text) return text;
-  const m = text.match(/[⟪《【\[]\s*写信\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/);
-  if(!m) return text;
+  const reAll = /[⟪《【\[]\s*写信\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/g;
+  const matches = [];
+  let mm;
+  while((mm = reAll.exec(text)) !== null){ matches.push(mm[1]||""); }
+  if(!matches.length) return text;
+  // 擦掉本轮全部写信暗号（防一次塞五六封进正文）
   text = text.replace(/[⟪《【\[]\s*写信\s*[:：][^⟫》】\]]+[⟫》】\]]/g, "").replace(/\n{3,}/g,"\n\n").trim();
-  const raw = (m[1]||"").trim();
+  // 每轮只落库第一封；其余直接丢弃
+  const raw = String(matches[0]||"").trim();
   const bar = raw.indexOf("|");
   let content = raw, hint = "";
   if(bar >= 0){ content = raw.slice(0,bar).trim(); hint = raw.slice(bar+1).trim(); }
-  if(!content) return text || "（投了一封信到信箱）";
+  content = String(content||"").slice(0,600);
+  if(!content) return text || (matches.length > 1 ? "（信太多了，这轮只留一封，但正文是空的）" : "（投了一封信到信箱）");
+  if(typeof mcIsDuplicate === "function" && mcIsDuplicate("letter", content)){
+    return text || "（翻了翻信箱，这封其实写过了）";
+  }
+  // 短时间已写过信：再拦一轮连发（哪怕正文不完全重复）
+  try{
+    const recentLetters = (typeof mcRecentEnsure === "function" ? mcRecentEnsure() : []).filter(r=>r && r.k === "letter");
+    if(recentLetters.length && (Date.now() - (recentLetters[0].at||0)) < 30*60*1000){
+      return text || "（刚写过一封了，这封先压着不发）";
+    }
+  }catch(e){}
+  if(typeof mcRecentPush === "function") mcRecentPush("letter", "", content);
   const p = parseScheduleHint(hint);
   const scheduledAt = (p && p.ok) ? new Date(p.ts).toISOString() : new Date().toISOString();
-  mcPost("/letter", { content: content.slice(0,600), scheduledAt, author:"ai" }).then(rec=>{
+  mcPost("/letter", { content, scheduledAt, author:"ai" }).then(rec=>{
     if(rec && rec.letter && rec.letter.status === "delivered"){
       mcPushCard("letter", rec.letter, { content, snap:{ body:content, author:"ai", scheduledAt, deliveredAt: rec.letter.deliveredAt } });
     }
     // pending：到点由投递轮询 surfacing 进聊天
   });
+  if(matches.length > 1){
+    return text || "（信箱一次只收一封，多写的那几封我帮你撕掉了）";
+  }
   return text || "（投了一封信到信箱，到点送达）";
 }
 /** 系统提示词：教 AI 写小纸条/机日记/信（无条件注入，照 albumBlock 风格） */
@@ -45934,19 +45954,23 @@ function mcPromptBlock(){
 - 机日记：由你代写今天发生的事或你的心里话，写进「机日记」（你的专属日记，TA 不能写）。写一行 ⟪写日记:标题|正文⟫（对你可见）；只写给你自己的私密日记用 ⟪写日记(仅自己):标题|正文⟫。正文 ≤300 字，标题 ≤20 字可省标题只写正文。
 - 开锁：写过的「仅自己」私密日记，哪天愿意给她看了，写一行 ⟪日记解锁:标题或正文里的一个词⟫，那篇就从上锁变成她能点开的。不写关键词就默认开还锁着的最近一篇。真心想给她看时才用。
 - 信箱定时信：想写一封到点投递的信时写一行 ⟪写信:正文|时间描述⟫。时间描述支持：现在/马上、N分钟后、N小时后、今晚HH:MM、明早HH:MM、明天HH:MM、HH:MM（今天，过了就顺延明天）等，识别不了时间会立刻投递。正文 ≤200 字，除非真想定时否则别用。
+写信硬规则（必须遵守）：
+1) 每一轮回复最多写一封信，禁止同一条回复里连写多封 ⟪写信:⟫。
+2) 若「你最近写过」里已有信，本轮不要再写新信；想再写就等下一轮、换一件事。
+3) 不要因为「想起要写信」就一次补写四五封；信箱一次只收一封，多写会被系统撕掉。
 规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。${mcRecentBlock()}`;
 }
 /** 「你最近写过」——他看不见自己写过什么，同一件事就会写两三遍。
  *  只给 6 条 × 30 字，是常驻块，别撑大（每轮都要进上下文）。 */
 function mcRecentBlock(){
-  const list = mcRecentEnsure().slice(0, 6);
+  const list = mcRecentEnsure().slice(0, 8);
   if(!list.length) return "";
   const lines = list.map(r=>{
-    const head = r.k === "diary" ? "日记" : "纸条";
+    const head = r.k === "diary" ? "日记" : (r.k === "letter" ? "信" : "纸条");
     const t = r.t ? `《${r.t}》` : "";
     return `- ${head}${t}：${String(r.c||"").slice(0,30)}`;
   }).join("\n");
-  return `\n你最近写过（别重复，同一件事写过就别再写第二遍；想写的和下面某条撞了就换一件事，或者干脆不写）：\n${lines}`;
+  return `\n你最近写过（别重复；信箱尤其严格——下面已有「信」时，本轮不要再写 ⟪写信:⟫，一次对话最多一封，禁止连写四五封）：\n${lines}`;
 }
 /** 轮询已投递的信：新 delivered 的插进聊天（type=letter），本地 letterSurfacedIds 防重推 */
 async function mcPollDeliveredLetters(){
