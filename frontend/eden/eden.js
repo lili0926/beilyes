@@ -15,7 +15,7 @@ const EdenTheme = (() => {
     const slot=typeof angelIconSlots==='undefined'?null:angelIconSlots[key];
     if(!slot || !slot.crop) return '<span class="eden-symbol" aria-hidden="true">✧</span>';
     const c=slot.crop;
-    return `<span class="eden-icon ${size}" aria-hidden="true" data-eden-icon="${h(key)}" style="--eden-atlas:url('eden/angel-atlas-${slot.sheet}.png');--ex:${c.x}%;--ey:${c.y}%;--ew:${c.w}%;--eh:${c.h}%;--ebw:${c.bw}%;--ebh:${c.bh}%"><span></span></span>`;
+    return `<span class="eden-icon ${size}" aria-hidden="true" data-eden-icon="${h(key)}" style="--eden-atlas:url('angel-atlas-${slot.sheet}.png');--ex:${c.x}%;--ey:${c.y}%;--ew:${c.w}%;--eh:${c.h}%;--ebw:${c.bw}%;--ebh:${c.bh}%"><span></span></span>`;
   }
   function allFeatures(){ return FEAT_GROUPS.flatMap(group=>group.items); }
   function feature(key,label){

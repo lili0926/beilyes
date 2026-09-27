@@ -36,6 +36,14 @@ test('every icon has measured bounds and a packaged local asset',()=>{
  const {context}=setup();const slots=vm.runInContext('angelIconSlots',context);assert.equal(Object.keys(slots).length,59);
  for(const [key,slot]of Object.entries(slots)){assert.ok(slot.crop,key);for(const n of Object.values(slot.crop))assert.ok(Number.isFinite(n),key);assert.ok(fs.existsSync(path.join(front,'eden',`angel-atlas-${slot.sheet}.png`)));}
 });
+test('CSS atlas URLs resolve relative to the packaged stylesheet directory',()=>{
+ const {theme,context}=setup();const slots=vm.runInContext('angelIconSlots',context);
+ for(const key of Object.keys(slots)){
+  const relative=theme.icon(key).match(/url\('([^']+)'\)/)[1];
+  const resolved=new URL(relative,'https://example.test/eden/eden.css');
+  assert.equal(resolved.pathname,`/eden/angel-atlas-${slots[key].sheet}.png`);
+ }
+});
 test('the shell reuses native theme persistence and leaves send/storage implementations intact',()=>{
  assert.ok(core.includes('data-ui-shell="eden"'));assert.ok(core.includes('edenMotionPaused:"edenMotionPaused"'));
  assert.ok(core.includes('if(state.uiShell==="eden") return EdenTheme.renderHome();'));
