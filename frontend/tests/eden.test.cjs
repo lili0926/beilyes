@@ -12,10 +12,12 @@ function setup(){
  for(const name of ['angel-icon-bounds.js','angel-icons.js','eden.js'])vm.runInContext(fs.readFileSync(path.join(front,'eden',name),'utf8'),context);
  return {context,state,calls,listeners,theme:vm.runInContext('EdenTheme',context)};
 }
-test('all existing routes remain reachable from the real feature registry',()=>{
+test('the requested seven entries are hidden while remaining real routes stay reachable',()=>{
  const {theme,context}=setup();const html=theme.results();const catalog=vm.runInContext('FEAT_GROUPS.flatMap(g=>g.items)',context);
  assert.equal(catalog.length,54);
- for(const f of catalog){assert.ok(html.includes('data-sub="'+f.key+'"'),f.key);assert.ok(html.includes('data-eden-icon="'+f.key+'"'),f.key);}
+ const hidden=new Set(['workshop','branding','usage','diary','duty','cooking','ntfy']);
+ for(const f of catalog){assert.equal(html.includes('data-sub="'+f.key+'"'),!hidden.has(f.key),f.key);}
+ assert.ok(html.includes('47 个入口'));assert.ok(html.includes('>日记</span>'));assert.ok(!html.includes('机日记'));
  assert.ok(!html.includes('data-feature='),'prototype routes must not enter the real app');
  vm.runInContext('FEAT_GROUPS[0].items.push({key:"future",label:"Future"})',context);
  assert.ok(theme.results().includes('data-sub="future"'));

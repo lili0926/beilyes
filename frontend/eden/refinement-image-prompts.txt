@@ -1,0 +1,25 @@
+cupid-splash.png
+Reference: none
+Use case: stylized-concept.
+Asset type: original full-bleed portrait 1024x1536 app splash background, no UI.
+Create a sophisticated dreamy maximalist sacred angel garden in pale ivory and white, pearl, intricately sculpted lace, faint blush roses and luminous mist-blue dawn. In the CENTER stands a SMALL CLASSICAL WHITE MARBLE CUPID STATUE on an ornate ivory pedestal, full statue visible head to foot, finely carved stone cherub wings and a classical bow. This is an unmistakable inanimate classical marble garden sculpture, tasteful draped fabric around hips, no cartoon styling. Frame it with lacy white rose arches and luminous cathedral garden architecture, delicate pearl garlands and carved tracery. Soft dawn halo backlight behind statue, still reflective pool and scattered pale rose petals in foreground. Balanced frontal composition, airy open center surrounding the statue, lush ornate detail toward perimeter. Ethereal believable sculptural materials and refined flowers, subtle nacre illumination. Statue at x50%, roughly middle vertical area, small enough for the grandeur of garden to remain visible. Calm romantic sanctuary rather than dark drama.
+NO words, lettering, symbols resembling an app logo, UI, clock, labels, mockup device, collage panels or watermarks. One uninterrupted wallpaper. Keep realistic sophisticated art, not cartoon.
+
+music-garden.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/a9d07dd38c4f183c64208ef0cef7e965.jpg
+Use case: stylized-concept.
+Asset type: original full-bleed portrait1024x1536 background for a shared music listening page.
+Reference image is STYLE REFERENCE ONLY, especially the ornate pearly oval and luminous garden on its center panel. Do not reproduce the page layout, brand, music controls, labels, text, song artwork, avatars, UI or phone mockup.
+Create a dreamy maximalist pale ivory/white angel garden with pearl, sculpted fine lace, faint blush and mist-blue, refined realistic sculptural rendering, no cartoon. In the UPPER THIRD place one empty central OVAL ivory and pearl ornamental frame with symmetrical delicate carved feather WINGS and white roses. Frame is centered x50%, y23%; entire ornament remains within upper40% of image. Within the frame show only tranquil blue mist and distant fairy cathedral architecture, no portrait, no song art, no disc. White rose/vine/lace borders down far left and right, beautiful corner embellishments.
+CRITICAL: the central/lower60% is a LIGHT SPACIOUS nearly uniform soft ivory translucent mist surface intended for real music player and playlist UI overlaid in code. Keep x15%..85%, y40%..93% almost empty and readable, low detail and no strong lines; garden detail only at outer edges. Soft pearl dawn light, airy sacred garden atmosphere, subtle hand-carved detail.
+Absolutely NO controls, play button, musical notes, text, words, avatar, person, UI, clock, clock hands, album grid, labels, logos or watermark. One continuous background, not collage.
+
+call-garden.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/27fbff847e841c6769a53be2fe3f8cf7.jpg
+Use case: stylized-concept.
+Asset type: original full-bleed portrait1024x1536 dreamlike CALL wallpaper.
+Reference image is STYLE REFERENCE ONLY: draw inspiration from the TELEPHONE section's pale arched chapel garden and lavender-blue sky, but do not reproduce its interface, portraits, text, controls, labels, panels or phone mockup.
+Create an ethereal sophisticated pale ivory/white cathedral angel garden, pearls, delicate sculpted lace, faint blush flowers and mist-blue/lavender sky. Tall arched white chapel window frames a softly luminous sky and distant white castle. Delicate pearl vines and white flowers line far left and right edges. In the UPPER THIRD place one ornamental pale pearl HALO/RING with subtle feather accents centered x50%, y24% suitable for a future avatar overlay. Ring center is empty sky, no person and no portrait. Ring occupies approximately30% of image width.
+Broad calm center and lower area for live captions and call controls rendered later: x16%..84%, y40%..92% should remain low-detail pale lavender-blue/ivory mist with softly blurred distant architecture, no strong foreground shapes. Keep castle detail subtle and distant, primarily behind upper ring or toward far sides. Luminous airy dawn, elegant realistic mother-of-pearl and carved white stone materials, not cartoon.
+NO words, UI, person, avatar, face, hands, clock, clock face, controls, phone icons, text, numbers, logos, watermarks, divided panels or collage. One uninterrupted wallpaper.
+

@@ -2818,8 +2818,10 @@ const state = {
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
   uiFont: LS.get("uiFont", ""), // "" | nail | angel | kitten
-  uiShell: LS.get("uiShell", "classic") || "classic",
-  edenMotionPaused: LS.get("edenMotionPaused", false), // classic | pixel | eldritch | claude | korean | blueprint
+  uiShell: ["korean","weibo"].includes(LS.get("uiShell", "classic")) ? "eden" : (LS.get("uiShell", "classic") || "classic"),
+  edenPlaylists: LS.get("edenPlaylists", []),
+  edenMotionPaused: LS.get("edenMotionPaused", false),
+  edenGardenPrefs: LS.get("edenGardenPrefs",{}), // classic | pixel | eldritch | claude | korean | blueprint
   bpFloor: "f1", // 蓝晒壳当前楼层（不持久化：冷启动回一层，会话内切走再回来还在原楼层）
   bpDiazo: LS.get("bpDiazo", false), // 蓝晒壳晒印：false=蓝晒（蓝底白线）· true=白图（浅底蓝线）
   bpIdxOpen: false, // 蓝晒壳图纸目录展开着没有（不持久化，跟 bpFloor 一样只活一次会话）
@@ -5105,7 +5107,7 @@ ${replyFormatRules()}`;
     //   ② 她**明说**要点歌 —— 这些词不会误伤，不像「听」那样满地都是
     const askedMusic = __featHot("点歌","放首","来首","歌单","放首歌","推荐首歌","切歌","换首");
     // 暂停不再吊着点歌块（原来 state.musicNow 一直真）；在播 或 她明说要点歌 才给
-    const pickBlock = (canPick && (playingNow || askedMusic))
+    const pickBlock = (playingNow || askedMusic)
       ? `\n\n【点歌 —— 你可以直接把歌发给她】
 想让她听某首歌时，在正式回复里写一行暗号：
 ⟪点歌:歌名 - 歌手⟫
@@ -5114,7 +5116,7 @@ ${replyFormatRules()}`;
 - **一条回复里可以发好几首**，一首写一行暗号，不限一首。
 - 想一次给她一整串歌，用歌单（最多 12 首）：
 ⟪歌单:歌单名|歌名1 - 歌手|歌名2 - 歌手|歌名3 - 歌手⟫
-  会变成一张歌单卡：她可以逐首点，也可以「全部播放」连着听。
+  会自动保存到一起听的「我们的歌单」，也会变成可逐首或全部播放的聊天歌单卡。
   歌单名起得有意思一点（比如「凌晨三点还醒着」），别叫「推荐歌单」。
 - 想到什么发什么，别刷屏；她没在聊音乐时也可以偶尔塞一首。`
       : "";
@@ -5381,7 +5383,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -5720,7 +5722,7 @@ function render(){
   let html="";
   if(state.subPage){ html+=renderSubPage(); }
   else if(state.tab==="home") html+=renderHomeSwipe();
-  else if(state.tab==="chat") html+=renderChat();
+  else if(state.tab==="chat") { const chatHtml=renderChat();html+=EdenMusic.roomActive()?EdenMusic.room(chatHtml):chatHtml; }
   else if(state.tab==="moments") html+=renderMoments();
   else if(state.tab==="settings") html+=renderSettings();
   html+=renderBottomNav();
@@ -5783,6 +5785,7 @@ function render(){
   catch(err){ console.error("[bindEvents]", err); try{ bindCoreNav(); }catch(e2){ console.error(e2); } }
   finally{ __domIdx = null; } // 索引出了这一段就作废，绝不让后面的代码查到过期的 DOM
   EdenTheme.afterRender();
+  EdenMusic.afterRender();
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
     const fel = document.getElementById(savedFocus.id);
@@ -6734,6 +6737,7 @@ function renderMoments(){
     }).join("");
   }
 
+  if(state.uiShell==="eden") return EdenTheme.renderMoments(composer,feed,scope);
   return `<div class="page mo-page wx-moments">
     <div class="wx-tabs">
       <button type="button" class="wx-tab${scope==="public"?" active":""}" data-mo-scope="public">公共朋友圈</button>
@@ -10885,37 +10889,32 @@ function musicHeaders(){
   }
   return h;
 }
-async function musicFetch(path, opts={}){
-  const base = musicBase();
-  if(!base) throw new Error("请先填写一起听 API 地址（VPS 或 Duetto）");
-  let url = base + path;
-  // Duetto 允许 token 走 query（部分 WebView 丢 Authorization）
-  if(musicBackend() === "duetto" && state.musicConfig.token && !/[?&]token=/.test(url)){
-    url += (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(state.musicConfig.token);
+let musicAuthRefresh = null;
+async function musicFetch(path, opts={}, retried=false){
+  const base=musicBase();
+  if(!base) throw new Error("请先填写一起听 API 地址");
+  const token=state.musicConfig.token;
+  let url=base+path;
+  if(musicBackend()==="duetto" && token && !/[?&]token=/.test(url)) url+=(url.includes("?")?"&":"?")+"token="+encodeURIComponent(token);
+  const headers={...musicHeaders(),...(opts.headers||{})};
+  if(opts.body!=null) headers["Content-Type"]=headers["Content-Type"]||"application/json";
+  const res=await fetch(url,{...opts,headers});
+  if(res.status===401 && !retried && musicBackend()==="duetto" && state.musicConfig.duettoPin){
+    if(token===state.musicConfig.token){
+      if(!musicAuthRefresh) musicAuthRefresh=musicDuettoLoginWithPin().finally(()=>{musicAuthRefresh=null;});
+      await musicAuthRefresh;
+    }
+    return musicFetch(path,opts,true);
   }
-  const method = (opts.method || "GET").toUpperCase();
-  const headers = { ...musicHeaders(), ...(opts.headers||{}) };
-  if(method !== "GET" && method !== "HEAD" && opts.body != null){
-    headers["Content-Type"] = headers["Content-Type"] || "application/json";
-  }
-  const res = await fetch(url, { ...opts, headers });
   if(!res.ok){
-    let err = "";
-    try{
-      const j = await res.json();
-      err = j.error || j.message || JSON.stringify(j);
-    }catch{
-      err = await res.text().catch(()=>"");
-    }
-    if(res.status === 401){
-      throw new Error("未授权（401）。Duetto 需先填 PIN 登录拿到 token；自建网关需 X-Auth-Token。");
-    }
-    throw new Error(err || ("HTTP "+res.status));
+    const raw=await res.text();let detail=raw;
+    try{const data=JSON.parse(raw);detail=data.error||data.message||raw;}catch{}
+    const err=new Error(detail || (res.status===401?"音乐服务登录已过期，请重新输入应用 PIN 登录。":"音乐服务请求失败（"+res.status+"）"));
+    err.status=res.status;throw err;
   }
-  const ct = res.headers.get("content-type")||"";
-  if(ct.includes("application/json")) return res.json();
-  return res.text();
+  return (res.headers.get("content-type")||"").includes("application/json")?res.json():res.text();
 }
+
 /** 把 Duetto / 网关的歌曲字段统一成 {id,name,artists,cover,source} */
 function normalizeSong(s, source){
   if(!s || typeof s !== "object") return null;
@@ -10958,67 +10957,31 @@ async function musicDetectBackend(){
   return "gateway";
 }
 async function musicDuettoLoginWithPin(pin){
-  const p = (pin || state.musicConfig.duettoPin || "").trim();
-  if(!p) throw new Error("请填写 Duetto 应用 PIN");
-  const base = musicBase();
-  if(!base) throw new Error("请先填写 Duetto 地址");
-  // 若未 setup 过，尝试 setup；已配置则 login
-  let data = null;
-  try{
-    const st = await fetch(base + "/api/auth/status").then(r=>r.json());
-    if(st && st.configured === false){
-      const res = await fetch(base + "/api/auth/setup", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ pin: p }),
-      });
-      data = await res.json();
-      if(!res.ok) throw new Error(data.error || "设置 PIN 失败");
-    } else {
-      const res = await fetch(base + "/api/auth/login", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ pin: p }),
-      });
-      data = await res.json();
-      if(!res.ok) throw new Error(data.error || "PIN 登录失败");
-    }
-  }catch(e){
-    if(e.message && e.message.includes("PIN")) throw e;
-    // 回退直接 login
-    const res = await fetch(base + "/api/auth/login", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ pin: p }),
-    });
-    data = await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.error || e.message || "PIN 登录失败");
-  }
-  if(!data || !data.token) throw new Error("未返回 token");
-  state.musicConfig.token = data.token;
-  state.musicConfig.duettoPin = p;
-  state.musicConfig.backend = "duetto";
-  persist("musicConfig");
-  state._musicBackendResolved = "duetto";
-  return data.token;
+  const p=String(pin||state.musicConfig.duettoPin||"").trim();
+  if(!p) throw new Error("请填写 Duetto 应用 PIN（不是网易云密码）");
+  const base=musicBase();if(!base)throw new Error("请先填写 Duetto 地址");
+  let endpoint="/api/auth/login";
+  const status=await fetch(base+"/api/auth/status");
+  if(status.ok){const st=await status.json();if(st.configured===false)endpoint="/api/auth/setup";}
+  else if(status.status!==404){const error=new Error("无法检查音乐服务登录状态（"+status.status+"），请稍后重试");error.status=status.status;throw error;}
+  const res=await fetch(base+endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:p})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){const error=new Error(data.error||data.message||"应用 PIN 登录失败，请检查音乐服务的 PIN");error.status=res.status;throw error;}
+  if(!data.token)throw new Error("音乐服务未返回登录凭证");
+  state.musicConfig.token=data.token;state.musicConfig.duettoPin=p;state.musicConfig.backend="duetto";
+  state._musicBackendResolved="duetto";persist("musicConfig");return data.token;
 }
-
-/** Duetto 门禁：当前 token 有效则直接返回；无效则用已保存/刚输入的 PIN 自动 setup/login。 */
+function musicCapturePin(){
+  const typed=document.getElementById("music-duetto-pin")?.value?.trim();
+  if(typed){state.musicConfig.duettoPin=typed;persist("musicConfig");}
+}
 async function musicDuettoEnsureAuthed(){
-  try{
-    const st = await musicFetch("/api/ncm/status");
-    if(st && st.ok) return true; // 门禁 token 有效
-  }catch(e){ /* 401 / 网络异常 → 走下面的 PIN 登录 */ }
-  // 用户可能已在 PIN 输入框填了值但没点「登录门禁」，先同步进配置
-  const pinInput = document.getElementById("music-duetto-pin");
-  const typed = pinInput && pinInput.value ? String(pinInput.value).trim() : "";
-  if(typed && typed !== (state.musicConfig.duettoPin || "")){
-    state.musicConfig.duettoPin = typed;
-    persist("musicConfig");
-  }
-  const pin = (state.musicConfig.duettoPin || "").trim();
-  if(!pin){
-    throw new Error("Duetto 需要 PIN 门禁：请在下方或「一起听」设置里填一个 Duetto 应用 PIN（≥4位），首次会自动完成 setup，然后就能生成网易二维码了。");
-  }
-  await musicDuettoLoginWithPin(pin);
-  return true;
+  musicCapturePin();
+  try{await musicFetch("/api/ncm/status");return true;}
+  catch(error){if(error.status!==401)throw error;}
+  // musicFetch already attempted the saved PIN once; do not loop on a rejected PIN.
+  if(state.musicConfig.duettoPin)throw new Error("音乐登录仍未通过，请确认应用 PIN 和服务地址");
+  throw new Error("请填写 Duetto 应用 PIN，再登录音乐服务");
 }
 
 function ensureAudio(){
@@ -11196,8 +11159,10 @@ function renderMusic(){
     : [["search","搜索"]];
   const settingsOpen = !!state.musicSettingsOpen;
 
+  if(state.uiShell==="eden") return EdenMusic.page({authBlock,contentHtml,navs,nowBlock,src,settingsOpen});
   return `<div class="page nm">
     ${subHeader('<i data-lucide="music"></i> 一起听')}
+    ${state.uiShell==="eden"&&!now?'<section class="nm-hero"><p>Music is always with you.</p><small>音乐，永远与你同在。</small></section>':""}
 
     <div class="nm-nav">
       ${navs.map(([k,label])=>`<button type="button" class="nm-tab${state.musicBrowse===k?" on":""}" data-music-browse="${k}">${label}</button>`).join("")}
@@ -11500,6 +11465,7 @@ function musicNormalizeQrImg(img){
 }
 
 async function musicStartNeteaseQr(){
+  musicCapturePin();
   state.musicError = "";
   state.musicQr.status = "waiting";
   state.musicQr.img = "";
@@ -16831,6 +16797,7 @@ function handlePlaylistMarkers(body){
   if(text.indexOf("歌单") < 0) return text;
   return text.replace(/[⟪《【]\s*歌单\s*[:：]\s*([^⟫》】]+?)\s*[⟫》】]/g, (_, q)=>{
     const raw = String(q).trim().slice(0, 400);
+    if(raw) EdenMusic.remember(raw);
     return raw ? `[playlist:${raw}]` : "";
   });
 }
@@ -19642,7 +19609,7 @@ function renderPhone(){
           <div class="call-av">${callAvatarHtml()}</div>
         </div>
         <div class="call-name">${esc(callPartnerName())}</div>
-        <div class="call-sub">${cfg.dnd?"勿扰已开 · 不会响铃":"文字通话 · 风格参考 Callhome"}</div>
+        <div class="call-sub">${cfg.dnd?"勿扰已开 · 不会响铃":"有些声音，值得被认真听见"}</div>
       </div>
       <div style="padding:16px 20px">
         <button class="btn-accent" id="call-start-out" style="width:100%;padding:14px;margin-bottom:10px">拨给 ${esc(callPartnerName())}</button>
@@ -19668,7 +19635,7 @@ function renderPhone(){
             ).join("")}</div>`:""}
           </div>`;
         }).join("") : `<div class="empty-state">还没有通话记录</div>`}
-        <div class="feat-section-label"><i data-lucide="volume-2"></i> 语音合成（TTS）</div>
+        <details class="call-settings"><summary>声音与通话设置</summary><div class="feat-section-label">语音合成（TTS）</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span class="setting-label">通话时播放 TA 的声音</span>
@@ -19773,6 +19740,7 @@ function renderPhone(){
           <span class="setting-label" style="margin-top:8px">Token</span>
           <input type="password" id="call-token" value="${escAttr(cfg.token||"")}" placeholder="X-Auth-Token"/>
         </div>
+</details>
       </div>
     `;
   }
@@ -23620,6 +23588,7 @@ function renderChatSidebar(){
         <button type="button" class="sb-close" id="chat-sidebar-close" aria-label="关闭">✕</button>
       </div>
       <div class="chat-sidebar-body">
+        ${state.uiShell==="eden" ? EdenGarden.controls() : ""}
         ${sbContactsCard()}
         <div class="sb-card">
           <div class="sb-card-label">时间</div>
@@ -23679,22 +23648,7 @@ function renderChatSidebar(){
           </div>
           <i data-lucide="chevron-right" style="opacity:.45"></i>
         </button>
-        <div class="sb-quota-wrap">
-          <div class="sb-section-title" style="display:flex;align-items:center;justify-content:space-between"><span>额度</span><button type="button" class="btn-ghost" id="sb-quota-refresh" style="padding:4px 10px;font-size:11px">刷新</button></div>
-          <div class="sb-card">
-            <div class="sb-quota-row">
-              <div class="sb-quota-head">5 小时窗口 <span>${esc(q5Text)}</span></div>
-              <div class="sb-quota-bar"><div class="sb-quota-fill" style="width:${p5==null?0:p5}%"></div></div>
-              <div style="font-size:10px;color:var(--sub);margin-top:3px">${esc(sbFmtReset(q5.resetAt))}</div>
-            </div>
-            <div class="sb-quota-row">
-              <div class="sb-quota-head">本周额度 <span>${esc(qwText)}</span></div>
-              <div class="sb-quota-bar"><div class="sb-quota-fill" style="width:${pw==null?0:pw}%"></div></div>
-              <div style="font-size:10px;color:var(--sub);margin-top:3px">${esc(sbFmtReset(qw.resetAt))}</div>
-            </div>
-            <div class="sb-quota-hint">${state.__quotaErr ? esc("⚠ "+state.__quotaErr) : "订阅用量，来自官方接口（经 VPS hub 代理）。"}</div>
-          </div>
-        </div>
+
       </div>
     </aside>
   `;
@@ -24919,7 +24873,7 @@ function mcDetailOverlay(type, rec){
   const anns = (rec && rec.annotations) || [];
   const restricted = mcIsRestricted(type, rec);
   const head = type==="note" ? "小纸条"
-    : type==="diary" ? "机日记"
+    : type==="diary" ? (state.uiShell==="eden"?"日记":"机日记")
     : "信";
   const body = rec ? (
     type==="diary"
@@ -25021,7 +24975,7 @@ function renderNotes(){
 function renderMachineDiary(){
   const all = state.mcDiaries || [];
   const detail = (state.mcDetail && state.mcDetail.type === "diary") ? mcFindDetail("diary", state.mcDetail.id) : null;
-  let h = `<div class="page">${subHeader('<i data-lucide="pen-tool"></i> 机日记')}<div class="sub-page-body">`;
+  let h = `<div class="page">${subHeader('<i data-lucide="pen-tool"></i> '+(state.uiShell==="eden"?"日记":"机日记"))}<div class="sub-page-body">`;
   if(!all.length){
     h += `<div class="empty-state"><div class="empty-emoji"><i data-lucide="pen-tool"></i></div>TA 还没有写日记<br><span style="font-size:11px;opacity:0.7">这是 TA 的专属日记，只有 TA 能写</span></div>`;
   } else {
@@ -25369,6 +25323,12 @@ function applyBrandingToDom(){
     if(tg) tg.textContent = tag;
     // 开屏背景图
     const splash = document.getElementById("splash-screen");
+    if(splash){
+      splash.classList.add("eden-cupid-splash");
+      if(st)st.textContent="花园为你醒来";
+      if(ss)ss.textContent="让每一次相逢，都被温柔珍藏";
+      if(tg)tg.textContent="轻触 · 进入花园";
+    }
     if(splash && sp && sp.image){
       splash.style.backgroundImage = `linear-gradient(180deg,rgba(253,246,242,0.55),rgba(245,228,219,0.75)),url(${sp.image})`;
       splash.style.backgroundSize = "cover";
@@ -25779,9 +25739,7 @@ function renderTheme(){
         <button type="button" class="sw-chip${state.uiShell==="pixel"?" on":""}" data-ui-shell="pixel">像素</button>
         <button type="button" class="sw-chip${state.uiShell==="eldritch"?" on":""}" data-ui-shell="eldritch">深渊</button>
         <button type="button" class="sw-chip${state.uiShell==="claude"?" on":""}" data-ui-shell="claude">Claude</button>
-        <button type="button" class="sw-chip${state.uiShell==="korean"?" on":""}" data-ui-shell="korean">韩系</button>
         <button type="button" class="sw-chip${state.uiShell==="blueprint"?" on":""}" data-ui-shell="blueprint">蓝晒</button>
-        <button type="button" class="sw-chip${state.uiShell==="weibo"?" on":""}" data-ui-shell="weibo">微博</button>
         <button type="button" class="sw-chip${state.uiShell==="eden"?" on":""}" data-ui-shell="eden">伊甸天使</button>
       </div>
       ${state.uiShell==="blueprint"?`
@@ -37917,8 +37875,6 @@ render();
 try{ applyBrandingToDom(); }catch(e){}
 // 打开 App 触发一次记忆自动沉淀（有登录态时会检查积攒的聊天）
 setTimeout(()=>{ if(typeof memAutoIntegrate==="function") memAutoIntegrate(); }, 6000);
-// 启动时预取一次 Claude 订阅额度（侧栏展示用，失败静默）
-setTimeout(()=>{ if(typeof __fetchClaudeQuota==="function") __fetchClaudeQuota().then(()=>{ try{ render(); }catch(e){} }); }, 8000);
 setTimeout(()=>{ if(typeof compressThreadIfNeeded==="function") compressThreadIfNeeded(); }, 9000);
 
 // 切到后台 / 关闭前强制落盘聊天（APK 很常见）

@@ -1,0 +1,45 @@
+cathedral-clock-background.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/6c3706d80cc692717a2b306d53054b6b.jpg
+Transparent background: false
+Use case: stylized-concept. Asset type: original portrait 2:3 mobile wallpaper.
+The supplied image is a STYLE REFERENCE ONLY: use the dreamlike cathedral garden illustration at its left as inspiration, never reproduce the design-sheet layout, labels, panels, diagrams or writing.
+Create a single maximalist ethereal white ivory Gothic garden with intricate ivory lace, abundant white roses, strings of tiny pearls, clear crystal, pale blush satin, luminous pale blue mist, and a delicate white castle far in the distance. Frontal still architectural composition with cathedral columns and traceries, soft sunlight and luminous air.
+One large ornate ROUND pearlescent clock face, centered precisely at x50% and y40% of the entire image, with radius approximately 32% of image WIDTH (diameter64% of width). Viewed absolutely straight on, perfect circle, not ellipse. Delicate Roman numeral dial I–XII around its edge. The central disk is calm, blank, translucent, pale nacre, readable and free of decorations. ABSOLUTELY NO CLOCK HANDS, no minute hand, no hour hand, no second hand, no arrows or diagonal line crossing the center, no central spindle. A moving clock will be overlaid by code. Clock crown: winged white cross above, white roses and pearl/crystal tracery around the outside rim. Still architecture and flowers; no motion blur. Lower image opens toward misty castle and garden. Luxurious fine detail without dark contrast.
+Full-bleed wallpaper. No UI, no labels, no words, no captions, no interface, no mockup device, no layout panels, no watermarks. Roman numeral hour markers only.
+
+cathedral-ornaments.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/6c3706d80cc692717a2b306d53054b6b.jpg
+Transparent background: true
+Use case: stylized-concept. Asset type: transparent square 2x2 sprite atlas of four isolated ornaments for independent animation.
+Supplied image is STYLE REFERENCE ONLY for delicate ivory lace, pearl, crystal and pale blush silk. Do not reproduce its text, clock, UI, diagram panels or full background.
+Exactly four isolated ornaments in strict 2 columns x2 rows of equal square cells, centers at (25%,25%),(75%,25%),(25%,75%),(75%,75%). Each complete ornament must remain within central76% of its cell, with at least12% clear transparent padding on every cell edge. Wide clear transparent gutters, no overlap. Matching ethereal ivory/white/pale blush nacre styling, very fine pale gold details only where specified.
+TOP LEFT: one delicate hanging ivory lace swathe, gently draping airy embroidered lace with scalloped edge, separate complete ornament.
+TOP RIGHT: one delicate white and very pale gold cross crystal hanging pendant, slender crystal drop below and a perfectly straight vertical thin pearl chain above, all aligned on cell center.
+BOTTOM LEFT: one pearl silk ribbon bow in faint blush ivory with long loose flowing tails, whole tails inside its cell.
+BOTTOM RIGHT: one single soft pale blush-white rose petal, softly curved satin texture, clean separated silhouette, no extra petals.
+Truly transparent alpha background. No text, no grid, no labels, no decorative cell frames, no backdrop or shadow plane. These will be cropped into independent animation sprites, so all margins MUST be empty transparent.
+
+eden-envelope.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/27fbff847e841c6769a53be2fe3f8cf7.jpg
+Transparent background: true
+Use case: stylized-concept. Asset type: single original transparent envelope illustration.
+Supplied image is STYLE REFERENCE ONLY for airy ivory/blush/pearl stationery. Do not reproduce UI, text, portraits, panels or phone mockups.
+Create exactly one CLOSED FRONT-FACING horizontal cream satin-paper envelope, broad elegant rectangular shape seen perfectly straight on, triangular closed flap clearly visible. Fine handmade paper texture and nacre sheen. Ornate sculpted ivory-white roses and delicate lace confined tastefully to corners, small pearl-gold wax seal at center of flap, faint blush silk ribbon. Spacious uncluttered centered body, refined luxurious romantic cathedral garden aesthetic. Silver-white pearl details, very restrained pale gold in seal only.
+Whole envelope completely isolated with at least10% clear transparent padding on all sides, no cropping, no diagonal tilt or isometric angle, no surroundings, no background, no UI, no words, no lettering, no stamp text or watermark. Genuine alpha transparency outside envelope.
+
+eden-letter-paper.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/27fbff847e841c6769a53be2fe3f8cf7.jpg
+Transparent background: false
+Use case: stylized-concept. Asset type: original PORTRAIT 2:3 blank ivory writing stationery background.
+Supplied image is STYLE REFERENCE ONLY for delicate ivory floral stationery and cathedral tracery. No reference text or UI should appear.
+A flat front-facing blank rectangular sheet of exquisite warm ivory handmade writing paper, full-bleed portrait 2:3. Very faint fine handmade paper texture. DISCREET fine white lacy rose and cathedral-tracery corner decorations ONLY AROUND OUTER EDGES. Airy ivory, pale blush silk highlights and tiny pearl details, matching a cream satin envelope with ivory roses and pearl wax seal. Decoration is restrained, delicate and concentrated inside the outermost12% edge bands.
+Central75% of sheet must stay calm and readable: empty warm ivory, almost uniform, no flowers, no lines, no pattern, no objects, no shadows crossing it. Spacious writing area suitable for dark text later rendered by software. No words, letters, ruling, handwriting, calligraphy, UI, mockup, desk, hands, seal or folded paper. No watermarks. Single uninterrupted stationery page, not collage.
+
+eden-bubble-frame.png
+Reference: D:/HuaweiMoveData/Users/86139/Desktop/27fbff847e841c6769a53be2fe3f8cf7.jpg
+Transparent background: true
+Use case: stylized-concept. Asset type: original transparent landscape approximately3:2 single chat bubble border for CSS border-image/nine-slice.
+The supplied image is STYLE REFERENCE ONLY for airy ivory/blush/pearl chat framing. Do not copy UI, writing, avatars or entire screen.
+Create ONE elegant rounded rectangular chat bubble BORDER ONLY, fully frontal and horizontal, subtle mother-of-pearl fine edges with white floral lace concentrated at four corners. Very thin continuous straight edge segments between corner ornaments, refined tiny white rose buds, delicate ivory vines, small pearls and subtle blush highlights. Corner ornamentation contained within outer22% width and height; no ornament intrudes into the central region. Rounded corners, no long protrusions or tails, symmetric enough for nine-slice stretching. Plenty of quiet thin straight sides for stretching.
+The entire center must be TRULY EMPTY TRANSPARENT ALPHA, including the large central rectangle: no colored fill, no white fill, no translucent paper fill, no shadowed center. Also truly transparent outside the border, about5% transparent outside padding. This is an open hollow ornamental frame, not a card. No content, no words, no avatar, no UI, no mockup, no extra frames, no background.
+
