@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Assemble dist/index.html from frontend/parts/."""
 from pathlib import Path
+from shutil import copytree
 
 ROOT = Path(__file__).resolve().parents[1]
 PARTS = ROOT / "frontend" / "parts"
@@ -34,7 +35,12 @@ def main():
     text = "".join(chunks)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8")
+    # The Eden shell is packaged locally; no remote image host is required.
+    eden = ROOT / "frontend" / "eden"
+    if eden.is_dir():
+        copytree(eden, OUT.parent / "eden", dirs_exist_ok=True)
     print(f"wrote {OUT} ({len(text)} bytes) from {len(order)} parts")
 
 if __name__ == "__main__":
     main()
+
