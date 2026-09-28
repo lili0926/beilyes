@@ -20,6 +20,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.environ.get('EDEN_DATA', str(ROOT / '.local-data')))
@@ -29,6 +30,7 @@ ORIGINS = os.environ.get('EDEN_APP_ORIGINS', 'https://localhost,http://localhost
 UPSTREAM = {'duel': 'http://127.0.0.1:8911', 'bar': 'http://127.0.0.1:8912', 'listen': 'http://127.0.0.1:8913'}
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=['GET','POST','OPTIONS'], allow_headers=['Authorization','Content-Type','X-Song-Title'], allow_credentials=False)
+app.mount('/eden/app', StaticFiles(directory=ROOT/'app', html=True, check_dir=False), name='eden-app')
 analysis_lock = asyncio.Lock()
 
 def authorize(request):
