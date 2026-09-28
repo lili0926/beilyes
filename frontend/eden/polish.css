@@ -7,6 +7,27 @@ body.shell-eden .hp-nav button[data-hp-tab] {
   border:1px solid #d8cbbb;border-radius:25px;background:#fffcf3b8;
   color:#89775f;font:12px/1.2 'Songti SC',serif;white-space:nowrap;
 }
+/* A return pill above the artwork, with the page title centered below it. */
+body.shell-eden .sub-header{
+  position:relative;top:auto;z-index:3;display:flex;flex-direction:column;align-items:center;
+  gap:0;margin:-8px -20px 18px;padding:18px 22px 14px;
+  border:0!important;background:transparent!important;box-shadow:none!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+body.shell-eden .sub-header .back-btn{align-self:flex-start;min-width:92px;height:40px;box-shadow:0 2px 9px #7b674615}
+body.shell-eden .sub-header .page-title,
+body.shell-eden .sub-header .sub-title{
+  max-width:100%;margin:23px 0 0!important;text-align:center;
+  color:#756b58;font:400 clamp(23px,6vw,28px)/1.4 'Songti SC','STSong',serif;
+  letter-spacing:.16em;text-shadow:0 1px #fff,0 0 18px #fff9;
+}
+body.shell-eden .sub-header .page-title:before,
+body.shell-eden .sub-header .sub-title:before{
+  content:'✧   E D E N   ✧';display:block;margin-bottom:5px;
+  color:#938674;font:10px/1.5 Georgia,serif;letter-spacing:.22em;
+}
+body.shell-eden .sub-header .page-title svg{width:19px;height:19px;vertical-align:-2px}
+body.shell-eden .sub-header .sub-desc{margin:5px 0 0;text-align:center;color:#9b8d79;font:11px/1.5 serif}
 body.shell-eden .sub-header .back-btn:focus-visible,
 body.shell-eden .eden-echo-back button:focus-visible,
 body.shell-eden #cab-modal-close:focus-visible,

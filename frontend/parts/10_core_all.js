@@ -10861,7 +10861,7 @@ function renderSubPage(){
 function subHeader(title){
   return `<div class="sub-header">
     <button type="button" class="back-btn" id="sub-back" aria-label="返回上一层">‹ 返回</button>
-    <h2 class="page-title" style="margin:0">${title}</h2>
+    <h2 class="page-title">${title}</h2>
   </div>`;
 }
 
