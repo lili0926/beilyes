@@ -1697,6 +1697,16 @@ async function loadIdentity({quiet = false} = {}) {
     renderHumanChipBalance(data.wallet.balance);
     renderUnreadBadges(identity.unread);
     syncGameTypeOptions(data.games || [], {preserveSelection: !initialIdentityLoad});
+    if (initialIdentityLoad) {
+      const requestedGame = new URLSearchParams(window.location.search).get("game");
+      const chosen = (data.games || []).find((item) => item.game_type === requestedGame);
+      if (chosen) {
+        $("gameCategory").value = gameCategoryFor(chosen);
+        syncGameTypeOptions(data.games || [], {preserveSelection: false});
+        $("gameType").value = requestedGame;
+        $("gameType").dispatchEvent(new Event("change"));
+      }
+    }
     syncMachinePicker(data.machines || []);
     renderSelectedStakeHint();
     const invitations = data.pending_invitations || [];

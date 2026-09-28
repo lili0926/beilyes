@@ -5,7 +5,7 @@ const EdenTheme = (() => {
     ['together','与你相伴','TOGETHER',['music','read','watch','shufang','phone','trip','body','usage']],
     ['memories','时光藏匣','OUR MEMORIES',['diary','mdiary','notes','mailbox','memory','savedchat','album','calendar','sparkvault','cabinets','dream','sigillo']],
     ['life','花园日常','LITTLE THINGS',['coupon','wallet','sayday','love','wardrobe','duty','quest','baby']],
-    ['play','梦中奇境','WONDERLAND',['explore','tavern','rewrite','hisphone','game','cooking','menu','cmdgame','htmlgame','roleplay','pr','flightchess','bisca_cards','bisca_daifugo','bisca_monopoly','captivity','divination','truthdare','eatapple']],
+    ['play','梦中奇境','WONDERLAND',['duel_gomoku','duel_blackjack','duel_zhajinhua','duel_mahjong','explore','tavern','rewrite','hisphone','game','cooking','menu','cmdgame','htmlgame','roleplay','pr','flightchess','bisca_cards','bisca_daifugo','bisca_monopoly','captivity','divination','truthdare','eatapple']],
     ['tools','羽翼之下','THE ATELIER',['workshop','mcphall','vps','ntfy','theme','branding','prompts']]
   ];
   const hiddenFeatures=new Set(['workshop','branding','usage','diary','duty','cooking','ntfy']);
@@ -13,7 +13,8 @@ const EdenTheme = (() => {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   function palette(){ return {bg:'#faf8f3',card:'#fffdfa',accent:'#89775e',accent2:'#ded4c4',text:'#514b43',sub:'#847969',border:'#d9cfbf',bubble_me:'#eee7dc',bubble_them:'#fffdfa'}; }
   function icon(key, size=''){
-    const slot=typeof angelIconSlots==='undefined'?null:angelIconSlots[key];
+    const duelIcons={duel_gomoku:'usage',duel_blackjack:'branding',duel_zhajinhua:'workshop',duel_mahjong:'ntfy'};
+    const slot=typeof angelIconSlots==='undefined'?null:angelIconSlots[duelIcons[key]||key];
     if(!slot || !slot.crop) return '<span class="eden-symbol" aria-hidden="true">✧</span>';
     const c=slot.crop;
     return `<span class="eden-icon ${size}" aria-hidden="true" data-eden-icon="${h(key)}" style="--eden-atlas:url('angel-atlas-${slot.sheet}.png');--ex:${c.x}%;--ey:${c.y}%;--ew:${c.w}%;--eh:${c.h}%;--ebw:${c.bw}%;--ebh:${c.bh}%"><span></span></span>`;
@@ -22,7 +23,8 @@ const EdenTheme = (() => {
   function feature(key,label){
     const f=allFeatures().find(item=>item.key===key);
     if(!f)return '';
-    return `<button type="button" class="feat-card eden-feature" data-sub="${h(key)}"><span class="eden-setting">${icon(key)}</span><span class="eden-feature-label">${h(label||f.label)}</span></button>`;
+    const gameMark={duel_gomoku:'五',duel_blackjack:'21',duel_zhajinhua:'♠',duel_mahjong:'中'}[key];
+    return `<button type="button" class="feat-card eden-feature" data-sub="${h(key)}"><span class="eden-setting">${icon(key)}${gameMark?`<span class="eden-game-mark" aria-hidden="true">${gameMark}</span>`:''}</span><span class="eden-feature-label">${h(label||f.label)}</span></button>`;
   }
   function motionButton(){return `<button type="button" class="eden-round" data-eden-motion aria-label="${state.edenMotionPaused?'播放动态':'暂停动态'}" aria-pressed="${!!state.edenMotionPaused}"><span aria-hidden="true">${state.edenMotionPaused?'▷':'Ⅱ'}</span></button>`;}
   function header(){return `<header class="eden-masthead"><div class="eden-header-actions">${motionButton()}<button type="button" class="eden-round" data-eden-page="settings" aria-label="个人设定">${icon('profile','small')}</button></div></header>`;}
@@ -33,7 +35,7 @@ const EdenTheme = (() => {
     const date=new Date().toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit'});
     const together=typeof daysSince==='function'?daysSince():'';
     return `${header()}<section class="eden-hero"><div class="eden-mirror"><img class="eden-emblem" src="eden/wing-emblem.png" alt="珍珠光环与洁白羽翼"><svg class="eden-cat" viewBox="0 0 80 125" role="img" aria-label="镜中淡淡的猫影"><path d="M25 27 23 9 35 20Q42 17 48 21L58 13 55 31Q61 40 50 46Q48 52 51 62Q56 74 57 96L65 108Q65 112 56 112L32 112Q23 110 24 103Q22 90 29 77Q36 64 34 51L27 44Q20 41 23 35L19 32Z"/><path d="M36 109Q61 120 67 103Q73 87 62 85Q57 85 59 91Q65 86 65 101Q64 113 39 106Z"/></svg></div><span class="eden-flourish" aria-hidden="true">✧ · ♡ · ✧</span></section>
-      <div class="eden-home-content"><section class="eden-card eden-couple"><p class="eden-overline">You & me, in every lifetime.</p><div class="eden-couple-row"><button type="button" data-eden-page="settings" class="eden-person" aria-label="查看我的资料">${avatar(c.myAvatar,myName)}<span>${h(myName)}</span></button><div class="eden-couple-center"><em>eternal</em><span>${together!==''?`第 ${h(together)} 天`:'一封写给彼此的信'}</span></div><button type="button" data-eden-page="settings" class="eden-person" aria-label="查看伴侣资料">${avatar(c.partnerAvatar,partnerName)}<span>${h(partnerName)}</span></button></div><p class="eden-caption">${h(c.startDate||'把平凡的日子，过成永恒。')}</p><button type="button" class="eden-pearl-button" data-eden-page="chat">${icon('mailbox','small')}去见 ${h(partnerName)}<span aria-hidden="true">›</span></button></section>
+      <div class="eden-home-content"><section class="eden-card eden-couple"><p class="eden-overline">You & me, in every lifetime.</p><div class="eden-couple-row"><button type="button" data-eden-page="settings" class="eden-person" aria-label="查看我的资料">${avatar(c.myAvatar,myName)}<span>${h(myName)}</span></button><div class="eden-couple-center"><em>eternal</em><span>${together!==''?`第 ${h(together)} 天`:'一封写给彼此的信'}</span></div><button type="button" data-eden-page="settings" class="eden-person" aria-label="查看伴侣资料">${avatar(c.partnerAvatar,partnerName)}<span>${h(partnerName)}</span></button></div><p class="eden-caption">${h(c.startDate||'把平凡的日子，过成永恒。')}</p><button type="button" class="eden-pearl-button" data-eden-page="chat">${icon('duty','small')}去见 ${h(partnerName)}<span aria-hidden="true">›</span></button></section>
       <section class="eden-status eden-card"><span>今日心语</span>${state.statusEditing?`<label class="eden-sr-only" for="status-input">今日状态</label><input id="status-input" maxlength="500" value="${h(state.editStatus)}"><button type="button" id="status-save">保存</button>`:`<p>${h(c.statusMsg||'花园的门，永远为你留着。')}</p><button type="button" id="status-edit" aria-label="编辑今日状态">落笔</button>`}</section>
       <div class="eden-section-title"><h2>慢慢，与你</h2><span>our little things</span></div><div class="eden-feature-grid">${['mdiary','mailbox','memory','album','music','read','dream','calendar','phone','notes'].map(k=>feature(k,k==='calendar'?'纪念日':undefined)).join('')}</div>
       <button type="button" class="eden-card eden-garden-link" data-eden-page="garden">${icon('garden')}<span><strong>漫步秘密花园</strong><small>一起生活、游戏，收藏每一个瞬间。</small></span><span aria-hidden="true">›</span></button><p class="eden-page-end">⋆ 永远为你留一束光 ⋆</p></div>`;

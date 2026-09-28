@@ -102,3 +102,5 @@ body.eden-motion-paused #eden-atmosphere *,body.eden-motion-paused .eden-emblem,
 body.shell-eden .section{border:0;background:none;box-shadow:none;border-radius:0}body.shell-eden .section-body{border:1px solid #d6ccba;border-radius:9px;background:#fffdf5d9;box-shadow:none}body.shell-eden .section-body .section-body,body.shell-eden .section-body .sw-card{border:0;box-shadow:none;background:transparent}
 @media(max-width:360px){.eden-setting{width:44px;height:48px}.eden-setting .eden-icon{width:44px;height:44px}.eden-feature-label{font-size:10px}}
 .eden-cat{top:105px;left:calc(50% - 20px);width:40px;height:66px}
+.eden-feature[data-sub^="duel_"] .eden-setting{position:relative}
+.eden-game-mark{position:absolute;right:-3px;bottom:1px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 2px;border:1px solid #c8b798;border-radius:50%;background:#fffaf0;box-shadow:0 1px 4px #917b5540;color:#705d43;font:700 10px/1 Georgia,serif}

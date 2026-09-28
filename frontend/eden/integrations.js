@@ -2,19 +2,21 @@
 const EdenIntegrations=(()=>{
   const DEFAULT='http://43.142.110.120/eden';
   const frames=new Map();let active='',cache=null,cacheKey='',autoBusy=false,notice='',analysisBusy=false;
+  const duelGames={duel_gomoku:['gomoku','五子棋'],duel_blackjack:['blackjack','21 点'],duel_zhajinhua:['zhajinhua','炸金花'],duel_mahjong:['mahjong','红中赖子麻将']};
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const config=()=>LS.get('edenServiceConnection',{url:DEFAULT,token:''});
   function normalized(value){const u=new URL(value);if(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1','43.142.110.120'].includes(u.hostname)))throw Error('服务地址需要 HTTPS，或使用当前 VPS IP');if(u.username||u.password||u.search||u.hash)throw Error('服务地址不能带密码或参数');return u.href.replace(/\/$/,'');}
   async function request(path,options={}){const c=config();if(!c.token)throw Error('请先填写服务连接码');const base=normalized(c.url);const response=await fetch(base+path,{...options,headers:{'Authorization':'Bearer '+c.token,...options.headers},signal:options.signal||AbortSignal.timeout(40000)});const data=await response.json().catch(()=>({detail:'服务未返回有效数据，请检查域名是否仍被拦截'}));if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:`服务连接失败（${response.status}）`);return data;}
   function settings(){const c=config();return `<details class="ei-setup" ${c.token?'':'open'}><summary>花园服务连接</summary><form id="ei-connect"><label>服务地址<input name="url" type="url" required value="${escape(c.url)}"></label><label>连接码<input name="token" type="password" autocomplete="off" required value="${escape(c.token)}" placeholder="部署时提供的专用连接码"></label><button type="submit">保存并检查连接</button><button type="button" data-ei="disconnect">断开</button><p role="status">${escape(notice||'只连接你的 VPS；小机继续使用 App 中已有的模型配置。')}</p></form></details>`;}
-  function page(service){active=service;const title=service==='duel'?'双弈 · 和你对局':'Afterhours · 和小机喝一杯';return `<div class="page ei-page">${subHeader(title)}${settings()}<div class="ei-actions"><button data-ei="talk">和 TA 说话</button><button data-ei="invite">${service==='duel'?'请 TA 看看牌桌':'请 TA 来吧台'}</button><button data-ei="reload">刷新页面</button></div><p class="ei-caption">${service==='duel'?'五子棋 · 21 点 · 炸金花 · 红中赖子麻将':'保留原版酒单、盲品、骰子、猜拳与轮盘'}</p><div id="ei-frame-slot"></div></div>`;}
+  function page(service){active=service;const game=duelGames[state.subPage];const title=service==='duel'?`${game?.[1]||'双弈'} · 和你对局`:'Afterhours · 和小机喝一杯';return `<div class="page ei-page">${subHeader(title)}${settings()}<div class="ei-actions"><button data-ei="talk">和 TA 说话</button><button data-ei="invite">${service==='duel'?'请 TA 看看牌桌':'请 TA 来吧台'}</button><button data-ei="reload">刷新页面</button></div><p class="ei-caption">${service==='duel'?`已为你选好${game?.[1]||'游戏'}，在下方牌室创建房间即可邀请 TA。`:'保留原版酒单、盲品、骰子、猜拳与轮盘'}</p><div id="ei-frame-slot"></div></div>`;}
   function afterRender(){
-    const service=state.subPage==='game'?'duel':state.subPage==='tavern'?'bar':'';
+    const service=duelGames[state.subPage]?'duel':state.subPage==='tavern'?'bar':'';
     const slot=document.getElementById('ei-frame-slot');const c=config();
     frames.forEach((frame,key)=>{frame.hidden=key!==service||!c.token||!slot;});
     if(service&&slot&&c.token){
       let frame=frames.get(service);let base;try{base=normalized(c.url);}catch{return;}
-      const src=base+'/'+service+'/';
+      const game=duelGames[state.subPage]?.[0];
+      const src=base+'/'+service+'/'+(game?'?game='+encodeURIComponent(game):'');
       if(!frame){frame=document.createElement('iframe');frame.className='ei-frame';frame.title=service==='duel'?'CedarDuet 游戏牌桌':'Afterhours 酒馆';frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-modals');frame.referrerPolicy='no-referrer';frames.set(service,frame);document.body.append(frame);}
       if(frame.src!==src)frame.src=src;
       frame.hidden=false;position();
