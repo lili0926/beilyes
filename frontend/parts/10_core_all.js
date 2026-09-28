@@ -1310,9 +1310,10 @@ function chatTickStart(){
 }
 function chatTickStop(){ if(__chatTick){ clearInterval(__chatTick); __chatTick = 0; } }
 
-async function __apiFetch(url, options, timeoutMs){
+async function __apiFetch(url, options, timeoutMs, attempts){
   const ms = timeoutMs == null ? apiTimeoutMs() : timeoutMs;
-  const maxTry = 3; // 1 次 + 最多 2 次重试
+  // Model POSTs can be billed even when a gateway replies 5xx. Never repeat one invisibly.
+  const maxTry = attempts == null ? 1 : Math.max(1, Math.min(3, attempts));
   let lastErr;
   for(let attempt = 0; attempt < maxTry; attempt++){
     const ctrl = new AbortController();
@@ -2472,7 +2473,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
   };
   const tools = opts.tools || [];
   const toolHandler = opts.toolHandler || null;
-  const maxRounds = opts.maxRounds || 0; // 0 = 不设上限（默认）；调用方想限制时传 opts.maxRounds
+  const maxRounds = Math.max(1, Math.min(6, Number(opts.maxRounds ?? 4) || 4));
   const toolEvents = [];
   let toolsParam = null;
   if(tools.length){
@@ -2504,7 +2505,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     if(p.includes(accText) && p.length > accText.length){ accText = p; return; }
     accText = accText + "\n\n" + p;
   };
-  for(let round=0; !maxRounds || round < maxRounds; round++){
+  for(let round=0; round < maxRounds; round++){
     const res = await __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsParam);
     __mergePiece(res && res.text);
     if(!res.toolCalls || !res.toolCalls.length){
@@ -2560,11 +2561,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
   return { text: accText || "（MCP 工具调用未收敛，已停止）", toolEvents };
 }
 
-/** 后台任务（压缩摘要 / 记忆提炼）用哪个便宜模型。
- *  优先她自己填的 aux；没填就走 VPS 上的 /aux 转发口 —— DeepSeek 的 key 在服务器的
- *  .env 里，不在这份代码里（仓库是 public，密钥写进来等于公开发布）。
- *  照 ttsProxyBase() 那套「用的时候回落」写：老存档的 apiConfig 是整份覆盖默认值的，
- *  后加的格子在老存档上永远是 undefined，指望默认值必然落空。 */
+/** 非聊天任务只能使用独立的辅助凭据或 VPS /aux；绝不读取聊天角色的 Key。 */
 function auxProxyBase(){
   const cfg = state.callConfig || {};
   const p = (cfg.baseUrl || "").trim()
@@ -2573,43 +2570,54 @@ function auxProxyBase(){
 }
 function auxEndpoint(apiConfig){
   const c = apiConfig || {};
-  // 她自己配齐了就听她的
-  if((c.auxOpenaiBase||"").trim() && (c.auxOpenaiKey||"").trim()){
-    return { base: c.auxOpenaiBase.trim().replace(/\/$/,""), key: c.auxOpenaiKey.trim(),
-             model: (c.auxOpenaiModel||"").trim() || "deepseek-chat", via: "aux" };
+  if(c.auxChannel === "claude" && (c.auxClaudeKey||"").trim()){
+    return { channel:"claude", base:(c.auxClaudeBase||"").trim() || "https://api.anthropic.com/v1/messages",
+             key:c.auxClaudeKey.trim(), model:(c.auxClaudeModel||"").trim() || "claude-sonnet-4-6", via:"aux" };
   }
-  // 否则走服务端转发口（鉴权用网关 token，模型由服务端定）
+  if((c.auxOpenaiBase||"").trim() && (c.auxOpenaiKey||"").trim()){
+    return { channel:"openai", base:c.auxOpenaiBase.trim().replace(/\/$/,""), key:c.auxOpenaiKey.trim(),
+             model:(c.auxOpenaiModel||"").trim() || "deepseek-chat", via:"aux" };
+  }
+  // 老存档即使选着「Claude 辅助」但没有独立 Key，也只会尝试独立 VPS 转发。
   const vps = auxProxyBase();
   const tok = (typeof callAuthToken === "function") ? callAuthToken() : "";
-  if(vps && tok) return { base: vps + "/aux", key: tok, model: "", via: "vps" };
-  // 最后才回落到主通道那把 key（老行为）
-  return { base: (c.openaiBase||"").replace(/\/$/,""), key: c.openaiKey||"",
-           model: (c.auxOpenaiModel||c.openaiModel||"gpt-4o-mini"), via: "main" };
+  if(vps && tok) return { channel:"openai", base:vps + "/aux", key:tok, model:"", via:"vps" };
+  return null;
 }
 
-async function callAuxAPI(apiConfig, prompt) {
-  const { auxChannel, claudeKey } = apiConfig;
-  if (auxChannel === "claude") {
-    const res = await __apiFetch(claudeEndpoint(null, apiConfig), {
+function auxConfigured(){ return !!auxEndpoint(state.apiConfig); }
+async function callAuxChatAPI(apiConfig, messages, systemPrompt, opts) {
+  const ep = auxEndpoint(apiConfig);
+  if(!ep) throw new Error("辅助 API 尚未配置；后台任务会保留，等辅助 API 可用后再试");
+  const convo = (messages||[]).map(m=>({role:m.role==="assistant"?"assistant":"user",
+    content:m.image?__chatContentForChannel(ep.channel,m):String(m.content||"")}));
+  const system = typeof systemPrompt === "object" && systemPrompt
+    ? [systemPrompt.static,systemPrompt.dynamic].filter(Boolean).join("\n\n") : String(systemPrompt||"");
+  let res, data;
+  if(ep.channel === "claude"){
+    const rows = system ? [{role:"user",content:system},{role:"assistant",content:"好的，我记住了。"},...convo] : convo;
+    res = await __apiFetch(ep.base, {
       method:"POST",
-      headers:{ "Content-Type":"application/json","x-api-key":claudeKey,"Authorization":"Bearer "+claudeKey,"anthropic-version":"2023-06-01" },
-      body: JSON.stringify({ model: claudeModelOf(null, apiConfig), max_tokens:1024, messages:[{ role:"user", content:prompt }] }),
-    });
-    const data = await res.json();
-    return data.content?.[0]?.text || "";
-  } else {
-    const ep = auxEndpoint(apiConfig);
-    if(!ep.base || !ep.key) throw new Error("没有可用的后台模型（既没配 aux，也没填网关地址/token）");
-    const body = { messages:[{ role:"user", content:prompt }] };
-    if(ep.model) body.model = ep.model;   // 走 VPS 时不指定，由服务端选
-    const res = await __apiFetch(`${ep.base}/chat/completions`, {
+      headers:{"Content-Type":"application/json","x-api-key":ep.key,"anthropic-version":"2023-06-01"},
+      body:JSON.stringify({model:ep.model,max_tokens:2048,messages:rows}),
+    },opts&&opts.timeoutMs,1);
+    data = await res.json().catch(()=>({}));
+    if(!res.ok || data.error) throw new Error("辅助 API HTTP "+res.status+"："+String(data.error?.message||data.message||"请求失败"));
+    return (data.content||[]).map(x=>x.text||"").join("\n").trim();
+  }
+  const body = { messages:system?[{role:"system",content:system},...convo]:convo };
+  if(ep.model) body.model = ep.model;
+  res = await __apiFetch(`${ep.base}/chat/completions`, {
       method:"POST",
       headers:{ "Content-Type":"application/json","Authorization":`Bearer ${ep.key}` },
       body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || "";
-  }
+    },opts&&opts.timeoutMs,1);
+  data = await res.json().catch(()=>({}));
+  if(!res.ok || data.error) throw new Error("辅助 API HTTP "+res.status+"："+String(data.error?.message||data.message||"请求失败"));
+  return String(data.choices?.[0]?.message?.content||"").trim();
+}
+async function callAuxAPI(apiConfig,prompt){
+  return callAuxChatAPI(apiConfig,[{role:"user",content:String(prompt||"")}],null);
 }
 
 
@@ -2843,9 +2851,10 @@ const state = {
   memIntegrateDraft: { threads: ["a1","a2","group"], dateFrom: "", dateTo: "", days: 0, maxPer: 0 },
   contextLimit: LS.get("contextLimit", 0),  // 聊天上下文条数（0=不限 → 启用滚动摘要，token 有界）
   apiConfig: LS.get("apiConfig",{
-    channel:"claude", auxChannel:"claude",
+    channel:"claude", auxChannel:"openai",
     claudeKey:"", openaiKey:"", openaiBase:"https://api.openai.com/v1",
-    openaiModel:"gpt-4o", auxOpenaiBase:"", auxOpenaiKey:"", auxOpenaiModel:"gpt-4o-mini",
+    openaiModel:"gpt-4o", auxOpenaiBase:"", auxOpenaiKey:"", auxOpenaiModel:"deepseek-chat",
+    auxClaudeKey:"", auxClaudeBase:"", auxClaudeModel:"claude-sonnet-4-6",
   }),
   // 渠道预设：整套 Key/Base/模型存成一张卡，换渠道时点一下切回，不用清空重填
   apiPresets: LS.get("apiPresets", []),
@@ -3052,9 +3061,9 @@ const state = {
   callOpenRec: null,  // 展开逐句的那条通话记录 id（不持久化）
 
   // 语气识别（见 readTone）。toneOn 关掉就完全不判、不标、不注入；
-  // toneAi 单独关掉只停 aux 精修，本地词典那份仍在（省钱/断网时用）。
+  // AI 语气精修是额外的一次请求；旧版默认开启，这里改为显式选择后才开启。
   toneOn: LS.get("toneOn", true),
-  toneAi: LS.get("toneAi", true),
+  toneAi: LS.get("toneAiExplicit", false) ? LS.get("toneAi", false) : false,
   claudeCacheOn: LS.get("claudeCacheOn", true),  // Claude 通道的 cache_control，见 __claudeCacheMark
   // 生成超时（秒）。默认 240 —— 实测她的中转会在 4 秒和 238 秒之间抽风，
   // 而且掐断**不退输入那部分的钱**，短超时等于白付。见 apiTimeoutMs。
@@ -6155,11 +6164,10 @@ function momentParseImageDesc(text){
 
 async function momentCallModel(promptText, image){
   const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
-  if(!ag) throw new Error("还没配置 AI");
   const msg = { role:"user", content:promptText };
   if(image){ msg.image = image; msg.imageMime = "image/jpeg"; }
-  let sys = (typeof systemPrompt === "function") ? systemPrompt(ag) : "";
-  let out = await callChatAPI(agentToApiConfig(ag), [msg], sys);
+  let sys = ag && typeof systemPrompt === "function" ? systemPrompt(ag) : "";
+  let out = await callAuxChatAPI(state.apiConfig, [msg], sys);
   if(typeof parseThinking === "function") out = parseThinking(out).body || out;
   return String(out||"");
 }
@@ -9663,7 +9671,7 @@ async function prSendUser(){
       if(!ag){ reply = "（请先在设置页配置 AI 的 API Key）"; }
       else {
         const msgs = history.map(m=>({ role: m.role==="assistant"?"assistant":"user", content: m.content }));
-        reply = await callChatAPI(ag, msgs, sys);
+        reply = await callAuxChatAPI(state.apiConfig, msgs, sys);
       }
     } else {
       reply = "（RP 通道未接到模型接口）";
@@ -12067,45 +12075,14 @@ function memRemotePost(path, body){
     })
     .catch(e=>{ window.__memCloudErr = "POST "+path+" 失败："+String((e&&e.message)||e); return null; });
 }
-/** 记忆整理/合并：**先 aux（便宜模型），聊天模型只当兜底**。
- *
- * 这个顺序来回翻过两次，两次都有理由，记一下免得再翻回去：
- *  - 最早是 aux 优先。DeepSeek 欠费报 402 抛的是异常不是空串，而兜底那层只在
- *    「返回空串」时才走 —— 于是自动沉淀整个哑掉，还只 console.warn。
- *  - 于是改成聊天模型优先。能用了，但聊天模型是官方订阅：压缩摘要 + 记忆提炼
- *    这些后台杂活一直在啃那 5 小时额度，聊到一半就没了。
- *  - 现在改回 aux 优先，但**两层都按异常处理**（try/catch 各包各的），
- *    aux 挂了照样落到聊天模型，不会再出现「静默哑掉」。
- * aux 现在默认指向 VPS 的 /aux 转发口，key 在服务器上，见 auxEndpoint()。 */
+/** 记忆整理/合并是后台任务，只走辅助 API。失败保留游标，等下轮再试。 */
 async function memModelCall(prompt, opts){
-  // opts.auxOnly：只许用便宜模型，aux 挂了就返回空，**绝不落到聊天模型**。
-  // 给「补旧账」那条路用 —— 拿她的 API 去消化三个月前的聊天记录，
-  // 花的是现在的钱、买的是过去的信息，不值。
   let result = "";
   state.__memErr = ""; // 每次重算，否则上一轮的旧错误会挂在界面上误导
-  // 第一层：便宜模型
   try{
     result = await callAuxAPI(state.apiConfig, prompt);
   }catch(e){
     state.__memErr = "后台模型失败：" + String((e&&e.message)||e).slice(0,80);
-  }
-  // 第二层：聊天模型兜底（要花订阅额度，所以只在上面没成的时候走）
-  if((!result || !result.trim()) && !(opts && opts.auxOnly)){
-    try{
-      // 优先非 CC 的通道，落到 CC 时也标 background，免得提炼出来的 LAYER|…
-      // 串到聊天里去（CC 的回复没有请求 id，见 __ccHubSend）
-      const ag = (typeof bgChatAgent==="function") ? bgChatAgent() : (state.agents||[])[0];
-      if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
-        const raw = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, { background:true });
-        const parsed = (typeof parseThinking==="function") ? parseThinking(raw) : { body: raw };
-        result = parsed.body || raw || "";
-        if(result && result.trim() && state.__memErr){
-          state.__memErr += "（已用聊天模型兜底，这次花了订阅额度）";
-        }
-      }
-    }catch(e){
-      state.__memErr = (state.__memErr ? state.__memErr+"；" : "") + "聊天模型也失败：" + String((e&&e.message)||e).slice(0,60);
-    }
   }
   return String(result||"");
 }
@@ -12638,20 +12615,11 @@ async function dreamRunOnce(force){
 ${bits.join("\n") || "- （几乎空白的一夜）"}`;
   let raw = "";
   try{
-    if(typeof callAuxAPI === "function"){
-      raw = await callAuxAPI(state.apiConfig, sleepPrompt);
-    }
-    if((!raw || !String(raw).trim()) && typeof agentById === "function"){
-      const ag = agentById("a1") || (state.agents||[])[0];
-      if(ag && typeof agentHasKey === "function" && agentHasKey(ag) && typeof callChatAPI === "function"){
-        raw = await callChatAPI(agentToApiConfig(ag), [{role:"user", content: sleepPrompt}], null);
-        const parsed = typeof parseThinking === "function" ? parseThinking(raw) : {body:raw};
-        raw = parsed.body || raw;
-      }
-    }
+    raw = await callAuxAPI(state.apiConfig, sleepPrompt);
   }catch(e){
     return { dreamed:false, reason:"api_error", error: String(e.message||e) };
   }
+  if(!String(raw||"").trim()) return { dreamed:false, reason:"api_wait" };
   const s = String(raw||"");
   const dream = (s.match(/<dream>([\s\S]*?)<\/dream>/i)||[])[1]?.trim() || "";
   const trace = (s.match(/<trace>([\s\S]*?)<\/trace>/i)||[])[1]?.trim() || "";
@@ -12709,7 +12677,7 @@ function proactiveHoursSinceLastChat(){
  */
 function proactiveBuildRequest(reason, opts){
   const ag = (typeof agentById === "function" ? agentById(state.chatTarget==="group"?"a1":state.chatTarget) : null) || (state.agents||[])[0];
-  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return null;
+  if(!ag) return null;
   const built = __proShadow(reason, opts);
   let sys = "";
   // 主动消息避免 NSFW 长流程抢戏：临时按「非 NSFW」拼系统提示词。
@@ -12724,24 +12692,14 @@ function proactiveBuildRequest(reason, opts){
 }
 
 async function proactiveGenerateLocal(reason, opts){
-  const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
-  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
-    const templates = [
-      "在干嘛。突然有点想你。",
-      "忙完回我一句就好。",
-      "我在。不着急。",
-      "记得喝口水。",
-      "屏幕亮了挺久了吧。歇一下。",
-      "到点了。别装忙。",
-    ];
-    return templates[Math.floor(Math.random()*templates.length)];
-  }
+  if(!auxConfigured()){ state.__proGenErr="辅助 API 尚未配置"; return ""; }
   const msgs = __proShadow(reason, opts).msgs;
   try{
     const built = proactiveBuildRequest(reason, opts);
+    if(!built) return "";
     const sys = built ? built.sys : "";
     state.__proGenErr = "";
-    let out = await callChatAPI(agentToApiConfig(ag), msgs, sys, { timeoutMs: 45000 });
+    let out = await callAuxChatAPI(state.apiConfig, msgs, sys, { timeoutMs: 45000 });
     if(typeof parseThinking === "function"){
       const p = parseThinking(out);
       out = p.body || out;
@@ -12754,11 +12712,11 @@ async function proactiveGenerateLocal(reason, opts){
       const m = head.match(/.*[。！？…!?]/);
       out = m ? m[0] : head;
     }
-    return out || "有点想你了。";
+    return out || "";
   }catch(e){
     // 以前这里静默吞掉：模型挂了和正常开口长得一模一样，都只看到一句兜底话。
     state.__proGenErr = String((e && e.message) || e).slice(0, 80);
-    return "有点想你了。";
+    return "";
   }
 }
 
@@ -13239,14 +13197,13 @@ async function proactiveOpenerRefill(force){
     }
     const ag = (typeof agentById === "function"
       ? agentById(state.chatTarget === "group" ? "a1" : state.chatTarget) : null) || (state.agents||[])[0];
-    if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return false;
-    if(ag.channel === "cc") return false;   // 走 CC 就等于又去烧订阅了，这条路的意义就没了
+    if(!ag || !auxConfigured()) return false;
 
     const built = proactiveBuildRequest("先写几句留着，等她很久没消息时再送到她眼前",
                                         { openers: PRO_OPENER_COUNT });
     if(!built) return false;
     state.__proGenErr = "";
-    let out = await callChatAPI(agentToApiConfig(ag), built.msgs, built.sys, { timeoutMs: 45000, background: true });
+    let out = await callAuxChatAPI(state.apiConfig, built.msgs, built.sys, { timeoutMs: 45000 });
     if(typeof parseThinking === "function") out = parseThinking(out).body || out;
     const lines = String(out||"")
       .split(/\r?\n/)
@@ -16308,8 +16265,8 @@ function rewriteBridgeInit(){
       // （CC 的回复没有请求 id，见 __ccHubSend）
       const ag = (typeof bgChatAgent === "function") ? bgChatAgent() : (state.agents||[])[0];
       if(!ag) throw new Error("还没有配好聊天渠道");
-      const raw = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content:String(d.prompt||"") }], null,
-                                   { background:true, timeoutMs: 240000 });
+      const raw = await callAuxChatAPI(state.apiConfig, [{ role:"user", content:String(d.prompt||"") }], null,
+                                      { timeoutMs: 240000 });
       const parsed = (typeof parseThinking === "function") ? parseThinking(raw) : { body: raw };
       text = String(parsed.body || raw || "").trim();
       if(!text) throw new Error("模型没有返回内容");
@@ -17148,8 +17105,8 @@ function biscaBotPickMoveWithAI(view){
       const bot = ensureBiscaBot();
       const seatName = (bot.agentName || (ag && ag.name) || "Aries").trim() || "Aries";
       // 单招也让他嘴一句，更像真人
-      if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
-        resolve({ index: 0, say: legal.length ? "……" : "" });
+      if(!ag || !auxConfigured()){
+        resolve(null);
         return;
       }
       const list = lines.map((ln, i) => "p"+(i+1)+": "+ln).join("\n");
@@ -17173,9 +17130,8 @@ function biscaBotPickMoveWithAI(view){
       const user = "【局面简报】\n"+(view.briefing||"（无）")+"\n\n【合法招】\n"+list+"\n\n请以 "+seatName+" 的身份选择并说话。";
       const apiMsgs = [{ role: "user", content: user }];
       let reply = "";
-      if(typeof callChatAPI === "function" && typeof agentToApiConfig === "function"){
-        try{ reply = await callChatAPI(agentToApiConfig(ag), apiMsgs, sys) || ""; }catch(e){ reply = ""; }
-      }
+      try{ reply = await callAuxChatAPI(state.apiConfig, apiMsgs, sys) || ""; }catch(e){ resolve(null); return; }
+      if(!reply.trim()){ resolve(null); return; }
       let idx = 0, say = "";
       const m = String(reply).match(/\{[\s\S]*\}/);
       if(m){
@@ -17190,7 +17146,7 @@ function biscaBotPickMoveWithAI(view){
       if(!say) say = (legal.length === 1) ? "就这手。" : "看我的。";
       resolve({ index: idx, say });
     }catch(e){
-      resolve({ index: 0, say: "……" });
+      resolve(null);
     }
   });
 }
@@ -17219,7 +17175,7 @@ async function biscaBotMaybeReplyChat(view){
   if(bot._lastChatAt && now - bot._lastChatAt < 8000) return;
   const target = state.chatTarget || "a1";
   const ag = typeof agentById === "function" ? agentById(target) : null;
-  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return;
+  if(!ag || !auxConfigured()) return;
   let persona = "";
   try{
     if(typeof systemPrompt === "function"){
@@ -17237,7 +17193,7 @@ async function biscaBotMaybeReplyChat(view){
   let reply = "";
   try{
     if(typeof callChatAPI === "function" && typeof agentToApiConfig === "function")
-      reply = await callChatAPI(agentToApiConfig(ag), [{role:"user", content:user}], sys) || "";
+      reply = await callAuxChatAPI(state.apiConfig, [{role:"user", content:user}], sys) || "";
   }catch(e){ return; }
   reply = String(reply).replace(/<thinking>[\s\S]*?<\/thinking>/gi,"").replace(/\s+/g," ").trim().slice(0, 40);
   if(!reply) return;
@@ -17269,6 +17225,7 @@ function biscaBotStartPoll(){
       }
       bot.status = "思考出牌…";
       const pick = await biscaBotPickMoveWithAI(v);
+      if(!pick){ bot.status = "等待辅助 API 恢复"; return; }
       const legal = v.legal || [];
       if(!legal.length){ bot.status = "无合法招"; return; }
       const i = Math.max(0, Math.min(legal.length - 1, (pick && pick.index) || 0));
@@ -17626,14 +17583,7 @@ async function cabinetAiEdit(){
   const prompt = `你是用户的亲密伴侣，住在同一个家。当前各柜子物品：\n${summary}\n\n请只针对「${open.name}」提出 1-3 个你想新放入的物品（生活化、温柔或小调皮均可）。\n严格每行一条，格式：\n物品名|可选备注\n不要编号，不要其它解释。`;
   try{
     let result = await callAuxAPI(state.apiConfig, prompt);
-    if((!result||!result.trim()) && typeof agentById==="function"){
-      const ag = agentById("a1") || (state.agents||[])[0];
-      if(ag && agentHasKey(ag)){
-        result = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-        const parsed = parseThinking(result);
-        result = parsed.body || result;
-      }
-    }
+    if(!String(result||"").trim()) throw new Error("辅助 API 暂无响应，请稍后再试");
     const lines = String(result||"").split("\n").map(s=>s.trim()).filter(Boolean).slice(0,5);
     let n = 0;
     lines.forEach((line,i)=>{
@@ -17710,7 +17660,7 @@ async function sparkOrganizeAll(){
   sv.books.forEach(b=>b.cards.forEach(c=>{ if(!c.ai) pending.push(c); }));
   if(!pending.length) return;
   const ag = (typeof agentById === "function" ? agentById(state.chatTarget==="group"?"a1":state.chatTarget) : null) || (state.agents||[])[0];
-  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))) return;
+  if(!ag || !auxConfigured()) return;
   const items = pending.map((c,i)=>({ i, text: String(c.text).slice(0,300) }));
   const known = sv.books.flatMap(b=>b.cards).filter(c=>c.ai && c.text).slice(0,30)
     .map(c=>`${c.id}|${String(c.text).slice(0,60)}`).join("\n");
@@ -17729,7 +17679,7 @@ ${items.map(it=>`[${it.i}] ${it.text}`).join("\n")}
 ${known || "（暂无）"}`;
   let text = "";
   try{
-    text = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content:prompt }], null);
+    text = await callAuxAPI(state.apiConfig, prompt);
   }catch(e){ console.warn("[spark] ai err", e); return; }
   let arr = null;
   try{
@@ -19788,9 +19738,9 @@ async function callSimulateIncoming(){
   s.reason = "好几个小时没有你的消息了，有点想你，打来看看";
   // 可选：用 AI 生成理由
   const ag = agentById(state.chatTarget==="group"?"a1":state.chatTarget) || (state.agents||[])[0];
-  if(ag && agentHasKey(ag)){
+  if(ag && auxConfigured()){
     try{
-      let t = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:"你想给用户打电话。用一句很短的中文写出「来电理由」（不要引号，15字以内）。"}], null);
+      let t = await callAuxAPI(state.apiConfig, "你想给用户打电话。用一句很短的中文写出「来电理由」（不要引号，15字以内）。");
       if(typeof parseThinking==="function") t = parseThinking(t).body || t;
       t = String(t||"").trim().slice(0,40);
       if(t) s.reason = t;
@@ -19894,8 +19844,8 @@ async function callAiTurn(userText){
   }
   render();
   const ag = agentById(state.chatTarget==="group"?"a1":state.chatTarget) || (state.agents||[])[0];
-  if(!ag || !agentHasKey(ag)){
-    s.caps.push({ who:"them", text:"（还没配置 API Key，我只能在这里陪你坐一会儿。）" });
+  if(!ag || !auxConfigured()){
+    s.caps.push({ who:"them", text:"（辅助 API 暂时不可用，我在这里等它恢复。）" });
     s.loading = false; render(); return;
   }
   const meta = s.lastVoiceMeta || {};
@@ -19980,8 +19930,8 @@ async function callAiTurn(userText){
   try{
     callTtsReset();      // 上一轮没播完的尾巴不能压到这一轮
     s.ttsError = "";
-    // CC 通道没有流式（tmux 桥是整段回的），别的通道都有。
-    const isStream = ag.channel !== "cc";
+    // 电话不在聊天页：一次辅助请求得到整段，再逐句送 TTS，不占用 Aries 聊天 Key。
+    const isStream = false;
     let text = "", capIdx = -1;
 
     const koLines = [];
@@ -20026,7 +19976,7 @@ async function callAiTurn(userText){
         sp.flush().forEach(sent=> callTtsPush(sent));
       }
     } else {
-      text = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], sys, ccOpts);
+      text = await callAuxChatAPI(state.apiConfig, [{role:"user",content:prompt}], sys, ccOpts);
       callLatMark("first");   // CC 通道没有流式，整段回来的那一刻就是「首字」
       if(typeof parseThinking==="function") text = parseThinking(text).body || text;
       text = String(text||"").trim().slice(0,300) || "……我在听。";
@@ -21104,7 +21054,7 @@ async function eaGenerate(){
     hist.push({ role:"user", content:`<system_trigger>\n${shell.prompt}${extra}\n\n结合上面最近的对话当作当前剧情。只输出 JSON。\n</system_trigger>` });
     const sys = eaSystemPrompt();
     // 一次吐一整份文档 JSON，默认 60 秒必超时（而且以前还会闷声重试两遍，要等满 3 分钟）
-    let out = await callChatAPI(agentToApiConfig(ag), hist, sys, { timeoutMs: 240000 });
+    let out = await callAuxChatAPI(state.apiConfig, hist, sys, { timeoutMs: 240000 });
     if(typeof parseThinking === "function") out = parseThinking(out).body || out;
     const data = eaParseJson(out);
     if(!data) throw new Error("模型没吐出能用的 JSON，再点一次");
@@ -21885,12 +21835,7 @@ ${(state.mcpLastResult||"（无）").slice(0, 2500)}
   try{
     let reply = "";
     const ag = (typeof agentById==="function" ? agentById(state.chatTarget==="group"?"a1":state.chatTarget) : null) || (state.agents||[])[0];
-    if(ag && typeof agentHasKey==="function" && agentHasKey(ag)){
-      reply = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null);
-      if(typeof parseThinking==="function"){ const p=parseThinking(reply); reply=p.body||reply; }
-    } else {
-      reply = await callAuxAPI(state.apiConfig, prompt);
-    }
+    reply = await callAuxAPI(state.apiConfig, prompt);
     reply = String(reply||"").trim();
     state.mcpAiPlan = reply;
     let plan = null;
@@ -21917,7 +21862,7 @@ function renderMcpHall(){
       ① 浏览器<strong>不能</strong>跑 stdio（Claude Desktop 本机用）。<br/>
       ② 这里用 <strong>Streamable HTTP / SSE</strong>。<br/>
       ③ 跨域被拦时填 <strong>VPS 反代</strong>。<br/>
-      ④ 「和 AI 一起玩」复用你已有的 API Key。
+      ④ 大厅里的「和 AI 一起玩」使用辅助 API；聊天页内的 MCP 使用当前角色 API。
     </div>
     <div class="add-form" style="margin-bottom:12px">
       <div class="setting-label">MCP Server URL</div>
@@ -22798,9 +22743,7 @@ async function sayGenerateOrder(){
   const s = sayEnsure();
   const ag = (typeof agentById === "function" ? agentById(state.chatTarget) : null) || (state.agents||[])[0];
   const unit = (typeof walletUnit==="function") ? walletUnit() : "小鱼干";
-  if(!ag || (typeof agentHasKey === "function" && !agentHasKey(ag))){
-    return SAY_FALLBACK[Math.floor(Math.random()*SAY_FALLBACK.length)];
-  }
+  if(!ag || !auxConfigured()) return "";
   const hist = (state.messages||[]).filter(m=>m.role==="user"||m.role==="assistant").slice(-12)
     .map(m=>({ role:m.role, content:String(m.content||"").slice(0,800) }));
   hist.push({ role:"user", content:`<system_trigger>
@@ -22818,14 +22761,14 @@ async function sayGenerateOrder(){
     const w = state.nsfwOn;
     try{ state.nsfwOn = false; sys = (typeof systemPrompt==="function") ? systemPrompt(ag) : ""; }
     finally{ state.nsfwOn = w; }
-    let out = await callChatAPI(agentToApiConfig(ag), hist, sys, { timeoutMs: 45000 });
+    let out = await callAuxChatAPI(state.apiConfig, hist, sys, { timeoutMs: 45000 });
     if(typeof parseThinking === "function") out = parseThinking(out).body || out;
     out = String(out||"").replace(/\s+/g," ").trim().replace(/^[「"']|[」"']$/g,"").trim();
     if(out.length > 60) out = out.slice(0, 60);
-    return out || SAY_FALLBACK[0];
+    return out || "";
   }catch(e){
     state.__sayErr = String((e&&e.message)||e).slice(0,80);
-    return SAY_FALLBACK[Math.floor(Math.random()*SAY_FALLBACK.length)];
+    return "";
   }
 }
 
@@ -22842,13 +22785,12 @@ async function sayTick(force){
   if(!due.length) return;
   // App 关着的时候定时器是冻的，回来时可能一次积了好几个。
   // 只补发最近的那一个，更早的直接作废，免得一口气刷三条。
-  due.forEach(x=>{ x.fired = true; });
   const slot = due[due.length-1];
-  try{ persist("sayDay"); }catch(e){}
-  if(!force && now - slot.at > 3*3600000) return;  // 过期太久（超过 3 小时）就不补了
+  if(!force && now - slot.at > 3*3600000){ due.forEach(x=>{x.fired=true;}); persist("sayDay"); return; }
   if(force && typeof showToast==="function") showToast("正在让他想一条…");
   const text = await sayGenerateOrder();
   if(!text) return;
+  due.forEach(x=>{ x.fired = true; });
   const o = { id:"o"+Date.now().toString(36), text, at:now, status:"pending", cost:s.cost };
   s.log = [o].concat(s.log).slice(0, 60);
   try{ persist("sayDay"); }catch(e){}
@@ -24644,7 +24586,7 @@ function renderChat(){
               <span style="position:absolute;content:'';height:20px;width:20px;left:${state.thoughtOn!==false?"22px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span>
             </label>
           </div>
-          ${[["tone-on-toggle","语气识别",state.toneOn!==false],["tone-ai-toggle","AI 精修语气",state.toneAi!==false&&state.toneOn!==false]].map(([tid,lbl,on])=>`
+          ${[["tone-on-toggle","语气识别",state.toneOn!==false],["tone-ai-toggle","AI 精修语气（每条消息额外用一次辅助 API）",state.toneAi!==false&&state.toneOn!==false]].map(([tid,lbl,on])=>`
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border)">
             <div style="font-size:12px;font-weight:600;color:var(--text)">${lbl}</div>
             <label style="position:relative;display:inline-block;width:44px;height:26px;flex-shrink:0">
@@ -25463,8 +25405,8 @@ async function hisPhoneGenerateDaily(force){
   const key = hisPhoneTodayKey();
   if(!force && h.lastGenDate === key) return { ok:true, skipped:true };
   const ag = hisPhoneAgent();
-  if(!ag || (typeof agentHasKey==="function" && !agentHasKey(ag))){
-    throw new Error("请先为第一位 AI（a1）配置 API Key");
+  if(!ag || !auxConfigured()){
+    throw new Error("辅助 API 尚未就绪，今天的内容会等它恢复后再生成");
   }
   const myName = (state.coupleInfo && state.coupleInfo.myName) || "她";
   const hisName = (ag && ag.name) || "他";
@@ -25489,7 +25431,7 @@ JSON：
   "privateAlbum": [{"caption":"他偷拍的${myName}的画面"}],  // 2到4条，露骨但不要未成年内容
 }`;
 
-  let raw = await callChatAPI(agentToApiConfig(ag), [{role:"user", content:prompt}], null);
+  let raw = await callAuxAPI(state.apiConfig, prompt);
   if(typeof parseThinking === "function"){
     const p = parseThinking(raw);
     raw = p.body || raw;
@@ -26005,7 +25947,7 @@ function backupCollectAllKeys(){
 /** 深拷贝并剥离 API Key（apiConfig、agents 与 apiPresets） */
 function backupStripKeys(obj){
   const out = JSON.parse(JSON.stringify(obj));
-  const KEY_FIELDS = ["claudeKey","openaiKey","geminiKey","auxOpenaiKey"];
+  const KEY_FIELDS = ["claudeKey","openaiKey","geminiKey","auxOpenaiKey","auxClaudeKey"];
   if(out && typeof out === "object"){
     if(out.apiConfig && typeof out.apiConfig === "object"){
       KEY_FIELDS.forEach(k=>{ if(k in out.apiConfig) out.apiConfig[k] = ""; });
@@ -26189,7 +26131,7 @@ function renderSettings(){
       </div>
     </div>
     <div class="section">
-      <div class="section-title"><i data-lucide="brain"></i> 辅助 API（记忆整合 / 游戏）</div>
+      <div class="section-title"><i data-lucide="brain"></i> 辅助 API（聊天页以外的任务）</div>
       <div class="section-body">
         <div class="setting-row">
           <span class="setting-label">渠道</span>
@@ -26198,14 +26140,22 @@ function renderSettings(){
             <button class="channel-btn${a.auxChannel==="openai"?" active":""}" data-aux-channel="openai">OpenAI 兼容</button>
           </div>
         </div>
-        ${a.auxChannel==="openai"?`
+        ${a.auxChannel==="claude"?`
+          <div class="setting-row"><span class="setting-label">辅助 Claude Key</span>
+            <input type="password" id="cfg-auxClaudeKey" value="${escAttr(a.auxClaudeKey||"")}" placeholder="单独填写，不复用 Aries Key"/></div>
+          <div class="setting-row"><span class="setting-label">辅助 Claude Base</span>
+            <input id="cfg-auxClaudeBase" value="${escAttr(a.auxClaudeBase||"")}" placeholder="留空用官方接口"/></div>
+          <div class="setting-row"><span class="setting-label">辅助 Claude 模型</span>
+            <input id="cfg-auxClaudeModel" value="${escAttr(a.auxClaudeModel||"")}" placeholder="claude-sonnet-4-6"/></div>
+        `:`
           <div class="setting-row"><span class="setting-label">Aux Key</span>
-            <input type="password" id="cfg-auxOpenaiKey" value="${escAttr(a.auxOpenaiKey||"")}" placeholder="留空则复用聊天 Key"/></div>
+            <input type="password" id="cfg-auxOpenaiKey" value="${escAttr(a.auxOpenaiKey||"")}" placeholder="留空尝试 VPS 辅助转发"/></div>
           <div class="setting-row"><span class="setting-label">Aux Base</span>
-            <input id="cfg-auxOpenaiBase" value="${escAttr(a.auxOpenaiBase||"")}" placeholder="留空则复用聊天 URL"/></div>
+            <input id="cfg-auxOpenaiBase" value="${escAttr(a.auxOpenaiBase||"")}" placeholder="留空尝试 VPS 辅助转发"/></div>
           <div class="setting-row"><span class="setting-label">Aux 模型</span>
-            <input id="cfg-auxOpenaiModel" value="${escAttr(a.auxOpenaiModel||"")}" placeholder="gpt-4o-mini"/></div>
-        `:""}
+            <input id="cfg-auxOpenaiModel" value="${escAttr(a.auxOpenaiModel||"")}" placeholder="deepseek-chat"/></div>
+        `}
+        <div style="font-size:11px;color:var(--sub);padding:4px 2px 8px;line-height:1.5">聊天页里的功能使用当前角色 API；其他任务只用独立辅助凭据或 VPS 辅助转发。辅助服务不可用时保留待处理任务。</div>
       </div>
     </div>
     <div class="section">
@@ -28280,7 +28230,7 @@ function bindEvents(){
   const toneAiToggle=document.getElementById("tone-ai-toggle");
   if(toneAiToggle) toneAiToggle.onchange=()=>{
     state.toneAi = !!toneAiToggle.checked;
-    try{ LS.set("toneAi", state.toneAi); }catch(e){}
+    try{ LS.set("toneAi", state.toneAi); LS.set("toneAiExplicit", true); }catch(e){}
     render();
   };
   $$("[data-guide-agent]").forEach(btn=>{
@@ -28910,7 +28860,7 @@ function bindEvents(){
   $$("[data-aux-channel]").forEach(btn=>{
     btn.onclick=()=>{ state.apiConfig.auxChannel=btn.dataset.auxChannel; persist("apiConfig"); render(); };
   });
-  ["auxOpenaiKey","auxOpenaiBase","auxOpenaiModel"].forEach(k=>{
+  ["auxOpenaiKey","auxOpenaiBase","auxOpenaiModel","auxClaudeKey","auxClaudeBase","auxClaudeModel"].forEach(k=>{
     const el=document.getElementById("cfg-"+k);
     if(el) el.onchange=()=>{ state.apiConfig[k]=el.value; persist("apiConfig"); };
   });
@@ -31579,17 +31529,17 @@ async function bgGenProactive(){
     const built = proactiveBuildRequest(gate.reason, { conflict: gate.conflict });
     if(!built) return;
     const ag = built.ag;
-    if(ag.channel === "cc") return;
+    const ep = auxEndpoint(state.apiConfig);
+    if(!ep) return;
     const target = state.chatTarget === "group" ? "a1" : (state.chatTarget || "a1");
     const task = {
       messages: built.msgs,
       sys: built.sys,
       cfg: {
-        channel: ag.channel,
-        claudeKey: ag.claudeKey || "", claudeBase: ag.claudeBase || "", claudeModel: ag.claudeModel || "",
-        openaiKey: ag.openaiKey || "", openaiBase: ag.openaiBase || "https://api.openai.com/v1",
-        openaiModel: ag.openaiModel || "gpt-4o",
-        geminiKey: ag.geminiKey || "", geminiModel: ag.geminiModel || "gemini-2.0-flash",
+        channel: ep.channel,
+        claudeKey: ep.channel === "claude" ? ep.key : "", claudeBase: ep.channel === "claude" ? ep.base : "", claudeModel: ep.channel === "claude" ? ep.model : "",
+        openaiKey: ep.channel === "openai" ? ep.key : "", openaiBase: ep.channel === "openai" ? ep.base : "",
+        openaiModel: ep.channel === "openai" ? (ep.model || "deepseek-chat") : "",
       },
       threadId: target,
       agentName: ag.name || "TA",
@@ -32443,10 +32393,7 @@ ${(function(){ try{
 不要问句，不要复述行程，不要「祝你」「下次」这种客套，也不要写引号和任何标签。
 上面聊天里出现过的具体东西优先写进去；没有就写你这段时间心里的那点动静。`;
     let txt = "";
-    if(typeof callChatAPI === "function"){
-      const req = buildMainChatRequest(ag, null);
-      txt = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content: prompt }], req.sys, { background:true });
-    }
+    txt = await callAuxAPI(state.apiConfig, prompt);
     txt = String(txt||"").replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
       .replace(/⟪[^⟫]{0,200}⟫/g, "").replace(/^[「"'“”\s]+|[」"'“”\s]+$/g, "").replace(/\s+/g, " ").trim();
     if(txt) entry.his = txt.slice(0, 60);
@@ -35090,8 +35037,7 @@ ${where ? "她这趟是去" + where + "。" : ""}
 - 不要问句，不要跟她搭话，不要引号和任何标签
 - **不要提她走了多远、走了多久，也不要催她、不要建议她去哪** —— 这趟怎么走是她的事
 - 不写数字，不写等级稀有度这种东西`;
-    const req = buildMainChatRequest(ag, null);
-    let txt = await callChatAPI(agentToApiConfig(ag), [{ role:"user", content: prompt }], req.sys, { background:true });
+    let txt = await callAuxAPI(state.apiConfig, prompt);
     txt = String(txt||"").replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
       .replace(/⟪[^⟫]{0,200}⟫/g, "").replace(/^[「"'“”\s]+|[」"'“”\s]+$/g, "")
       .replace(/\s+/g, " ").trim();
@@ -36551,15 +36497,9 @@ MM-DD HH:mm 一句话
 
 这是对「上一次摘要」的整体更新，不是追加：上一次里超过 ${cutoff} 的行删掉，约定那块原样带过来再补新的。
 **全文不超过 220 字**，不许写开场白、结束语或任何解释。\n\n【上一次摘要】\n${prevSummary||"（无）"}\n\n【新对话】${span}\n${text.slice(0,20000)}`;
-    // 兜底优先挑非 CC 的通道：CC 是共享终端，摘要和她刚发的消息撞在一起会互相串
-    // （hub 的回复没有请求 id）—— 「换官方订阅渠道就把摘要发出来了」就是这么来的。
-    const ag = (typeof bgChatAgent==="function" ? bgChatAgent() : null) || agentById(target) || (state.agents||[])[0];
-    // 摘要用便宜的 aux（DeepSeek）生成，主模型（贵）兜底：省 token 大头就是省在每轮的上下文，这里只花零头
+    // 对话摘要是后台压缩，辅助模型不可用时保留旧摘要和旧进度。
     let summary = "";
     try{ summary = (await callAuxAPI(state.apiConfig, prompt)) || ""; }catch(e){}
-    if(!summary.trim() && typeof callChatAPI==="function" && ag){
-      summary = await callChatAPI(agentToApiConfig(ag), [{role:"user",content:prompt}], null, { background:true });
-    }
     // 空摘要绝不能覆盖上一份，否则压缩点白推进、旧对话就真丢了
     if(!String(summary||"").trim()) return;
     // 900 → 400：提示词要的是 220 字的流水账，留点余量就够（这一段每轮都发）
@@ -36669,14 +36609,6 @@ function fmtClock(ts){
 
 async function callOneAgentReply(ag, apiMsgs, sys){
   const cfg = agentToApiConfig(ag);
-  // 同步旧 apiConfig 里的 key，方便 aux 等
-  if(ag.channel==="claude" && ag.claudeKey) state.apiConfig.claudeKey = ag.claudeKey;
-  if(ag.channel==="openai" && ag.openaiKey){
-    state.apiConfig.openaiKey = ag.openaiKey;
-    state.apiConfig.openaiBase = ag.openaiBase;
-    state.apiConfig.openaiModel = ag.openaiModel;
-  }
-
   // ── 工具集成：卡片写库（本地）+ MCP + 相机 ──
   let reply = "", toolEvents = [];
   const isCC = ag.channel === "cc";
@@ -36789,7 +36721,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       const r = await callChatAPIAdvanced(cfg, apiMsgs, sysCam, {
         tools,
         toolHandler: __ariesToolHandler,
-        maxRounds: (ariesCam || cardsOn) ? 6 : 0,
+        maxRounds: 4,
       });
       reply = r.text || "";
       toolEvents = r.toolEvents || [];
@@ -36801,8 +36733,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
         }
       }catch(e){}
     }catch(e){
-      showToast(`工具调用失败，已退化为普通对话：${e.message}`);
-      reply = await callChatAPI(cfg, apiMsgs, sys||null);
+      showToast(`工具调用失败：${e.message}`);
+      throw e;
     }
   } else if(state.streamOn !== false && !guardOn() && typeof callChatAPIStream === "function"){
     // 流式输出：实时气泡 + 收尾复用同一管线；出错自动回退非流式
@@ -36823,8 +36755,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       reply = r.reply || "";
     }catch(e){
       streamLiveEnd();
-      showToast(`流式失败，已切换非流式：${e.message}`);
-      reply = await callChatAPI(cfg, apiMsgs, sys||null);
+      showToast(`流式失败：${e.message}`);
+      throw e;
     }
     streamLiveEnd();
   } else {
@@ -37294,10 +37226,7 @@ function collectChatTranscript(opts = {}){
 
 /** 打开整理选择弹窗（不立即跑 AI） */
 function openMemIntegrate(){
-  if(!state.apiConfig.claudeKey && !state.apiConfig.auxOpenaiKey && !state.apiConfig.openaiKey){
-    const anyKey = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
-    if(!anyKey) return alert("请先配置 API Key");
-  }
+  if(!auxConfigured()) return alert("辅助 API 暂不可用，记忆整理会等它恢复后再进行");
   const pad = n=>String(n).padStart(2,"0");
   const today = new Date();
   const defTo = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
@@ -37314,10 +37243,7 @@ function openMemIntegrate(){
 
 /** 从聊天记录提炼记忆（确认后后台跑） */
 async function integrateMemoriesFromChat(){
-  if(!state.apiConfig.claudeKey && !state.apiConfig.auxOpenaiKey && !state.apiConfig.openaiKey){
-    const anyKey = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
-    if(!anyKey) return alert("请先配置 API Key");
-  }
+  if(!auxConfigured()) return alert("辅助 API 暂不可用，记忆整理会等它恢复后再进行");
   const fromEl = document.getElementById("mem-int-from");
   const toEl = document.getElementById("mem-int-to");
   if(fromEl && fromEl.value) state.memIntegrateDraft = { ...(state.memIntegrateDraft||{}), dateFrom: fromEl.value };
@@ -37556,9 +37482,7 @@ async function memAutoIntegrate(opts){
     __memNote("聊天记录还没读完，先不沉淀（避免把检查点夹坏）");
     return;
   }
-  const anyKey = state.apiConfig && (state.apiConfig.claudeKey || state.apiConfig.auxOpenaiKey || state.apiConfig.openaiKey);
-  const agKey = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
-  if(!anyKey && !agKey){ __memNote("没有可用的 API Key"); return; }
+  if(!auxConfigured()){ __memNote("辅助 API 尚未配置，等待可用后再整理"); return; }
   const ids = [...((state.agents||[]).map(a=>a.id)), "group"];
   const cp = state.memCheckpoint || (state.memCheckpoint = {});
   const rc = state.memCpRecent   || (state.memCpRecent   = {});
@@ -37612,10 +37536,7 @@ async function memAutoIntegrate(opts){
   let totalCreated = 0, totalRemote = 0, madeNew = 0, madeBack = 0;
   const errs = [];
   try{
-    // 提炼一律走**聊天模型**（memDigestTranscript 里已改成聊天模型主力）。
-    // 以前这里先调云端 /mem/ingest —— 那个接口在 VPS 上是拿 DeepSeek 提炼的，
-    // DeepSeek 欠费时它照样回 {ok:true,count:0}，把「失败」伪装成「没什么可记的」。
-    // 现在云端只负责**存**（/mem/add 只做保存 + 向量化，不调任何 LLM）。
+    // 云端只负责存储；提炼由辅助 API 完成，失败不推进游标。
     const digest = async (tid, skip, take, label, opts)=>{
       const transcript = collectChatTranscript({ threadIds:[tid], skip, limit: take, maxPerThread:0 });
       if(!transcript.trim()) return true;   // 空区间也算处理过，照常推进游标，免得反复重试
@@ -37722,9 +37643,7 @@ async function memAutoIntegrate(opts){
 /** 多选已有记忆 → 合并成一条 */
 async function mergeMemories(){
   if(state.memSelected.length<2) return alert("请至少选择 2 条记忆进行合并");
-  // 合并也走聊天模型，所以有聊天 Key 就够了（原来只认 apiConfig 那三把，没配 aux 会被拦下）
-  const _hasAg = (state.agents||[]).some(a=>typeof agentHasKey==="function" && agentHasKey(a));
-  if(!_hasAg && !state.apiConfig.claudeKey && !state.apiConfig.auxOpenaiKey && !state.apiConfig.openaiKey) return alert("请先配置 API Key");
+  if(!auxConfigured()) return alert("辅助 API 暂不可用，记忆合并会等它恢复后再进行");
   const toMerge=state.memories.filter(m=>state.memSelected.includes(m.id));
   const prompt=`以下是${toMerge.length}条记忆碎片，请帮我将它们整合成一段精炼的日记（300字以内），保留情感核心，去除重复：\n\n${toMerge.map((m,i)=>`${i+1}. [${m.layer}] ${m.content}`).join("\n\n")}`;
   state.memMergeLoading=true; render();
