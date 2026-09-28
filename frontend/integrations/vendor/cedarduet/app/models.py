@@ -18,6 +18,7 @@ class CreateRoomBody(StrictBody):
     stake: int = Field(default=0, ge=0)
     target_player_count: int | None = Field(default=None, ge=2, le=6)
     fill_with_npcs: bool = False
+    managed_mode: bool = False
     rematch_of_room_id: str | None = Field(default=None, min_length=8, max_length=8)
 
     @field_validator("stake", mode="before")

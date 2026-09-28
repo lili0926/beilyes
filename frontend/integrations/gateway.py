@@ -36,10 +36,10 @@ def authorize(request):
     if not TOKEN or not hmac.compare_digest(supplied, 'Bearer ' + TOKEN):
         raise HTTPException(401, '请在 App 输入服务连接码')
 
-async def upstream(service, path, *, method='GET', data=None, raw=None, content_type=None):
+async def upstream(service, path, *, method='GET', data=None, raw=None, content_type=None, extra_headers=None):
     async with httpx.AsyncClient(timeout=35, follow_redirects=False, trust_env=False) as client:
         response = await client.request(method, UPSTREAM[service] + path,
-            json=data, content=raw, headers={'content-type': content_type} if content_type else {})
+            json=data, content=raw, headers={**({'content-type': content_type} if content_type else {}), **(extra_headers or {})})
     return response
 
 @app.get('/eden/health')
@@ -54,6 +54,59 @@ async def status(request: Request):
         try: result[name] = (await upstream(name,path)).is_success
         except httpx.HTTPError: result[name] = False
     return {'ok':all(result.values()),'services':result}
+
+GAMES = {'gomoku', 'blackjack', 'zhajinhua', 'mahjong'}
+
+def game_response(response):
+    # The Eden board only consumes its own projected room. Never forward the
+    # Cedar timeline, internal identity metadata, or hidden deck/wall state.
+    if not response.is_success:
+        return Response(response.content, status_code=response.status_code, media_type='application/json')
+    payload = response.json()
+    room = payload.get('room') or {}
+    projected = {
+        key: room.get(key) for key in (
+            'room_id', 'game_type', 'game_name', 'status', 'revision',
+            'current_player_id',
+            'viewer', 'board_state', 'private_state', 'winner',
+            'winner_player_id', 'result', 'action_note')
+    }
+    projected['participants'] = [{key: person.get(key) for key in (
+        'player_id', 'display_name', 'seat_index', 'token', 'game_metadata')}
+        for person in room.get('participants', [])]
+    actor = room.get('current_actor') or {}
+    projected['current_actor'] = {key: actor.get(key) for key in ('player_id', 'display_name')}
+    return JSONResponse({'ok': True, 'room': projected}, headers={'Cache-Control': 'no-store'})
+
+@app.post('/eden/games/{game}/rooms')
+async def create_game_room(game: str, request: Request):
+    authorize(request)
+    if game not in GAMES: raise HTTPException(404, '没有这个游戏')
+    target = 4 if game == 'mahjong' else 2
+    response = await upstream('duel', '/api/rooms', method='POST', data={
+        'game_type': game, 'mode': 'human_first', 'stake': 0,
+        'target_player_count': target, 'fill_with_npcs': target == 4,
+        'managed_mode': True,
+    }, extra_headers={'X-Eden-Managed': '1'})
+    return game_response(response)
+
+@app.get('/eden/games/rooms/{room_id}')
+async def get_game_room(room_id: str, request: Request):
+    authorize(request)
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8}', room_id): raise HTTPException(422, '房间编号无效')
+    return game_response(await upstream('duel', f'/api/rooms/{room_id}'))
+
+@app.post('/eden/games/rooms/{room_id}/move')
+async def move_game_room(room_id: str, request: Request):
+    authorize(request)
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8}', room_id): raise HTTPException(422, '房间编号无效')
+    body = await bounded_json(request)
+    move, revision = body.get('move'), body.get('revision')
+    if not isinstance(move, dict) or not isinstance(revision, int) or isinstance(revision, bool):
+        raise HTTPException(422, '需要服务端给出的动作和局面版本')
+    response = await upstream('duel', f'/api/rooms/{room_id}/move', method='POST',
+        data={'move': move, 'revision': revision})
+    return game_response(response)
 
 @app.get('/eden/tools')
 async def tools(request: Request):

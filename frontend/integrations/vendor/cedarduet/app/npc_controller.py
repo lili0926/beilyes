@@ -531,6 +531,10 @@ def _finish_npc_action(
     updated: dict[str, Any], npc_player_id: str,
     provider: NpcProvider | None,
 ) -> asyncio.Task[bool] | None:
+    if updated.get("game_type") in {"gomoku", "blackjack", "zhajinhua", "mahjong"}:
+        # Eden keeps conversation in its own chat. No speech/model call belongs
+        # to a managed board-game turn.
+        return None
     if (
         updated.get("status") == "playing"
         and updated.get("current_player_id") == npc_player_id

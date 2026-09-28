@@ -5794,6 +5794,7 @@ function render(){
   EdenTheme.afterRender();
   EdenMusic.afterRender();
   EdenIntegrations.afterRender();
+  EdenGames.afterRender();
   EdenColorStudio.mount();
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
@@ -10837,10 +10838,10 @@ function renderSubPage(){
     rewrite: renderRewrite,
     cabinets: renderCabinets,
     game: renderGame,
-    duel_gomoku: ()=>EdenIntegrations.page("duel"),
-    duel_blackjack: ()=>EdenIntegrations.page("duel"),
-    duel_zhajinhua: ()=>EdenIntegrations.page("duel"),
-    duel_mahjong: ()=>EdenIntegrations.page("duel"),
+    duel_gomoku: ()=>EdenGames.page("gomoku"),
+    duel_blackjack: ()=>EdenGames.page("blackjack"),
+    duel_zhajinhua: ()=>EdenGames.page("zhajinhua"),
+    duel_mahjong: ()=>EdenGames.page("mahjong"),
     cooking: renderCookingGame,
     menu: renderMenuGame,
     cmdgame: renderCmdGame,

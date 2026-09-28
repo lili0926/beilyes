@@ -74,6 +74,7 @@ def hand_value(hand: Iterable[dict[str, Any]]) -> dict[str, int | bool | str]:
 
 
 class Blackjack(GamePlugin):
+    uses_local_npc_strategy = True
     """One persisted multiplayer table playing against a wallet-less dealer."""
 
     game_type = "blackjack"
@@ -737,3 +738,7 @@ class Blackjack(GamePlugin):
         value = self._value_for(state, player_id)
         preferred = "stand" if int(value["total"]) >= 17 else "hit"
         return sorted(actions, key=lambda action: action["action"] != preferred)
+
+    def choose_local_npc_action(self, state, actor, participants):
+        actions = self.npc_legal_actions(state, actor, participants)
+        return actions[0] if actions else None

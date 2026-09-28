@@ -4,6 +4,8 @@ from .base import GamePlugin, move_coordinates
 
 
 class Gomoku(GamePlugin):
+    supports_npcs = True
+    uses_local_npc_strategy = True
     supports_stakes = True
     game_type = "gomoku"
     display_name = "五子棋"
@@ -60,3 +62,42 @@ class Gomoku(GamePlugin):
         if all(cell is not None for row in board for cell in row):
             return "draw"
         return None
+
+    def npc_legal_actions(self, state, actor, participants):
+        del actor, participants
+        return [
+            {"row": row, "col": col}
+            for row, cells in enumerate(state["board"])
+            for col, value in enumerate(cells) if value is None
+        ]
+
+    def private_state(self, state, viewer, participants):
+        del participants
+        return {"legal_actions": self.npc_legal_actions(state, None, None)}
+
+    def choose_local_npc_action(self, state, actor, participants):
+        legal = self.npc_legal_actions(state, actor, participants)
+        if not legal:
+            return None
+        board = state["board"]
+        own = actor["token"]
+        others = [p["token"] for p in participants if p["player_id"] != actor["player_id"]]
+        foe = others[0] if others else None
+        def streak(row, col, mark, dr, dc):
+            count = 1
+            for sign in (-1, 1):
+                r, c = row + sign * dr, col + sign * dc
+                while 0 <= r < 15 and 0 <= c < 15 and board[r][c] == mark:
+                    count += 1
+                    r += sign * dr
+                    c += sign * dc
+            return count
+        def score(move, mark):
+            return max(streak(move["row"], move["col"], mark, dr, dc)
+                       for dr, dc in ((1, 0), (0, 1), (1, 1), (1, -1)))
+        return max(legal, key=lambda move: (
+            score(move, own) >= 5,
+            foe is not None and score(move, foe) >= 5,
+            score(move, own) * 2 + (score(move, foe) if foe else 0),
+            -(abs(move["row"] - 7) + abs(move["col"] - 7)),
+        ))

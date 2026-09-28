@@ -46,6 +46,7 @@ def _hidden_hand() -> list[dict[str, bool]]:
 
 
 class Zhajinhua(GamePlugin):
+    uses_local_npc_strategy = True
     game_type = "zhajinhua"
     display_name = "炸金花"
     category = "card"
@@ -762,6 +763,18 @@ class Zhajinhua(GamePlugin):
     ) -> list[dict[str, Any]]:
         del participants
         return self.legal_actions_for(state, str(actor["player_id"]))
+
+    def choose_local_npc_action(self, state, actor, participants):
+        actions = self.npc_legal_actions(state, actor, participants)
+        if not actions:
+            return None
+        player = self._player_state(state, str(actor["player_id"]))
+        if not player["seen"]:
+            return next((item for item in actions if item["action"] == "peek"), actions[0])
+        value = evaluate_hand(self._hand(state, str(actor["player_id"])))
+        strong = value.hand_type != "high_card"
+        priority = ("compare", "call", "raise", "fold") if strong else ("call", "fold")
+        return next((item for kind in priority for item in actions if item["action"] == kind), actions[0])
 
     def format_action(
         self,

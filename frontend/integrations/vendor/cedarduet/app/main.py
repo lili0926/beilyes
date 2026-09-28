@@ -1161,6 +1161,8 @@ async def human_read_notifications(
 
 @app.post("/api/rooms")
 async def human_create(request: Request, body: CreateRoomBody):
+    if body.managed_mode and request.headers.get("X-Eden-Managed") != "1":
+        raise DuelError("托管对局只能从花园牌桌创建", 403)
     trusted_human = request.headers.get("X-Duel-Human-Player")
     if not trusted_human:
         raise DuelError("请从 toy.cedarstar.org 首页登录进入", 403)
@@ -1245,7 +1247,8 @@ async def human_create(request: Request, body: CreateRoomBody):
                 {
                     "player_id": selected_ai,
                     "role": "ai",
-                    "participant_kind": "bound_machine",
+                    "participant_kind": "system_npc" if body.managed_mode else "bound_machine",
+                    **({"npc_persona_id": "local-01"} if body.managed_mode else {}),
                 }
                 for selected_ai in selected_ais
             ),
@@ -1259,7 +1262,7 @@ async def human_create(request: Request, body: CreateRoomBody):
             **{machine["id"]: machine["name"] for machine in machines},
         },
         stake=body.stake,
-        enforce_trusted_pair=True,
+        enforce_trusted_pair=not body.managed_mode,
         first_player_id=first_player_id,
         rematch_of_room_id=body.rematch_of_room_id,
     )
