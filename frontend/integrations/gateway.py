@@ -114,13 +114,6 @@ async def tools(request: Request):
     response = await upstream('bar','/bar/tools')
     response.raise_for_status()
     definitions = [{'name':'eden_'+t['name'],'description':t['description'],'inputSchema':t['input_schema']} for t in response.json()['tools']]
-    definitions.append({'name':'eden_play','description':'CedarDuet真实游戏。先 rooms 找邀请，再 accept，然后 state 获取自己视角的规则、牌面与合法动作。move 按返回规则执行。红中麻将只自摸、红中万能。禁止猜对手手牌。',
-        'inputSchema': {'type':'object','properties':{
-            'action':{'type':'string','enum':['catalog','rooms','new','accept','reject','state','move','rematch','resign','leave']},
-            'room_id':{'type':'string'},'game_type':{'type':'string','enum':['gomoku','blackjack','zhajinhua','mahjong']},
-            'move':{'type':'object','description':'按 state 返回 move_format / legal_actions 填写'},
-            'message':{'type':'string'},'mode':{'type':'string','enum':['human_first','ai_first']},
-            'target_player_count':{'type':'integer','minimum':2,'maximum':4},'fill_with_npcs':{'type':'boolean'}},'required':['action']}})
     definitions.append({'name':'eden_listening','description':'读取用户明确上传歌曲的 Lilt Echo 声学分析。数据不是耳听，不能声称听到了未提供的歌词或演唱细节。',
         'inputSchema':{'type':'object','properties':{'song_id':{'type':'string'}},'required':['song_id']}})
     return {'tools':definitions}
@@ -131,15 +124,7 @@ async def call_tool(request: Request):
     body=await bounded_json(request)
     name=body.get('name'); args=body.get('arguments') or {}
     if not isinstance(args,dict): raise HTTPException(422,'arguments 必须是对象')
-    if name=='eden_play':
-        # Identity, zero stakes and no long-poll are assigned by this private gateway.
-        permitted={'action','room_id','game_type','move','message','mode','target_player_count','fill_with_npcs'}
-        args={k:v for k,v in args.items() if k in permitted}
-        if args.get('action') not in {'catalog','rooms','new','accept','reject','state','move','rematch','resign','leave'}:
-            raise HTTPException(422,'不支持的游戏动作')
-        args.update(player_id='local-ai',opponent_id='local-human',stake=0,wait=False)
-        response=await upstream('duel','/mcp/play',method='POST',data=args)
-    elif name in {'eden_bar_look','eden_bar_drink','eden_bar_game'}:
+    if name in {'eden_bar_look','eden_bar_drink','eden_bar_game'}:
         response=await upstream('bar','/bar/ai',method='POST',data={'tool':name.removeprefix('eden_'),'input':args})
     elif name=='eden_listening':
         sid=str(args.get('song_id',''))
