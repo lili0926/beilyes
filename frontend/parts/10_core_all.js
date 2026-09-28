@@ -21525,6 +21525,7 @@ function renderMenuGame(){
 // 浏览器不能用 stdio；支持 Streamable HTTP 与旧版 SSE。跨域请走 VPS 反代。
 let __mcpReqId = 1;
 let __mcpSseEndpoint = null;
+let __mcpConnectedKey = "";
 
 function mcpLog(line){
   state.mcpLog = [{ t: new Date().toISOString(), line: String(line) }, ...(state.mcpLog||[])].slice(0, 40);
@@ -21537,6 +21538,10 @@ function mcpEnsureConfig(){
   if(state.mcpConfig.inChat === undefined) state.mcpConfig.inChat = true;
   if(state.mcpConfig.token === undefined) state.mcpConfig.token = "";
   return state.mcpConfig;
+}
+function mcpConfigKey(){
+  const cfg = mcpEnsureConfig();
+  return JSON.stringify([cfg.url||"", cfg.proxy||"", cfg.transport||"auto", cfg.token||""]);
 }
 function mcpEffectiveUrl(url){
   const cfg = mcpEnsureConfig();
@@ -21656,6 +21661,7 @@ async function mcpRpc(method, params){
 async function mcpConnect(){
   const cfg = mcpEnsureConfig();
   if(!(cfg.url||"").trim()){ alert("请填写 MCP Server URL"); return; }
+  const key = mcpConfigKey();
   window.__mcpUserOff = false;        // 连上了就把「她手动断过」那个记号清掉
   state.mcpStatus = "connecting";
   state.mcpError = "";
@@ -21664,6 +21670,7 @@ async function mcpConnect(){
   state.mcpServerInfo = null;
   __mcpSseEndpoint = null;
   state.mcpSessionId = "";
+  __mcpConnectedKey = "";
   render();
   try{
     const init = await mcpRpc("initialize", {
@@ -21685,7 +21692,9 @@ async function mcpConnect(){
       const res = await mcpRpc("resources/list", {});
       state.mcpResources = res?.resources || [];
     }catch(e){ state.mcpResources = []; }
+    if(key !== mcpConfigKey()) throw new Error("连接过程中配置已改变，请重新连接");
     state.mcpStatus = "ready";
+    __mcpConnectedKey = key;
     mcpLog("已连接 · 工具 "+state.mcpTools.length+" 个");
   }catch(e){
     state.mcpStatus = "error";
@@ -21703,6 +21712,7 @@ function mcpDisconnect(){
   state.mcpError = "";
   __mcpSseEndpoint = null;
   state.mcpSessionId = "";
+  __mcpConnectedKey = "";
   window.__mcpUserOff = true;          // 她手动断的，这一程别自动连回来
   mcpLog("已断开");
   render();
@@ -21720,6 +21730,7 @@ function mcpDisconnect(){
  * 失败不吵她（原因写进 mcpLog，MCP 大厅页看得到），60 秒内不重试。
  */
 let __mcpEnsureAt = 0;
+let __mcpEnsureKey = "";
 let __mcpEnsureInflight = null;
 async function mcpEnsureReady(opts){
   const o = opts || {};
@@ -21727,11 +21738,13 @@ async function mcpEnsureReady(opts){
   if(!cfg || !(cfg.url || "").trim()) return false;      // 没配就不管
   if(cfg.inChat === false) return false;                 // 她关了「参与聊天」
   if(window.__mcpUserOff && !o.force) return false;      // 她刚手动断开
-  if(state.mcpStatus === "ready" && (state.mcpTools||[]).length) return true;
+  const key = mcpConfigKey();
+  if(state.mcpStatus === "ready" && (state.mcpTools||[]).length && __mcpConnectedKey === key) return true;
   if(__mcpEnsureInflight) return __mcpEnsureInflight;     // 正在连，别并发开第二条
   const now = Date.now();
-  if(!o.force && now - __mcpEnsureAt < 60000) return false;
+  if(!o.force && __mcpEnsureKey === key && now - __mcpEnsureAt < 60000) return false;
   __mcpEnsureAt = now;
+  __mcpEnsureKey = key;
   __mcpEnsureInflight = (async ()=>{
     try{ await mcpConnect(); }catch(e){ try{ mcpLog("自动连接失败: " + (e && e.message || e)); }catch(_){} }
     return state.mcpStatus === "ready" && (state.mcpTools||[]).length > 0;
@@ -21794,6 +21807,7 @@ function mcpCollectArgs(toolName){
   return args;
 }
 async function mcpCallTool(toolName, args){
+  if(state.mcpStatus === "ready" && __mcpConnectedKey !== mcpConfigKey()) await mcpConnect();
   if(state.mcpStatus !== "ready"){ alert("请先连接 MCP 服务器"); return; }
   try{
     mcpLog("call "+toolName+" "+JSON.stringify(args||{}));
@@ -36622,8 +36636,11 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   const mcpInChat = !isCC
     && state.mcpStatus === "ready"
     && state.mcpConfig && state.mcpConfig.inChat !== false
-    && (state.mcpTools||[]).length > 0
-    && !(apiMsgs||[]).some(m=>m && m.image);
+    && __mcpConnectedKey === mcpConfigKey()
+    && (state.mcpTools||[]).length > 0;
+  if(!isCC && state.mcpConfig && state.mcpConfig.url){
+    mcpLog(mcpInChat ? "聊天已注入 "+state.mcpTools.length+" 个工具" : "聊天未注入工具："+(state.mcpConfig.inChat===false?"参与聊天已关闭":state.mcpStatus));
+  }
   let edenTools = [];
   if(!isCC){
     try{

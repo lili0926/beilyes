@@ -55,3 +55,25 @@ test('the shell reuses native theme persistence and leaves send/storage implemen
  assert.ok(core.includes('EdenTheme.afterRender();'));
  const module=fs.readFileSync(path.join(front,'eden/eden.js'),'utf8');assert.ok(!/fetch\(|indexedDB|localStorage|apiKey|chat-form/.test(module));
 });
+test('switching MCP servers reconnects instead of reusing the old tool list',async()=>{
+ const config={url:'https://first.example/mcp',transport:'auto',proxy:'',token:''};
+ const state={mcpConfig:config,mcpStatus:'ready',mcpTools:[{name:'old_tool'}]};
+ let connects=0;
+ const context=vm.createContext({state,window:{},Date,mcpConnect:async()=>{
+   connects++;
+   state.mcpStatus='ready';state.mcpTools=[{name:'new_tool'}];
+   vm.runInContext('__mcpConnectedKey=mcpConfigKey()',context);
+ }});
+ vm.runInContext('function mcpEnsureConfig(){return state.mcpConfig}\n'+
+   core.slice(core.indexOf('function mcpConfigKey(){'),core.indexOf('function mcpEffectiveUrl('))+
+   'let __mcpConnectedKey="";\n'+
+   core.slice(core.indexOf('let __mcpEnsureAt = 0;'),core.indexOf('function mcpSchemaFields(')),context);
+ vm.runInContext('__mcpConnectedKey=mcpConfigKey()',context);
+ assert.equal(await vm.runInContext('mcpEnsureReady()',context),true);
+ assert.equal(connects,0);
+ config.url='https://second.example/mcp';
+ assert.equal(await vm.runInContext('mcpEnsureReady()',context),true);
+ assert.equal(connects,1);
+ assert.equal(await vm.runInContext('mcpEnsureReady()',context),true);
+ assert.equal(connects,1);
+});
