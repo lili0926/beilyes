@@ -5733,7 +5733,7 @@ function render(){
     const capUrl = (typeof captivityLaunchUrl === "function") ? captivityLaunchUrl() : "";
     html += `<div class="captivity-frame-wrap" id="captivity-frame-wrap">
       <div class="captivity-frame-bar">
-        <button type="button" id="cap-frame-close">← 返回宫殿</button>
+        <button type="button" id="cap-frame-close">‹ 返回宫殿</button>
         <div class="cap-title">囚禁模拟器</div>
         <button type="button" id="cap-frame-ext">新窗口打开</button>
       </div>
@@ -5744,7 +5744,7 @@ function render(){
     const b = state.biscaOpen;
     html += `<div class="captivity-frame-wrap" id="bisca-frame-wrap">
       <div class="captivity-frame-bar">
-        <button type="button" id="bisca-frame-close">← 返回宫殿</button>
+        <button type="button" id="bisca-frame-close">‹ 返回宫殿</button>
         <div class="cap-title">${esc(b.title||"游戏")}</div>
         <button type="button" id="bisca-bot-toggle" title="请机入座">请机</button>
         <button type="button" id="bisca-frame-host">${b.useDomain?"用IP":"用域名"}</button>
@@ -10844,7 +10844,7 @@ function renderSubPage(){
 
 function subHeader(title){
   return `<div class="sub-header">
-    <button class="back-btn" id="sub-back">←</button>
+    <button type="button" class="back-btn" id="sub-back" aria-label="返回上一层">‹ 返回</button>
     <h2 class="page-title" style="margin:0">${title}</h2>
   </div>`;
 }
@@ -17444,7 +17444,7 @@ function renderCaptivity(){
   const url = captivityLaunchUrl();
   return `
     <div class="sub-header">
-      <button type="button" class="back-btn" id="sub-back">←</button>
+      <button type="button" class="back-btn" id="sub-back" aria-label="返回上一层">‹ 返回</button>
       <div>
         <div class="sub-title">囚禁模拟器</div>
         <div class="sub-desc">外接原版 · 30 天双路线</div>
@@ -17550,7 +17550,7 @@ function renderCabinets(){
     modal = `<div class="cab-modal-mask" id="cab-modal-mask">
       <div class="cab-modal" id="cab-modal-panel">
         <div class="cab-modal-head">
-          <button class="back-btn" id="cab-modal-close" style="width:32px;height:32px">←</button>
+          <button type="button" class="back-btn" id="cab-modal-close" aria-label="返回上一层">‹ 返回</button>
           <div style="flex:1">
             <div style="font-size:15px;font-weight:700;color:var(--text)">${esc(open.icon||"")} ${esc(open.name)}</div>
             <div class="cab-swipe-hint">左右滑切换柜子 · ${idx+1}/${cabs.length}</div>

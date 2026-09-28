@@ -1,0 +1,68 @@
+/* The same ivory return pill used by Echo, across Eden feature pages. */
+body.shell-eden .sub-header .back-btn,
+body.shell-eden #cab-modal-close,
+body.shell-eden .captivity-frame-bar button:first-child,
+body.shell-eden .hp-nav button[data-hp-tab] {
+  width:auto;min-width:82px;height:36px;flex-shrink:0;padding:0 14px;
+  border:1px solid #d8cbbb;border-radius:25px;background:#fffcf3b8;
+  color:#89775f;font:12px/1.2 'Songti SC',serif;white-space:nowrap;
+}
+body.shell-eden .sub-header .back-btn:focus-visible,
+body.shell-eden .eden-echo-back button:focus-visible,
+body.shell-eden #cab-modal-close:focus-visible,
+body.shell-eden .captivity-frame-bar button:first-child:focus-visible,
+body.shell-eden .hp-nav button[data-hp-tab]:focus-visible {
+  outline:2px solid #b7a181;outline-offset:3px;
+}
+
+/* Echo is a diary-like feed: let the words lead, without poster-sized cards. */
+body.shell-eden .eden-echo-back {padding:12px 16px 0;}
+body.shell-eden .eden-echo-back button {min-height:36px;padding:7px 14px;}
+body.shell-eden .eden-echo-head {padding:8px 16px 10px;}
+body.shell-eden .eden-echo-head h1 {margin:4px 0;font-size:25px;}
+body.shell-eden .eden-echo-head p {margin:3px 0;}
+body.shell-eden .eden-echo-toolbar {padding:9px 14px 7px;gap:6px;}
+body.shell-eden .eden-echo-toolbar button {padding:8px 10px;}
+body.shell-eden .wx-feed {padding:5px 14px 24px;}
+body.shell-eden .wx-post.mo-card {
+  padding:13px 13px 12px;margin-bottom:10px;border-radius:13px;
+  background:linear-gradient(155deg,#fffdf7f2,#faf6eeed);
+  box-shadow:0 3px 12px #66533a0b,inset 0 0 0 2px #fff8;
+}
+body.shell-eden .wx-post-row {gap:10px;}
+body.shell-eden .wx-av {width:38px;height:38px;}
+body.shell-eden .wx-author {font-size:14px;line-height:1.35;margin:0;}
+body.shell-eden .wx-text {font:13px/1.55 'Songti SC',serif;margin:5px 0 2px;}
+body.shell-eden .wx-imgs {margin:4px 0 3px;}
+body.shell-eden .wx-meta {min-height:26px;margin-top:2px;}
+body.shell-eden .wx-time {font-size:10px;color:#a89780;}
+body.shell-eden .wx-more {
+  width:31px;height:25px;border:1px solid #e3d7c6;border-radius:9px;
+  background:#f8f2e9;color:#8d785f;font-size:15px;box-shadow:none;
+}
+body.shell-eden .wx-more:active {background:#efe4d5;}
+body.shell-eden .wx-panel {
+  background:#f8f2e9;border:1px solid #d8c8b2;border-radius:12px;
+  box-shadow:0 5px 18px #5646331f;padding:2px;max-width:min(230px,calc(100vw - 70px));
+}
+body.shell-eden .wx-panel button {color:#77634d;font-size:12px;padding:8px 11px;}
+body.shell-eden .wx-panel button+button {border-left:1px solid #e2d5c5;}
+body.shell-eden .wx-panel button:focus-visible {outline:2px solid #b7a181;outline-offset:-3px;}
+body.shell-eden .wx-zone {
+  margin-top:5px;padding:7px 9px;border:1px solid #e7dccd;border-radius:9px;
+  background:#f5f0e8c9;color:#63584d;font-size:12px;line-height:1.5;
+}
+body.shell-eden .wx-likes {color:#867059;border-color:#e5d9ca;margin-bottom:4px;padding-bottom:4px;}
+body.shell-eden .wx-likes .wx-heart,
+body.shell-eden .wx-likes b,
+body.shell-eden .wx-cmt .wx-cn,
+body.shell-eden .wx-reply-to {color:#947d62;}
+body.shell-eden .wx-cmt {color:#554d46;font-size:12px;line-height:1.55;margin-top:2px;}
+body.shell-eden .wx-cmt-box {margin-top:6px;}
+body.shell-eden .wx-cmt-box input {background:#fffdf8;border-color:#ded1c0;color:#65594a;border-radius:9px;}
+body.shell-eden .wx-cmt-box button {background:#ab9679;border-radius:9px;}
+@media(max-width:360px){
+  body.shell-eden .eden-echo-toolbar{flex-wrap:wrap;}
+  body.shell-eden .eden-echo-toolbar .wx-tabs{width:100%;flex-basis:100%;}
+  body.shell-eden .wx-feed{padding-inline:10px;}
+}
