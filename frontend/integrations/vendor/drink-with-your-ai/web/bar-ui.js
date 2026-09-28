@@ -109,7 +109,7 @@
       }
       layout.append(header);screen.append(layout);return layout;
     }
-    function drinkImage(item){const image=el('img');image.alt=item.name;image.loading='lazy';image.src='/assets/bar/'+encodeURIComponent((item.special?'今日特调':item.flight?'盲品':item.name).replace(/[:/\\?*"<>|]/g,'-'))+'.png';image.onerror=()=>{image.onerror=null;image.src='/assets/bar/default.svg';};return image;}
+    function drinkImage(item){const image=el('img');image.alt=item.name;image.loading='lazy';const url='/assets/bar/'+encodeURIComponent((item.special?'今日特调':item.flight?'盲品':item.name).replace(/[:/\\?*"<>|]/g,'-'))+'.png';image.onerror=()=>{image.onerror=null;image.src='/assets/bar/default.svg';};fetch(url).then(response=>{if(!response.ok)throw Error('image '+response.status);return response.blob();}).then(blob=>{const objectUrl=URL.createObjectURL(blob);image.onload=()=>URL.revokeObjectURL(objectUrl);image.src=objectUrl;}).catch(()=>{image.src='/assets/bar/default.svg';});return image;}
     function textInfo(item,parent){
       parent.append(el('span','bar-drink-name',item.name));const en=nameEnglish(item,meta);if(en)parent.append(el('span','bar-drink-en',en));
       parent.append(el('span','bar-drink-std'+(item.flight?' bar-flight-summary':''),item.flight?'六杯盲喝，\n边喝边玩':+item.std>0?'✦ + '+Number(item.std).toFixed(1):'无酒精'));
