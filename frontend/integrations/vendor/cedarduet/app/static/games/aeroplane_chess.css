@@ -1,0 +1,695 @@
+.board.aeroplane_chess {
+  width: min(94vw, 680px);
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  aspect-ratio: auto;
+  display: block;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  touch-action: manipulation;
+}
+
+.battle-stage:has(.board.aeroplane_chess),
+.battle-stage:has(.board.aeroplane_chess) .table-layout,
+.battle-stage:has(.board.aeroplane_chess) .board-zone,
+.battle-stage:has(.board.aeroplane_chess) .board-frame,
+.battle-stage:has(.board.aeroplane_chess) .game-controls,
+.battle-stage:has(.board.aeroplane_chess) .game-chat-area {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.battle-stage:has(.board.aeroplane_chess) .table-layout,
+.battle-stage:has(.board.aeroplane_chess) .board-zone,
+.battle-stage:has(.board.aeroplane_chess) .board-frame {
+  width: 100%;
+}
+
+.aeroplane-game {
+  --aero-red: #d54b54;
+  --aero-red-dark: #8d2634;
+  --aero-yellow: #e9b93f;
+  --aero-yellow-dark: #9b6814;
+  --aero-blue: #3f88d7;
+  --aero-blue-dark: #225995;
+  --aero-green: #45a873;
+  --aero-green-dark: #236d49;
+  --aeroplane-token-size: clamp(13px, 3.2vw, 21px);
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  font-family: system-ui, sans-serif;
+  color: #3f3444;
+}
+
+.aeroplane-board-heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  font-size: clamp(12px, 2.4vw, 15px);
+}
+
+.aeroplane-board-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aeroplane-board-heading span {
+  min-width: 0;
+  max-width: 62%;
+  color: #746879;
+  font-size: .9em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.aeroplane-board-shell {
+  width: 100%;
+  aspect-ratio: 1;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: clamp(4px, .8vw, 7px) solid #756474;
+  border-radius: clamp(13px, 2.6vw, 22px);
+  background: #faf4e8;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, .75),
+    0 11px 23px rgba(70, 51, 65, .2),
+    4px 5px 0 rgba(82, 60, 75, .18);
+}
+
+.aeroplane-edge-roster {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  overflow: hidden;
+}
+
+.aeroplane-edge-roster > * { min-width: 0; max-width: 100%; }
+
+.aeroplane-edge-participant {
+  --aero-edge-color: #777;
+  grid-column: var(--edge-column);
+  width: 100%;
+  max-width: 156px;
+  overflow: hidden;
+  border-left: 5px solid var(--aero-edge-color);
+}
+
+.aeroplane-edge-participant .board-edge-avatar {
+  max-width: 24px;
+  max-height: 24px;
+  flex: 0 0 24px;
+}
+
+.aeroplane-edge-participant .board-edge-copy,
+.aeroplane-edge-participant .board-edge-copy strong,
+.aeroplane-edge-participant .board-edge-copy small {
+  max-width: 100%;
+}
+
+.aeroplane-edge-name-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aeroplane-edge-name-row strong { min-width: 0; }
+
+.aeroplane-home-count {
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  color: #49384a;
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.battle-stage:has(.board.aeroplane_chess)
+  .player-name[data-aeroplane-home-count] {
+  padding-right: 48px;
+  position: relative;
+}
+
+.battle-stage:has(.board.aeroplane_chess)
+  .player-name[data-aeroplane-home-count]::after {
+  content: attr(data-aeroplane-home-count);
+  padding: 1px 4px;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  color: inherit;
+  background: rgba(255, 255, 255, .18);
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.aeroplane-edge-participant.color-red { --aero-edge-color: var(--aero-red); }
+.aeroplane-edge-participant.color-yellow { --aero-edge-color: var(--aero-yellow); }
+.aeroplane-edge-participant.color-blue { --aero-edge-color: var(--aero-blue); }
+.aeroplane-edge-participant.color-green { --aero-edge-color: var(--aero-green); }
+
+.aeroplane-edge-participant[data-visual-edge$="-right"] { justify-self: end; }
+
+.aeroplane-board-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.aeroplane-board-base {
+  fill: #f8f1e4;
+  stroke: #d8cbb9;
+  stroke-width: .7;
+}
+
+.aeroplane-airport {
+  stroke-width: .75;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 .8px 1px rgba(61, 43, 55, .22));
+}
+
+.aeroplane-airport.color-red { fill: #f9d9d9; stroke: var(--aero-red-dark); }
+.aeroplane-airport.color-yellow { fill: #faedbd; stroke: var(--aero-yellow-dark); }
+.aeroplane-airport.color-blue { fill: #d7e8f8; stroke: var(--aero-blue-dark); }
+.aeroplane-airport.color-green { fill: #d8efdf; stroke: var(--aero-green-dark); }
+
+.aeroplane-airport-slot {
+  fill: rgba(255, 255, 255, .68);
+  stroke-width: .55;
+}
+
+.aeroplane-home-runway {
+  fill: none;
+  stroke-width: 7.2;
+  stroke-linecap: butt;
+  opacity: .2;
+}
+
+.aeroplane-home-runway.color-red { stroke: var(--aero-red); }
+.aeroplane-home-runway.color-yellow { stroke: var(--aero-yellow); }
+.aeroplane-home-runway.color-blue { stroke: var(--aero-blue); }
+.aeroplane-home-runway.color-green { stroke: var(--aero-green); }
+
+.aeroplane-airport-slot.color-red { stroke: var(--aero-red); }
+.aeroplane-airport-slot.color-yellow { stroke: var(--aero-yellow); }
+.aeroplane-airport-slot.color-blue { stroke: var(--aero-blue); }
+.aeroplane-airport-slot.color-green { stroke: var(--aero-green); }
+
+.aeroplane-track-cell,
+.aeroplane-home-lane,
+.aeroplane-launch {
+  stroke: #fffaf0;
+  stroke-width: .7;
+  filter: drop-shadow(0 .6px .5px rgba(63, 48, 59, .25));
+}
+
+.aeroplane-track-cell.color-red,
+.aeroplane-home-lane.color-red,
+.aeroplane-launch.color-red,
+.aeroplane-center.color-red { fill: var(--aero-red); }
+.aeroplane-track-cell.color-yellow,
+.aeroplane-home-lane.color-yellow,
+.aeroplane-launch.color-yellow,
+.aeroplane-center.color-yellow { fill: var(--aero-yellow); }
+.aeroplane-track-cell.color-blue,
+.aeroplane-home-lane.color-blue,
+.aeroplane-launch.color-blue,
+.aeroplane-center.color-blue { fill: var(--aero-blue); }
+.aeroplane-track-cell.color-green,
+.aeroplane-home-lane.color-green,
+.aeroplane-launch.color-green,
+.aeroplane-center.color-green { fill: var(--aero-green); }
+
+.aeroplane-track-cell.shortcut {
+  stroke: #fffdf7;
+  stroke-width: 1.05;
+}
+
+.aeroplane-jump-mark {
+  fill: rgba(255, 255, 255, .82);
+  pointer-events: none;
+}
+
+.aeroplane-shortcut-mark {
+  fill: none;
+  stroke: #fffdf7;
+  stroke-width: .7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.aeroplane-shortcut-underlay,
+.aeroplane-shortcut-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.aeroplane-shortcut-underlay {
+  stroke: rgba(255, 253, 247, .9);
+  stroke-width: 2.8;
+}
+
+.aeroplane-shortcut-line {
+  stroke-width: 1.35;
+  stroke-dasharray: 2.4 1.45;
+  opacity: .88;
+}
+
+.aeroplane-shortcut-line.color-red,
+.aeroplane-shortcut-cross.color-red { stroke: var(--aero-red); }
+.aeroplane-shortcut-line.color-yellow,
+.aeroplane-shortcut-cross.color-yellow { stroke: var(--aero-yellow); }
+.aeroplane-shortcut-line.color-blue,
+.aeroplane-shortcut-cross.color-blue { stroke: var(--aero-blue); }
+.aeroplane-shortcut-line.color-green,
+.aeroplane-shortcut-cross.color-green { stroke: var(--aero-green); }
+
+.aeroplane-shortcut-arrow {
+  stroke: #fffdf7;
+  stroke-width: .55;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.aeroplane-shortcut-arrow.color-red { fill: var(--aero-red); }
+.aeroplane-shortcut-arrow.color-yellow { fill: var(--aero-yellow); }
+.aeroplane-shortcut-arrow.color-blue { fill: var(--aero-blue); }
+.aeroplane-shortcut-arrow.color-green { fill: var(--aero-green); }
+
+.aeroplane-shortcut-cross {
+  fill: rgba(255, 253, 247, .92);
+  stroke-width: 1.1;
+}
+
+.aeroplane-center {
+  stroke: rgba(255, 255, 255, .78);
+  stroke-width: .55;
+}
+
+.aeroplane-center-core {
+  fill: #fffdf7;
+  stroke: #5a4654;
+  stroke-width: .65;
+}
+
+.aeroplane-legal-target {
+  width: clamp(15px, 5.2%, 30px);
+  aspect-ratio: 1;
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  border: 2px solid #c88b49;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .18);
+  box-shadow: 0 0 0 3px rgba(255, 250, 231, .76);
+  pointer-events: none;
+  animation: aeroplane-target-pulse 1.25s ease-in-out infinite;
+}
+
+.aeroplane-token {
+  --plane-main: #777;
+  --plane-dark: #444;
+  width: var(--aeroplane-token-size);
+  min-width: 0;
+  aspect-ratio: 1;
+  position: absolute;
+  z-index: calc(8 + var(--stack-order, 0));
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 50%;
+  color: var(--plane-main);
+  background: transparent;
+  filter: none;
+  isolation: isolate;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.aeroplane-token::before {
+  content: "";
+  width: calc(var(--aeroplane-token-size) + 3px);
+  height: calc(var(--aeroplane-token-size) + 3px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--plane-dark);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .76);
+  pointer-events: none;
+}
+
+.aeroplane-token.color-red { --plane-main: var(--aero-red); --plane-dark: var(--aero-red-dark); }
+.aeroplane-token.color-yellow { --plane-main: var(--aero-yellow); --plane-dark: var(--aero-yellow-dark); }
+.aeroplane-token.color-blue { --plane-main: var(--aero-blue); --plane-dark: var(--aero-blue-dark); }
+.aeroplane-token.color-green { --plane-main: var(--aero-green); --plane-dark: var(--aero-green-dark); }
+
+.aeroplane-token:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.aeroplane-token.legal {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  /* Above every possible 6-player × 4-plane visual stack (non-legal max 31). */
+  z-index: calc(40 + var(--stack-order, 0));
+  cursor: pointer;
+  background: transparent;
+  filter: none;
+}
+
+.aeroplane-token.legal::before {
+  border: 2px solid #a96516;
+  background: transparent;
+  box-shadow: 0 0 0 2px rgba(255, 237, 154, .88);
+}
+
+.aeroplane-token.legal:hover .aeroplane-token-svg,
+.aeroplane-token.legal:focus-visible .aeroplane-token-svg {
+  transform: translateY(-2px) scale(1.08);
+}
+
+.aeroplane-token:focus-visible {
+  outline: 3px solid #382b3a;
+  outline-offset: 2px;
+}
+
+.aeroplane-token-svg {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+  display: block;
+  overflow: visible;
+  filter:
+    drop-shadow(0 0 .35px rgba(255, 255, 255, .95))
+    drop-shadow(0 1px .5px rgba(54, 38, 50, .38));
+  transition: transform 130ms ease;
+}
+
+.aeroplane-token.legal .aeroplane-token-svg {
+  width: var(--aeroplane-token-size);
+  height: var(--aeroplane-token-size);
+  filter:
+    drop-shadow(0 0 .35px rgba(255, 255, 255, .95))
+    drop-shadow(0 1px .5px rgba(54, 38, 50, .42));
+}
+
+.aeroplane-token-shadow {
+  fill: rgba(45, 30, 41, .36);
+  transform: translate(1.5px, 2px);
+}
+
+.aeroplane-token-body {
+  fill: var(--plane-main);
+  stroke: var(--plane-dark);
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+.aeroplane-token-shine {
+  fill: rgba(255, 255, 255, .42);
+}
+
+.aeroplane-token.last-moved {
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.aeroplane-token.last-moved::before {
+  box-shadow: 0 0 0 1px #fffdf2, 0 0 0 3px #c88b49;
+}
+
+.aeroplane-token.recently-returned {
+  animation: aeroplane-return-flash 1.1s ease-in-out 2;
+}
+
+.aeroplane-activity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 39px;
+  padding: 4px 8px;
+  border: 1px solid #d7cad7;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .75);
+  color: #6e6272;
+  font-size: clamp(11px, 2.3vw, 13px);
+}
+
+.aeroplane-activity > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.aeroplane-activity.npc-feedback-active {
+  border-color: #b97824;
+  background: #fff8dd;
+  box-shadow: inset 3px 0 0 #c88b49;
+  color: #49384a;
+}
+
+.aeroplane-activity.npc-feedback-active > span:last-child {
+  font-weight: 800;
+}
+
+.aeroplane-activity[data-npc-feedback-phase="roll"] .aeroplane-die {
+  border-color: #b97824;
+  color: #49384a;
+  background: #fffdf5;
+}
+
+.aeroplane-die {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  place-items: center;
+  padding: 5px;
+  border: 2px solid #49384a;
+  border-radius: 10px;
+  color: #49384a;
+  background: linear-gradient(145deg, #fffef9, #eee2d2);
+  box-shadow: inset -3px -3px 4px rgba(91, 63, 52, .14), 2px 3px 0 rgba(73, 56, 74, .18);
+}
+
+.aeroplane-die.compact {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border-width: 1px;
+  border-radius: 7px;
+  box-shadow: 1px 2px 0 rgba(73, 56, 74, .15);
+}
+
+.aeroplane-die.empty { opacity: .43; }
+
+.aeroplane-pip {
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.aeroplane-pip.on { background: currentColor; }
+
+.game-controls:has(.aeroplane-controls) {
+  width: min(680px, 100%);
+}
+
+.aeroplane-controls {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.aeroplane-action-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 2px solid #5a4654;
+  border-radius: 12px;
+  background: #fffaf0;
+  box-shadow: 3px 4px 0 rgba(82, 60, 75, .16);
+}
+
+.aeroplane-action-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.aeroplane-action-copy strong { font-size: 14px; }
+.aeroplane-action-copy strong,
+.aeroplane-action-copy span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+.aeroplane-action-copy span { color: #786b7b; font-size: 11px; }
+
+.aeroplane-roll-button {
+  min-width: 78px;
+  min-height: 36px;
+  padding: 5px 9px;
+}
+
+.aeroplane-roll-button.ready:not(:disabled) {
+  color: #fff;
+  background: #c36f80;
+  border-color: #684e68;
+  box-shadow: 3px 3px 0 rgba(82, 60, 75, .28);
+}
+
+@keyframes aeroplane-target-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(.86); opacity: .72; }
+  50% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+}
+
+@keyframes aeroplane-return-flash {
+  0%, 100% { filter: drop-shadow(0 1px .5px rgba(54, 38, 50, .38)); }
+  50% { filter: drop-shadow(0 0 1px #d34754); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aeroplane-token-svg { transition: none; }
+  .aeroplane-legal-target,
+  .aeroplane-token.recently-returned { animation: none; }
+}
+
+@media (max-width: 599px) {
+  .board.aeroplane_chess {
+    width: min(96vw, 680px);
+    max-width: 100%;
+  }
+
+  .aeroplane-game {
+    --aeroplane-token-size: clamp(12px, 3.65vw, 17px);
+    gap: 6px;
+  }
+
+  .aeroplane-edge-roster { gap: 4px; }
+  .aeroplane-edge-participant {
+    width: min(132px, 100%);
+    min-height: 30px;
+    padding: 2px 4px;
+    border-left-width: 4px;
+  }
+
+  .aeroplane-edge-participant .board-edge-avatar {
+    max-width: 22px;
+    max-height: 22px;
+    flex-basis: 22px;
+  }
+
+  .aeroplane-home-count {
+    padding-inline: 3px;
+    font-size: 8px;
+  }
+
+  .battle-stage:has(.board.aeroplane_chess)
+    .player-name[data-aeroplane-home-count] {
+    padding-right: 42px;
+  }
+
+  .battle-stage:has(.board.aeroplane_chess)
+    .player-name[data-aeroplane-home-count]::after {
+    right: 6px;
+    font-size: 8px;
+  }
+
+  .aeroplane-board-shell {
+    border-width: 4px;
+    border-radius: 13px;
+    box-shadow: 0 7px 15px rgba(70, 51, 65, .18);
+  }
+
+  .aeroplane-token.legal {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .aeroplane-activity { min-height: 35px; padding: 3px 6px; gap: 6px; }
+  .aeroplane-activity .aeroplane-die.compact { width: 25px; height: 25px; }
+
+  .aeroplane-action-panel {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 5px;
+    padding: 3px 5px;
+  }
+
+  .aeroplane-action-panel > .aeroplane-die {
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .aeroplane-action-copy strong { font-size: 12px; }
+  .aeroplane-action-copy span { font-size: 10px; }
+  .aeroplane-roll-button {
+    min-width: 66px;
+    min-height: 34px;
+    padding: 4px 7px;
+  }
+
+  .battle-stage:has(.board.aeroplane_chess) .game-chat-area,
+  .battle-stage:has(.board.aeroplane_chess) .chat-compose,
+  .battle-stage:has(.board.aeroplane_chess) .recent-chat-feed {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 359px) {
+  .aeroplane-board-heading { gap: 5px; }
+  .aeroplane-board-heading span { max-width: 58%; }
+  .aeroplane-roll-button { min-width: 60px; padding-inline: 6px; }
+}

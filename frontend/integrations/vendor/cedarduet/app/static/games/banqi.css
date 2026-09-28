@@ -1,0 +1,19 @@
+.board.banqi {
+  --cols: 4;
+  --rows: 8;
+  --board-ratio: 3 / 4;
+}
+
+.board.banqi .banqi-piece {
+  width: min(74%, 60px);
+}
+
+@media (max-width: 599px) {
+  .board.banqi {
+    width: min(94vw, 360px);
+  }
+
+  .board.banqi .banqi-piece {
+    width: min(74%, 57px);
+  }
+}

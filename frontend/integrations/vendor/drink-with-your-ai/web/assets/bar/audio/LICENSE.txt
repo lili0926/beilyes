@@ -1,0 +1,102 @@
+Bar application sound sprite
+
+Includes edited Clicked_In_04 and Cancel_07 from the purchased Cute & Cozy UI Audio Pack by Case Portman. Licensed for inclusion in this application, not for redistribution as standalone sound assets or another sound library.
+
+Original pack license:
+Royalty-Free Sound Effects License
+
+You are free to use these sound effects in any personal or commercial project, including games, apps, videos, animations, and other creative projects.
+
+You may use, edit, modify, mix, process, and adapt the sounds however you like.
+No attribution or credit is required.
+
+You CAN:
+- Use the SFX in personal or commercial projects
+- Use them in games, apps, videos, animations, plugins, and other creative projects
+- Edit, modify, layer, process, or remix the SFX
+- Use them in unlimited projects
+- Use them without giving credit
+- Include the SFX in your project when distributing that project to others
+
+You CAN'T:
+- Resell the SFX as standalone audio
+- Repackage or redistribute the SFX as an SFX or asset collection
+- Upload the original SFX files for others to download separately
+- Include the SFX in another SFX pack or sound library
+- Claim the original SFX as your own work
+
+In short: Use them however you like in your projects. Just don't sell or redistribute the sounds themselves.
+
+Thank you for supporting this sound pack! 
+
+
+
+Need Custom Sound Effects?
+
+I also create bespoke sound effects and custom sound design!
+
+If you need something a little more tailored to your project, check out my website for information about my commission services. Whether you need a handful of SFX or a full soundscape for your game, feel free to get in touch!
+
+Website: www.caseportmanaudio.com
+
+Pouring Drink Sound Effect by Rea.mp3 — reasanka
+https://freesound.org/people/reasanka/sounds/382911/
+CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/
+Edits: mono conversion, level adjustments, short fades; Cancel_07 and pouring combined with a short pause.
+
+
+Cocktail cue (bar-sfx-v2.json):
+Ice Cube In The Glass 08.wav by Debsound
+https://freesound.org/people/Debsound/sounds/278202/
+Licensed under Creative Commons Attribution-NonCommercial 4.0 International
+https://creativecommons.org/licenses/by-nc/4.0/
+Combined with pouring water by nikerk (CC0 1.0)
+https://freesound.org/people/nikerk/sounds/764760/
+Edits: outer silence trimmed, mono conversion, levels adjusted, short fades, ice followed by water with an 80ms gap.
+This cocktail cue retains the attribution and noncommercial requirements of Debsound. Commercial use requires separate permission from Debsound or replacement of that source.
+
+
+Fizzy cue (bar-sfx-v3.json): Beer Pouring Into Glass 170427_1449.wav by megashroom
+https://freesound.org/people/megashroom/sounds/390164/
+CC0 1.0 https://creativecommons.org/publicdomain/zero/1.0/
+Edits: first 5 seconds retained, original opening unchanged, last 0.5 seconds cosine fade-out, resampled to application format.
+
+Game/UI cues (v4), purchased Cute & Cozy UI Audio Pack by Case Portman: Failure_06, Success_03, Cancel_08, Clock_Tick_04, Clicked_Out_04, Confirm_02. Edited: mono conversion, application sample rate, level adjustment. Same purchased-pack license above applies.
+
+Game selection update: Clock_Tick_07 replaces Clicked_Out_04 in sprite v5. Success_03 and Failure_06 play at 70% gain. Same purchased Cute & Cozy license applies.
+Sprite v6 adds Clicked_Out_04 for ordinary confirmation and result actions under the same purchased pack license; drink-specific confirmation audio remains unchanged.
+
+Sprite v7 adds Vrymaa — Glass Cheers Champagne (734622), clip 01, for opening the bar strip. CC0 1.0. Source: https://freesound.org/people/Vrymaa/sounds/734622/
+
+Background music: Last_Round_at_AM.mp3, supplied by mamo as a Gemini-generated track for this application. Not covered by the CC licenses of the sound effects.
+
+Sprite v8 adds Currency_08 (Cute & Cozy, purchased license above) for game navigation.
+
+Sprite v9 adds Dialogue_Blip_12 (paper), Dialogue_Expression_Angry_01 (scissors), and Dialogue_Expression_Negative_04 (rock), from the purchased Cute & Cozy pack under the license above.
+
+Sprite v10 replaces rock with Dialogue_Expression_Neutral_04 (same purchased Cute & Cozy license). Rock and scissors playback gain is 70%; paper unchanged.
+
+Sprite v11 adds Dialogue_Blip_01 for committing a hand (same purchased pack license). Rock gain 60%, scissors 50%; reveal mixes both selected hand cues simultaneously.
+
+Sprite v12 additionally includes Error_01 for tied games, from the same purchased pack.
+
+Sprite v13 adds KVV Audio, GAMEMisc_Dice Rolling Single 01_KVV AUDIO_FREE (Freesound 790971). Source: https://freesound.org/people/KVV_Audio/sounds/790971/ . License: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/ . Edits: excerpts 1.73–3.06s and 3.48–4.72s, 6ms edge fades, mono/resampling, second roll offset 120ms. Included as application audio, not a standalone stock collection.
+
+Sprite v14 uses the same KVV Audio excerpts, with the second roll offset changed to 300ms.
+
+Sprite v15 uses the same KVV Audio excerpts, with the second roll offset changed to 200ms.
+
+Sprite v16 replaces dice audio with joanneneedsthesound, Dice Rolling - Dungeon and Dragons, https://freesound.org/people/joanneneedsthesound/sounds/177208/ . CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/ . Trimmed from 2.57s to the end (1.34256s); original speed and volume, played once.
+
+Current background music: Last_Glass_at_Midnight.mp3, supplied by mamo as Gemini-generated music. Replaces Last Round at AM; playback gain remains 12%.
+
+Sprite v17 adds Vrymaa champagne clink excerpt 13, https://freesound.org/people/Vrymaa/sounds/734622/ (CC0), and KVV Audio excerpt03 for dice selection (CC BY 4.0, source and edits above). Converted to mono/44.1kHz.
+
+Sprite v18 adds tony_bear, prize wheel, https://freesound.org/people/tony_bear/sounds/274007/ (CC0 1.0). Excerpt 32.675–36.675 seconds, converted to mono, original speed.
+
+Sprite v19 adds Warning_03, Clock_Tick_06, Menu_Open_01, Menu_Close_02 (purchased Cute & Cozy pack), and Vrymaa cork opening excerpt02 (CC0): https://freesound.org/people/Vrymaa/sounds/734620/ . Converted to mono/44.1kHz.
+
+Sprite v20: soda uses Taira Komori, Pouring_coke.mp3, https://freesound.org/people/Taira%20Komori/sounds/212735/ (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). Excerpt 0.5–4.0s, final 0.5s fade-out, mono/44.1kHz. Beer retains megashroom above.
+Tea and owner-reserve drink use paul_sutyrin, pouring tea, https://freesound.org/people/paul_sutyrin/sounds/262322/ (CC BY 4.0). Combined respectively with nikerk, teacup set down, https://freesound.org/people/nikerk/sounds/764772/ (CC0), and Vrymaa ceramic box excerpt03, https://freesound.org/people/Vrymaa/sounds/734625/ (CC0). Edits: ceramic +5dB, silence trimmed, 80ms joining gap, short edge fades, mono/44.1kHz.
+
+Sprite v21 extends the same Taira Komori soda excerpt to source 0.5–5.0s, fading from source 4.0–5.0s. Other cues unchanged.

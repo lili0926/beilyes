@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>双弈 · CEDAR TOY</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=0.9.8">
+  <link rel="stylesheet" href="/static/games/checkers.css?v=0.1.0">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-leading">
+        <a class="home-link" href="https://toy.cedarstar.org/" aria-label="返回 CedarToy 首页">←</a>
+        <a class="brand" href="/" aria-label="返回双弈首页">
+          <span class="pixel-logo"></span>
+          <span>CEDAR TOY</span>
+        </a>
+      </div>
+      <div class="top-actions">
+        <span class="service-badge">DUEL / 双弈</span>
+        <span id="pairLabel" class="pair-label">IDENTITY CHECK...</span>
+        <div class="chip-wallet-actions" aria-label="我的筹码入口">
+          <a id="chipBalanceLink" class="chip-balance-link" href="/chips"
+             aria-label="我的筹码，进入筹码中心">
+            <span class="chip-wallet-icon" aria-hidden="true">🪙</span>
+            <strong id="humanChipBalance" class="chip-balance"
+                    aria-label="当前人类筹码余额">—</strong>
+          </a>
+          <a id="chipCenterLink" class="chip-center-button" href="/chips">
+            <span class="chip-center-label">筹码中心</span><span id="chipCenterUnreadBadge" class="unread-badge hidden"
+              aria-label="筹码中心未读数量">0</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="duel-main">
+      <section id="loadingView" class="gate-view pixel-card">
+        <span class="gate-glyph">棋</span>
+        <p class="eyebrow">LOADING BOUND PAIR...</p>
+      </section>
+
+      <section id="unboundView" class="gate-view pixel-card hidden">
+        <span class="gate-glyph">!</span>
+        <div>
+          <p class="eyebrow">IDENTITY REQUIRED</p>
+          <h1>请从 toy.cedarstar.org 首页登录进入</h1>
+          <p>双弈只服务于已经绑定的人类与小机，不提供游客房间或陌生人匹配。</p>
+        </div>
+        <a class="pixel-btn" href="https://toy.cedarstar.org/">返回首页登录 →</a>
+      </section>
+
+      <section id="lobbyView" class="lobby-view hidden">
+        <div class="lobby-header">
+          <div class="lobby-title-row">
+            <h1>双弈</h1>
+            <button id="notificationBell" class="notification-bell lobby-notification-bell" type="button"
+                    aria-label="对局通知（未读0）" title="对局通知" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 2h6v2h2v2h2v8h2v4H3v-4h2V6h2V4h2V2zm-2 6v6h10V8h-2V6H9v2H7zm2 12h6v2H9v-2z"></path>
+              </svg>
+              <span id="notificationUnreadBadge" class="unread-badge hidden"
+                    aria-label="通知未读数量">0</span>
+            </button>
+          </div>
+          <p id="heroPair" class="hero-pair">正在读取你的小机清单</p>
+        </div>
+
+        <p id="notice" class="notice" role="status"></p>
+
+        <div class="lobby-stack">
+          <section class="section-panel pixel-card create-panel">
+            <div class="section-head">
+              <div>
+                <span class="tag pink">NEW GAME</span>
+                <h2>开新对局</h2>
+              </div>
+            </div>
+            <div class="create-form">
+              <div class="participant-picker" data-selection-mode="single">
+                <label id="aiSingleField" class="pixel-field">
+                  <span>选对手</span>
+                  <select id="aiPlayer" aria-describedby="participantHint"></select>
+                </label>
+                <div id="aiMultiField" class="pixel-field ai-multi-field hidden">
+                  <span id="aiMultiLabel">选对手</span>
+                  <button id="aiMultiTrigger" class="ai-multi-trigger" type="button"
+                          aria-haspopup="listbox" aria-expanded="false"
+                          aria-controls="aiMultiMenu" aria-labelledby="aiMultiLabel aiMultiSummary"
+                          aria-describedby="participantHint">
+                    <span id="aiMultiSummary">请选择对手</span>
+                    <span class="ai-multi-caret" aria-hidden="true">▾</span>
+                  </button>
+                  <div id="aiMultiMenu" class="ai-multi-menu hidden" role="listbox"
+                       aria-multiselectable="true" aria-labelledby="aiMultiLabel"></div>
+                </div>
+              </div>
+              <div class="pixel-field">
+                <span>棋种 <span id="gameTokenEstimate" style="color:#c95f72;font-family:system-ui,sans-serif;">（约20–60 token/轮）</span></span>
+                <div class="game-type-selects">
+                  <select id="gameCategory" aria-label="游戏分类">
+                    <option value="board">棋</option>
+                    <option value="card">牌</option>
+                    <option value="dice">骰</option>
+                  </select>
+                  <select id="gameType" aria-label="具体游戏">
+                    <option value="banqi">翻翻棋 / 2人</option>
+                    <option value="checkers">西洋跳棋 / 2人</option>
+                    <option value="chinese_checkers">中国跳棋 / 2、3、4、6人</option>
+                    <option value="jungle">斗兽棋 / 2人</option>
+                    <option value="junqi">军棋 / 2人</option>
+                    <option value="othello">黑白棋 / 2人</option>
+                    <option value="tictactoe">井字棋 / 2人</option>
+                    <option value="connect4">四子连珠 / 2人</option>
+                    <option value="gomoku">五子棋 / 2人</option>
+                    <option value="go">围棋 / 2人</option>
+                    <option value="xiangqi">象棋 / 2人</option>
+                    <option value="chess">国际象棋 / 2人</option>
+                    <option value="dots_boxes">点格棋 / 2–4人</option>
+                    <option value="uno">UNO / 2–6人</option>
+                  </select>
+                </div>
+              </div>
+              <label class="pixel-field">
+                <span>谁先走</span>
+                <select id="mode">
+                  <option value="human_first">你先手</option>
+                  <option value="ai_first">小机先手</option>
+                  <option value="random">随机</option>
+                </select>
+              </label>
+              <label class="pixel-field stake-field">
+                <span>本局筹码</span>
+                <input id="stake" type="number" min="0" step="1" inputmode="numeric" value="0" aria-describedby="stakeHint gameStakeHint">
+                <small id="gameStakeHint" class="stake-game-hint" aria-live="polite"></small>
+              </label>
+              <div id="multiplayerOptions" class="multiplayer-options hidden">
+                <label class="pixel-field">
+                  <span>目标桌型</span>
+                  <select id="targetPlayerCount"></select>
+                </label>
+                <label class="npc-fill-toggle">
+                  <input id="fillWithNpcs" type="checkbox" checked>
+                  <span>空位由 NPC 补齐</span>
+                </label>
+                <p id="npcProviderHint" class="npc-provider-hint" aria-live="polite"></p>
+              </div>
+              <button id="createButton" class="pixel-btn create-submit" type="button" disabled>创建对局 →</button>
+            </div>
+            <div id="seatPreview" class="seat-preview hidden" aria-label="座位预览" aria-live="polite"></div>
+            <div id="participantHint" class="create-note">
+              <span>●</span>
+              <p id="stakeHint">筹码必须是大于等于 0 的整数；0 筹码直接开局，非零筹码需对方确认，余额可为负。</p>
+            </div>
+          </section>
+
+          <section id="pendingPanel" class="section-panel pixel-card pending-panel hidden">
+            <div class="section-head compact-head">
+              <div>
+                <span class="tag pink">PENDING</span>
+                <h2>待确认</h2>
+              </div>
+            </div>
+            <div id="pendingList" class="pending-list"></div>
+          </section>
+
+          <section class="section-panel pixel-card room-panel">
+            <div class="section-head">
+              <div>
+                <span class="tag">ROOM LOG</span>
+                <h2>我的全部房间</h2>
+              </div>
+              <button id="refreshRoomsButton" class="pixel-btn secondary compact" type="button">刷新</button>
+            </div>
+            <div id="roomList" class="room-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="gameView" class="game-view hidden">
+        <header class="game-header pixel-card">
+          <div class="game-toolbar">
+            <button id="backButton" class="pixel-btn secondary game-nav-btn" type="button">← 房间列表</button>
+            <div class="game-heading">
+              <span id="gameBadge" class="tag pink">GAME</span>
+              <h1 id="gameTitle">双弈</h1>
+            </div>
+            <div class="game-toolbar-actions" aria-label="对局操作">
+              <button id="refreshButton" class="pixel-btn secondary compact" type="button" aria-label="刷新局面">刷新</button>
+              <button id="rulesButton" class="pixel-btn secondary compact" type="button"
+                      aria-expanded="false" aria-controls="rulesDrawer">规则</button>
+              <button id="resignButton" class="pixel-btn danger compact" type="button">认输</button>
+            </div>
+          </div>
+
+          <section class="game-meta" aria-label="对局信息">
+            <div class="game-meta-line game-meta-primary">
+              <span class="game-meta-item room-number-item">
+                <span class="game-meta-label">房间号</span>
+                <strong id="roomId" class="room-number-value">—</strong>
+                <button id="copyRoomButton" class="room-copy-button" type="button"
+                        aria-label="复制房间号">
+                  <span class="room-copy-label" aria-hidden="true">复制</span>
+                </button>
+              </span>
+              <span class="game-meta-separator" aria-hidden="true">·</span>
+              <span class="game-meta-item">
+                <span class="game-meta-label">状态</span>
+                <strong id="status">—</strong>
+              </span>
+              <span class="game-meta-separator" aria-hidden="true">·</span>
+              <span class="game-meta-item">
+                <span class="game-meta-label">筹码</span>
+                <strong id="roomStake">娱乐局</strong>
+              </span>
+            </div>
+            <div class="game-meta-line game-meta-secondary">
+              <span id="roundMeta" class="game-meta-item hidden">
+                <strong id="roundText"></strong>
+              </span>
+              <span id="roundSeparator" class="game-meta-separator hidden" aria-hidden="true">·</span>
+              <span class="game-meta-item turn-item">
+                <strong id="turn">—</strong>
+              </span>
+            </div>
+          </section>
+        </header>
+        <p id="gameMessage" class="notice" role="status"></p>
+
+        <section id="resultBanner" class="result-banner hidden" aria-live="polite">
+          <span>GAME RESULT</span>
+          <div class="result-banner-copy">
+            <strong id="resultBannerText">对局结束</strong>
+            <small id="roomRetentionStatus">自动删除时间加载中</small>
+          </div>
+          <button id="togglePreserveButton" class="pixel-btn secondary compact" type="button">保留此对局</button>
+        </section>
+
+        <section class="battle-stage pixel-card" id="battleStage">
+          <div class="battle-main-column">
+            <div id="opponentRow" class="player-row opponent-row">
+              <div class="player-identity">
+                <span id="aiAvatar" class="player-avatar ai-avatar" aria-hidden="true">🤖</span>
+                <strong id="aiName" class="player-name ai-name">你的小机</strong>
+              </div>
+              <p id="aiSpeech" class="speech-bubble ai-speech hidden"></p>
+            </div>
+
+            <div id="tableLayout" class="table-layout layout-duel count-2" data-player-count="2">
+              <div id="roomParticipants" class="room-participants count-2 hidden"
+                   aria-label="围桌席位"></div>
+
+              <div id="sharedSpeechSlot" class="shared-speech-slot hidden" aria-live="polite">
+                <div id="sharedSpeech" class="speech-bubble shared-speech empty" aria-hidden="true">
+                  <span id="sharedSpeechAvatar" class="shared-speech-avatar" aria-hidden="true"></span>
+                  <span class="shared-speech-copy">
+                    <strong id="sharedSpeechName"></strong>
+                    <span id="sharedSpeechText"></span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="board-zone">
+                <div class="board-frame">
+                  <div id="board" class="board" aria-label="棋盘"></div>
+                </div>
+                <div id="gameControls" class="game-controls hidden"
+                     aria-label="游戏专属操作"></div>
+                <div id="moveConfirm" class="move-confirm">
+                  <span id="selectionHint">请先在棋盘上选择落点</span>
+                  <button id="confirmMoveButton" class="pixel-btn" type="button" disabled>落子</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="viewerParticipantSlot" class="viewer-participant-row hidden">
+              <p id="viewerSpeech" class="speech-bubble human-speech viewer-speech hidden"
+                 aria-hidden="true" aria-live="polite">
+                <span id="viewerSpeechText" class="speech-bubble-text"></span>
+              </p>
+              <div id="viewerParticipant" class="viewer-participant-slot hidden"
+                   aria-label="我的席位"></div>
+            </div>
+
+            <div id="humanRow" class="player-row human-row">
+              <div class="player-identity">
+                <span id="humanAvatar" class="player-avatar human-avatar" aria-hidden="true"></span>
+                <strong id="humanName" class="player-name human-name">你</strong>
+              </div>
+              <p id="humanSpeech" class="speech-bubble human-speech hidden">
+                <span id="humanSpeechText" class="speech-bubble-text"></span>
+              </p>
+            </div>
+
+            <section id="privateStatePanel" class="private-state-panel pixel-card hidden"
+                     aria-label="我的信息，仅自己可见">
+              <span class="tag pink">我的信息 · PRIVATE</span>
+              <div id="privateStateContent"></div>
+            </section>
+          </div>
+
+          <section id="gameChatArea" class="game-chat-area" aria-label="对局聊天">
+            <div id="recentChatFeed" class="recent-chat-feed hidden" aria-label="最近发言">
+              <div class="recent-chat-heading" aria-hidden="true">最近发言</div>
+              <ol id="recentChatMessages" class="recent-chat-messages" aria-live="polite"></ol>
+            </div>
+            <div class="chat-compose game-compose">
+              <input id="chatInput" maxlength="500" type="text" placeholder="说点什么…" aria-label="消息内容">
+              <button id="sendMessageButton" class="pixel-btn secondary" type="button">发送</button>
+            </div>
+          </section>
+        </section>
+
+        <button id="historyDrawerTab" class="history-drawer-tab" type="button"
+                aria-expanded="false" aria-controls="historyDrawerPanel">
+          <span>📜对局记录</span>
+        </button>
+      </section>
+    </main>
+
+  </div>
+
+  <div id="rulesScrim" class="drawer-scrim" aria-hidden="true">
+    <section id="rulesDrawer" class="rules-drawer" role="dialog" aria-modal="true"
+             aria-labelledby="rulesTitle" aria-describedby="rulesGuide">
+      <div class="drawer-head">
+        <div>
+          <span class="tag pink">RULE BOOK</span>
+          <h2 id="rulesTitle">游戏规则</h2>
+        </div>
+        <button id="closeRulesButton" class="pixel-btn secondary drawer-close" type="button" aria-label="关闭规则">×</button>
+      </div>
+      <p id="rulesGuide" class="rules-guide">建议先看目标，再看行动与特殊规则。</p>
+      <div id="rulesText" class="rules-content" tabindex="0" aria-label="规则正文"></div>
+    </section>
+  </div>
+
+  <div id="historyDrawer" class="history-drawer" aria-hidden="true">
+    <aside id="historyDrawerPanel" class="history-drawer-panel" role="dialog" aria-label="对局记录">
+      <div class="history-head">
+        <span class="terminal-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div>
+          <strong>对局记录</strong>
+          <small>共享时间线</small>
+        </div>
+        <button id="closeHistoryButton" class="history-close" type="button" aria-label="关闭对局记录">×</button>
+      </div>
+      <ol id="timeline" class="history-list" aria-live="polite"></ol>
+    </aside>
+  </div>
+
+  <div id="waitModeModal" class="wait-mode-modal-backdrop hidden"
+       role="dialog" aria-modal="true" aria-labelledby="waitModeModalTitle"
+       aria-describedby="waitModeModalDescription" aria-hidden="true">
+    <section class="wait-mode-modal pixel-card">
+      <button id="dismissWaitModeModalButton" class="wait-mode-modal-close" type="button"
+              aria-label="仅关闭本次提示" title="仅关闭本次提示">×</button>
+      <span class="tag pink">ROOM TIP</span>
+      <h2 id="waitModeModalTitle">挂等模式</h2>
+      <p id="waitModeModalDescription" class="wait-mode-modal-copy">想让小机自动接着下？回聊天窗口告诉它「开启挂等模式」。开启后，小机会用约 30 秒一次的短心跳持续等待；一次心跳结束不代表退出，轮到它时会自动继续。</p>
+      <div class="wait-mode-modal-actions" aria-label="挂等提示偏好">
+        <button id="closeWaitModalTodayButton" class="pixel-btn secondary" type="button">今日关闭</button>
+        <button id="closeWaitModalForeverButton" class="pixel-btn" type="button">永久关闭</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="resultModal" class="result-modal-backdrop hidden"
+       role="dialog" aria-modal="true" aria-labelledby="resultModalTitle">
+    <section class="result-modal pixel-card">
+      <span class="tag pink">GAME OVER</span>
+      <h2 id="resultModalTitle">对局结束</h2>
+      <strong id="resultModalText">和棋</strong>
+      <label class="result-preserve-option" for="resultPreserveCheckbox">
+        <input id="resultPreserveCheckbox" type="checkbox"
+               aria-describedby="resultRetentionHint resultModalMessage">
+        <span class="result-preserve-copy">
+          <strong>保留本局棋谱和聊天记录</strong>
+          <small id="resultRetentionHint">自动删除时间加载中</small>
+        </span>
+      </label>
+      <p id="resultModalMessage" class="result-modal-message"
+         role="status" aria-live="polite"></p>
+      <div class="result-modal-actions result-action-row" aria-label="对局后续操作">
+        <button id="rematchButton" class="pixel-btn" type="button">再来一局</button>
+        <button id="finishGameButton" class="pixel-btn secondary" type="button">结束对局</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="notificationModal" class="notification-modal-backdrop hidden"
+       role="dialog" aria-modal="true" aria-labelledby="notificationModalTitle"
+       aria-describedby="notificationModalHint" aria-hidden="true">
+    <section class="notification-modal pixel-card">
+      <div class="notification-modal-head">
+        <div>
+          <span class="tag pink">NOTICES</span>
+          <h2 id="notificationModalTitle">对局通知</h2>
+        </div>
+        <button id="closeNotificationModalButton"
+                class="notification-modal-close" type="button"
+                aria-label="关闭对局通知">×</button>
+      </div>
+      <p id="notificationModalHint" class="notification-modal-hint"></p>
+      <div id="notificationList" class="notification-list" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <div id="toast" class="pixel-toast" role="status" aria-live="polite"></div>
+  <script src="/static/game_ui_registry.js?v=0.9.1"></script>
+  <script src="/static/games/liars_dice.js?v=0.1.1"></script>
+  <!-- Non-legacy game renderers autoload from catalog before app interaction. -->
+  <script src="/static/app.js?v=0.9.5"></script>
+</body>
+</html>

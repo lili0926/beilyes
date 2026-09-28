@@ -1,0 +1,6 @@
+# Standalone Web/MCP dependencies. PyMahjongGB is installed separately by the
+# launcher so a native build failure cannot prevent these packages installing.
+-r requirements-common.txt
+
+# Standard stdio MCP adapter; kept out of the production dependency surface.
+mcp>=2.1,<3

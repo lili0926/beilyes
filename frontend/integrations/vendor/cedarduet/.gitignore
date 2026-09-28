@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+.env.*
+!.env.example
+*.log
+
+# Native build products must never dirty a source clone.
+/third_party/pymahjonggb/build/
+/third_party/pymahjonggb/*.egg-info/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite
+data/*.sqlite3
+
+# Official deployment-only NPC content; keep it outside the public repository.
+/app/config/npc_personas/*.json
+!/app/config/npc_personas/_schema.json
+!/app/config/npc_personas/_example.json
+/app/config/npc_avatars/*
+!/app/config/npc_avatars/README.md
+/XuZhiHeng.png
+/YueMingChuan.png
+/WenXingZhi.png
+/TangYi.png
+/ShangLingYi.png
+/QiaoMai.png

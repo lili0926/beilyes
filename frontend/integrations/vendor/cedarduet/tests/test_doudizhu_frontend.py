@@ -1,0 +1,984 @@
+import json
+import shutil
+import subprocess
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = ROOT / "app" / "static" / "games" / "doudizhu.js"
+STYLE_PATH = ROOT / "app" / "static" / "games" / "doudizhu.css"
+SCRIPT = SCRIPT_PATH.read_text(encoding="utf-8")
+STYLES = STYLE_PATH.read_text(encoding="utf-8")
+HTML = (ROOT / "app" / "static" / "index.html").read_text(encoding="utf-8")
+NODE = shutil.which("node")
+
+
+class DoudizhuFrontendTests(unittest.TestCase):
+    def test_independent_registry_renderer_and_lazy_styles(self):
+        for expected in (
+            'window.DuelGameUI.register("doudizhu", renderer);',
+            'participantPresentation: "embedded"',
+            "function renderBoard(context)",
+            "function renderControls(context)",
+            "usesStandardMoveConfirmation: false",
+            "ownsPrivateStatePresentation: true",
+            'const STYLE_HREF = "/static/games/doudizhu.css?v=0.1.10";',
+            'link.dataset.duelGameStyle = "doudizhu";',
+        ):
+            self.assertIn(expected, SCRIPT)
+        self.assertNotIn("/static/games/doudizhu.js", HTML)
+        self.assertNotIn("doudizhu.css", HTML)
+
+    def test_client_only_selects_authoritative_actions_and_handles_ambiguity(self):
+        for expected in (
+            "context.legalActions",
+            "action.action_id",
+            "exactSelectedAction(context)",
+            "selectedPlayMove(context)",
+            "card_ids: [...selectedIds(context)]",
+            "context.helpers.submitMove({...action})",
+            'action.action === "bid"',
+            'action.action === "pass"',
+            "matches.length > 1",
+            "selectedActionId",
+            "rankCountsForIds",
+            "rankCountsEqual",
+            "rankCountsSubset",
+        ):
+            self.assertIn(expected, SCRIPT)
+        for forbidden in (
+            "function classifyCards", "function canBeat", "RANK_VALUE",
+            "BOMB_STRENGTH", "classify_ranks", "legal_rank_plays",
+            "function canonicalIds", "function isSubset",
+        ):
+            self.assertNotIn(forbidden, SCRIPT)
+
+    def test_three_seat_identity_bottom_trick_pass_and_private_hand_are_visible(self):
+        for expected in (
+            "doudizhu-opponents", "doudizhu-seat", "doudizhu-avatar",
+            "roles_by_player", "role-landlord", "farmerPartnerId", "对家",
+            "bottom_revealed", "bottom_cards", "doudizhu-trick-cards",
+            "pass_player_ids", "doudizhu-hand-scroll", "我的手牌",
+            "terminal_hands", "doudizhu-terminal-review",
+        ):
+            self.assertIn(expected, SCRIPT + STYLES)
+        self.assertIn(".filter((item) => item.player_id !== viewerId)", SCRIPT)
+        self.assertIn("renderHand(documentRef, context, shell)", SCRIPT)
+        self.assertIn("context.helpers.renderParticipantAvatar", SCRIPT)
+        self.assertIn("renderAvatar(documentRef, context, value)", SCRIPT)
+        self.assertIn("renderAvatar(documentRef, context, viewer)", SCRIPT)
+        self.assertIn(".doudizhu-terminal-cards", STYLES)
+        self.assertIn("overflow-x: auto;", STYLES)
+
+    def test_current_turn_region_and_avatar_styles(self):
+        for expected in (
+            ".doudizhu-seat.current {",
+            ".doudizhu-hand-zone.current {",
+            ".doudizhu-turn-indicator {",
+            ".doudizhu-avatar.current-turn-avatar.current-turn-avatar {",
+            ".doudizhu-avatar.current-turn-avatar.current-turn-avatar::after {",
+            "text-overflow: ellipsis;",
+        ):
+            self.assertIn(expected, STYLES)
+        avatar_override = STYLES[
+            STYLES.index(".doudizhu-avatar.current-turn-avatar.current-turn-avatar {"):
+            STYLES.index(
+                ".role-landlord .doudizhu-avatar {",
+                STYLES.index(".doudizhu-avatar.current-turn-avatar.current-turn-avatar {")
+            )
+        ]
+        self.assertIn("outline: 0;", avatar_override)
+        self.assertIn("box-shadow: none;", avatar_override)
+        self.assertIn("display: none;", avatar_override)
+
+    def test_mobile_turn_copy_spacing_and_center_vertical_distribution(self):
+        for expected in (
+            ".doudizhu-current-action-label {",
+            "color: #941f2b;",
+            "background: #fff0ec;",
+            "grid-template-columns: minmax(0, 1fr) auto;",
+            "max-width: min(36vw, 150px);",
+            "grid-template-rows: auto minmax(0, 1fr);",
+            "grid-template-rows: auto minmax(60px, 1fr) auto;",
+            "gap: 14px;",
+            "gap: 12px;",
+            "gap: 10px;",
+        ):
+            self.assertIn(expected, STYLES)
+        self.assertIn('"doudizhu-current-action-label", "行动中"', SCRIPT)
+
+    def test_terminal_hands_use_compact_non_scrolling_fan(self):
+        terminal_cards = STYLES[
+            STYLES.index(".doudizhu-terminal-cards {"):
+            STYLES.index(".doudizhu-card {", STYLES.index(".doudizhu-terminal-cards {"))
+        ]
+        self.assertIn("overflow: hidden;", terminal_cards)
+        self.assertNotIn("overflow-x: auto;", terminal_cards)
+        self.assertIn(
+            ".doudizhu-terminal-cards .doudizhu-card + .doudizhu-card {\n  margin-left: -14px;",
+            STYLES,
+        )
+        self.assertIn("margin-left: -19px;", STYLES)
+        self.assertLessEqual(28 + 19 * (28 - 19), 203)
+        self.assertIn("doudizhu-terminal-count", SCRIPT + STYLES)
+        self.assertIn("terminal-wide-rank", SCRIPT + STYLES)
+        self.assertIn("letter-spacing: -1.2px;", STYLES)
+        self.assertIn(
+            ".doudizhu-card.terminal-wide-rank + .doudizhu-card {\n"
+            "    margin-left: -17px;",
+            STYLES,
+        )
+
+    def test_mobile_hand_scroll_has_320_and_375_guards(self):
+        for expected in (
+            ".board.doudizhu {",
+            "height: auto;",
+            "aspect-ratio: auto;",
+            "overflow: visible;",
+            ".doudizhu-hand-scroll {",
+            "overflow-x: auto;",
+            "touch-action: pan-x;",
+            "overscroll-behavior-x: contain;",
+            "max-width: 100%;",
+            "min-height: 44px;",
+            "@media (max-width: 599px)",
+            "@media (max-width: 375px)",
+            "@media (max-width: 320px)",
+            "button.doudizhu-card:focus-visible",
+        ):
+            self.assertIn(expected, STYLES)
+        board_rule = STYLES[
+            STYLES.index(".board.doudizhu {"):STYLES.index("}", STYLES.index(".board.doudizhu {"))
+        ]
+        self.assertNotIn("aspect-ratio: var(", board_rule)
+        self.assertNotIn("overflow: hidden", board_rule)
+
+    def test_local_selection_disables_scroll_anchoring_without_locking_page_scroll(self):
+        anchor_rule = STYLES[
+            STYLES.index(".board.doudizhu,\n.doudizhu-hand-zone,\n.doudizhu-controls {"):
+            STYLES.index(
+                "}",
+                STYLES.index(".board.doudizhu,\n.doudizhu-hand-zone,\n.doudizhu-controls {")
+            )
+        ]
+        self.assertIn("overflow-anchor: none;", anchor_rule)
+        self.assertNotIn("position: fixed", anchor_rule)
+        local_rerender = SCRIPT[
+            SCRIPT.index("function localRerender(context)"):
+            SCRIPT.index("function createCard", SCRIPT.index("function localRerender(context)"))
+        ]
+        self.assertIn("windowRef.scrollY ?? windowRef.pageYOffset", local_rerender)
+        self.assertIn("windowRef.scrollTo(scrollX, scrollY)", local_rerender)
+        self.assertIn("windowRef.requestAnimationFrame(restore)", local_rerender)
+        self.assertIn(
+            "button.doudizhu-card.selected {\n  transform: translateY(-11px);",
+            STYLES,
+        )
+        submit_action = SCRIPT[
+            SCRIPT.index("function submitAction(context, action)"):
+            SCRIPT.index("function renderBidControls", SCRIPT.index("function submitAction(context, action)"))
+        ]
+        self.assertNotIn("localRerender(context)", submit_action)
+
+    def test_disabled_private_cards_stay_fully_legible(self):
+        disabled_rule = STYLES[
+            STYLES.index("button.doudizhu-card:disabled {"):
+            STYLES.index("}", STYLES.index("button.doudizhu-card:disabled {"))
+        ]
+        self.assertIn("cursor: default;", disabled_rule)
+        self.assertIn("opacity: 1;", disabled_rule)
+        self.assertIn("filter: none;", disabled_rule)
+        self.assertNotIn("opacity: .72;", STYLES)
+
+    def test_mobile_table_is_compact_without_clipping_private_or_bottom_cards(self):
+        mobile = STYLES[
+            STYLES.index("@media (max-width: 599px)"):
+            STYLES.index("@media (max-width: 375px)")
+        ]
+        narrow = STYLES[
+            STYLES.index("@media (max-width: 375px)"):
+            STYLES.index("@media (max-width: 320px)")
+        ]
+        smallest = STYLES[
+            STYLES.index("@media (max-width: 320px)"):
+            STYLES.index("@media (prefers-reduced-motion: reduce)")
+        ]
+        for expected in (
+            "gap: 4px;",
+            "padding: 6px 5px 5px;",
+            "width: 29px;",
+            "min-height: 60px;",
+            "min-height: 82px;",
+            "height: 73px;",
+        ):
+            self.assertIn(expected, mobile)
+        for expected in (
+            "gap: 3px;",
+            "padding: 5px 4px 4px;",
+            "width: 27px;",
+            "min-height: 57px;",
+            "min-height: 78px;",
+            "height: 70px;",
+        ):
+            self.assertIn(expected, narrow)
+        for expected in (
+            "width: 25px;",
+            "min-height: 37px;",
+            "width: 26px;",
+            "min-height: 54px;",
+            "min-height: 74px;",
+            "height: 67px;",
+        ):
+            self.assertIn(expected, smallest)
+        self.assertIn("overflow-x: auto;", STYLES)
+        self.assertIn("overflow-y: hidden;", STYLES)
+        self.assertIn("width: 44px;\n    min-width: 44px;\n    height: 66px;", mobile)
+        self.assertIn("margin-left: -20px;", mobile)
+        self.assertIn("width: 42px;\n    min-width: 42px;\n    height: 64px;", narrow)
+        self.assertIn("margin-left: -21px;", narrow)
+        self.assertIn("width: 40px;\n    min-width: 40px;\n    height: 61px;", smallest)
+        self.assertIn("margin-left: -22px;", smallest)
+        self.assertNotIn("max-height:", mobile + narrow + smallest)
+
+    def test_bottom_cards_are_three_complete_non_overlapping_cards(self):
+        bottom_styles = STYLES[
+            STYLES.index(".doudizhu-bottom-cards {"):STYLES.index(".doudizhu-trick {")
+        ]
+        self.assertIn("gap: 4px;", bottom_styles)
+        self.assertIn("min-width: 31px;", bottom_styles)
+        self.assertIn("margin: 0;", bottom_styles)
+        self.assertNotIn("margin-left: -", bottom_styles)
+
+    def test_bidding_uses_explicit_compact_confirmation(self):
+        for expected in (
+            "selectedBidActionId",
+            "doudizhu-bid-options",
+            "doudizhu-bid-confirm",
+            "doudizhu-bid-confirm-button",
+            "确认后才会提交",
+            "确认不叫",
+            "确认叫 ${score} 分",
+            "context.uiState.submitting",
+        ):
+            self.assertIn(expected, SCRIPT + STYLES)
+        self.assertNotIn(
+            'button.addEventListener("click", () => submitAction(context, action));',
+            SCRIPT,
+        )
+
+    def test_mobile_play_actions_are_compact_and_have_clear_enabled_states(self):
+        mobile = STYLES[
+            STYLES.index("@media (max-width: 599px)"):
+            STYLES.index("@media (max-width: 375px)")
+        ]
+        narrow = STYLES[
+            STYLES.index("@media (max-width: 375px)"):
+            STYLES.index("@media (max-width: 320px)")
+        ]
+        for expected in (
+            ".doudizhu-controls.is-playing {",
+            "min-height: 30px;",
+            "grid-template-columns: minmax(74px, .65fr) minmax(0, 1.35fr);",
+            "min-height: 36px;",
+            "padding: 5px 10px;",
+        ):
+            self.assertIn(expected, mobile)
+        self.assertIn("min-height: 28px;", narrow)
+        self.assertIn("min-height: 34px;", narrow)
+        self.assertIn("buttons.append(passButton, playButton);", SCRIPT)
+        self.assertIn(".doudizhu-play-button:not(:disabled)", STYLES)
+        self.assertIn(".doudizhu-pass-button:not(:disabled)", STYLES)
+        self.assertIn(
+            "background: linear-gradient(145deg, #c33b46, #92262f) !important;",
+            STYLES,
+        )
+        self.assertIn(
+            "background: linear-gradient(145deg, #3b8b76, #1d6254);",
+            STYLES,
+        )
+        disabled = STYLES[
+            STYLES.index(
+                ".doudizhu-controls.is-playing .doudizhu-action-buttons button:disabled {"
+            ):
+            STYLES.index(
+                "}",
+                STYLES.index(
+                    ".doudizhu-controls.is-playing .doudizhu-action-buttons button:disabled {"
+                ),
+            )
+        ]
+        self.assertIn("background: #ecefed;", disabled)
+        self.assertIn("opacity: 1;", disabled)
+
+    def test_cards_are_css_text_not_images_or_emoji_faces(self):
+        self.assertIn("const SUIT_TEXT", SCRIPT)
+        self.assertIn("doudizhu-card-rank", SCRIPT + STYLES)
+        self.assertIn("doudizhu-card-suit", SCRIPT + STYLES)
+        self.assertIn("doudizhu-card-back", SCRIPT + STYLES)
+        self.assertNotIn("<img", SCRIPT.lower())
+        self.assertNotIn("url(", STYLES.lower())
+        for emoji in ("🃏", "🎴", "♠️", "♥️", "♣️", "♦️", "💣", "🔥"):
+            self.assertNotIn(emoji, SCRIPT + STYLES)
+
+    @unittest.skipUnless(NODE, "node is required for renderer syntax check")
+    def test_renderer_parses_in_node(self):
+        completed = subprocess.run(
+            [NODE, "--check", str(SCRIPT_PATH)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+
+@unittest.skipUnless(NODE, "node is required for renderer DOM tests")
+class DoudizhuFrontendRuntimeTests(unittest.TestCase):
+    def run_node(self, assertions):
+        ranks = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"]
+        suits = ["spades", "hearts", "clubs", "diamonds"]
+        hand = [
+            {
+                "id": f"HAND-{index}",
+                "suit": suits[index % len(suits)],
+                "rank": ranks[index % len(ranks)],
+            }
+            for index in range(17)
+        ]
+        state = {
+            "board_kind": "doudizhu",
+            "flow": {"phase": "bidding", "round_number": 1, "turn_number": 0},
+            "bidding": {"highest_score": 0},
+            "roles_by_player": {
+                "human-1": "unassigned",
+                "ai-1": "unassigned",
+                "ai-2": "unassigned",
+            },
+            "bottom_revealed": False,
+            "bottom_card_count": 3,
+            "bottom_cards": [],
+            "current_trick": {
+                "leader_player_id": "human-1",
+                "last_play": None,
+                "pass_player_ids": [],
+            },
+            "hand_counts": {"human-1": 17, "ai-1": 17, "ai-2": 17},
+            "multiplier": 1,
+            "bomb_count": 0,
+        }
+        legal_actions = [
+            {"action": "bid", "action_id": f"bid:{score}", "score": score,
+             "label": "不叫" if score == 0 else f"{score}分"}
+            for score in range(4)
+        ]
+        private_state = {"hand": hand, "legal_actions": legal_actions}
+        bottom_cards = [
+            {"id": "BOTTOM-S3", "suit": "spades", "rank": "3"},
+            {"id": "BOTTOM-H7", "suit": "hearts", "rank": "7"},
+            {"id": "BOTTOM-DA", "suit": "diamonds", "rank": "A"},
+        ]
+        harness = r'''
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const vm = require("node:vm");
+
+class ClassList {
+  constructor() { this.names = new Set(); }
+  set(value) { this.names = new Set(String(value || "").split(/\s+/).filter(Boolean)); }
+  add(...names) { names.forEach((name) => this.names.add(name)); }
+  contains(name) { return this.names.has(name); }
+  toggle(name, force) {
+    const enabled = force === undefined ? !this.names.has(name) : Boolean(force);
+    if (enabled) this.names.add(name); else this.names.delete(name);
+    return enabled;
+  }
+}
+class Element {
+  constructor(tag, documentRef) {
+    this.tag = tag;
+    this.ownerDocument = documentRef;
+    this.children = [];
+    this.dataset = {};
+    this.attributes = {};
+    this.listeners = {};
+    this.style = {setProperty(name, value) { this[name] = String(value); }};
+    this.classList = new ClassList();
+    this.disabled = false;
+    this.scrollLeft = 0;
+    this.textContent = "";
+    this.id = "";
+  }
+  set className(value) { this.classList.set(value); }
+  get className() { return [...this.classList.names].join(" "); }
+  appendChild(child) { this.children.push(child); return child; }
+  append(...children) { this.children.push(...children); }
+  replaceChildren(...children) { this.children = children; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  addEventListener(name, listener) { this.listeners[name] = listener; }
+}
+const styleNodes = new Map();
+const document = {
+  head: {appendChild(node) { if (node.id) styleNodes.set(node.id, node); }},
+  createElement(tag) { return new Element(tag, document); },
+  getElementById(id) { return styleNodes.get(id) || null; },
+};
+let renderer = null;
+let pageScrollX = 0;
+let pageScrollY = 0;
+const scrollCalls = [];
+const window = {
+  document,
+  get scrollX() { return pageScrollX; },
+  get scrollY() { return pageScrollY; },
+  get pageXOffset() { return pageScrollX; },
+  get pageYOffset() { return pageScrollY; },
+  scrollCalls,
+  scrollTo(left, top) {
+    pageScrollX = Number(left) || 0;
+    pageScrollY = Number(top) || 0;
+    scrollCalls.push([pageScrollX, pageScrollY]);
+  },
+  requestAnimationFrame(callback) { callback(); return scrollCalls.length; },
+  DuelGameUI: {register(gameType, value) {
+    assert.equal(gameType, "doudizhu");
+    renderer = value;
+  }},
+};
+document.defaultView = window;
+vm.runInNewContext(fs.readFileSync("app/static/games/doudizhu.js", "utf8"), {
+  window, document, console, Math, Set, Map, Number, String, Boolean, Array, Object, Promise,
+});
+assert.ok(renderer);
+function descendants(root) {
+  const result = [];
+  const visit = (node) => { result.push(node); node.children.forEach(visit); };
+  root.children.forEach(visit);
+  return result;
+}
+function hasClass(node, name) { return node.classList && node.classList.contains(name); }
+const state = STATE_JSON;
+const privateState = PRIVATE_JSON;
+const bottomCards = BOTTOM_JSON;
+const participants = [
+  {player_id: "human-1", display_name: "南山", seat_index: 0},
+  {player_id: "ai-1", display_name: "小机一号", seat_index: 1},
+  {player_id: "ai-2", display_name: "小机二号", seat_index: 2},
+];
+function makeContext(stateOverrides = {}) {
+  const board = new Element("div", document);
+  const controls = new Element("div", document);
+  const submitted = [];
+  const avatarCalls = [];
+  const uiState = {};
+  let rerenders = 0;
+  const context = {
+    board, controls, state: {...state, ...stateOverrides}, privateState,
+    participants, viewer: {player_id: "human-1"},
+    room: {current_player_id: "human-1", status: "playing"},
+    canMove: true, isTerminal: false,
+    legalActions: privateState.legal_actions, uiState,
+    helpers: {
+      setBoardLayout(options) { board.attributes.ariaLabel = options.ariaLabel; },
+      canMove() { return context.canMove; },
+      rerender() { rerenders += 1; return true; },
+      async submitMove(move) { submitted.push(move); return true; },
+      renderParticipantAvatar(target, participant) {
+        avatarCalls.push(participant.player_id);
+        target.textContent = `avatar:${participant.player_id}`;
+        return true;
+      },
+    },
+  };
+  return {context, board, controls, submitted, avatarCalls, uiState, rerenders: () => rerenders};
+}
+'''.replace("STATE_JSON", json.dumps(state, ensure_ascii=False)).replace(
+            "PRIVATE_JSON", json.dumps(private_state, ensure_ascii=False)
+        ).replace("BOTTOM_JSON", json.dumps(bottom_cards, ensure_ascii=False)) + assertions
+        completed = subprocess.run(
+            [NODE, "-e", harness],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_current_turn_switches_player_region_and_visible_name_together(self):
+        self.run_node(r'''
+const value = makeContext();
+renderer.renderBoard(value.context);
+let nodes = descendants(value.board);
+let handZone = nodes.find((node) => hasClass(node, "doudizhu-hand-zone"));
+let turnIndicator = nodes.find((node) => hasClass(node, "doudizhu-turn-indicator"));
+assert.ok(hasClass(handZone, "current"));
+assert.equal(handZone.attributes["aria-current"], "true");
+assert.equal(turnIndicator.textContent, "轮到 南山");
+assert.equal(turnIndicator.title, "轮到 南山");
+assert.ok(nodes.filter((node) => hasClass(node, "doudizhu-seat")).every(
+  (node) => !hasClass(node, "current")
+));
+
+value.context.room.current_player_id = "ai-2";
+value.context.canMove = false;
+value.board.replaceChildren();
+renderer.renderBoard(value.context);
+nodes = descendants(value.board);
+handZone = nodes.find((node) => hasClass(node, "doudizhu-hand-zone"));
+turnIndicator = nodes.find((node) => hasClass(node, "doudizhu-turn-indicator"));
+const currentSeat = nodes.find(
+  (node) => hasClass(node, "doudizhu-seat") && hasClass(node, "current")
+);
+assert.ok(!hasClass(handZone, "current"));
+assert.equal(handZone.attributes["aria-current"], "false");
+assert.equal(currentSeat.dataset.playerId, "ai-2");
+assert.equal(currentSeat.attributes["aria-current"], "true");
+assert.equal(turnIndicator.textContent, "轮到 小机二号");
+const actionLabels = nodes.filter(
+  (node) => hasClass(node, "doudizhu-current-action-label")
+);
+assert.equal(actionLabels.length, 1);
+assert.equal(actionLabels[0].textContent, "行动中");
+
+value.context.participants[2].display_name = "Codex_杉星_0828_特别长的行动玩家名字";
+value.board.replaceChildren();
+renderer.renderBoard(value.context);
+turnIndicator = descendants(value.board).find(
+  (node) => hasClass(node, "doudizhu-turn-indicator")
+);
+assert.equal(turnIndicator.textContent, "轮到 Codex_杉星_0828_特别长的行动玩家名字");
+assert.equal(turnIndicator.title, turnIndicator.textContent);
+''')
+
+    def test_private_hand_and_complete_hidden_or_revealed_bottom_render(self):
+        self.run_node(r'''
+const hidden = makeContext();
+assert.equal(renderer.renderBoard(hidden.context), true);
+const hiddenNodes = descendants(hidden.board);
+const seats = hiddenNodes.filter((node) => hasClass(node, "doudizhu-seat"));
+assert.deepEqual(seats.map((node) => node.dataset.playerId).sort(), ["ai-1", "ai-2"]);
+const privateScroller = hiddenNodes.find((node) => hasClass(node, "doudizhu-hand-scroll"));
+assert.ok(privateScroller);
+assert.equal(privateScroller.attributes["aria-label"], "我的私密手牌，可横向滚动并多选");
+const privateCards = privateScroller.children.filter((node) => hasClass(node, "doudizhu-card"));
+assert.equal(privateCards.length, 17);
+assert.deepEqual(
+  privateCards.map((node) => node.dataset.cardId).sort(),
+  privateState.hand.map((card) => card.id).sort()
+);
+const hiddenBottom = hiddenNodes.find((node) => hasClass(node, "doudizhu-bottom-cards"));
+assert.equal(hiddenBottom.children.length, 3);
+assert.ok(hiddenBottom.children.every((node) => hasClass(node, "doudizhu-card-back")));
+
+const revealed = makeContext({bottom_revealed: true, bottom_cards: bottomCards});
+renderer.renderBoard(revealed.context);
+const revealedBottom = descendants(revealed.board).find(
+  (node) => hasClass(node, "doudizhu-bottom-cards")
+);
+assert.equal(revealedBottom.children.length, 3);
+assert.ok(revealedBottom.children.every((node) => hasClass(node, "doudizhu-card")));
+assert.deepEqual(
+  revealedBottom.children.map((node) => node.dataset.cardId),
+  bottomCards.map((card) => card.id)
+);
+assert.equal(styleNodes.get("duel-game-doudizhu-styles").href, "/static/games/doudizhu.css?v=0.1.10");
+''')
+
+    def test_terminal_review_shows_every_remaining_hand_high_to_low(self):
+        self.run_node(r'''
+const playing = makeContext();
+renderer.renderBoard(playing.context);
+let nodes = descendants(playing.board);
+assert.equal(nodes.filter((node) => hasClass(node, "doudizhu-terminal-review")).length, 0);
+assert.equal(nodes.filter((node) => hasClass(node, "doudizhu-seat")).length, 2);
+assert.ok(nodes.filter((node) => hasClass(node, "doudizhu-seat-count")).every(
+  (node) => /17 张/.test(node.textContent)
+));
+
+const terminalHands = {
+  "human-1": [],
+  "ai-1": [
+    {id: "S10", suit: "spades", rank: "10"},
+    {id: "H2", suit: "hearts", rank: "2"},
+    {id: "JOKER-B", suit: "joker", rank: "big_joker"},
+  ],
+  "ai-2": [
+    {id: "SK", suit: "spades", rank: "K"},
+    {id: "HA", suit: "hearts", rank: "A"},
+  ],
+};
+const terminal = makeContext({
+  flow: {phase: "finished"}, terminal_hands: terminalHands,
+  hand_counts: {"human-1": 0, "ai-1": 3, "ai-2": 2},
+});
+terminal.context.room.status = "finished";
+terminal.context.canMove = false;
+renderer.renderBoard(terminal.context);
+nodes = descendants(terminal.board);
+const rows = nodes.filter((node) => hasClass(node, "doudizhu-terminal-row"));
+assert.deepEqual(rows.map((node) => node.dataset.playerId), ["human-1", "ai-1", "ai-2"]);
+assert.equal(nodes.filter((node) => hasClass(node, "doudizhu-terminal-empty")).length, 1);
+assert.deepEqual(
+  nodes.filter((node) => hasClass(node, "doudizhu-terminal-count")).map((node) => node.textContent),
+  ["0 张", "3 张", "2 张"]
+);
+const aiOne = rows.find((node) => node.dataset.playerId === "ai-1");
+assert.deepEqual(aiOne.children[1].children.map((node) => node.dataset.cardId), [
+  "JOKER-B", "H2", "S10",
+]);
+const terminalTen = aiOne.children[1].children.find((node) => node.dataset.cardId === "S10");
+assert.ok(hasClass(terminalTen, "terminal-wide-rank"));
+assert.equal(
+  descendants(terminalTen).find((node) => hasClass(node, "doudizhu-card-rank")).textContent,
+  "10"
+);
+const aiTwo = rows.find((node) => node.dataset.playerId === "ai-2");
+assert.deepEqual(aiTwo.children[1].children.map((node) => node.dataset.cardId), ["HA", "SK"]);
+''')
+
+    def test_seat_and_own_hand_avatars_use_shared_helper_and_fallback(self):
+        self.run_node(r'''
+const shared = makeContext();
+renderer.renderBoard(shared.context);
+assert.deepEqual(shared.avatarCalls, ["ai-1", "ai-2", "human-1"]);
+assert.deepEqual(
+  descendants(shared.board)
+    .filter((node) => hasClass(node, "doudizhu-avatar"))
+    .map((node) => node.textContent),
+  ["avatar:ai-1", "avatar:ai-2", "avatar:human-1"]
+);
+
+const missing = makeContext();
+delete missing.context.helpers.renderParticipantAvatar;
+renderer.renderBoard(missing.context);
+assert.deepEqual(
+  descendants(missing.board)
+    .filter((node) => hasClass(node, "doudizhu-avatar"))
+    .map((node) => node.textContent),
+  ["小", "小", "南"]
+);
+
+const failed = makeContext();
+failed.context.helpers.renderParticipantAvatar = () => { throw new Error("avatar failed"); };
+renderer.renderBoard(failed.context);
+assert.deepEqual(
+  descendants(failed.board)
+    .filter((node) => hasClass(node, "doudizhu-avatar"))
+    .map((node) => node.textContent),
+  ["小", "小", "南"]
+);
+''')
+
+    def test_private_hand_is_displayed_big_to_small_without_mutating_projection(self):
+        self.run_node(r'''
+privateState.hand = [
+  {id: "three", suit: "clubs", rank: "3"},
+  {id: "ace", suit: "diamonds", rank: "A"},
+  {id: "small", suit: "joker", rank: "small_joker"},
+  {id: "ten", suit: "hearts", rank: "10"},
+  {id: "big", suit: "joker", rank: "big_joker"},
+  {id: "king", suit: "spades", rank: "K"},
+  {id: "two", suit: "clubs", rank: "2"},
+];
+const sourceOrder = privateState.hand.map((card) => card.id);
+const value = makeContext();
+renderer.renderBoard(value.context);
+const scroller = descendants(value.board).find((node) => hasClass(node, "doudizhu-hand-scroll"));
+assert.deepEqual(
+  scroller.children.map((node) => node.dataset.cardId),
+  ["big", "small", "two", "ace", "king", "ten", "three"]
+);
+assert.deepEqual(privateState.hand.map((card) => card.id), sourceOrder);
+''')
+
+    def test_card_selection_rerender_preserves_horizontal_scroll_and_action_states(self):
+        self.run_node(r'''
+privateState.legal_actions = [
+  {
+    action: "play", action_id: "pair-3", card_ids: ["HAND-0", "HAND-13"],
+    pattern_label: "对子", main_rank: "3",
+  },
+  {action: "pass", action_id: "pass"},
+];
+const value = makeContext({
+  flow: {phase: "playing", round_number: 1, turn_number: 3},
+  current_trick: {
+    leader_player_id: "ai-1",
+    last_play: {
+      player_id: "ai-1", cards: [{id: "TABLE-4", suit: "spades", rank: "4"}],
+      pattern: {label: "单张"},
+    },
+    pass_player_ids: [],
+  },
+});
+value.context.helpers.rerender = () => {
+  value.board.replaceChildren();
+  value.controls.replaceChildren();
+  renderer.renderBoard(value.context);
+  renderer.renderControls(value.context);
+  return true;
+};
+renderer.renderBoard(value.context);
+let scroller = descendants(value.board).find((node) => hasClass(node, "doudizhu-hand-scroll"));
+scroller.scrollLeft = 137;
+scroller.children.find((node) => node.dataset.cardId === "HAND-13").listeners.click();
+scroller = descendants(value.board).find((node) => hasClass(node, "doudizhu-hand-scroll"));
+assert.equal(scroller.scrollLeft, 137);
+assert.equal(JSON.stringify(value.uiState.selectedCardIds), JSON.stringify(["HAND-13"]));
+
+scroller.scrollLeft = 164;
+scroller.children.find((node) => node.dataset.cardId === "HAND-0").listeners.click();
+scroller = descendants(value.board).find((node) => hasClass(node, "doudizhu-hand-scroll"));
+assert.equal(scroller.scrollLeft, 164);
+assert.equal(
+  JSON.stringify(value.uiState.selectedCardIds),
+  JSON.stringify(["HAND-13", "HAND-0"])
+);
+let controls = descendants(value.controls);
+assert.equal(
+  controls.find((node) => hasClass(node, "doudizhu-controls")).classList.contains("is-playing"),
+  true
+);
+assert.equal(controls.find((node) => hasClass(node, "doudizhu-play-button")).disabled, false);
+assert.equal(controls.find((node) => hasClass(node, "doudizhu-pass-button")).disabled, false);
+
+scroller.scrollLeft = 151;
+scroller.children.find((node) => node.dataset.cardId === "HAND-13").listeners.click();
+scroller = descendants(value.board).find((node) => hasClass(node, "doudizhu-hand-scroll"));
+assert.equal(scroller.scrollLeft, 151);
+assert.equal(JSON.stringify(value.uiState.selectedCardIds), JSON.stringify(["HAND-0"]));
+controls = descendants(value.controls);
+assert.equal(controls.find((node) => hasClass(node, "doudizhu-play-button")).disabled, true);
+assert.equal(controls.find((node) => hasClass(node, "doudizhu-pass-button")).disabled, false);
+''')
+
+    def test_rank_equivalent_single_and_pair_cards_are_selectable_and_submitted(self):
+        self.run_node(r'''
+(async () => {
+  function installRerender(value) {
+    value.context.helpers.rerender = () => {
+      value.board.replaceChildren();
+      value.controls.replaceChildren();
+      renderer.renderBoard(value.context);
+      renderer.renderControls(value.context);
+      return true;
+    };
+  }
+  function card(value, cardId) {
+    return descendants(value.board).find(
+      (node) => hasClass(node, "doudizhu-card") && node.dataset.cardId === cardId
+    );
+  }
+
+  privateState.hand = [
+    {id: "S10", suit: "spades", rank: "10"},
+    {id: "H10", suit: "hearts", rank: "10"},
+    {id: "D10", suit: "diamonds", rank: "10"},
+    {id: "SJ", suit: "spades", rank: "J"},
+  ];
+  privateState.legal_actions = [{
+    action: "play", action_id: "play:solo:7:S10", card_ids: ["S10"],
+    pattern_type: "solo", pattern_label: "单张", main_rank: "10",
+  }];
+  const single = makeContext({flow: {phase: "playing", round_number: 1, turn_number: 3}});
+  installRerender(single);
+  renderer.renderBoard(single.context);
+  renderer.renderControls(single.context);
+  assert.equal(card(single, "S10").disabled, false);
+  assert.equal(card(single, "H10").disabled, false);
+  assert.equal(card(single, "D10").disabled, false);
+  assert.equal(card(single, "SJ").disabled, true);
+  card(single, "D10").listeners.click();
+  const singleControls = descendants(single.controls);
+  const singleButtons = singleControls.find(
+    (node) => hasClass(node, "doudizhu-action-buttons")
+  );
+  assert.ok(hasClass(singleButtons.children[0], "doudizhu-pass-button"));
+  assert.ok(hasClass(singleButtons.children[1], "doudizhu-play-button"));
+  const singlePlay = singleControls.find((node) => hasClass(node, "doudizhu-play-button"));
+  assert.equal(singlePlay.disabled, false);
+  const singleSubmission = singlePlay.listeners.click();
+  assert.equal(singlePlay.listeners.click(), false);
+  await singleSubmission;
+  assert.equal(JSON.stringify(single.submitted), JSON.stringify([{
+    action: "play", action_id: "play:solo:7:S10", card_ids: ["D10"],
+  }]));
+
+  privateState.legal_actions = [{
+    action: "play", action_id: "play:pair:7:S10-H10", card_ids: ["S10", "H10"],
+    pattern_type: "pair", pattern_label: "对子", main_rank: "10",
+  }];
+  const pair = makeContext({flow: {phase: "playing", round_number: 1, turn_number: 3}});
+  installRerender(pair);
+  renderer.renderBoard(pair.context);
+  renderer.renderControls(pair.context);
+  card(pair, "H10").listeners.click();
+  assert.equal(card(pair, "S10").disabled, false);
+  assert.equal(card(pair, "D10").disabled, false);
+  card(pair, "D10").listeners.click();
+  assert.equal(card(pair, "S10").disabled, true);
+  assert.equal(card(pair, "H10").disabled, false);
+  assert.equal(card(pair, "D10").disabled, false);
+  const pairPlay = descendants(pair.controls).find(
+    (node) => hasClass(node, "doudizhu-play-button")
+  );
+  assert.equal(pairPlay.disabled, false);
+  await pairPlay.listeners.click();
+  assert.equal(JSON.stringify(pair.submitted), JSON.stringify([{
+    action: "play", action_id: "play:pair:7:S10-H10", card_ids: ["H10", "D10"],
+  }]));
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+''')
+
+    def test_rank_multiset_matching_preserves_complex_straight_selection(self):
+        self.run_node(r'''
+(async () => {
+  privateState.hand = [
+    {id: "S3", suit: "spades", rank: "3"}, {id: "H3", suit: "hearts", rank: "3"},
+    {id: "S4", suit: "spades", rank: "4"}, {id: "H4", suit: "hearts", rank: "4"},
+    {id: "S5", suit: "spades", rank: "5"}, {id: "H5", suit: "hearts", rank: "5"},
+    {id: "S6", suit: "spades", rank: "6"}, {id: "H6", suit: "hearts", rank: "6"},
+    {id: "S7", suit: "spades", rank: "7"}, {id: "H7", suit: "hearts", rank: "7"},
+  ];
+  privateState.legal_actions = [{
+    action: "play", action_id: "straight-canonical",
+    card_ids: ["S3", "S4", "S5", "S6", "S7"],
+    pattern_type: "solo_chain_5", pattern_label: "五张顺子", main_rank: "7",
+  }];
+  const value = makeContext({flow: {phase: "playing", round_number: 1, turn_number: 3}});
+  value.context.helpers.rerender = () => {
+    value.board.replaceChildren();
+    value.controls.replaceChildren();
+    renderer.renderBoard(value.context);
+    renderer.renderControls(value.context);
+    return true;
+  };
+  renderer.renderBoard(value.context);
+  renderer.renderControls(value.context);
+  for (const cardId of ["H3", "H4", "H5", "H6", "H7"]) {
+    descendants(value.board).find(
+      (node) => hasClass(node, "doudizhu-card") && node.dataset.cardId === cardId
+    ).listeners.click();
+  }
+  const play = descendants(value.controls).find((node) => hasClass(node, "doudizhu-play-button"));
+  assert.equal(play.disabled, false);
+  await play.listeners.click();
+  assert.equal(JSON.stringify(value.submitted), JSON.stringify([{
+    action: "play", action_id: "straight-canonical",
+    card_ids: ["H3", "H4", "H5", "H6", "H7"],
+  }]));
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+''')
+
+    def test_local_selection_and_pattern_rerenders_preserve_page_scroll_y(self):
+        self.run_node(r'''
+privateState.legal_actions = [
+  {
+    action: "play", action_id: "pair-3-a", card_ids: ["HAND-0", "HAND-13"],
+    pattern_label: "对子解释 A", main_rank: "3",
+  },
+  {
+    action: "play", action_id: "pair-3-b", card_ids: ["HAND-0", "HAND-13"],
+    pattern_label: "对子解释 B", main_rank: "3",
+  },
+  {action: "pass", action_id: "pass"},
+];
+const value = makeContext({
+  flow: {phase: "playing", round_number: 1, turn_number: 3},
+  current_trick: {
+    leader_player_id: "ai-1",
+    last_play: {
+      player_id: "ai-1", cards: [{id: "TABLE-4", suit: "spades", rank: "4"}],
+      pattern: {label: "单张"},
+    },
+    pass_player_ids: [],
+  },
+});
+value.context.helpers.rerender = () => {
+  window.scrollTo(0, 19);
+  value.board.replaceChildren();
+  value.controls.replaceChildren();
+  renderer.renderBoard(value.context);
+  renderer.renderControls(value.context);
+  return true;
+};
+renderer.renderBoard(value.context);
+
+function handScroller() {
+  return descendants(value.board).find((node) => hasClass(node, "doudizhu-hand-scroll"));
+}
+function clickCard(cardId, expectedY) {
+  window.scrollTo(0, expectedY);
+  window.scrollCalls.length = 0;
+  handScroller().children.find((node) => node.dataset.cardId === cardId).listeners.click();
+  assert.equal(window.scrollY, expectedY);
+  assert.deepEqual(window.scrollCalls.at(-1), [0, expectedY]);
+}
+
+clickCard("HAND-13", 641);
+assert.equal(JSON.stringify(value.uiState.selectedCardIds), JSON.stringify(["HAND-13"]));
+clickCard("HAND-13", 641);
+assert.equal(JSON.stringify(value.uiState.selectedCardIds), JSON.stringify([]));
+
+clickCard("HAND-13", 688);
+clickCard("HAND-0", 688);
+let controls = descendants(value.controls);
+const choices = controls.filter((node) => hasClass(node, "doudizhu-pattern-choice"));
+assert.equal(choices.length, 2);
+window.scrollTo(0, 733);
+window.scrollCalls.length = 0;
+choices[1].listeners.click();
+assert.equal(window.scrollY, 733);
+assert.deepEqual(window.scrollCalls.at(-1), [0, 733]);
+assert.equal(value.uiState.selectedActionId, "pair-3-b");
+''')
+
+    def test_bid_option_only_selects_then_confirmation_submits_once(self):
+        self.run_node(r'''
+(async () => {
+  const value = makeContext();
+  renderer.renderControls(value.context);
+  let nodes = descendants(value.controls);
+  assert.equal(nodes.filter((node) => hasClass(node, "doudizhu-bid-confirm")).length, 0);
+  const twoPoints = nodes.find(
+    (node) => hasClass(node, "doudizhu-bid-button") && node.dataset.actionId === "bid:2"
+  );
+  twoPoints.listeners.click();
+  assert.equal(value.submitted.length, 0);
+  assert.equal(value.uiState.selectedBidActionId, "bid:2");
+
+  value.controls.replaceChildren();
+  renderer.renderControls(value.context);
+  nodes = descendants(value.controls);
+  const confirm = nodes.find((node) => hasClass(node, "doudizhu-bid-confirm-button"));
+  assert.ok(confirm);
+  assert.equal(confirm.textContent, "确认叫 2 分");
+  window.scrollCalls.length = 0;
+  const firstSubmission = confirm.listeners.click();
+  const duplicateSubmission = confirm.listeners.click();
+  assert.equal(duplicateSubmission, false);
+  await firstSubmission;
+  assert.equal(window.scrollCalls.length, 0);
+  assert.equal(value.submitted.length, 1);
+  assert.equal(JSON.stringify(value.submitted[0]), JSON.stringify({
+    action: "bid", action_id: "bid:2", score: 2, label: "2分",
+  }));
+
+  const cancelled = makeContext();
+  renderer.renderControls(cancelled.context);
+  nodes = descendants(cancelled.controls);
+  nodes.find((node) => node.dataset.actionId === "bid:0").listeners.click();
+  cancelled.controls.replaceChildren();
+  renderer.renderControls(cancelled.context);
+  nodes = descendants(cancelled.controls);
+  const cancel = nodes.find((node) => hasClass(node, "doudizhu-bid-cancel-button"));
+  assert.equal(nodes.find((node) => hasClass(node, "doudizhu-bid-confirm-button")).textContent, "确认不叫");
+  cancel.listeners.click();
+  assert.equal(cancelled.uiState.selectedBidActionId, null);
+  assert.equal(cancelled.submitted.length, 0);
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+''')
+
+
+if __name__ == "__main__":
+    unittest.main()

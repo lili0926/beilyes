@@ -1,0 +1,271 @@
+"""Background orchestration for persisted, idempotent system-NPC turns."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+
+from .framework import DuelError, _room_id, get_room
+from .npc_controller import NpcTurnResult, run_current_npc_turn
+from .npc_runtime import (
+    NPC_DECISION_LEASE_SECONDS,
+    list_active_npc_turn_room_ids,
+)
+
+
+logger = logging.getLogger(__name__)
+
+MAX_CONSECUTIVE_NPC_TURNS = 16
+NPC_IN_PROGRESS_RETRY_SECONDS = NPC_DECISION_LEASE_SECONDS + 1
+NPC_VISIBLE_ACTION_DELAY_SECONDS = 2.0
+NPC_VISIBLE_ACTION_DELAY_EXEMPT_GAME_TYPES = frozenset({"liars_dice"})
+# These games already hold each system-NPC action on screen themselves.  Keep
+# the duration here as audited metadata and skip the scheduler pause so the two
+# mechanisms cannot turn one beat into a double wait.
+NPC_GAME_MANAGED_VISIBLE_ACTION_DELAYS_SECONDS = {
+    "aeroplane_chess": 2.0,
+}
+
+TurnRunner = Callable[[str], Awaitable[NpcTurnResult]]
+RoomChangedCallback = Callable[[str], None]
+ActionSleeper = Callable[[float], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class NpcVisibleActionPacing:
+    source: str
+    effective_delay_seconds: float
+    scheduler_delay_seconds: float
+
+
+def npc_visible_action_pacing(
+    room: dict, default_seconds: float = NPC_VISIBLE_ACTION_DELAY_SECONDS
+) -> NpcVisibleActionPacing:
+    """Describe the single visible pacing source for a system-NPC action."""
+    game_type = room.get("game_type")
+    if game_type in NPC_VISIBLE_ACTION_DELAY_EXEMPT_GAME_TYPES:
+        return NpcVisibleActionPacing("none", 0.0, 0.0)
+    game_delay = NPC_GAME_MANAGED_VISIBLE_ACTION_DELAYS_SECONDS.get(game_type)
+    if game_delay is not None:
+        return NpcVisibleActionPacing("game_renderer", game_delay, 0.0)
+    return NpcVisibleActionPacing(
+        "npc_scheduler", default_seconds, default_seconds
+    )
+
+
+def npc_visible_action_delay_seconds(
+    room: dict, default_seconds: float = NPC_VISIBLE_ACTION_DELAY_SECONDS
+) -> float:
+    """Return the pre-action pause used to keep an NPC revision observable."""
+    return npc_visible_action_pacing(room, default_seconds).scheduler_delay_seconds
+
+
+def is_system_npc_turn(room: dict) -> bool:
+    if room.get("status") != "playing":
+        return False
+    current_player_id = room.get("current_player_id")
+    return any(
+        participant.get("player_id") == current_player_id
+        and participant.get("participant_kind") == "system_npc"
+        and participant.get("join_status") == "joined"
+        and participant.get("activity_state", "active") == "active"
+        and participant.get("active", True)
+        for participant in room.get("participants", [])
+    )
+
+
+class NpcTurnScheduler:
+    """Keep at most one local worker per room while SQLite deduplicates workers."""
+
+    def __init__(
+        self,
+        *,
+        turn_runner: TurnRunner = run_current_npc_turn,
+        room_changed: RoomChangedCallback | None = None,
+        max_consecutive_turns: int = MAX_CONSECUTIVE_NPC_TURNS,
+        in_progress_retry_seconds: float = NPC_IN_PROGRESS_RETRY_SECONDS,
+        visible_action_delay_seconds: float = NPC_VISIBLE_ACTION_DELAY_SECONDS,
+        action_sleeper: ActionSleeper = asyncio.sleep,
+    ) -> None:
+        if max_consecutive_turns < 1:
+            raise ValueError("max_consecutive_turns must be positive")
+        if visible_action_delay_seconds < 0:
+            raise ValueError("visible_action_delay_seconds must not be negative")
+        self._turn_runner = turn_runner
+        self._room_changed = room_changed
+        self._max_consecutive_turns = max_consecutive_turns
+        self._in_progress_retry_seconds = in_progress_retry_seconds
+        self._visible_action_delay_seconds = visible_action_delay_seconds
+        self._action_sleeper = action_sleeper
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._retry_tasks: dict[str, asyncio.Task[None]] = {}
+        self._requested_again: set[str] = set()
+        self._registry_lock = asyncio.Lock()
+        self._started = False
+        self._closed = False
+
+    async def start(self) -> None:
+        """Enable scheduling and enqueue every persisted active NPC turn."""
+        async with self._registry_lock:
+            if self._started:
+                return
+            self._started = True
+            self._closed = False
+        for room_id in list_active_npc_turn_room_ids():
+            await self.schedule(room_id)
+
+    async def shutdown(self) -> None:
+        """Cancel owned background work and release every in-memory room slot."""
+        async with self._registry_lock:
+            self._closed = True
+            self._started = False
+            tasks = [*self._tasks.values(), *self._retry_tasks.values()]
+            self._tasks.clear()
+            self._retry_tasks.clear()
+            self._requested_again.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def schedule(self, room_id: str) -> bool:
+        """Idempotently enqueue a room without waiting for an NPC provider."""
+        room_id = _room_id(room_id)
+        async with self._registry_lock:
+            if not self._started or self._closed:
+                return False
+            existing = self._tasks.get(room_id)
+            if existing is not None and not existing.done():
+                self._requested_again.add(room_id)
+                return False
+            task = asyncio.create_task(
+                self._run_room(room_id), name=f"npc-turn:{room_id}"
+            )
+            self._tasks[room_id] = task
+        return True
+
+    async def _run_room(self, room_id: str) -> None:
+        outcome = "error"
+        try:
+            outcome = await self._drain_room(room_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("system NPC background turn failed for room %s", room_id)
+        finally:
+            restart = False
+            retry_to_cancel: asyncio.Task[None] | None = None
+            async with self._registry_lock:
+                current = asyncio.current_task()
+                if self._tasks.get(room_id) is current:
+                    self._tasks.pop(room_id, None)
+                if outcome in {"idle", "missing", "limit"}:
+                    retry_to_cancel = self._retry_tasks.pop(room_id, None)
+                requested_again = room_id in self._requested_again
+                self._requested_again.discard(room_id)
+                restart = (
+                    requested_again
+                    and outcome not in {"in_progress", "limit"}
+                    and self._started
+                    and not self._closed
+                )
+            if retry_to_cancel is not None:
+                retry_to_cancel.cancel()
+            if outcome == "in_progress":
+                await self._arm_in_progress_retry(room_id)
+            elif restart:
+                await self.schedule(room_id)
+
+    async def _drain_room(self, room_id: str) -> str:
+        for _turn_index in range(self._max_consecutive_turns):
+            try:
+                room = get_room(room_id)
+            except DuelError as exc:
+                if exc.status_code == 404:
+                    return "missing"
+                raise
+            if not is_system_npc_turn(room):
+                return "idle"
+            revision = room["revision"]
+            visible_delay = npc_visible_action_delay_seconds(
+                room, self._visible_action_delay_seconds
+            )
+            if visible_delay > 0:
+                await self._action_sleeper(visible_delay)
+            try:
+                result = await self._turn_runner(room_id)
+            except DuelError:
+                latest = get_room(room_id)
+                if (
+                    latest.get("revision") != revision
+                    or not is_system_npc_turn(latest)
+                ):
+                    continue
+                raise
+            if result.status == "in_progress":
+                return "in_progress"
+            if result.status not in {"applied", "already_applied"}:
+                return "idle"
+            self._notify_room_changed(room_id)
+            if result.speech_task is not None:
+                result.speech_task.add_done_callback(
+                    lambda task, changed_room_id=room_id: self._speech_finished(
+                        changed_room_id, task
+                    )
+                )
+        return "limit"
+
+    def _notify_room_changed(self, room_id: str) -> None:
+        if self._room_changed is None:
+            return
+        try:
+            self._room_changed(room_id)
+        except Exception:
+            logger.exception(
+                "system NPC revision notification failed for room %s", room_id
+            )
+
+    def _speech_finished(
+        self, room_id: str, task: asyncio.Task[bool]
+    ) -> None:
+        try:
+            sent = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception("system NPC speech task failed for room %s", room_id)
+            return
+        if sent:
+            self._notify_room_changed(room_id)
+
+    async def _arm_in_progress_retry(self, room_id: str) -> None:
+        async with self._registry_lock:
+            if (
+                not self._started
+                or self._closed
+                or room_id in self._retry_tasks
+            ):
+                return
+            retry = asyncio.create_task(
+                self._retry_after_lease(room_id),
+                name=f"npc-turn-retry:{room_id}",
+            )
+            self._retry_tasks[room_id] = retry
+
+    async def _retry_after_lease(self, room_id: str) -> None:
+        try:
+            await asyncio.sleep(self._in_progress_retry_seconds)
+            async with self._registry_lock:
+                current = asyncio.current_task()
+                if self._retry_tasks.get(room_id) is current:
+                    self._retry_tasks.pop(room_id, None)
+            await self.schedule(room_id)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            async with self._registry_lock:
+                current = asyncio.current_task()
+                if self._retry_tasks.get(room_id) is current:
+                    self._retry_tasks.pop(room_id, None)

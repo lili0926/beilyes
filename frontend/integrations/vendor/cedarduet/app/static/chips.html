@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8d9f1">
+  <title>筹码中心 · Duel</title>
+  <link rel="stylesheet" href="/static/chips.css?v=1.4.0">
+
+</head>
+<body>
+  <main class="chip-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">DUEL CHIP HOUSE</p>
+        <h1>筹码中心</h1>
+      </div>
+    </header>
+
+    <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
+
+    <section class="balance-strip" aria-labelledby="balanceTitle">
+      <div class="subject-control">
+        <label for="subjectSelect">查看对象</label>
+        <select id="subjectSelect" disabled>
+          <option value="human">我</option>
+        </select>
+        <span id="readOnlyTag" class="readonly-tag hidden">只读</span>
+      </div>
+      <div class="balance-summary">
+        <div>
+          <p id="balanceTitle" class="section-kicker">我的筹码</p>
+          <p class="balance-line"><strong id="myBalance">--</strong><span>枚</span></p>
+        </div>
+        <div class="status-stack">
+          <span id="myBankruptcyState" class="status-pill">读取中</span>
+          <span id="myBankruptcyCount" class="count-label">破产 -- 次</span>
+        </div>
+      </div>
+      <div class="bankruptcy-compact">
+        <div>
+          <strong>破产处理</strong>
+          <p id="bankruptcyDescription">余额 ≤ -500 时可自愿宣布，重置为 50 枚。</p>
+        </div>
+        <button id="bankruptcyButton" class="button danger" type="button" disabled>
+          宣布破产
+        </button>
+      </div>
+    </section>
+
+    <section class="module-switcher" aria-labelledby="moduleSwitcherTitle">
+      <div class="module-intro">
+        <div>
+          <p class="section-kicker">功能模块</p>
+          <h2 id="moduleSwitcherTitle">选择要查看的内容</h2>
+        </div>
+        <span>一次只看一项</span>
+      </div>
+
+      <div class="module-tabs" role="tablist" aria-label="筹码中心功能">
+        <button id="tab-checkin" class="module-tab" type="button" role="tab"
+          aria-selected="true" aria-controls="panel-checkin" data-panel="panel-checkin">每日签到</button>
+        <button id="tab-achievements" class="module-tab" type="button" role="tab" tabindex="-1"
+          aria-selected="false" aria-controls="panel-achievements" data-panel="panel-achievements">
+          成就<span id="achievementUnreadBadge" class="unread-badge hidden" aria-label="成就未读数量">0</span></button>
+        <button id="tab-shop" class="module-tab" type="button" role="tab" tabindex="-1"
+          aria-selected="false" aria-controls="panel-shop" data-panel="panel-shop">
+          互动商店<span id="exchangeUnreadBadge" class="unread-badge hidden" aria-label="兑换未读数量">0</span></button>
+        <button id="tab-loans" class="module-tab" type="button" role="tab" tabindex="-1"
+          aria-selected="false" aria-controls="panel-loans" data-panel="panel-loans">
+          欠条<span id="loanUnreadBadge" class="unread-badge hidden" aria-label="借款未读数量">0</span></button>
+        <button id="tab-ledger" class="module-tab" type="button" role="tab" tabindex="-1"
+          aria-selected="false" aria-controls="panel-ledger" data-panel="panel-ledger">筹码流水</button>
+      </div>
+
+      <div class="module-panels">
+        <section id="panel-checkin" class="module-card module-panel checkin-card" role="tabpanel"
+          aria-labelledby="tab-checkin">
+          <div class="module-heading">
+            <span class="pixel-icon" aria-hidden="true">✦</span>
+            <div>
+              <h2>每日签到</h2>
+              <p id="checkInDescription">固定奖励，不连签、不补签</p>
+            </div>
+            <span id="checkInState" class="panel-state">读取中</span>
+          </div>
+          <div class="reward-row">
+            <strong>+20</strong>
+            <span>筹码 / 今日</span>
+            <button id="checkInButton" class="button primary" type="button" disabled>立即签到</button>
+          </div>
+        </section>
+
+        <section id="panel-achievements" class="module-card module-panel achievements-card" role="tabpanel"
+          aria-labelledby="tab-achievements" hidden>
+          <div class="module-heading">
+            <span class="pixel-icon" aria-hidden="true">★</span>
+            <div>
+              <h2>成就</h2>
+              <p id="achievementDescription">永久成就 · 解锁即到账</p>
+            </div>
+            <span id="achievementSummary" class="panel-state">-- / --</span>
+          </div>
+          <div id="achievementSections" class="achievement-sections" aria-live="polite"></div>
+        </section>
+
+        <section id="panel-shop" class="module-card module-panel exchange-card" role="tabpanel"
+          aria-labelledby="tab-shop" hidden>
+          <div class="module-heading">
+            <span class="pixel-icon" aria-hidden="true">♡</span>
+            <div>
+              <h2 id="exchangeTitle">互动商店</h2>
+              <p id="exchangeDescription">先完成约定，再由对方确认并支付筹码</p>
+            </div>
+          </div>
+          <p class="exchange-boundary">双弈不保存互动内容，也不介入履约争议。</p>
+          <p class="exchange-limits">1–100 枚 · 最多 3 张 · 每日支付上限 100 · 72 小时有效</p>
+
+          <div class="exchange-tabs" role="tablist" aria-label="互动商店内容">
+            <button id="exchange-tab-shop" class="exchange-tab" type="button"
+              aria-selected="true" data-exchange-view="exchange-view-shop">商店</button>
+            <button id="exchange-tab-requests" class="exchange-tab" type="button"
+              aria-selected="false" data-exchange-view="exchange-view-requests">
+              申请<span id="exchangePendingBadge" class="exchange-badge hidden" aria-label="待我确认数量">0</span>
+            </button>
+            <button id="exchange-tab-history" class="exchange-tab" type="button"
+              aria-selected="false" data-exchange-view="exchange-view-history">记录</button>
+          </div>
+
+          <section id="exchange-view-shop" class="exchange-view">
+            <div id="exchangeCatalog" class="exchange-catalog" aria-live="polite">
+              <p class="exchange-empty">正在摆放商品…</p>
+            </div>
+            <form id="exchangeCreateForm" class="exchange-form hidden" autocomplete="off" novalidate>
+              <div class="exchange-form-heading">
+                <div><span id="exchangeFormSymbol" aria-hidden="true">♡</span></div>
+                <div><h3 id="exchangeFormTitle">你用小约定向小机换筹码</h3><p id="exchangeFormDescription"></p></div>
+              </div>
+              <input id="exchangeItemKey" type="hidden">
+              <div class="exchange-form-grid">
+                <label>向哪只小机换筹码<select id="exchangeMachineSelect" required disabled></select></label>
+                <label>希望对方支付的筹码数（1–100）<input id="exchangeAmount" type="number" min="1" max="100" step="1" required></label>
+              </div>
+              <label id="exchangeCustomTitleWrap" class="hidden">你承诺的小约定标题（1–30 字）
+                <input id="exchangeCustomTitle" type="text" minlength="1" maxlength="30">
+              </label>
+              <label>本次说明：你会如何完成约定（1–120 字）
+                <textarea id="exchangeRequestNote" minlength="1" maxlength="120" rows="3"
+                  placeholder="例如：我会发一张今天窗外的照片" required></textarea>
+              </label>
+              <p id="exchangeFormError" class="form-error hidden" role="alert" aria-live="assertive"></p>
+              <div class="exchange-form-actions">
+                <button id="exchangeCreateButton" class="button primary" type="submit">发送申请</button>
+                <button id="exchangeCancelButton" class="button ghost" type="button">取消</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="exchange-view-requests" class="exchange-view" hidden>
+            <section class="exchange-request-group" aria-labelledby="pendingForMeTitle">
+              <div class="exchange-list-heading">
+                <h3 id="pendingForMeTitle">待我确认付款</h3>
+                <span id="exchangePendingCount" class="panel-state urgent">0 张</span>
+              </div>
+              <div id="exchangePendingList" class="exchange-list" aria-live="polite"></div>
+            </section>
+            <section class="exchange-request-group" aria-labelledby="waitingMachineTitle">
+              <div class="exchange-list-heading">
+                <h3 id="waitingMachineTitle">等待小机确认付款</h3>
+                <span id="exchangeWaitingCount" class="panel-state quiet">0 张</span>
+              </div>
+              <div id="exchangeWaitingList" class="exchange-list" aria-live="polite"></div>
+            </section>
+          </section>
+
+          <section id="exchange-view-history" class="exchange-view" hidden>
+            <div class="exchange-list-heading">
+              <h3>兑换记录</h3><span id="exchangeHistoryCount" class="panel-state">0 张</span>
+            </div>
+            <div id="exchangeHistoryList" class="exchange-list" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <section id="panel-loans" class="module-card module-panel loans-card" role="tabpanel"
+          aria-labelledby="tab-loans" hidden>
+          <div class="module-heading">
+            <span class="pixel-icon" aria-hidden="true">◇</span>
+            <div>
+              <h2 id="socialTitle">欠条</h2>
+              <p id="socialDescription">借款提案、协商与还款</p>
+            </div>
+          </div>
+          <div class="loan-view-switch" aria-label="欠条内容切换">
+            <button id="loanViewCreateButton" class="loan-view-option" type="button"
+              data-loan-view="create" aria-pressed="true">发起借款</button>
+            <button id="loanViewListButton" class="loan-view-option" type="button"
+              data-loan-view="list" aria-pressed="false">
+              我的欠条 <span id="loanCount" class="loan-view-count">0</span>
+            </button>
+          </div>
+          <section id="loanViewCreate" class="loan-view">
+            <form id="loanCreateForm" class="loan-form" autocomplete="off" novalidate>
+              <div class="loan-form-grid">
+                <label>向谁借<select id="loanMachineSelect" required disabled></select></label>
+                <label>申请本金<input id="loanPrincipal" type="number" min="1" step="1" required></label>
+                <label>日利率（%）<input id="loanRate" type="text" inputmode="decimal" value="0" required></label>
+                <label>到期日（上海时区）<input id="loanDueDate" type="date" required></label>
+              </div>
+              <label class="cap-choice">
+                <input id="loanCapEnabled" type="checkbox" checked>
+                <span>利息封顶保护（累计利息最多等于本金）</span>
+              </label>
+              <p id="loanCapWarning" class="loan-warning hidden">关闭后将按约定单利持续累计至还清，没有本金倍数保护。</p>
+              <p id="loanFormError" class="form-error hidden" role="alert" aria-live="assertive"></p>
+              <button id="loanCreateButton" class="button primary" type="submit">发送借款提案</button>
+              <p class="loan-create-hint">提案发出后 3 天内有效。</p>
+            </form>
+          </section>
+          <section id="loanViewList" class="loan-view" hidden>
+            <div id="loanList" class="loan-list" aria-live="polite">
+              <p class="loan-empty">正在读取欠条…</p>
+            </div>
+            <details class="loan-interest-note">
+              <summary>计息说明</summary>
+              <p>利息按剩余本金与实际经过时间累计，余数结转后向下取整；逾期仍按原日利率计息。</p>
+            </details>
+          </section>
+        </section>
+
+        <section id="panel-ledger" class="module-card module-panel ledger-card" role="tabpanel"
+          aria-labelledby="tab-ledger" hidden>
+          <div class="module-heading">
+            <span class="pixel-icon" aria-hidden="true">▤</span>
+            <div>
+              <h2>筹码流水</h2>
+              <p id="ledgerDescription">我的统一账本 · 最近流水</p>
+            </div>
+          </div>
+          <ol id="ledgerList" class="ledger-list">
+            <li class="ledger-empty">正在读取流水…</li>
+          </ol>
+        </section>
+      </div>
+    </section>
+
+  </main>
+  <script src="/static/chips.js?v=1.4.0"></script>
+
+</body>
+</html>

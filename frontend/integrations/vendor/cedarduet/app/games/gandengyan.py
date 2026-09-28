@@ -1,0 +1,1027 @@
+from __future__ import annotations
+
+import itertools
+import random
+from copy import deepcopy
+from typing import Any, Iterable
+
+from .base import GamePlugin, MoveResult
+from .tools import (
+    discard_cards,
+    draw_cards,
+    ensure_card_zones,
+    ensure_flow,
+    private_hand,
+    public_card_state,
+)
+
+
+SUITS = ("spades", "hearts", "clubs", "diamonds")
+SUIT_CODES = {
+    "spades": "S",
+    "hearts": "H",
+    "clubs": "C",
+    "diamonds": "D",
+}
+SUIT_LABELS = {
+    "spades": "黑桃",
+    "hearts": "红桃",
+    "clubs": "梅花",
+    "diamonds": "方块",
+    "joker": "王",
+}
+RANKS = ("3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2")
+SEQUENCE_RANKS = RANKS[:-1]
+RANK_VALUE = {rank: index for index, rank in enumerate(RANKS)}
+JOKER_RANKS = ("small_joker", "big_joker")
+PATTERN_LABELS = {
+    "single": "单张",
+    "pair": "对子",
+    "straight": "顺子",
+    "consecutive_pairs": "连对",
+    "three_bomb": "三炸",
+    "four_bomb": "深水炸弹",
+    "joker_bomb": "王炸",
+}
+BOMB_STRENGTH = {
+    "three_bomb": 1,
+    "four_bomb": 2,
+    "joker_bomb": 3,
+}
+MAX_MULTIPLIER = 8
+
+
+def build_deck() -> list[dict[str, str]]:
+    """Return one canonical, uniquely identified 54-card deck."""
+    deck = [
+        {
+            "id": f"{SUIT_CODES[suit]}{rank}",
+            "suit": suit,
+            "rank": rank,
+        }
+        for suit in SUITS
+        for rank in RANKS
+    ]
+    deck.extend((
+        {"id": "JOKER-S", "suit": "joker", "rank": "small_joker"},
+        {"id": "JOKER-B", "suit": "joker", "rank": "big_joker"},
+    ))
+    return deck
+
+
+def _card_sort_key(card: dict[str, Any]) -> tuple[int, int]:
+    rank = card.get("rank")
+    if rank in RANK_VALUE:
+        return RANK_VALUE[str(rank)], SUITS.index(str(card.get("suit")))
+    if rank == "small_joker":
+        return len(RANKS), 0
+    if rank == "big_joker":
+        return len(RANKS), 1
+    raise ValueError("牌张包含未知点数或花色")
+
+
+def card_label(card: dict[str, Any]) -> str:
+    rank = card.get("rank")
+    if rank == "small_joker":
+        return "小王"
+    if rank == "big_joker":
+        return "大王"
+    suit = str(card.get("suit"))
+    if rank not in RANK_VALUE or suit not in SUIT_LABELS:
+        raise ValueError("牌张包含未知点数或花色")
+    return f"{SUIT_LABELS[suit]}{rank}"
+
+
+def _pattern(
+    pattern_type: str,
+    cards: list[dict[str, Any]],
+    *,
+    rank: str | None = None,
+    start_rank: str | None = None,
+    top_rank: str | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "type": pattern_type,
+        "label": PATTERN_LABELS[pattern_type],
+        "count": len(cards),
+        "is_bomb": pattern_type in BOMB_STRENGTH,
+    }
+    if rank is not None:
+        result["rank"] = rank
+        result["rank_value"] = RANK_VALUE.get(rank, len(RANKS))
+    if start_rank is not None and top_rank is not None:
+        result.update({
+            "start_rank": start_rank,
+            "top_rank": top_rank,
+            "rank_value": RANK_VALUE[top_rank],
+        })
+    if result["is_bomb"]:
+        result["bomb_strength"] = BOMB_STRENGTH[pattern_type]
+    return result
+
+
+def classify_card_patterns(
+    cards: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return every legal interpretation of one physical card combination."""
+    selected = list(cards)
+    if not selected or len(selected) != len({card.get("id") for card in selected}):
+        return []
+    ranks = [card.get("rank") for card in selected]
+    if len(selected) == 2 and set(ranks) == set(JOKER_RANKS):
+        return [_pattern("joker_bomb", selected, rank="big_joker")]
+    if any(rank not in RANK_VALUE and rank not in JOKER_RANKS for rank in ranks):
+        return []
+
+    joker_count = sum(rank in JOKER_RANKS for rank in ranks)
+    ordinary_ranks = [str(rank) for rank in ranks if rank not in JOKER_RANKS]
+    if not ordinary_ranks:
+        return []
+    counts = {rank: ordinary_ranks.count(rank) for rank in set(ordinary_ranks)}
+    patterns: list[dict[str, Any]] = []
+
+    # A joker can complete a same-rank group, but can never become a single.
+    if len(counts) == 1 and len(selected) <= 4:
+        rank = ordinary_ranks[0]
+        pattern_type = {
+            1: "single",
+            2: "pair",
+            3: "three_bomb",
+            4: "four_bomb",
+        }.get(len(selected))
+        if pattern_type is not None and (joker_count == 0 or len(selected) > 1):
+            patterns.append(_pattern(pattern_type, selected, rank=rank))
+
+    # Enumerate every containing run: 4,5,王 can mean either 3-5 or 4-6.
+    if (
+        len(selected) >= 3
+        and "2" not in counts
+        and all(count == 1 for count in counts.values())
+    ):
+        length = len(selected)
+        ordinary_values = {RANK_VALUE[rank] for rank in ordinary_ranks}
+        for start in range(0, len(SEQUENCE_RANKS) - length + 1):
+            stop = start + length
+            if ordinary_values <= set(range(start, stop)):
+                patterns.append(_pattern(
+                    "straight",
+                    selected,
+                    start_rank=RANKS[start],
+                    top_rank=RANKS[stop - 1],
+                ))
+
+    # Jokers may fill either half of a pair or an entire missing pair.
+    if (
+        len(selected) >= 4
+        and len(selected) % 2 == 0
+        and "2" not in counts
+        and all(count <= 2 for count in counts.values())
+    ):
+        pair_count = len(selected) // 2
+        ordinary_values = {RANK_VALUE[rank] for rank in ordinary_ranks}
+        for start in range(0, len(SEQUENCE_RANKS) - pair_count + 1):
+            stop = start + pair_count
+            if ordinary_values <= set(range(start, stop)) and sum(
+                2 - counts.get(RANKS[value], 0) for value in range(start, stop)
+            ) == joker_count:
+                patterns.append(_pattern(
+                    "consecutive_pairs",
+                    selected,
+                    start_rank=RANKS[start],
+                    top_rank=RANKS[stop - 1],
+                ))
+
+    unique: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for pattern in patterns:
+        identity = (
+            pattern["type"],
+            pattern.get("rank"),
+            pattern.get("start_rank"),
+            pattern.get("top_rank"),
+        )
+        unique.setdefault(identity, pattern)
+    return list(unique.values())
+
+
+def classify_cards(cards: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return a stable canonical interpretation for compatibility callers."""
+    patterns = classify_card_patterns(cards)
+    return patterns[0] if patterns else None
+
+
+def can_beat(candidate: dict[str, Any], target: dict[str, Any]) -> bool:
+    """Apply exact-step ordinary comparison and unrestricted bomb comparison."""
+    candidate_bomb = bool(candidate.get("is_bomb"))
+    target_bomb = bool(target.get("is_bomb"))
+    if candidate_bomb:
+        if not target_bomb:
+            return True
+        candidate_strength = int(candidate["bomb_strength"])
+        target_strength = int(target["bomb_strength"])
+        if candidate_strength != target_strength:
+            return candidate_strength > target_strength
+        return int(candidate["rank_value"]) > int(target["rank_value"])
+    if target_bomb:
+        return False
+    if (
+        candidate.get("type") != target.get("type")
+        or candidate.get("count") != target.get("count")
+    ):
+        return False
+    pattern_type = str(candidate["type"])
+    candidate_value = int(candidate["rank_value"])
+    target_value = int(target["rank_value"])
+    if pattern_type in {"single", "pair"} and candidate.get("rank") == "2":
+        return target.get("rank") != "2"
+    return candidate_value == target_value + 1
+
+
+def _all_combinations(hand: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Generate every legal physical-card combination from one hand."""
+    by_rank = {
+        rank: sorted(
+            [card for card in hand if card.get("rank") == rank],
+            key=_card_sort_key,
+        )
+        for rank in RANKS
+    }
+    jokers = sorted(
+        [card for card in hand if card.get("rank") in JOKER_RANKS],
+        key=_card_sort_key,
+    )
+    combinations: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+
+    def add(cards: Iterable[dict[str, Any]]) -> None:
+        ordered = sorted(cards, key=_card_sort_key)
+        key = tuple(sorted(str(card["id"]) for card in ordered))
+        combinations.setdefault(key, ordered)
+
+    for rank in RANKS:
+        rank_cards = by_rank[rank]
+        for total_count in (1, 2, 3, 4):
+            for joker_count in range(0, min(len(jokers), total_count - 1) + 1):
+                ordinary_count = total_count - joker_count
+                if ordinary_count > len(rank_cards):
+                    continue
+                for ordinary_group in itertools.combinations(
+                    rank_cards, ordinary_count
+                ):
+                    for joker_group in itertools.combinations(jokers, joker_count):
+                        add((*ordinary_group, *joker_group))
+
+    if {card.get("rank") for card in jokers} == set(JOKER_RANKS):
+        add(jokers)
+
+    for start in range(len(SEQUENCE_RANKS)):
+        for stop in range(start + 3, len(SEQUENCE_RANKS) + 1):
+            run = SEQUENCE_RANKS[start:stop]
+            for joker_count in range(0, min(len(jokers), len(run)) + 1):
+                for gaps in itertools.combinations(run, joker_count):
+                    ordinary_run = [rank for rank in run if rank not in gaps]
+                    if any(not by_rank[rank] for rank in ordinary_run):
+                        continue
+                    for ordinary_group in itertools.product(
+                        *(by_rank[rank] for rank in ordinary_run)
+                    ):
+                        for joker_group in itertools.combinations(jokers, joker_count):
+                            add((*ordinary_group, *joker_group))
+
+    for start in range(len(SEQUENCE_RANKS)):
+        for stop in range(start + 2, len(SEQUENCE_RANKS) + 1):
+            run = SEQUENCE_RANKS[start:stop]
+            deficit_options: list[tuple[int, ...]] = [(0,) * len(run)]
+            if jokers:
+                deficit_options.extend(
+                    tuple(1 if index == missing else 0 for index in range(len(run)))
+                    for missing in range(len(run))
+                )
+            if len(jokers) >= 2:
+                deficit_options.extend(
+                    tuple(2 if index == missing else 0 for index in range(len(run)))
+                    for missing in range(len(run))
+                )
+                deficit_options.extend(
+                    tuple(1 if index in missing else 0 for index in range(len(run)))
+                    for missing in itertools.combinations(range(len(run)), 2)
+                )
+            for deficits in deficit_options:
+                joker_count = sum(deficits)
+                choices = [
+                    list(itertools.combinations(by_rank[rank], 2 - deficit))
+                    for rank, deficit in zip(run, deficits)
+                ]
+                if any(not rank_choices for rank_choices in choices):
+                    continue
+                for ordinary_groups in itertools.product(*choices):
+                    ordinary_cards = [
+                        card for group in ordinary_groups for card in group
+                    ]
+                    for joker_group in itertools.combinations(jokers, joker_count):
+                        add((*ordinary_cards, *joker_group))
+    return list(combinations.values())
+
+
+def _public_pattern(pattern: dict[str, Any]) -> dict[str, Any]:
+    return deepcopy(pattern)
+
+
+class Gandengyan(GamePlugin):
+    game_type = "gandengyan"
+    display_name = "干瞪眼"
+    category = "card"
+    min_players = 2
+    max_players = 4
+    allowed_player_counts = (2, 3, 4)
+    recommended_players = 3
+    supports_npcs = True
+    supports_stakes = True
+    supports_multiplayer_stakes = True
+    uses_custom_stake_settlement = True
+    mcp_immediate_public_events = True
+    rules_text = (
+        "【牌局】\n"
+        "本项目固定的四川常见 54 张版本：支持 2–4 人，使用一副含大小王的 54 张牌；"
+        "首位（庄家）发 6 张，其余每人 5 张。点数顺序固定为 "
+        "3<4<5<6<7<8<9<10<J<Q<K<A<2。\n\n"
+        "【牌型】\n"
+        "普通牌型只有单张、对子、至少 3 张连续且"
+        "不含 2 的顺子、至少 2 对连续且不含 2 的连对。三张同点为三炸，四张同点为"
+        "深水炸弹，双王为最高王炸；炸弹可以越级压任何普通牌，炸弹之间先按三炸、"
+        "深水炸弹、王炸的强度比较，同强度再按点数比较，不要求只大一级。\n\n"
+        "【跟牌】\n"
+        "普通跟牌"
+        "必须同牌型、同张数并且恰好高一级；单 2 可以压任意普通单张，对 2 可以压任意"
+        "普通对子，2 不得进入顺子或连对。大小王不能单出（绝对禁止单出），但可作"
+        "百搭牌，与普通牌组成对子、顺子、连对、三炸或深水炸弹；同一组牌有多种解释"
+        "时，服务端按当前牌面采用可合法跟牌的解释。双王单独一起仍是最高王炸。\n\n"
+        "【回合】\n"
+        "每墩由引牌者出任意合法牌，之后按座位依次跟牌或过；一次成功出牌会重新开始"
+        "统计其他人的过牌。当最后出牌者之外的所有仍在局玩家都过牌，该墩结束，由"
+        "最后成功出牌者成为下墩引牌者，并从该玩家开始按座位顺序每人摸 1 张；牌堆"
+        "耗尽后，后续席位不再摸牌。牌堆已空时，若新引牌者只剩孤王等、没有任何合法"
+        "引牌组合，服务端自动跳到下一位可引牌玩家；所有人都无法引牌则本局和局。\n\n"
+        "【胜负与结算】\n"
+        "任一玩家出完手牌立即获胜。筹码按底注、剩余手牌"
+        "和倍率进行多人零和结算：每名输家承担 底注×剩余手牌张数×最终倍率 的负值，"
+        "赢家获得所有负值的绝对值之和；和局时所有玩家筹码变化均为 0。每出现一次"
+        "三炸、深水炸弹或王炸，最终倍率"
+        "乘 2，最高 8 倍。不采用春天、天胡或其他地区附加翻倍。"
+    )
+    move_format = (
+        '出牌：{"move":{"action":"play","card_ids":["S3"]}}；'
+        '过牌：{"move":{"action":"pass"}}。只能从 private_state.'
+        "legal_actions 中选择服务端发布的组合。"
+    )
+
+    def __init__(self, rng: random.Random | None = None) -> None:
+        self._rng = rng or random.SystemRandom()
+
+    @staticmethod
+    def _state_skeleton() -> dict[str, Any]:
+        state: dict[str, Any] = {
+            "board_kind": "gandengyan",
+            "participant_order": [],
+            "turn_player_id": None,
+            "cards": None,
+            "trick": None,
+            "multiplier": 1,
+            "max_multiplier": MAX_MULTIPLIER,
+            "bomb_count": 0,
+            "play_sequence": 0,
+            "action_history": [],
+            "last_action": None,
+            "winner_player_id": None,
+            "draw": False,
+            "draw_reason": None,
+        }
+        ensure_flow(state, phase="leading")
+        return state
+
+    def initial_state(self) -> dict[str, Any]:
+        return self._state_skeleton()
+
+    def tokens_for(self, participants: list[dict[str, Any]]) -> list[str]:
+        return [f"P{index + 1}" for index, _item in enumerate(participants)]
+
+    def initialize(self, participants: list[dict[str, Any]]) -> dict[str, Any]:
+        ordered = sorted(participants, key=lambda item: item.get("seat_index", 0))
+        if not ordered:
+            raise ValueError("干瞪眼至少需要一个等待席位")
+        return self.initialize_for_first_player(
+            participants, str(ordered[0]["player_id"])
+        )
+
+    def initialize_for_first_player(
+        self,
+        participants: list[dict[str, Any]],
+        first_player_id: str,
+    ) -> dict[str, Any]:
+        if not 1 <= len(participants) <= 4:
+            raise ValueError("干瞪眼只支持 2–4 人，等待房允许先创建 1 个席位")
+        state = self._state_skeleton()
+        ordered = sorted(participants, key=lambda item: item.get("seat_index", 0))
+        order = [str(item["player_id"]) for item in ordered]
+        if first_player_id not in order:
+            raise ValueError("干瞪眼首位必须是本桌参与者")
+        state["participant_order"] = order
+        ensure_card_zones(state, build_deck(), order, rng=self._rng)
+        for _round in range(5):
+            for player_id in order:
+                draw_cards(state, player_id)
+        draw_cards(state, first_player_id)
+        state["turn_player_id"] = first_player_id
+        state["trick"] = self._new_trick(1, first_player_id)
+        return state
+
+    @staticmethod
+    def _new_trick(number: int, leader_player_id: str) -> dict[str, Any]:
+        return {
+            "number": number,
+            "leader_player_id": leader_player_id,
+            "last_play": None,
+            "pass_player_ids": [],
+        }
+
+    @staticmethod
+    def _next_player(state: dict[str, Any], player_id: str) -> str:
+        order = state["participant_order"]
+        return str(order[(order.index(player_id) + 1) % len(order)])
+
+    @staticmethod
+    def _cards_for_ids(
+        state: dict[str, Any], player_id: str, card_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        hand = state["cards"]["hands"].get(player_id)
+        if not isinstance(hand, list):
+            raise ValueError("行动者不在本局手牌区")
+        by_id = {card.get("id"): card for card in hand}
+        if len(by_id) != len(hand):
+            raise ValueError("持久化手牌 ID 不唯一")
+        try:
+            return [by_id[card_id] for card_id in card_ids]
+        except KeyError as exc:
+            raise ValueError("所选牌不全在行动者手中") from exc
+
+    @classmethod
+    def _play_actions_for(
+        cls, state: dict[str, Any], player_id: str
+    ) -> list[dict[str, Any]]:
+        hand = state["cards"]["hands"].get(player_id, [])
+        target = (state.get("trick") or {}).get("last_play")
+        target_pattern = target.get("pattern") if isinstance(target, dict) else None
+        actions: list[dict[str, Any]] = []
+        for cards in _all_combinations(hand):
+            pattern = cls._resolve_pattern(cards, target_pattern)
+            if pattern is None:
+                continue
+            ordered_cards = sorted(cards, key=_card_sort_key)
+            actions.append({
+                "action": "play",
+                "card_ids": [str(card["id"]) for card in ordered_cards],
+                "pattern_type": pattern["type"],
+                "pattern_label": pattern["label"],
+            })
+        actions.sort(key=lambda action: (
+            BOMB_STRENGTH.get(str(action["pattern_type"]), 0),
+            len(action["card_ids"]),
+            tuple(action["card_ids"]),
+        ))
+        return actions
+
+    @staticmethod
+    def _resolve_pattern(
+        cards: Iterable[dict[str, Any]],
+        target_pattern: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Choose a legal interpretation without discarding alternate meanings."""
+        patterns = classify_card_patterns(cards)
+        if target_pattern is not None:
+            patterns = [item for item in patterns if can_beat(item, target_pattern)]
+            same_type = [
+                item for item in patterns
+                if item["type"] == target_pattern.get("type")
+                and item["count"] == target_pattern.get("count")
+            ]
+            if same_type:
+                return same_type[0]
+        return patterns[0] if patterns else None
+
+    @classmethod
+    def legal_actions_for(
+        cls, state: dict[str, Any], player_id: str
+    ) -> list[dict[str, Any]]:
+        if (
+            state.get("winner_player_id") is not None
+            or state.get("flow", {}).get("phase") == "finished"
+            or state.get("turn_player_id") != player_id
+        ):
+            return []
+        actions = cls._play_actions_for(state, player_id)
+        if (state.get("trick") or {}).get("last_play") is not None:
+            actions.append({"action": "pass"})
+        return actions
+
+    @staticmethod
+    def _parse_card_ids(move: dict[str, Any]) -> list[str]:
+        card_ids = move.get("card_ids")
+        if (
+            not isinstance(card_ids, list)
+            or not card_ids
+            or any(not isinstance(card_id, str) or not card_id for card_id in card_ids)
+            or len(card_ids) != len(set(card_ids))
+        ):
+            raise ValueError("card_ids 必须是非空且不重复的牌 ID 数组")
+        return card_ids
+
+    def validate_action(
+        self,
+        state: dict[str, Any],
+        move: dict[str, Any],
+        actor: dict[str, Any],
+    ) -> None:
+        if not isinstance(move, dict):
+            raise ValueError("move 必须是对象")
+        if state.get("flow", {}).get("phase") == "finished":
+            raise ValueError("对局已经结束")
+        player_id = str(actor["player_id"])
+        if player_id not in state.get("participant_order", []):
+            raise ValueError("行动者不在本局参与者中")
+        if state.get("turn_player_id") != player_id:
+            raise ValueError("当前行动权属于另一名参与者")
+        action = move.get("action")
+        if action == "pass":
+            if set(move) != {"action"}:
+                raise ValueError("pass 只接受 action 字段")
+            if (state.get("trick") or {}).get("last_play") is None:
+                raise ValueError("引牌者不能过牌")
+            return
+        if action != "play":
+            raise ValueError("action 必须是 play 或 pass")
+        allowed = {"action", "card_ids", "pattern_type", "pattern_label"}
+        if set(move) - allowed:
+            raise ValueError("play 只接受 action、card_ids 和服务端牌型提示")
+        card_ids = self._parse_card_ids(move)
+        selected = self._cards_for_ids(state, player_id, card_ids)
+        target = (state.get("trick") or {}).get("last_play")
+        target_pattern = target.get("pattern") if isinstance(target, dict) else None
+        pattern = self._resolve_pattern(selected, target_pattern)
+        if pattern is None:
+            raise ValueError("所选组合不是服务端当前发布的合法出牌")
+        for key in ("pattern_type", "pattern_label"):
+            expected = pattern["type" if key == "pattern_type" else "label"]
+            if key in move and move[key] != expected:
+                raise ValueError("客户端牌型提示与服务端识别不一致")
+
+    def validate_move(
+        self, state: dict[str, Any], move: dict[str, Any], mark: str
+    ) -> None:
+        del state, move, mark
+        raise ValueError("干瞪眼需要 participant-aware action 接口")
+
+    def apply_move(
+        self, state: dict[str, Any], move: dict[str, Any], mark: str
+    ) -> dict[str, Any]:
+        del state, move, mark
+        raise ValueError("干瞪眼需要 participant-aware action 接口")
+
+    def _apply_play(
+        self,
+        state: dict[str, Any],
+        move: dict[str, Any],
+        actor: dict[str, Any],
+    ) -> MoveResult:
+        player_id = str(actor["player_id"])
+        card_ids = self._parse_card_ids(move)
+        cards = self._cards_for_ids(state, player_id, card_ids)
+        cards = sorted(cards, key=_card_sort_key)
+        target = (state.get("trick") or {}).get("last_play")
+        target_pattern = target.get("pattern") if isinstance(target, dict) else None
+        pattern = self._resolve_pattern(cards, target_pattern)
+        if pattern is None:
+            raise ValueError("服务端无法识别所选牌型")
+        discard_cards(state, player_id, cards)
+        state["play_sequence"] = int(state.get("play_sequence", 0)) + 1
+        play = {
+            "sequence": state["play_sequence"],
+            "player_id": player_id,
+            "cards": deepcopy(cards),
+            "pattern": _public_pattern(pattern),
+        }
+        trick = state["trick"]
+        trick["last_play"] = play
+        trick["pass_player_ids"] = []
+        state["flow"]["phase"] = "following"
+        state["flow"]["turn_number"] = int(state["flow"].get("turn_number", 0)) + 1
+        if pattern["is_bomb"]:
+            state["bomb_count"] = int(state.get("bomb_count", 0)) + 1
+            state["max_multiplier"] = MAX_MULTIPLIER
+            state["multiplier"] = min(
+                MAX_MULTIPLIER,
+                int(state.get("multiplier", 1)) * 2,
+            )
+        record = {
+            "trick": trick["number"],
+            "action": "play",
+            **deepcopy(play),
+            "multiplier": state["multiplier"],
+        }
+        state["action_history"].append(record)
+        state["last_action"] = deepcopy(record)
+        remaining = len(state["cards"]["hands"][player_id])
+        if remaining == 0:
+            state["winner_player_id"] = player_id
+            state["turn_player_id"] = None
+            state["flow"]["phase"] = "finished"
+            return MoveResult(
+                state=state,
+                note=f"{pattern['label']}出牌成功并清空手牌，赢得本局。",
+                result={"winner_player_id": player_id, "draw": False},
+            )
+        next_player = self._next_player(state, player_id)
+        state["turn_player_id"] = next_player
+        multiplier_note = (
+            f"，倍率升至 {state['multiplier']} 倍" if pattern["is_bomb"] else ""
+        )
+        return MoveResult(
+            state=state,
+            next_player_id=next_player,
+            note=f"打出{pattern['label']}（{len(cards)} 张）{multiplier_note}。",
+        )
+
+    def _apply_pass(
+        self,
+        state: dict[str, Any],
+        actor: dict[str, Any],
+    ) -> MoveResult:
+        player_id = str(actor["player_id"])
+        trick = state["trick"]
+        if player_id in trick["pass_player_ids"]:
+            raise ValueError("本轮跟牌已经过牌")
+        trick["pass_player_ids"].append(player_id)
+        state["flow"]["turn_number"] = int(state["flow"].get("turn_number", 0)) + 1
+        pass_record = {
+            "trick": trick["number"],
+            "action": "pass",
+            "player_id": player_id,
+        }
+        state["action_history"].append(pass_record)
+        state["last_action"] = deepcopy(pass_record)
+        last_player = str(trick["last_play"]["player_id"])
+        other_players = {
+            candidate for candidate in state["participant_order"]
+            if candidate != last_player
+        }
+        if set(trick["pass_player_ids"]) >= other_players:
+            draw_counts = {candidate: 0 for candidate in state["participant_order"]}
+            draw_order: list[str] = []
+            candidate = last_player
+            for _index in state["participant_order"]:
+                draw_order.append(candidate)
+                candidate = self._next_player(state, candidate)
+            for candidate in draw_order:
+                if not state["cards"]["deck"]:
+                    break
+                draw_counts[candidate] = len(draw_cards(state, candidate, 1))
+            completed_number = int(trick["number"])
+            state["flow"].update({
+                "phase": "leading",
+                "round_number": completed_number + 1,
+                "turn_number": 0,
+            })
+            state["trick"] = self._new_trick(completed_number + 1, last_player)
+            state["turn_player_id"] = last_player
+            skipped_leaders: list[str] = []
+            next_leader: str | None = last_player
+            if not state["cards"]["deck"]:
+                candidate = last_player
+                next_leader = None
+                for _index in state["participant_order"]:
+                    if self._play_actions_for(state, candidate):
+                        next_leader = candidate
+                        break
+                    skipped_leaders.append(candidate)
+                    candidate = self._next_player(state, candidate)
+                if next_leader is None:
+                    state["draw"] = True
+                    state["draw_reason"] = "no_legal_leading_combination"
+                    state["turn_player_id"] = None
+                    state["flow"]["phase"] = "finished"
+                else:
+                    state["trick"]["leader_player_id"] = next_leader
+                    state["turn_player_id"] = next_leader
+
+            summary = {
+                "trick": completed_number,
+                "action": "trick_end",
+                "winner_player_id": last_player,
+                "pass_player_ids": list(trick["pass_player_ids"]),
+                "draw_order": draw_order,
+                "draw_counts": draw_counts,
+                "deck_count": len(state["cards"]["deck"]),
+            }
+            if skipped_leaders:
+                summary["skipped_leader_player_ids"] = skipped_leaders
+            if state.get("draw"):
+                summary["draw"] = True
+            state["action_history"].append(summary)
+            state["last_action"] = deepcopy(summary)
+            drawn_total = sum(draw_counts.values())
+            if state.get("draw"):
+                return MoveResult(
+                    state=state,
+                    skipped_player_ids=skipped_leaders,
+                    note=(
+                        f"其余玩家均过牌，第 {completed_number} 墩结束；牌堆已空且"
+                        "所有玩家均无合法引牌组合，本局和局。"
+                    ),
+                    result={
+                        "winner_player_id": None,
+                        "draw": True,
+                        "draw_reason": state["draw_reason"],
+                        "result_text": "牌堆已空且所有玩家均无法引牌，本局和局。",
+                    },
+                )
+            skip_note = (
+                f"；自动跳过 {len(skipped_leaders)} 名无法引牌的玩家"
+                if skipped_leaders else ""
+            )
+            return MoveResult(
+                state=state,
+                next_player_id=next_leader,
+                skipped_player_ids=skipped_leaders,
+                note=(
+                    f"其余玩家均过牌，第 {completed_number} 墩结束；按顺序摸 "
+                    f"{drawn_total} 张{skip_note}。"
+                ),
+            )
+        next_player = self._next_player(state, player_id)
+        state["turn_player_id"] = next_player
+        return MoveResult(
+            state=state,
+            next_player_id=next_player,
+            note="过。",
+        )
+
+    def apply_action(
+        self,
+        state: dict[str, Any],
+        move: dict[str, Any],
+        actor: dict[str, Any],
+    ) -> MoveResult:
+        self.validate_action(state, move, actor)
+        if move["action"] == "play":
+            return self._apply_play(state, move, actor)
+        return self._apply_pass(state, actor)
+
+    def progress_after_action(
+        self,
+        state: dict[str, Any],
+        move: dict[str, Any],
+        actor: dict[str, Any],
+        participants: list[dict[str, Any]],
+        applied: dict[str, Any] | MoveResult,
+    ) -> dict[str, Any] | MoveResult:
+        del state, actor, participants
+        if not isinstance(applied, MoveResult):
+            return applied
+        action = applied.state.get("last_action")
+        if not isinstance(action, dict):
+            return applied
+        if action.get("action") == "play":
+            # card_ids and optional pattern hints already travel in the player
+            # move; the remaining public changes are deterministic.
+            return applied
+        elif action.get("action") == "trick_end":
+            delta = {
+                "kind": "trick_end",
+                "winner_player_id": action["winner_player_id"],
+                "draw_counts": {
+                    player_id: count
+                    for player_id, count in action["draw_counts"].items()
+                    if count
+                },
+                "deck_count": int(action["deck_count"]),
+            }
+        else:
+            return applied
+        applied.public_event = {"gandengyan_delta": delta}
+        return applied
+
+    def check_winner(self, state: dict[str, Any]) -> str | None:
+        del state
+        return None
+
+    def result_for(
+        self,
+        state: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        del participants
+        if state.get("draw"):
+            return {
+                "winner_player_id": None,
+                "draw": True,
+                "draw_reason": state.get("draw_reason"),
+                "result_text": "牌堆已空且所有玩家均无法引牌，本局和局。",
+            }
+        winner = state.get("winner_player_id")
+        return {"winner_player_id": winner, "draw": False} if winner else None
+
+    def apply_resignation(
+        self,
+        state: dict[str, Any],
+        resigned_player_id: str,
+        participants: list[dict[str, Any]],
+    ) -> None:
+        del participants
+        order = list(state.get("participant_order", []))
+        if resigned_player_id not in order:
+            raise ValueError("干瞪眼认输者不属于本桌")
+        start = order.index(resigned_player_id)
+        remaining = [item for item in order if item != resigned_player_id]
+        next_player = next(
+            (
+                str(order[(start + offset) % len(order)])
+                for offset in range(1, len(order) + 1)
+                if order[(start + offset) % len(order)] in remaining
+            ),
+            None,
+        )
+        state["participant_order"] = remaining
+        trick = state.get("trick")
+        if isinstance(trick, dict):
+            trick["pass_player_ids"] = [
+                item for item in trick.get("pass_player_ids", [])
+                if item != resigned_player_id
+            ]
+            last_play = trick.get("last_play")
+            if isinstance(last_play, dict) and last_play.get("player_id") == resigned_player_id:
+                current = state.get("turn_player_id")
+                leader = current if current in remaining else next_player
+                state["trick"] = self._new_trick(
+                    int(trick.get("number", 1)) + 1, leader
+                )
+                state["turn_player_id"] = leader
+        if state.get("turn_player_id") == resigned_player_id:
+            state["turn_player_id"] = next_player
+
+    def settlement_deltas(
+        self,
+        state: dict[str, Any],
+        result: dict[str, Any],
+        participants: list[dict[str, Any]],
+        stake: int,
+    ) -> dict[str, int]:
+        player_ids = [str(item["player_id"]) for item in participants]
+        if isinstance(stake, bool) or not isinstance(stake, int) or stake <= 0:
+            raise ValueError("干瞪眼筹码底注必须是正整数")
+        if result.get("draw"):
+            return {player_id: 0 for player_id in player_ids}
+        winner = result.get("winner_player_id")
+        if winner not in player_ids:
+            raise ValueError("干瞪眼终局必须有一名有效赢家")
+        multiplier = min(int(state.get("multiplier", 1)), MAX_MULTIPLIER)
+        hands = state.get("cards", {}).get("hands", {})
+        deltas = {
+            player_id: -stake * len(hands[player_id]) * multiplier
+            for player_id in player_ids
+            if player_id != winner
+        }
+        deltas[str(winner)] = -sum(deltas.values())
+        return {player_id: int(deltas[player_id]) for player_id in player_ids}
+
+    def public_state(
+        self,
+        state: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        terminal = state.get("flow", {}).get("phase") == "finished"
+        return self._project_public_state(state, participants, terminal=terminal)
+
+    def terminal_public_state(
+        self,
+        state: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return self._project_public_state(state, participants, terminal=True)
+
+    def _project_public_state(
+        self,
+        state: dict[str, Any],
+        participants: list[dict[str, Any]],
+        *,
+        terminal: bool,
+    ) -> dict[str, Any]:
+        del participants
+        card_state = public_card_state(state)
+        trick = state.get("trick") or {}
+        last_play = trick.get("last_play")
+        projected = {
+            "board_kind": "gandengyan",
+            "flow": deepcopy(state["flow"]),
+            "current_trick": {
+                "number": trick.get("number"),
+                "leader_player_id": trick.get("leader_player_id"),
+                "last_play": deepcopy(last_play),
+                "pass_player_ids": list(trick.get("pass_player_ids", [])),
+            },
+            "deck_count": card_state["deck_count"],
+            "hand_counts": card_state["hand_counts"],
+            "multiplier": min(int(state.get("multiplier", 1)), MAX_MULTIPLIER),
+            "max_multiplier": MAX_MULTIPLIER,
+            "last_action_note": state.get("last_action_note", ""),
+        }
+        if terminal:
+            hands = (state.get("cards") or {}).get("hands", {})
+            projected["terminal_hands"] = {
+                player_id: deepcopy(sorted(
+                    hands.get(player_id, []), key=_card_sort_key, reverse=True
+                ))
+                for player_id in state.get("participant_order", [])
+            }
+        return projected
+
+    def private_state(
+        self,
+        state: dict[str, Any],
+        viewer: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        del participants
+        player_id = str(viewer["player_id"])
+        return {
+            "hand": sorted(private_hand(state, player_id), key=_card_sort_key),
+            "legal_actions": self.legal_actions_for(state, player_id),
+        }
+
+    def participant_summary(
+        self,
+        state: dict[str, Any],
+        participant: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> dict[str, int]:
+        del participants
+        return {
+            "hand_count": int(
+                state.get("hand_counts", {}).get(participant["player_id"], 0)
+            )
+        }
+
+    def npc_compact_rules(
+        self,
+        state: dict[str, Any],
+        actor: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> str:
+        del state, actor, participants
+        return (
+            "固定四川 54 张干瞪眼：普通跟牌同型同数且恰高一级，单/对 2 可越级；"
+            "顺子和连对不含 2。三炸、四炸、双王炸可按强度或点数越级压制。"
+            "大小王不能单出，但可百搭组成对子、顺子、连对、三炸或四炸；双王仍为"
+            "最高王炸。不要自行推导组合，只能原样选择服务端的"
+            " authoritative legal_actions。"
+        )
+
+    def npc_public_actions(
+        self,
+        state: dict[str, Any],
+        actor: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        del actor, participants
+        return deepcopy(state.get("action_history", [])[-24:])
+
+    def npc_legal_actions(
+        self,
+        state: dict[str, Any],
+        actor: dict[str, Any],
+        participants: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        del participants
+        return self.legal_actions_for(state, str(actor["player_id"]))
+
+    def format_action(
+        self,
+        state: dict[str, Any],
+        move: dict[str, Any],
+        actor: dict[str, Any],
+    ) -> str:
+        if move.get("action") == "pass":
+            return "过"
+        card_ids = self._parse_card_ids(move)
+        cards = self._cards_for_ids(state, str(actor["player_id"]), card_ids)
+        target = (state.get("trick") or {}).get("last_play")
+        target_pattern = target.get("pattern") if isinstance(target, dict) else None
+        pattern = self._resolve_pattern(cards, target_pattern)
+        if pattern is None:
+            raise ValueError("无法识别出牌牌型")
+        labels = "、".join(
+            card_label(card) for card in sorted(cards, key=_card_sort_key)
+        )
+        return f"{pattern['label']}：{labels}"
+
+    def format_move(
+        self, state: dict[str, Any], move: dict[str, Any], mark: str
+    ) -> str:
+        del state, mark
+        return str(move.get("action", "play"))

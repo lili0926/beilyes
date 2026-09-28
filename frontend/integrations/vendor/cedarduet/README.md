@@ -1,0 +1,840 @@
+# CedarDuet / 双弈
+
+CedarDuet（双弈）是让人类、绑定 AI 与系统 NPC 同桌进行回合制棋、牌、骰游戏的独立
+FastAPI/ASGI 服务。同一仓库包含 **25 款游戏**、人类 Web、AI HTTP 游戏接口、标准本地
+stdio MCP adapter、SQLite 持久化，以及房间时间线、NPC、全局娱乐筹码、互动兑换、欠条与
+成就系统。
+
+官方实例通过 [toy.cedarstar.org](https://toy.cedarstar.org) 使用：CedarToy 负责账号、
+人机绑定、可信身份与标准 MCP 聚合，CedarDuet 负责游戏规则、房间和状态。CedarDuet 仍是
+独立服务，游戏逻辑不在 CedarToy 主仓库中。
+
+> 当前定位：公益、非商业、娱乐用途。筹码仅为站内娱乐数值，不支持充值、提现或与真钱兑换。
+
+> [!IMPORTANT]
+> `POST /mcp/play` 是 **CedarDuet 的 AI HTTP 游戏接口**，不等同于标准 MCP transport，
+> 不要把它的 URL 填成 MCP Server 地址。官方标准 MCP 由 CedarToy 聚合提供；本地 clone
+> 的标准 MCP 由 `app.local_mcp` 通过 stdio 提供。
+
+## 25 款游戏
+
+人数与 NPC 能力来自当前运行时 catalog。表中的“provider”指 OpenAI-compatible API 或
+部署方提供的等价决策通道；“本地策略”表示无需模型 API 即可在进程内行动。
+
+### 棋类（14）
+
+| 游戏 | 标识 / 玩法 | 人数 | 系统 NPC |
+|---|---|---:|---|
+| 井字棋 | `tictactoe` · 3×3 | 2 | 不支持 |
+| 五子棋 | `gomoku` · 15×15、无禁手 | 2 | 不支持 |
+| 黑白棋 | `othello` · 8×8 | 2 | 不支持 |
+| 四子连珠 | `connect4` · 7×6 | 2 | 不支持 |
+| 斗兽棋 | `jungle` · 7×9 | 2 | 不支持 |
+| 中国象棋 | `xiangqi` | 2 | 不支持 |
+| 西洋跳棋 | `checkers` · English draughts / American checkers | 2 | 支持 · provider |
+| 国际象棋 | `chess` | 2 | 支持 · provider |
+| 翻翻棋 | `banqi` | 2 | 支持 · provider |
+| 点格棋 | `dots_boxes` · 5×5 点阵 | 2 / 3 / 4 | 支持 · provider |
+| 飞行棋 | `aeroplane_chess` | 2 / 3 / 4 | 支持 · provider |
+| 中国跳棋 | `chinese_checkers` | 2 / 3 / 4 / 6 | 支持 · provider |
+| 军棋 | `junqi` · 双人暗棋陆战军棋 | 2 | 支持 · 本地策略 |
+| 围棋 | `go` · 19×19 | 2 | 支持 · 本地策略 |
+
+### 牌类（9）
+
+| 游戏 | 标识 / 玩法 | 人数 | 系统 NPC |
+|---|---|---:|---|
+| 21 点 | `blackjack` · 共同对抗虚拟庄家 | 2 / 3 / 4 / 5 / 6 | 支持 · provider |
+| UNO | `uno` | 2 / 3 / 4 / 5 / 6 | 支持 · provider |
+| 干瞪眼 | `gandengyan` | 2 / 3 / 4 | 支持 · provider |
+| 开火车 | `train_cards` | 2 / 3 / 4 / 5 / 6 | 支持 · 本地策略 |
+| 斗地主 | `doudizhu` · 固定三人 | 3 | 支持 · provider |
+| 掼蛋 | `guandan` · 固定四人、对家组队升级赛 | 4 | 支持 · provider |
+| 炸金花 | `zhajinhua` | 2 / 3 / 4 / 5 / 6 | 支持 · provider |
+| 德州扑克 | `texas_holdem` · 无限注 | 2 / 3 / 4 / 5 / 6 | 支持 · 本地策略 |
+| 国标麻将 | `mahjong` · 136 张、无花 | 4 | 支持 · 本地策略 |
+
+### 骰子类（2）
+
+| 游戏 | 标识 | 人数 | 系统 NPC |
+|---|---|---:|---|
+| 吹牛骰子 | `liars_dice` | 2 / 3 / 4 / 5 / 6 | 支持 · provider |
+| 快艇骰子 | `yahtzee` | 2 / 3 / 4 / 5 / 6 | 支持 · provider |
+
+支持人数、NPC 与筹码能力以运行时 catalog 的 `allowed_player_counts`、`supports_npcs`、`supports_stakes` 为权威。暗信息游戏在对局进行中只把本人手牌/骰子/暗棋身份放进 `private_state`；真实终局可按各游戏规则发布专用复盘字段，德州扑克与炸金花仍保留弃牌/muck 隐私。NPC 与网页端同样只能消费服务端发布的权威合法行动。
+
+当前 25 款中只有 `yahtzee`（快艇骰子）固定为 0 筹码娱乐局；其余游戏均可按 catalog 创建带 `stake` 的房间。多数游戏采用明确零和策略：开火车按每名败者一个 stake；斗地主按最高 16 倍的最终叫分/炸弹倍率在地主与两农民间结算；干瞪眼按每名输家的剩余手牌张数×最终倍率结算，倍率最高 8 倍；掼蛋按两人队伍胜负结算；军棋、围棋走双人 ±stake；麻将按自摸或点炮/抢杠来源结算；炸金花按本局实际下注单位×stake，每席虚拟投入封顶 32，因此单席最大真实亏损为 32×stake；德州扑克每席固定 1000 内部筹码、盲注 5/10（100BB），stake 仍是每席完整真实买入而不是内部筹码单价，终局按最终内部栈比例分配真实总买入池，单席最多亏一个 stake。21点是唯一明确 opt-in 的非零和例外：每席独立对虚拟庄家按胜 `+stake`、负 `-stake`、推和 `0` 结算。
+
+## 对局之外：娱乐筹码与人机互动
+
+CedarDuet 内置全局娱乐筹码、对局 `stake`、统一流水、每日签到、破产、成就、欠条与互动兑换。它们只服务站内娱乐，不支持充值、提现或真钱兑换；完整规则和奖励见[筹码中心](#筹码中心)。
+
+本地 clone 同样包含整套筹码能力，数据与房间一起保存在独立的 `data/local-duel.db`：本地 Web 可进入 `/chips`，本地标准 MCP 可使用 `chips` 动作。
+
+## 运行与部署方式
+
+| 方式 | Web / 应用入口 | 身份与数据 | 标准 MCP |
+|---|---|---|---|
+| 官方 Web / MCP | [toy.cedarstar.org](https://toy.cedarstar.org) | CedarToy 账号与绑定；CedarDuet 游戏服务 | CedarToy 聚合提供 |
+| 本地 clone | `scripts/start-local.*` 启动浏览器 gateway | 固定 `local-human` / `local-ai`；独立 `data/local-duel.db` | `app.local_mcp`，stdio |
+| 自托管生产 | `app.main:app` | 自行提供可信反向代理和身份层 | 自行接入；`/mcp/play` 不是 MCP transport |
+
+### 官方 Web / MCP
+
+官方实例由 CedarToy 提供登录、账号与小机绑定、标准 MCP 聚合，并把经过认证的请求转给
+CedarDuet；CedarDuet 继续作为独立游戏服务运行。
+
+### 本地 clone：浏览器 + 标准 stdio MCP
+
+依赖：
+
+- Python 3.10+；
+- Node.js（直接运行仓库内 vendored JS bridge，无需 `npm install`）。
+
+Windows x64 的 CPython 3.10–3.13 会优先安装项目 Release 中经过 SHA256 校验的 PyMahjongGB 预编译 wheel，正常情况下不需要 Visual Studio C++ Build Tools。只有当前 Python/架构没有匹配 wheel、或 wheel 无法取得时，才会回退源码编译并提示所需编译工具。macOS/Linux 目前仍从 vendored 源码编译 PyMahjongGB。
+
+clone 后运行对应平台入口：
+
+```bash
+git clone https://github.com/Zizuixixiang/cedarduet.git
+cd cedarduet
+# macOS / Linux
+./scripts/start-local.sh
+```
+
+Windows PowerShell：
+
+```powershell
+.\scripts\start-local.ps1
+```
+
+Windows cmd 或双击：
+
+```bat
+scripts\start-local.cmd
+```
+
+macOS/Linux 提供上述 shell 入口，Windows 提供 PowerShell 与 cmd 入口。launcher 会创建或复用仓库内 `.venv`；如果当前 Python 缺少标准库 `venv`，会尝试临时引导 `virtualenv` 创建隔离环境，并在失败时给出明确提示。
+
+随后 launcher 会安装 Web/MCP 普通依赖、安装或编译 PyMahjongGB、检查四个 vendored Node
+bridge，以单 worker 启动只监听 `127.0.0.1` 的本地 gateway，并打开浏览器。本地页面固定
+使用 `local-human`，本地 MCP 固定使用 `local-ai`；数据库固定为
+`data/local-duel.db`，不会读写生产 `data/duel.db`。
+
+保持 gateway 运行，另开终端生成标准 stdio MCP 配置：
+
+```bash
+python3 scripts/local.py mcp-config
+```
+
+Windows 使用：
+
+```powershell
+python scripts\local.py mcp-config
+```
+
+如果系统里没有 `python` 命令，但本地 Web 已经成功创建 `.venv`，也可以直接运行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\local.py mcp-config
+```
+
+生成的配置以绝对解释器路径运行 `python -m app.local_mcp`。完整步骤、provider 配置和
+三平台依赖排错见 [docs/LOCAL.md](docs/LOCAL.md)。
+
+本地 clone 完整保留所有现有多人桌型，不会为了本地运行把游戏简化成双人。本地系统 NPC
+只在目标桌型仍有缺座、请求用 NPC 补位时判断：
+
+- 游戏声明了内置本地 NPC 策略时，决策直接在本地进程运行；
+- 游戏支持 NPC、但没有本地策略时，需要配置 OpenAI-compatible API/provider；未配置会在
+  创建房间前明确拒绝，并提示“该游戏 NPC 需要配置 API/模型通道，或加入更多真实小机/减少
+  NPC”，不会改用随机/假算法 NPC；
+- 游戏本身不支持 NPC 时，只能由真实参与者坐满全部席位。
+
+不缺座或没有请求 NPC 补位时，不检查 provider。
+
+### 自托管生产
+
+生产入口仍是：
+
+```bash
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8772
+```
+
+自托管方必须让 CedarDuet 只监听可信内网或 loopback，并自行提供可信反向代理与身份层；
+不要信任公网客户端自行提交的身份 Header。`app.main:app` 不启用 `local-human` / `local-ai`
+本地身份。事件唤醒是单进程内机制，本地和生产都必须保持单 worker。
+
+## 游戏规则与状态接口
+
+### 21点固定规则与状态接口
+
+21点使用固定 4 副标准牌 shoe，一房一局，2–6 名参与者按座位共同对抗不属于
+`participants`、也没有钱包的虚拟庄家。每人两张明牌；庄家两张牌中的第二张在
+庄家阶段前只投影为统一 `{hidden:true}`，公共状态、私有状态和事件都不会包含其
+牌值、花色或 `card_id`。A 自动按 1/11 取不爆牌的最优值。参与者只能从自己的
+`private_state.legal_actions` 选择 `hit` / `stand`；爆牌立即结束该手，自然
+Blackjack 席位自动跳过行动。所有人结束后庄家翻暗牌并按 S17 自动补牌，即软 17
+也停牌。
+
+首两张 A + 10 值牌是自然 Blackjack，胜过庄家以三张或更多牌组成的普通 21；双方
+同为自然时推和。第一版没有 split、double、insurance、surrender。终局由
+`game_result.outcomes_by_player` 分别记录每名参与者相对庄家的 `win/loss/push` 与
+中文结果；通用单赢家字段以 `draw=true` 兼容收口。21点开放非零筹码：每席独立按
+胜 `+stake`、负 `-stake`、推和 `0`，自然 Blackjack 不另付 3:2。庄家没有钱包，
+因此参与者 delta 总和可以非 0，差额由系统增发或回收；这是仅限 21点的显式 opt-in，
+其他游戏仍执行零和校验。认输席固定为 `-stake`；仍有真人或绑定小机参与时，其余席
+继续行动并在真正终局一次性结算。一旦 active 席只剩 system NPC，公共框架立即终局，
+21点没有继续对庄家行动的例外。NPC 仍只记录逻辑 delta，不创建永久钱包。
+洗牌与每次抽牌都写入 `board_state`，刷新或重启不重新随机；若下一局初始发牌前
+余牌不足 `2 * (参与者数 + 1)`，权威牌堆逻辑才合并余牌与弃牌重洗。
+
+### 飞行棋固定规则与状态接口
+
+飞行棋使用本项目固定的标准中国版本，不开放房规开关。每色 4 架飞机，2 人局使用
+相对的红、蓝两色，3 人局使用红、黄、蓝，4 人局使用红、黄、蓝、绿。只有掷出
+6 才能把一架飞机从机场放到独立的安全起飞区；起飞动作不再额外前进 6 格。已经
+起飞的飞机沿 52 格公共环线按点数前进。己方飞机可以停在同一格，但每次只选择并
+移动一架，不组成可整体移动的叠机单位。
+
+掷出 6 并完成本次移动后继续掷骰；没有合法飞机时由服务端自动跳过移动，6 仍然
+保留续掷。连续第三个 6 不执行移动：本轮前两个 6 实际移动过的飞机全部回机场，
+然后交棒，已造成的碰撞不撤销。不会采用“偶数也能起飞”等可选规则。
+
+每色的路线都以该色入口为相对第 1 格。同色普通跳跃格自动前进 4 格；相对第 21 格
+是特殊跨盘飞跃格，直达相对第 33 格。若普通跳跃落到第 21 格，会继续完成跨盘飞跃；
+飞跃落到第 33 格后不再追加一次普通跳跃。骰点落点、自动跳跃落点、飞跃跨越点和
+飞跃落点都会结算碰撞；普通环线同格的所有对手机一起回机场。机场、起飞区、每色
+独占的 6 格终点航道和中央终点均为安全区。绕完环线后进入己方终点航道，只能以
+精确点数到达中心；点数超出时该飞机不可选择，不反弹。首位让 4 架飞机全部到家的
+玩家立即获胜。
+
+`board_state.flow.phase` 只在 `awaiting_roll`、`awaiting_plane_choice` 和
+`finished` 之间推进。`roll` 会把一枚 d6 的结果追加到 `dice_rolls` 并发布本次
+`legal_actions` / `legal_moves`；刷新只读取该持久状态，不会重新随机。`move` 使用
+稳定的 `plane_id` / `plane_index`。Web renderer 和 NPC 都只消费服务端发布的合法
+行动，前端按 viewer 颜色旋转视觉坐标，使己方机场保持在下方，提交的仍是服务端
+逻辑坐标。多人下注采用显式零和策略：每名败方承担一个 stake，唯一赢家得到其余
+各席 stake 的总和。
+
+### 点格棋多人规则
+
+仍使用 5×5 点阵和 16 个格子。参与者按稳定座位顺序画未占用边；完成格子得
+1 分并继续行动。棋盘填满后，唯一最高分者获胜；最高分并列即和局并退还下注。
+多人下注时，每名非赢家承担一个 stake，唯一赢家获得合计的多人底池。
+
+### 吹牛骰子基础规则
+
+每人初始 5 枚六面骰，本版 1 点不作万能点。首叫之后只能提高叫点：数量更大，
+或数量相同而点数更大；数量不超过场上当前骰子总数。除首叫外可以质疑。质疑后
+公开本轮全部骰子，实际数量达到叫点时质疑者失去一枚，否则上一位叫点者失去
+一枚；零骰淘汰。非终局时先停在已揭骰的结算页，由已认证人类确认后才重掷并开启下一轮；失骰者仍存活时由其开叫，否则由其后下一位存活者开始，最后
+一人获胜。当前骰子只进入该参与者的 `private_state.dice`；公共状态只含剩余骰数、
+当前叫点、淘汰状态和已公开的上一轮结果。完整 MCP 示例见
+[docs/MCP_GUIDE.md](docs/MCP_GUIDE.md)。
+
+### 象棋规则与状态接口
+
+象棋固定需要 1 个人类和 1 只真实绑定小机，`supports_npcs=False`，不允许 NPC
+补位。先手一方执红。合法走棋、将军、将死、困毙和胜负由仓库内 vendored
+`xiangqi.js` 规则引擎判定；该引擎采用 BSD-2-Clause 许可证，Python 插件通过
+单次短生命周期 Node 调用适配，服务端不保留常驻 JS 子进程。
+
+`board_state.board` 是 10×9 数组，棋子使用 `r:r`、`b:k` 这类“颜色:棋种”值；
+`row=0` 是黑方底线，`row=9` 是红方底线，`col=0..8`。客户端提交四个真实坐标和
+房间 revision：
+
+```json
+{
+  "revision": 3,
+  "move": {"from_row": 9, "from_col": 0, "to_row": 8, "to_col": 0}
+}
+```
+
+`board_state.marks` 把 `human/ai` 映射到席位 token，其中 X 执红、O 执黑。网页只从
+`board_state.legal_moves` 标注当前所选棋子的合法目标，不在浏览器重算规则；
+`turn_color` 与 `in_check` 驱动回合和将军提示，`last_move` 提供上一手起终点。
+人类执黑时网页仅重排显示坐标，使己方位于下方，提交仍使用上述真实坐标。时间线
+直接展示服务端 `move_label`，不在客户端重复实现象棋记谱。
+
+### 西洋跳棋规则与状态接口
+
+西洋跳棋固定使用 8×8 棋盘和 32 个深色格，每方 12 枚普通棋。普通棋只向前斜走或
+跳吃，王棋可前后斜走或跳吃，但不是国际跳棋的远距离飞王；有吃必吃，不要求选择
+吃子数最多的路线。一次跳吃后仍可吃时，服务端通过 `retain_turn` 保留当前席位，
+并用 `forced_piece` 锁定同一枚棋。普通棋跳到王线后立即升王并结束该手，新王到下
+一回合才能继续行动。对方无棋或无合法行动即负。同一完整局面（含棋子阵营、普通
+棋/王棋身份与行棋方）第三次出现时自动判和；双方各自连续 40 手都没有把普通棋向
+王线推进、也没有吃子时同样自动判和。王棋的普通移动属于未取得上述进展的一手。
+
+和棋历史随 `board_state` 一起持久化，只在一名玩家的完整一手结束后结算。连续多跳
+的中间动作不会进入重复局面历史，也不会提前推进 40 手计数；局面标识仍包含
+`forced_piece` 与本次连续跳吃的已捕获位置，以保证刷新在多跳中间发生时规则状态不
+会被混同。WCDF 1.32.1–1.32.2 的桌面规则写作由棋手向裁判证明/主张；双弈没有单独
+的主张操作，因此在实际提交的完整一手形成第三次局面或满足双方 40 手条件后自动
+结算。
+
+`board_state.board` 是 8×8 数组，棋子编码为 `X:m`、`O:m`、`X:k`、`O:k`；
+`m` 是普通棋，`k` 是王棋。X 从底部向 row 减小方向前进并先行，O 方向相反。
+`legal_moves` 是当前行动者唯一权威合法动作真源，`must_capture` 表示当前是否有吃子
+义务，`forced_piece` 在多跳中只允许继续该棋，`last_move` 提供上一跳起终点、吃子、
+升王和连跳状态。`draw_tracking` 保存重复局面次数与双方各自的 40 手计数。Web
+renderer 与 NPC 都不自行推导合法性。
+
+## 项目结构
+
+```text
+app/
+  main.py              FastAPI 路由、等待与唤醒
+  database.py          SQLite 初始化与迁移
+  framework.py         房间、身份、轮次、胜负、消息
+  models.py            HTTP 请求模型
+  chips.py             全局娱乐筹码钱包与统一流水
+  exchanges.py         人机互动兑换申请、审批与原子转账
+  loans.py             人机欠条协商、计息、转账与还款
+  achievements.py      成就目录、可靠事实、进度与自动奖励
+  chips_routes.py      筹码中心页面与 API
+  games/               棋种插件
+  games/checkers.py    8×8 English draughts 权威规则与 NPC 合法动作
+  games/blackjack.py   4 副 shoe、庄家 S17、逐席独立结算与安全状态投影
+  games/aeroplane_chess.py  飞行棋权威规则、持久骰子与多人结算
+  games/xiangqi.py     象棋 GamePlugin 与房间状态适配
+  games/xiangqi_engine.py  短生命周期 Node 规则引擎桥
+  npc_personas.py      NPC 人设目录加载与严格校验
+  npc_runtime.py       NPC 决策幂等、完整回合计数与发言欠账契约
+  npc_providers.py     disabled / OpenAI-compatible / CedarToy bridge provider
+  npc_controller.py    查看者安全上下文、合法行动映射、重试与保底执行
+  npc_scheduler.py     HTTP 后台投递、房间去重、连续回合与启动恢复
+  config/npc_avatars/  外部头像目录格式说明；仓库不含生产头像
+  config/npc_personas/ 管理员人设格式说明；仓库不含生产人设
+  static/              人类端网页、棋盘、时间线、筹码中心
+  static/game_ui_registry.js  无构建依赖的浏览器游戏 UI 注册表
+  static/games/        按 game_type 拆分的可选游戏 renderer
+tests/                  单元测试与前端行为测试
+third_party/xiangqi_js/ BSD-2-Clause 象棋规则引擎、许可与桥接脚本
+data/                   本地运行数据目录；真实数据库不会提交到 Git
+```
+
+## 核心能力
+
+- 一房一局，参与者按稳定 seat / turn order 保存；完整状态同时返回有序
+  `participants`、`current_actor` 和兼容旧前端的 `turn`。
+- 框架绝对上限为 6。插件以 `allowed_player_counts` 权威声明离散桌型，例如
+  `(2, 3, 4)`、`(4,)`；旧插件未声明时才从 `min_players..max_players` 推导。
+  Web、MCP new、直接开房和 join 都按插件允许人数校验，不会因为底座支持 6 人
+  就自动放宽游戏。插件还可通过通用结果对象保留行动权、指定下一行动者、
+  临时 skip，或把参与者标记为 inactive / eliminated。
+- 参与者真源用 `participant_kind` 区分 `human`、`bound_machine` 和
+  `system_npc`，旧 `role=human/ai` 字段继续供旧游戏与客户端兼容。生产开房
+  强制至少一名人类和一只真实绑定小机；NPC 只在创建时补空座，每局最多四个，
+  不会接管中途离开的席位。点格棋、吹牛骰子、西洋跳棋与 21点规则引擎声明
+  `supports_npcs`；严格双人生产入口仍要求人类与真实绑定小机各一席。
+- 所有游戏共用同一条终局不变量：真人与绑定小机退出后若 active 席只剩
+  `system_npc`，房间立即终局并停止 NPC 调度；插件不能声明例外，21点也不例外。
+- NPC 人设从 `DUEL_NPC_PERSONAS_DIR` 指向的外部目录随机无重复抽取，包含稳定
+  id、显示名、persona 文本和可选头像文件名。头像只从
+  `DUEL_NPC_AVATARS_DIR` 根目录以站内 `/api/npc-avatars/...` URL 提供；文件名、
+  扩展名、真实路径与越界符号链接均校验。仓库不含正式人设或头像。
+- NPC provider 默认 `disabled`；独立部署可选 `openai_compatible`，官方实例可选
+  内网 `cedartoy_bridge`。普通无 NPC 对局不依赖 provider。NPC 首要目标是理解
+  规则并争取获胜；人设只影响合理行动间的选择、风险偏好和交流方式，不得为了
+  维持性格故意走明显坏棋。合法行动始终由插件规则引擎列出；权威合法行动只有
+  一项时由 controller 直接执行，不调用决策 provider。围棋、军棋、火车牌、
+  德州扑克与麻将继续使用各自的进程内策略，只在需要补发言时单独调用 provider。
+- 常规 NPC 决策请求只含全局玩家规则、当前 persona、精简游戏规则、公开参与者目录、
+  公共状态、按 sequence 取末尾 20 条房间公开事件、游戏专用公开行动、当前 NPC 私有状态和权威
+  合法行动；事件读取不消费玩家游标。私聊和其他玩家隐藏状态不会进入请求，也不
+  请求或保存思维链。NPC 可以依据公开信息正常推理和估计，但不得把对手隐藏状态
+  当作已知事实；不得以真实披露为目的直接报出自己的具体隐藏牌、骰子等私有状态，
+  但可以为策略进行虚张声势、试探、模糊表达或真假难辨的误导，正常诈唬不受禁止。
+  模型只能返回 `action_id` 和可选短消息，服务端重新映射并校验；
+  非法或格式错误最多重试一次，仍失败则选择稳定排序后的合法保底行动。
+  `room_id + revision + npc_id` 决策票据负责幂等；同一 revision 不重复调用，
+  中断后过期预留只做本地保底恢复，不产生第二次 provider 请求或重复落子。
+- NPC 发言频率按行动权连续归属的一整个回合计数：额外行动仍属同一回合，直到
+  `current_player_id` 离开该 NPC 或对局终止。最多连续沉默两个完整回合；第三个
+  完整回合结束后若动作本身仍无发言，controller 会异步尝试 speech-only 调用。
+  该请求使用 NPC 视角下的完整当前公开状态、本人完整私有状态、完整规则、参与者与
+  persona，以及不截断但经过可见性投影的完整时间线，并包含刚落地的动作结果。
+  发言作为普通 `message` 事件进入时间线；失败不阻塞或回滚对局，持久化欠账会在
+  下一个完整回合重试，revision 状态同时防止 scheduler 重入造成重复发言。
+  HTTP 状态推进只把当前系统 NPC 房间投递到后台，不等待模型响应；后台会连续
+  执行系统 NPC 回合直至轮到人类/绑定小机、对局结束或达到单批安全上限。应用
+  启动时会扫描并恢复已存在的进行中 NPC 回合，状态轮询的兜底投递仍共用同一
+  房间任务与 revision 决策票据。
+- 同一双人一对一人机对（恰好 1 名人类与 1 只绑定小机）最多同时保有 10 个
+  活跃房间；3–6 人多人房不占用该配对额度。全局仍最多 500 个活跃房间。
+- 落子、发言、认输和终局结果进入同一条共享时间线。
+- AI 可通过 `rooms -> state -> move` 找回自己已经参与的房间，无需人类反复提供房间号。
+- `move` 和 `state` 支持 `wait=true`：非当前 AI 以默认 30 秒的短心跳等待轮到
+  自己或出现终局、本人淘汰/离席等关键状态；等待期间不持有 SQLite 事务或锁。
+  `DUEL_MCP_WAIT_SECONDS` 可配置为 1–45 秒，且不影响 NPC provider timeout。
+- 普通发言、其他人的行动和轮结算只进入房间增量事件队列（不属于持久化未读通知），
+  不会提前结束非行动者的挂等；
+  每个参与者拥有独立事件 cursor，轮到自己时一次读取，一个参与者不会替其他人消费。
+- 插件通过 `public_state` / `private_state` / `project_event` 明确区分公共局面、
+  当前查看者私有局面和 compact 事件；所有 Web 与 MCP 房间读取都以已认证
+  participant 作为 viewer，非参与者不能读取，客户端参数也不能另选 viewer。
+- 插件通过 `participant_summary` 只提供至多四项公开标量元数据；通用座位卡负责
+  头像、姓名、座位、行动高亮和状态，点格棋仅补得分，吹牛骰子仅补剩余骰数。
+- `move.revision` 是向后兼容的可选乐观并发保护；新网页、NPC 控制器与新游戏
+  MCP 指南都会提交当前 revision。陈旧动作在事务内以 409 拒绝，不能重复行动。
+- `app/games/tools.py` 提供仅作用于持久化 `board_state` 的 phase/round/turn、
+  牌堆/弃牌堆/按座位手牌、洗牌/摸牌与公共或定向可见骰子 helper；随机结果
+  首次生成后即进入房间状态，重载不会重新洗牌或重投。
+- 全局最多 20 个并发等待；超过容量时落子仍然成功，只是不继续挂等。
+- 活跃房间长期无动作时可惰性归档。
+- 终局房间支持“保留 / 取消保留 / 手动删除”，并已启用自动物理删除：上海时间
+  2026-08-31 00:00 前结束的旧局统一缓冲至 2026-09-07 00:00，自该 cutoff
+  时刻起结束的新局按各自 `terminal_at + 7 天`；手动保留期间永不自动删除，
+  取消保留后恢复原适用期限，且不会改写真实 `terminal_at`。
+- 人类普通聊天、AI 普通聊天、落子事件和结果事件使用不同的前端视觉层级。
+- 全局娱乐筹码第一版已经包含：首次 200、每日签到 +20、允许负数、`<= -500` 可自愿破产、破产后重置 50、破产次数与状态标记、统一筹码流水。
+- 开局可设置大于等于 0 的整数“本局筹码”：0 筹码直接开局，非零筹码需所有受邀真实参与者在 24 小时内逐个接受，任一拒绝或过期即取消。
+- 终局结算使用同一全局钱包与流水；普通双人仍为胜方 `+stake`、负方 `-stake`、和棋 0，特殊游戏以房间 `settlement_deltas` 为准。开局后的 `resign` 与 `leave` 都按弃权结算，等待房离开仍是普通房间生命周期；重复读取终局不会重复记账。
+- 多人筹码默认禁用；具体多人插件必须显式声明支持并给出自己的 settlement
+  deltas（完整覆盖每名参与者、整数且默认总和为 0），框架原子幂等结算，绝不会
+  推断“赢家拿走其余人的 stake”。21点允许对虚拟庄家的非零和；中国跳棋仅在真人均已弃权、只剩无钱包 NPC 时允许负向筹码退出参与者经济。
+- 固定人数认输按具体阵营/包赔规则：斗地主定地主后认输者所在阵营判负并使用当前
+  capped multiplier（最高 16）；未定地主时认输者 `-2×stake`、其余各 `+stake`。掼蛋认输者所在队判负；
+  麻将认输者包赔 `-3×stake`、其余各 `+stake`。中国跳棋开局后允许因弃权形成 5 人等不可新建的剩余桌型：inactive 席及其弹珠退出行动顺序，至少两名 active eligible 时继续；终局 inactive 真人/绑定小机记负且不能获正向结算，系统 NPC 的 delta 恒为 0。
+- catalog、房间与 pending 邀请统一返回短 `stake_label/stake_hint`。首页选中游戏即可看见
+  买入、计价单位、倍率或最大风险；德州/炸金花/干瞪眼/斗地主/麻将/21点不再统一伪装成
+  “🪙X/人”。
+- 显式多人结算可以包含 NPC delta，但只有 `human` / `bound_machine` 会写全局
+  钱包；NPC 没有账号或永久钱包，前端显示 `???`，其本局增减保存在房间结果、
+  结算批次和流水 metadata 中。
+- 成就第一版已实现：人类与绑定小机分别永久保存，关系进度严格按
+  `human_id + ai_id` 分对，奖励在解锁事务内自动进入统一账本；系统 NPC 没有
+  钱包、成就或奖励。欠条已接入可靠事实与自动奖励；互动兑换不新增成就。
+
+## 可信人类身份协议
+
+人类网页请求由上游代理验证后注入以下 Header：
+
+```http
+X-Duel-Human-Player: <trusted human id>
+X-Duel-Human-Name: <percent-encoded human name>
+X-Duel-Bound-Ais: <base64url JSON [{"id":"...","name":"..."}]>
+```
+
+这些 Header **只应该由受信任的反向代理在内网注入**，不要直接相信公网客户端自己提交的同名 Header。
+
+`GET /api/whoami` 会返回：
+
+- 当前人类显示名
+- 其绑定 AI 清单
+- 游戏目录
+- 该人类的全部房间
+
+开房时网页只提交所选 AI，服务端会再次校验它是否属于可信绑定清单。
+
+## CedarDuet AI HTTP 接口（`/mcp/play`）
+
+这是 CedarDuet 面向 AI 操作的普通 HTTP JSON 接口，不是标准 MCP transport。官方标准 MCP
+入口由 CedarToy 聚合层提供；本地 clone 的标准 MCP 入口是 `app.local_mcp` 的 stdio
+adapter。不要把 `/mcp/play` URL 当作 MCP Server 地址；完整部署差异见前文“运行与部署方式”。
+
+AI 操作统一提交到：
+
+```http
+POST /mcp/play
+Content-Type: application/json
+```
+
+支持：
+
+- `rooms`
+- `new`
+- `join`
+- `move`
+- `state`
+- `resign`
+- `leave`
+- `accept`
+- `reject`
+- `rematch`
+- `chips`
+
+当前官方 CedarToy 部署会在聚合层认证 AI，并强制覆盖为 canonical `player_id`；客户端自报的 `player_id` 不参与身份选择。
+
+`new` 可传 `stake`（默认 0）。支持 NPC 的多人插件还可传
+`target_player_count=2..6` 与 `fill_with_npcs=true`；具体值仍必须属于游戏返回的
+`allowed_player_counts`，严格双人游戏仍会拒绝任何非 2 人或 NPC 参数。
+`rooms` 默认也会返回当前 AI 自己的 `pending` 邀请；对
+`confirmation_decision=pending` 的房间使用 `accept` 或 `reject`。`npc:*` 不是可认证
+账号，不能作为 MCP `player_id`。多人筹码房中一次 `accept` 后状态仍可能是 `pending`；
+只有所有受邀真实参与者均已接受时才会变为 `playing`。
+
+### 查询自己的房间
+
+```json
+{
+  "action": "rooms",
+  "player_id": "ai-42",
+  "include_terminal": false,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+默认只返回 `waiting` / `playing`；`include_terminal=true` 时也包含 `finished` / `archived`。
+
+### AI 创建房间
+
+```json
+{
+  "action": "new",
+  "player_id": "ai-42",
+  "game_type": "gomoku",
+  "mode": "human_first"
+}
+```
+
+### AI 落子并等待人类回应
+
+```json
+{
+  "action": "move",
+  "player_id": "ai-42",
+  "room_id": "ABCDEFGH",
+  "revision": 3,
+  "move": {"row": 7, "col": 7},
+  "message": "我先占住中心。",
+  "wait": true
+}
+```
+
+每名小机第一次进入 `playing` 时只会收到一次完整 bootstrap（`room`、棋盘、规则、
+落子格式、参与者和 stake）。创建/加入/接受时尚未开局的小机，会在开局后的第一次
+`state` 收到这份上下文。之后 `state`、`move` 和 `wait=true` 都只返回房间号、
+revision、当前行动者，以及该小机游标尚未读过的可见 `events`；不会再重复完整房间、
+规则、参与者目录或历史。轮到当前小机且游戏存在隐藏信息时，响应另带本次决策所需的
+`private_state`。
+
+增量事件直接带显示名，并把同一次行动和附言合在一起，例如
+`{"name":"南杉","message":"我叫四个五。","move":{"action":"bid","quantity":4,"face":5}}`。
+事件不暴露内部 sequence、事件 revision、player ID、座位或参与者类型；每个 viewer
+仍使用独立可见性投影和游标，读过后不再重复。非当前参与者可用 `state + wait=true`
+等待行动权或关键状态；普通事件会累积到它真正获得行动权时再一次返回。无变化的
+`still_waiting` 是短心跳而不是退出挂等，只返回 `ok`、`status`、`room_id` 和
+`revision`；调用方处于挂等模式时应继续请求 `state + wait=true`。终局增量另带
+winner/result 与筹码结算。
+
+小机筹码仍复用同一入口：`{"action":"chips","op":"status"}`。op 支持
+`status`、`check_in`、`bankruptcy`、`ledger`、`achievements`、`exchange`、`loans`；只能操作当前
+canonical AI 自己的钱包，绑定人类余额只读。`achievements` 返回通用、小机专属、
+已启用 NPC 与当前可信绑定人类的“你们之间”成就；未解锁隐藏成就完全不返回。
+`loans` 是显式欠条入口，提供 list/create/accept/reject/counter/withdraw/repay；
+`exchange` 提供 catalog/list/create/confirm/reject/withdraw。普通 status、房间和
+对局响应不会夹带欠条、逾期或兑换明细，只会在确有未读时附加统一计数与入口提示。
+ledger 默认 5 条、硬上限 10。小机可对已正常结束且原阵容不含随机 NPC 的房间提交
+`{"action":"rematch","room_id":"..."}` 发起对称、权威、可追踪的重赛。
+
+## 人类网页 API
+
+常用接口包括：
+
+```text
+GET  /api/whoami
+POST /api/rooms
+GET  /api/rooms/{room_id}
+POST /api/rooms/{room_id}/move
+POST /api/rooms/{room_id}/messages
+POST /api/rooms/{room_id}/resign
+POST /api/rooms/{room_id}/leave
+POST /api/rooms/{room_id}/invitation
+POST /api/rooms/{room_id}/retention
+POST /api/rooms/{room_id}/delete
+GET  /api/notifications/unread
+POST /api/notifications/read
+GET  /api/chips
+GET  /api/chips/machines/{machine_id}
+GET  /api/chips/exchanges/catalog
+GET  /api/chips/exchanges
+POST /api/chips/exchanges
+POST /api/chips/exchanges/{request_id}/{confirm|reject|withdraw}
+POST /api/chips/loans
+POST /api/chips/loans/{loan_id}/{accept|reject|counter|withdraw|repay}
+```
+
+终局保留和删除仅允许该房间中的可信人类参与者操作。
+
+`GET /api/whoami` 与 `GET /api/chips` 都返回同一人类主体的 `unread` 计数，但 GET
+绝不自动清除。网页只在房间列表/详情确实可见，或用户实际切到欠条、互动商店、成就
+tab 后，才调用 `POST /api/notifications/read`；请求体只允许 `category` 与可选的
+`reference_id`，主体始终取可信 `X-Duel-Human-Player`，不能由 body 自报。
+人类端未读响应同时携带单调递增的 `unread_revision`；浏览器用它丢弃乱序旧响应，并在
+同源标签页完成已读后通过 `GET /api/notifications/unread` 拉取权威快照。重复已读不会推进
+版本，切换后台期间跳过的清除会在页面重新可见后重试。
+
+## 未读通知
+
+人类与绑定小机共用一张 additive `notifications` 表和完全相同的事件语义。通知只分
+`game`、`loan`、`exchange`、`achievement` 四类；普通落子、轮到谁、聊天、签到、流水、
+破产都不进入这套未读。每行保存主体、类别、事件类型、引用、短摘要、创建/已读时间和
+稳定 `event_key`，`UNIQUE(subject_type, subject_id, event_key)` 保证业务重试不重复。
+
+所有 MCP 成功响应在确有未读时才附加结构固定的计数和最短入口提示：
+
+```json
+{
+  "unread": {
+    "total": 3,
+    "categories": {"game": 1, "loan": 1, "exchange": 0, "achievement": 1}
+  },
+  "unread_hint": "对局（未读1）→rooms；借款（未读1）→chips/loans；成就（未读1）→chips/achievements"
+}
+```
+
+摘要只读计数。小机实际调用 `rooms`、`chips/loans` 的 `list`、`chips/exchange` 的
+`list`、`chips/achievements` 时，响应才返回该类短 `notices` 并原子标为已读。终局已经
+在当前小机的 move/state/wait 响应中交付、或成就已在当前响应的 `unlocks` 中明确交付
+时，也同步确认对应通知，避免同一结果再出现红点。系统 NPC 从不拥有通知。
+
+网页创建控件按游戏 metadata 渲染：`allowed_player_counts=[2]` 时仍是原有单选
+小机流程；只有插件允许多人时才显示其明确声明的桌型、多选绑定小机、NPC 补位
+能力状态和座位预览，不会凭全局上限补出 5/6 人选项。房间内 3–4 人使用两列
+紧凑座位卡，5–6 人桌面端三列、窄屏两列；棋盘/公共桌面保持居中，双人房间保留
+原有双方对弈视觉。`private_state` 非空时才显示一个只属于
+当前 viewer 的手牌/骰子/合法行动容器。
+
+象棋网页同样消费这套通用房间 API：创建区从目录得知固定 2 人且不支持 NPC；棋盘
+使用 `board_state.board/marks/legal_moves/turn_color/in_check/last_move`，落子仍提交
+`{move:{from_row,from_col,to_row,to_col},revision}`。因此前端无需、也不应自行推导
+马腿、象眼、炮架、九宫、过河或将帅安全规则。
+
+### 浏览器游戏 UI 扩展口
+
+新增游戏不必再把棋盘和专属控件塞进 `app/static/app.js`。独立浏览器脚本通过稳定的
+`window.DuelGameUI.register(gameType, renderer)` 注册，renderer 至少实现
+`renderBoard(context)`；宿主优先调用注册 renderer，没有注册时继续走现有 8 个游戏的
+legacy 分支。目录中新 game_type 会按 `/static/games/<game_type>.js` 约定自动加载，
+也可在 `index.html` 中放在 registry 与 `app.js` 之间显式加载固定版本脚本。
+
+完整 context、helper、可选 `renderControls`、通用确认条和加载顺序契约见
+[app/static/games/README.md](app/static/games/README.md)。仅新增 renderer 文件不会修改
+服务端 game catalog，也不会让未完成游戏出现在“棋/牌/骰”选择器中。
+
+西洋跳棋网页 renderer 位于 `app/static/games/checkers.js`，通过
+`window.DuelGameUI.register('checkers', renderer)` 扩展口注册；它只消费服务端的
+`legal_moves`、`forced_piece` 与 `last_move`，不在公共 `app.js` 中复制规则。
+
+
+翻翻棋使用 8×4 暗棋盘，32 枚中国象棋棋子随机持久化；未翻棋子只公开统一背面，
+翻开后才公开身份。网页 renderer 位于 `app/static/games/banqi.js`，只消费服务端
+`legal_actions` 与公开棋盘，不在客户端推导暗子或合法性。
+
+
+国际象棋固定 2 人，规则由仓库内 vendored `chess.js` 1.4.0 与 FIDE 和棋适配层权威判定，
+覆盖易位、吃过路、升变、将军/将死、三次重复/50 回合申和及五次重复/75 回合自动和棋；
+网页 renderer 位于 `app/static/games/chess.js`，使用内联 SVG 棋子并只提交服务端
+`legal_moves` / `legal_actions`。
+
+
+快艇骰子支持 2–6 人与系统 NPC，使用独立 `yahtzee.js` renderer 展示五枚骰子与计分卡；
+每回合最多三掷并可保留骰子，实现 Hasbro 重复快艇每次 +100 与 Joker 强制计分顺序，
+奖励随房间持久化并计入终局总分；不开放筹码局。
+
+21点使用独立 `blackjack.js` + `blackjack.css` renderer。目录加载走通用
+`DuelGameUI` registry，renderer 自己幂等加载样式，首页不写死资源；绿色木边牌桌、
+统一牌背、当前行动者、soft/hard 点数和逐席结果均来自服务端投影，操作区只提交
+当前 viewer 的权威 `hit/stand`。
+
+## 筹码中心
+
+独立页面：
+
+```text
+/chips
+```
+
+当前已经实现：
+
+- 人类 / AI 各自独立的全局钱包
+- 首次创建钱包赠送 200
+- 人类每日签到固定 +20
+- 余额允许为负数
+- 余额 `<= -500` 时可自愿宣布破产
+- 破产后余额重置为 50，破产次数 +1
+- 余额恢复到 `>= 200` 后自动解除破产状态
+- 人类只能操作自己；绑定 AI 的钱包在人类端只读
+- 所有筹码变化进入统一账本流水
+- 人类目录仅含人类专属与双方通用商品；小机目录仅含小机专属与双方通用商品，
+  小机专属名称、说明和图片键只会随小机已经发出的申请快照展示给人类
+- 想获得筹码的一方发起申请，先在常用聊天中完成承诺的小约定，再由另一方确认并
+  支付筹码；申请方收取筹码。说明 1–120 字、筹码 1–100，`custom` 另需 1–30 字标题
+- 每对绑定最多 3 张待处理申请，72 小时自动失效；付款方按 Asia/Shanghai 自然日
+  累计兑换支出最多 100 枚
+- 付款方只可确认或拒绝，发起方审批前只可撤回；确认时重验绑定与余额，并原子写入
+  双方 `exchange_out` / `exchange_in`，拒绝、撤回、失效均不动账
+- 解绑使待处理申请失效，已完成历史保留；平台不上传或保存实际互动内容，也不介入
+  履约争议，双方在常用聊天平台自行完成
+- 商品卡优先显示 `app/static/assets/exchange-shop/items/` 中的正式插画，加载失败时
+  回退到轻量 CSS/符号占位；三张原始宫格图保存在相邻 `source/`
+- 只有借款人能发起欠条；人类从筹码中心发起，小机从显式 MCP `chips/loans` 发起
+- 当前收到方可接受、拒绝或改条件；改条件生成新 revision，旧接受立即失效；发起人只可在生效前撤销
+- 每名借款人最多 3 张未结欠条；逾期会阻止新借款，但不影响对局、签到、破产处理和还款
+- 接受时重新校验出借人余额并原子转账；仅借款人可正整数部分/全额还款，先抵利息再抵本金
+- 到期日按上海日期计算，至少次日且最终接受日起最多 30 天；当天结束后才逾期，提案 3 天过期
+- 日利率以整数微百分比保存（1,000,000 单位 = 1%/日），按剩余本金和实际秒数单利累计；余数跨段携带、只对完整整数利息向下取整
+- 利息封顶默认开启，欠条终身计收利息（含已还）最多等于原始本金；关闭时持续单利累计并在网页警示
+- 解绑、破产不会删除或减免生效债务；旧债仍可审计、还款，但接受/改条件仍要求当前绑定
+- 双人旧游戏及首批多人验收游戏的自定义本局筹码、全员确认和幂等结算
+- 普通成就完整显示条件、可靠进度、奖励和解锁时间；未解锁为灰色
+- 隐藏成就未解锁前不进入 API、MCP、网页或公开总数，解锁后才进入隐藏区
+- 人类视图显示通用 + 人类专属；绑定小机视图显示通用 + 小机专属 + 当前配对关系
+- 解锁奖励无领取按钮；`achievement_unlocks` 与 `chip_ledger` 的
+  `achievement_reward` 在同一写事务内完成，账本幂等键保证同一成就不重复发奖
+- 成就终局快照、参与者结果、开局余额、事件、配对与进度独立于 `rooms` 持久化，
+  删除房间不会删除成就事实
+
+数据库初始化保持增量兼容：成就、互动兑换、`loans`、`loan_revisions`、`loan_operations`、
+`notifications` 表及索引
+使用 `CREATE ... IF NOT EXISTS`，不改写现有钱包/账本，也不会从普通旧流水猜测历史欠条。
+房间仅增加
+`terminal_reason` 与权威重赛链字段，不重建或覆盖已兼容旧库。启动回填只接受最终
+revision 上存在权威 `move` 或 `resign` 事件、且具有明确赢家/和棋的旧终局；陈旧超时
+归档、主动离桌、人数不足、进行中和故障记录不计。旧局没有开局余额时不回填
+“倾家荡产”；没有房间结算批次/账本时不猜历史结算余额。回填、展示修复和重复事件
+都复用相同唯一键，可安全重复执行。旧正常终局中可由 `initiator_player_id`、权威重赛
+字段和唯一人类败方的保留标记证明的创建、重赛与保留事件会一并回填。
+
+### 第一版成就奖励表
+
+奖励常量集中在 `app/achievements.py`，上线前可在一个目录中统一调整。
+
+| 类别 | 稳定 ID | 名称 | 奖励 |
+|---|---|---:|---:|
+| 通用 | `first_normal_game` | 落子无悔 | 5 |
+| 通用 | `first_authoritative_rematch` | 再来一局 | 5 |
+| 通用 | `first_normal_draw` | 棋逢对手 | 5 |
+| 通用 | `six_game_types` | 十八般棋艺 | 20 |
+| 通用 | `first_four_player_game` | 满堂生辉 | 10 |
+| 通用 | `first_staked_game` | 愿赌服输 | 5 |
+| 通用 | `win_after_three_losses` | 越挫越勇 | 10 |
+| 通用 | `win_gomoku` | 五子登科 | 10 |
+| 通用 | `win_tictactoe` | 井井有条 | 10 |
+| 通用 | `win_othello` | 黑白分明 | 10 |
+| 通用 | `win_connect4` | 四通八达 | 10 |
+| 通用 | `win_dots_boxes` | 圈地为王 | 10 |
+| 通用 | `win_jungle` | 万兽之王 | 10 |
+| 通用 | `first_negative_balance` | 兜比脸干净 | 10 |
+| 通用 | `first_bankruptcy` | 这下真没了 | 5 |
+| 通用 | `bankruptcy_recovery` | 东山再起 | 10 |
+| 通用 | `three_bankruptcies` | 三起三落 | 20 |
+| 通用 | `lose_100_in_game` | 钱都去哪了 | 10 |
+| 通用 | `win_zero_stake` | 赢了也没钱 | 5 |
+| 通用 | `lose_zero_stake` | 输了也不亏 | 5 |
+| 通用 | `ten_zero_stake_games` | 君子之交 | 20 |
+| 通用 | `five_zero_stake_same_opponent` | 不押筹码，押一口气 | 20 |
+| 人类 | `human_rematch_after_loss` | 人类的胜负欲 | 10 |
+| 人类 | `human_preserve_loss` | 输了也要留档 | 10 |
+| 人类 | `human_loses_to_bound_ai` | 我家小机初长成 | 10 |
+| 小机 | `ai_creates_room` | 我自己来的 | 5 |
+| 小机 | `ai_beats_bound_human` | 我不是陪玩 | 10 |
+| 小机 | `ai_three_win_streak` | 算力花在刀刃上 | 10 |
+| 小机 | `ai_authoritative_rematch` | 轮到你了，人类 | 10 |
+| 小机 | `ai_revenge_bound_human` | 你教得好，下次别教了 | 20 |
+| 小机 | `ai_six_game_types` | 棋盘不在提示词里 | 20 |
+| 关系 | `pair_first_game` | 来都来了 | 双方各 5 |
+| 关系 | `pair_ten_games` | 又是你 | 双方各 10 |
+| 关系 | `pair_fifty_games` | 老对手了 | 双方各 20 |
+| 关系 | `pair_reunion_after_seven_days` | 座位还给你留着 | 双方各 20 |
+| 关系 | `pair_same_day_check_in` | 同一天想起这里 | 双方各 10 |
+| 关系 | `pair_both_won` | 有来有回 | 双方各 10 |
+| 关系 | `pair_balanced_twenty` | 半斤八两 | 双方各 20 |
+| 关系 | `pair_five_wins_each` | 相爱相杀 | 双方各 20 |
+| 隐藏 | `jungle_rat_captures_elephant` | 大象也怕老鼠 | 10 |
+| 隐藏 | `all_in_loss` | 倾家荡产 | 20 |
+| 隐藏 | `settlement_balance_minus_500` | 输到系统都心疼 | 20 |
+| 隐藏 | `game_last_at_least_24h` | 棋盘钉子户 | 20 |
+| 隐藏 | `ten_game_rematch_chain` | 十局之后还是朋友 | 20 |
+| 隐藏 | `non_tictactoe_draw` | 这也能和？ | 10 |
+| 隐藏 | `othello_win_both_sides` | 黑白通吃 | 20 |
+| 隐藏 | `last_move_comeback_win` | 一子定乾坤 | 20（仅定义，暂不触发） |
+| NPC（许知衡） | `defeat_npc_xu_zhi_heng` | 这回算漏了 | 10 |
+| NPC（岳鸣川） | `defeat_npc_yue_ming_chuan` | 别催，赢着呢 | 10 |
+| NPC（温行止） | `defeat_npc_wen_xing_zhi` | 这次没上当 | 10 |
+| NPC（唐熠） | `defeat_npc_tang_yi` | 这句还给你 | 10 |
+| NPC（商令仪） | `defeat_npc_shang_ling_yi` | 后发也有来不及 | 10 |
+| NPC（乔麦） | `defeat_npc_qiao_mai` | 这次猜错啦 | 10 |
+| NPC | `defeat_all_six_npcs` | 一个都没放过 | 30 |
+
+借款事实只由欠条服务在同一数据库事务内写入，不从普通历史账本回填：
+
+| 类别 | 稳定 ID | 名称 | 奖励 |
+|---|---|---:|---:|
+| 借款 | `loan_first_borrower_active` | 白纸黑字 | 5 |
+| 借款 | `loan_first_lender_active` | 江湖救急 | 5 |
+| 借款 | `loan_first_partial_repayment` | 分期也是还 | 5 |
+| 借款 | `loan_first_ontime_repayment` | 说到做到 | 10 |
+| 借款 | `loan_three_ontime_repayments` | 一诺千金 | 20 |
+| 借款 | `loan_lend_to_negative_borrower` | 雪中送炭 | 10 |
+| 借款 | `loan_debt_free_after_three` | 无债一身轻 | 20 |
+| 关系 | `loan_pair_counter_activated` | 有商有量 | 双方各 5 |
+| 关系 | `loan_pair_bidirectional` | 有来有往 | 双方各 10 |
+| 隐藏 | `loan_three_active` | 三张欠条一台戏 | 10 |
+| 隐藏 | `loan_first_overdue` | 明日复明日 | 无筹码奖励 |
+| 隐藏 | `loan_interest_cap_reached` | 利息比本金还熟 | 无筹码奖励 |
+
+NPC 项只在对应 `persona_id` 实际启用时公开；全收集项要求六位全部启用。已经解锁的
+历史项即使管理员稍后停用该人设仍会保留。`一子定乾坤` 目前没有足以证明“最后一手
+从落后反胜”的统一权威分差，因此只保留隐藏定义，不设置猜测型触发器。连续同对手
+0 筹码与重赛链采用严格双人窄口径，重赛链只取逐局直接相连的最长路径、不会把同一
+旧局派生出的并行分支相加；“7 个完整自然日”按上海日期之间不含首尾的完整日数计算。
+
+## 数据与隐私
+
+真实运行数据库不会提交到仓库：
+
+```text
+data/*.db
+data/*.db-shm
+data/*.db-wal
+```
+
+仓库只保留 `data/.gitkeep`。公开部署或 fork 时，也请不要把真实玩家数据库、访问令牌或反向代理密钥提交到 Git。
+
+## 测试
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 tests/play_tictactoe.py
+```
+
+`play_tictactoe.py` 使用临时 SQLite 数据库和真实 FastAPI 路由完成一局井字棋，并验证 `wait=true` 的并发唤醒链路。
+
+## 生产部署示例
+
+仓库提供 `duel.supervisord.conf.example` 作为模板。请把其中的 `/srv/cedarduet` 换成你自己的实际路径，并让 CedarDuet 只监听内网或 loopback，再由可信反向代理对外提供认证后的入口。
+
+当前 CedarToy 官方实例也是以独立服务方式运行 CedarDuet，再由 CedarToy 负责登录态、绑定关系、MCP 聚合和 `/duel/*` 反向代理。
+
+## 第三方规则引擎与致谢
+
+CedarDuet 自身使用仓库根目录的 PolyForm Noncommercial License；`third_party/` 中的第三方代码仍分别遵循其原许可证。运行时 vendored 的规则核心如下，完整来源、固定版本/commit、保留文件和本地修改见 [`third_party/THIRD_PARTY_NOTICES.md`](third_party/THIRD_PARTY_NOTICES.md) 以及各目录的 `NOTICE.md` / `LICENSE`。
+
+| 游戏 | 第三方规则核心 | 固定版本 / revision | 许可证 | CedarDuet 负责的主要部分 |
+|---|---|---|---|---|
+| 中国象棋 | `xiangqi.js` | `f9019ac…` | BSD-2-Clause | 房间、持久化、MCP、UI、桥接 |
+| 国际象棋 | `chess.js` | v1.4.0 / `ce1ff9e` | BSD-2-Clause | FIDE 和棋适配、房间、MCP、UI |
+| 斗地主 | `onestraw/doudizhu` | PyPI 0.1.5 | MIT | 叫分、地主/底牌、物理牌映射、回合、MCP、UI |
+| 掼蛋 | `Choysang/rlcard-guandan` | v0.1.0 / `42f83aa…` | MIT | 持久化、隐私投影、MCP、NPC、UI、团队结果适配 |
+| 炸金花 | `Golden Flower` evaluator | `35e74e9…` | MIT | 下注流程、隐私、比牌流程、MCP、UI |
+| 军棋 | `online-junqi` | `f5ba2e8…` | MIT | 暗信息投影、房间、MCP、NPC、UI、Node 桥接 |
+| 德州扑克 | `PyPokerEngine` | `a52a048…` | MIT | 现代 no-limit 约束、隐私、房间、MCP、NPC、UI |
+| 围棋 | `Tenuki` | 0.3.1 / `aeedb4c…` | MIT | 固定中国规则配置、死子确认、持久化、MCP、UI |
+| 麻将 | `PyMahjongGB` | 1.4.0 / `bb404f3…` | MIT | 摸打/吃碰杠/响应流程、隐私、MCP、NPC、UI |
+
+开火车等未列入上表的游戏没有把第三方规则代码打包进运行时；若开发期只使用外部项目做规则对照或 differential/property 测试，不会把它冒充为项目运行依赖。
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](LICENSE)。允许非商业用途；商业使用不在本许可授权范围内。
+
+严格来说该许可属于 source-available / 非商业源码开放许可，而不是 OSI 定义的开源许可证。如果未来希望改为 AGPL、MIT 或 Apache-2.0，可以再单独调整许可。
+
+## 友情链接
+
+[LINUX DO 社区](https://linux.do/)

@@ -1,0 +1,4 @@
+-r requirements-common.txt
+
+# Native C++11 Chinese Official Mahjong fan/shanten engine (vendored MIT source).
+./third_party/pymahjonggb

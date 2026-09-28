@@ -1,0 +1,70 @@
+from .gomoku import Gomoku
+from .blackjack import Blackjack
+from .zhajinhua import Zhajinhua
+from .mahjong import Mahjong
+
+GAME_CATEGORIES = frozenset({"board", "card", "dice"})
+
+# Short, centralized lobby/invitation copy. ``X`` is replaced with the room's
+# concrete integer stake; the browser uses the same metadata for a live preview.
+STAKE_PRESENTATIONS = {
+    "texas_holdem": ("买入 🪙X/人", "最大亏 X"),
+    "zhajinhua": ("计价 🪙X/单位", "最大亏 32×X"),
+    "gandengyan": ("底注 🪙X", "按剩牌×倍率，倍率最高8倍"),
+    "doudizhu": ("底注 🪙X", "倍率最高16倍"),
+    "mahjong": ("底注 🪙X", "自摸收三家各 X"),
+    "blackjack": ("下注 🪙X/人", "胜+X/负-X/和0"),
+}
+DEFAULT_STAKE_PRESENTATION = ("🪙X/人", "")
+
+GAMES = {p.game_type: p() for p in (Gomoku, Blackjack, Zhajinhua, Mahjong)}
+
+
+def get_game(game_type: str):
+    try:
+        return GAMES[game_type]
+    except KeyError as exc:
+        choices = "、".join(sorted(GAMES))
+        raise ValueError(f"不支持的棋种：{game_type}；可选：{choices}") from exc
+
+
+def stake_presentation(game_type: str, stake: int | None = None) -> dict[str, str]:
+    """Return short stake label/hint metadata, optionally resolved for a room."""
+    label, hint = STAKE_PRESENTATIONS.get(
+        game_type, DEFAULT_STAKE_PRESENTATION
+    )
+    if stake is None:
+        return {"stake_label": label, "stake_hint": hint}
+    if stake <= 0:
+        return {"stake_label": "娱乐局", "stake_hint": ""}
+    value = str(stake)
+    return {
+        "stake_label": label.replace("X", value),
+        "stake_hint": hint.replace("X", value),
+    }
+
+
+def game_catalog() -> list[dict]:
+    catalog = []
+    for plugin in GAMES.values():
+        counts = plugin.resolved_allowed_player_counts()
+        if plugin.category not in GAME_CATEGORIES:
+            raise ValueError(
+                f"{plugin.game_type} 的 category 必须是 board/card/dice"
+            )
+        catalog.append({
+            "game_type": plugin.game_type,
+            "display_name": plugin.display_name,
+            "category": plugin.category,
+            "min_players": counts[0],
+            "max_players": counts[-1],
+            "allowed_player_counts": list(counts),
+            "recommended_players": plugin.resolved_recommended_players(),
+            "supports_npcs": plugin.supports_npcs,
+            "uses_local_npc_strategy": plugin.uses_local_npc_strategy,
+            "supports_stakes": plugin.supports_stakes,
+            "supports_multiplayer_stakes": plugin.supports_multiplayer_stakes,
+            "uses_custom_stake_settlement": plugin.uses_custom_stake_settlement,
+            **stake_presentation(plugin.game_type),
+        })
+    return catalog
