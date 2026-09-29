@@ -2454,9 +2454,17 @@
     }
     .chat-more-btn:active { transform: scale(.92); }
     .chat-more-btn.open { transform: rotate(45deg); background: var(--accent2); color: var(--text); }
+    .chat-more-btn { position: relative; }
+    .chat-more-btn .chat-more-pill-n {
+      position: absolute; top: -3px; right: -3px; min-width: 14px; height: 14px;
+      border-radius: 7px; background: var(--accent); color: #fff;
+      font-size: 10px; line-height: 14px; text-align: center; padding: 0 3px;
+      font-weight: 700; pointer-events: none;
+    }
+    .chat-more-btn.open .chat-more-pill-n { transform: rotate(-45deg); }
     /* 弹出面板：轻量、圆角、米白统一 */
     .chat-more-panel {
-      display: flex; gap: 4px; padding: 8px 6px;
+      display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 6px;
       background: var(--card); border: 1px solid var(--border); border-radius: 16px;
       box-shadow: 0 4px 14px rgba(0,0,0,.06);
       animation: morePanelIn .16s ease;
@@ -2466,14 +2474,16 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .chat-more-panel .chat-more-item {
-      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+      flex: 1 1 18%; min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px;
       background: none; border: none; cursor: pointer; padding: 6px 8px;
       border-radius: 10px; font-size: 11px; color: var(--text); line-height: 1;
     }
     .chat-more-panel .chat-more-item i { font-size: 20px; color: var(--sub); }
     .chat-more-panel .chat-more-item:active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-    .chat-more-panel .chat-more-item.rec { color: var(--accent); }
-    .chat-more-panel .chat-more-item.rec i { color: var(--accent); }
+    .chat-more-panel .chat-more-item.rec,
+    .chat-more-panel .chat-more-item.active { color: var(--accent); }
+    .chat-more-panel .chat-more-item.rec i,
+    .chat-more-panel .chat-more-item.active i { color: var(--accent); }
     /* Lucide 图标统一尺寸跟随字号 */
     svg.lucide { width: 1em; height: 1em; vertical-align: -0.15em; stroke-width: 2; }
     /* ─── 小狗动作：爪印气泡 [action:xxx] ─────────────── */
@@ -7167,12 +7177,6 @@
       color:#fff;
     }
     .pill-picker-ft{ margin-top:8px; font-size:11px; color:var(--sub,#999); }
-    #pill-box-btn b{
-      position:absolute; top:-4px; right:-4px; min-width:14px; height:14px;
-      border-radius:7px; background:var(--accent,#c9a88a); color:#fff;
-      font-size:10px; line-height:14px; text-align:center; padding:0 3px;
-    }
-    #pill-box-btn{ position:relative; }
 
     .pill-chip{ display:inline-flex; flex-direction:column; align-items:flex-start; gap:1px; }
     .pill-chip-name{ font-weight:600; }
