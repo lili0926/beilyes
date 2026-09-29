@@ -16669,11 +16669,13 @@ function renderPilulierPage(){
     </div>`;
   }).join("");
   const n = sel.size;
-  return `<div class="page-head"><button type="button" class="back-btn" data-back="1">←</button><div class="page-title">药盒</div></div>
-  <div class="pill-page">
-    <div class="pill-page-hint">点选后去聊天发送即可生效（最多 ${PILULIER_MAX} 颗）。只影响下一句，不进历史。${n?` 当前已选 ${n} 颗。`:""}</div>
-    <div class="pill-page-grid">${cards}</div>
-    <button type="button" class="btn primary pill-page-go" data-pill-go-chat="1" style="margin-top:12px;width:100%">去聊天里用</button>
+  return `<div class="page">
+    ${subHeader('<i data-lucide="pill"></i> 药盒')}
+    <div class="pill-page">
+      <div class="pill-page-hint">点选后去聊天发送即可生效（最多 ${PILULIER_MAX} 颗）。只影响下一句，不进历史。${n?` 当前已选 ${n} 颗。`:""}</div>
+      <div class="pill-page-grid">${cards}</div>
+      <button type="button" class="btn primary pill-page-go" data-pill-go-chat="1" style="margin-top:12px;width:100%">去聊天里用</button>
+    </div>
   </div>`;
 }
 
