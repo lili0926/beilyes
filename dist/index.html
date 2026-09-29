@@ -10496,6 +10496,9 @@ const state = {
   albumIdx: 0,
   // coupon 券夹
   coupons: LS.get("coupons", null),  // null=未初始化，ensureCoupons() 播种默认券
+  pillSelectedIds: [],
+  pillPickerOpen: false,
+  pillLastTaken: [],
   couponEditingId: null,             // 券夹页正在编辑的券 id，或 "new"
   couponDraft: null,                 // 编辑器工作副本
   // cmdgame
