@@ -7392,7 +7392,7 @@ function renderHomeKorean(){
     prompts:"mist", project:"mist", sparkvault:"mist", album:"mist",
     game:"mist", ntfy:"mist",
     calendar:"sage", duty:"sage", quest:"sage", bisca_cards:"sage", flightchess:"sage",
-    phone:"apricot", wardrobe:"apricot", coupon:"apricot", truthdare:"apricot",
+    phone:"apricot", wardrobe:"apricot", coupon:"apricot", pilulier:"apricot", truthdare:"apricot",
     tavern:"apricot", cooking:"apricot", menu:"apricot",
     read:"lilac", music:"lilac", shufang:"lilac", dream:"lilac", trip:"sage",
     roleplay:"lilac", divination:"lilac", rewrite:"lilac",
@@ -7423,6 +7423,7 @@ function renderHomeKorean(){
     {key:"read", icon:"book-open", label:"一起读"},
     {key:"watch", icon:"film", label:"一起看"},
     {key:"theme", icon:"palette", label:"外观"},
+    {key:"pilulier", icon:"pill", label:"药盒"},
   ];
   const deskApps = deskAppDefs.map(iconBtn).join("");
   const deskKeys = new Set(deskAppDefs.map(it => it.key));
@@ -7904,6 +7905,7 @@ const FEAT_GROUPS = [
         {key:"savedchat", icon:"bookmark", label:"收藏记录"},
         {key:"album",    icon:"image", label:"相册"},
         {key:"coupon",   icon:"ticket", label:"券夹"},
+        {key:"pilulier", icon:"pill", label:"药盒"},
         {key:"wallet",   icon:"wallet", label:"钱包"},
         {key:"sayday",   icon:"gavel", label:"我说了算"},
         {key:"love",     icon:"heart", label:"计分器"},
@@ -10818,6 +10820,7 @@ function renderSubPage(){
     album: renderAlbum,
     savedchat: renderSavedChat,
     coupon: renderCoupons,
+    pilulier: renderPilulierPage,
     wallet: renderWallet,
     sayday: renderSayDay,
     love: renderLove,
@@ -16587,7 +16590,8 @@ function pillPickerHtml(){
   const sel = new Set(pillSelectedEnsure());
   const chips = (PILULIER_PILLS||[]).map(p=>{
     const on = sel.has(p.id);
-    return `<button type="button" class="pill-chip${on?" on":""}" data-pill-toggle="${escAttr(p.id)}" title="${escAttr((p.text||"").slice(0,80))}">${esc(p.name)}</button>`;
+    const scene = String(p.text||"").split("\n")[0].replace(/^适用场景[：:]/,"").trim();
+    return `<button type="button" class="pill-chip${on?" on":""}" data-pill-toggle="${escAttr(p.id)}" title="${escAttr(scene||p.name)}"><span class="pill-chip-name">${esc(p.name)}</span><span class="pill-chip-id">${esc(p.id)}</span></button>`;
   }).join("");
   const n = sel.size;
   return `<div class="pill-picker" id="pill-picker">
@@ -16596,7 +16600,39 @@ function pillPickerHtml(){
       <button type="button" class="pill-picker-close" data-pill-close="1" aria-label="关闭">×</button>
     </div>
     <div class="pill-picker-list">${chips}</div>
-    <div class="pill-picker-ft">发出后自动吃掉，不进聊天记录</div>
+    <div class="pill-picker-ft">长按自己的气泡也可打开 · 发出后自动吃掉，不进聊天记录</div>
+  </div>`;
+}
+function pillTakenFooterHtml(m){
+  const list = (m && Array.isArray(m.pillsTaken) && m.pillsTaken.length) ? m.pillsTaken : [];
+  if(!list.length) return "";
+  const names = list.map(x=>x.name||x.id).filter(Boolean);
+  if(!names.length) return "";
+  return `<div class="pill-taken-ft">pris · ${esc(names.join(" · "))}</div>`;
+}
+function renderPilulierPage(){
+  const sel = new Set(pillSelectedEnsure());
+  const cards = (PILULIER_PILLS||[]).map(p=>{
+    const on = sel.has(p.id);
+    const lines = String(p.text||"").split("\n");
+    const scene = (lines[0]||"").replace(/^适用场景[：:]/,"").trim();
+    const body = lines.slice(1).join("\n").trim();
+    return `<div class="pill-page-card${on?" on":""}" data-pill-toggle="${escAttr(p.id)}">
+      <div class="pill-page-top">
+        <span class="pill-page-code">${esc(p.id)}</span>
+        <span class="pill-page-name">${esc(p.name)}</span>
+        <span class="pill-page-mark">${on?"已选":"点选"}</span>
+      </div>
+      <div class="pill-page-scene">${esc(scene)}</div>
+      <div class="pill-page-body">${esc(body.slice(0,160))}${body.length>160?"…":""}</div>
+    </div>`;
+  }).join("");
+  const n = sel.size;
+  return `<div class="page-head"><button type="button" class="back-btn" data-back="1">←</button><div class="page-title">药盒</div></div>
+  <div class="pill-page">
+    <div class="pill-page-hint">点选后去聊天发送即可生效（最多 ${PILULIER_MAX} 颗）。只影响下一句，不进历史。${n?` 当前已选 ${n} 颗。`:""}</div>
+    <div class="pill-page-grid">${cards}</div>
+    <button type="button" class="btn primary pill-page-go" data-pill-go-chat="1" style="margin-top:12px;width:100%">去聊天里用</button>
   </div>`;
 }
 
@@ -24516,6 +24552,7 @@ function renderChat(){
       if(m.time && !showMeta && firstInRun){
         const tIcon = (!isMe && hasThinking(m))?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
         msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}${tIcon}</div>`;
+        if(!isMe && typeof pillTakenFooterHtml==="function"){ const _pf=pillTakenFooterHtml(m); if(_pf) msgs+=_pf; }
       }
     });
     state.pendingUser.forEach(m=>{
@@ -28291,6 +28328,31 @@ function bindEvents(){
     // 手机那边靠 __refocusChat 在重绘后把焦点收回来。
     chatSend.onmousedown = e=>e.preventDefault();
     chatSend.onclick=()=>{ state.__refocusChat = true; sendUserMsg(); };
+  // 长按自己的气泡 → 打开药盒
+  try{
+    document.querySelectorAll(".bubble-row.me .bubble, .bubble-row.me").forEach(el=>{
+      if(el.__pillLongBound) return;
+      el.__pillLongBound = true;
+      let tm = null;
+      const start = (ev)=>{
+        if(tm) clearTimeout(tm);
+        tm = setTimeout(()=>{
+          tm = null;
+          state.pillPickerOpen = true;
+          if(typeof render==="function") render();
+          try{ if(typeof showToast==="function") showToast("选药，只影响下一句回复"); }catch(e){}
+        }, 480);
+      };
+      const clear = ()=>{ if(tm){ clearTimeout(tm); tm=null; } };
+      el.addEventListener("touchstart", start, { passive:true });
+      el.addEventListener("touchend", clear);
+      el.addEventListener("touchmove", clear);
+      el.addEventListener("mousedown", start);
+      el.addEventListener("mouseup", clear);
+      el.addEventListener("mouseleave", clear);
+    });
+  }catch(e){}
+
   }
   const trigger=document.getElementById("trigger-reply");
   if(trigger) trigger.onclick=triggerAIReply;
@@ -37002,6 +37064,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       usage: i===0 ? lastUsage : null,
       thinking: i===0 ? (thinking || null) : null,
       cardOnly: isCardCarrier || undefined,
+      pillsTaken: i===0 && state.pillLastTaken && state.pillLastTaken.length ? state.pillLastTaken.slice() : undefined,
     });
   });
   // 真写卡成功才留痕（工具或标记）；模型嘴上说记下了不会进这里

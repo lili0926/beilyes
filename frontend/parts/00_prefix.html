@@ -7172,6 +7172,28 @@
       font-size:10px; line-height:14px; text-align:center; padding:0 3px;
     }
     #pill-box-btn{ position:relative; }
+
+    .pill-chip{ display:inline-flex; flex-direction:column; align-items:flex-start; gap:1px; }
+    .pill-chip-name{ font-weight:600; }
+    .pill-chip-id{ font-size:10px; opacity:.65; }
+    .pill-taken-ft{
+      font-size:11px; color:var(--sub,#999); padding:2px 12px 6px; opacity:.85;
+      font-style:italic;
+    }
+    .pill-page{ padding:12px 14px 28px; }
+    .pill-page-hint{ font-size:12px; color:var(--sub,#888); margin-bottom:12px; line-height:1.5; }
+    .pill-page-grid{ display:flex; flex-direction:column; gap:10px; }
+    .pill-page-card{
+      border:1px solid var(--border,#e8e0d8); border-radius:14px; padding:12px 14px;
+      background:var(--card,#fff); text-align:left; cursor:pointer;
+    }
+    .pill-page-card.on{ border-color:var(--accent,#c9a88a); box-shadow:0 0 0 1px var(--accent,#c9a88a); }
+    .pill-page-top{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .pill-page-code{ font-size:11px; color:var(--sub,#999); }
+    .pill-page-name{ font-size:15px; font-weight:600; flex:1; }
+    .pill-page-mark{ font-size:11px; color:var(--accent,#c9a88a); }
+    .pill-page-scene{ font-size:12px; color:var(--sub,#888); margin-bottom:6px; }
+    .pill-page-body{ font-size:12px; color:var(--text,#444); line-height:1.55; white-space:pre-wrap; }
 </style>
 
   <div id="app"></div>
