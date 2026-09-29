@@ -34111,6 +34111,14 @@ if(!window.__mpDelegated){
         if(typeof render==="function") render();
         return;
       }
+      if(raw.closest("[data-pill-go-chat]")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.subPage = null;
+        state.tab = "chat";
+        state.pillPickerOpen = true;
+        if(typeof render==="function") render();
+        return;
+      }
       if(raw.closest("[data-pill-toggle]")){
         e.preventDefault(); e.stopImmediatePropagation();
         const pid = raw.closest("[data-pill-toggle]").getAttribute("data-pill-toggle");
