@@ -16669,13 +16669,11 @@ function renderPilulierPage(){
     </div>`;
   }).join("");
   const n = sel.size;
-  return `<div class="page">
-    ${subHeader('<i data-lucide="pill"></i> 药盒')}
-    <div class="pill-page">
-      <div class="pill-page-hint">点选后去聊天发送即可生效（最多 ${PILULIER_MAX} 颗）。只影响下一句，不进历史。${n?` 当前已选 ${n} 颗。`:""}</div>
-      <div class="pill-page-grid">${cards}</div>
-      <button type="button" class="btn primary pill-page-go" data-pill-go-chat="1" style="margin-top:12px;width:100%">去聊天里用</button>
-    </div>
+  return `<div class="page-head"><button type="button" class="back-btn" data-back="1">←</button><div class="page-title">药盒</div></div>
+  <div class="pill-page">
+    <div class="pill-page-hint">点选后去聊天发送即可生效（最多 ${PILULIER_MAX} 颗）。只影响下一句，不进历史。${n?` 当前已选 ${n} 颗。`:""}</div>
+    <div class="pill-page-grid">${cards}</div>
+    <button type="button" class="btn primary pill-page-go" data-pill-go-chat="1" style="margin-top:12px;width:100%">去聊天里用</button>
   </div>`;
 }
 
@@ -24782,14 +24780,14 @@ function renderChat(){
         <button type="button" id="puppy-open" class="chat-more-item" title="小狗按钮"><i data-lucide="paw-print"></i><span>小狗</span></button>
         <button type="button" id="chat-voice-btn" class="chat-more-item" title="语音消息（录音转文字发给TA）"><i data-lucide="audio-lines"></i><span>语音消息</span></button>
         <button type="button" id="chat-pr-btn" class="chat-more-item" title="RP快穿"><i data-lucide="sparkles"></i><span>RP</span></button>
+        <button type="button" id="pill-box-btn" class="chat-more-item${(state.pillSelectedIds&&state.pillSelectedIds.length)?" active":""}" title="药盒（只影响下一句）"><i data-lucide="pill"></i><span>药盒${(state.pillSelectedIds&&state.pillSelectedIds.length)?` · ${state.pillSelectedIds.length}`:""}</span></button>
       </div>`:""}
       <input type="file" id="chat-img-input" accept="image/*" style="display:none"/>
       <input type="file" id="chat-file-input" multiple style="display:none"/>
       <div class="chat-input-row letter-input-row">
-        <button type="button" id="chat-more-btn" title="更多" class="chat-more-btn${state.chatMoreOpen?" open":""}" aria-label="展开附件面板"><i data-lucide="plus"></i></button>
+        <button type="button" id="chat-more-btn" title="更多" class="chat-more-btn${state.chatMoreOpen?" open":""}${(state.pillSelectedIds&&state.pillSelectedIds.length)?" has-pill":""}" aria-label="展开附件面板"><i data-lucide="plus"></i>${(state.pillSelectedIds&&state.pillSelectedIds.length)?`<b class="chat-more-pill-n">${state.pillSelectedIds.length}</b>`:""}</button>
         <textarea id="chat-input" placeholder="${(state.chatStyleMode||"")==="imessage"?"iMessage":(state.chatMode==="story"?"写下一句话，TA 会顺着写下去…（如：那我吻你）":"Write a letter…")}" rows="1">${esc(state.chatInput)}</textarea>
         ${hasPending&&!state.chatLoading?`<button type="button" id="trigger-reply" title="让${(activeAg&&activeAg.name)||"TA"}回复（${state.pendingUser.length}条）" class="input-icon-btn reply-trigger"><i data-lucide="message-circle"></i><b>${state.pendingUser.length}</b></button>`:""}
-        <button type="button" id="pill-box-btn" class="input-icon-btn${(state.pillSelectedIds&&state.pillSelectedIds.length)?" active":""}" title="药盒" aria-label="药盒"><i data-lucide="pill"></i>${(state.pillSelectedIds&&state.pillSelectedIds.length)?`<b>${state.pillSelectedIds.length}</b>`:""}</button>
         <button id="chat-send" class="send-btn${state.chatInput.trim()?" active":""}"><i data-lucide="send"></i></button>
       </div>
       ${typeof pillPickerHtml==="function"?pillPickerHtml():""}
@@ -26953,6 +26951,7 @@ if(!window.__mpDelegated){
       }
       if(id==="pill-box-btn" || raw.closest("#pill-box-btn")){
         e.preventDefault(); e.stopImmediatePropagation();
+        state.chatMoreOpen = false;
         state.pillPickerOpen = !state.pillPickerOpen;
         if(typeof render==="function") render();
         return;
