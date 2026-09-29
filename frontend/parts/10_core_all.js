@@ -16551,9 +16551,23 @@ function emojiRainInit(){
     if(typeof EmojiRain === "undefined") return;
     const on = localStorage.getItem("eggs");
     EmojiRain.enable(on !== "0");
+    // 默认暗号：喵 → 🐾（可被 eggs_custom 覆盖/扩展）
+    const DEFAULT_EGGS = [
+      { id: "c:meow", triggers: ["喵"], emoji: ["🐾"], effect: "rain" }
+    ];
     try{
-      const custom = JSON.parse(localStorage.getItem("eggs_custom") || "[]");
-      if(Array.isArray(custom) && custom.length) EmojiRain.setCustom(custom);
+      let custom = [];
+      try{ custom = JSON.parse(localStorage.getItem("eggs_custom") || "[]"); }catch(e){ custom = []; }
+      if(!Array.isArray(custom)) custom = [];
+      // 若用户还没存过自定义，写入默认；若已有则保证喵这条在（除非用户删过并记了 off）
+      if(!custom.length){
+        custom = DEFAULT_EGGS.slice();
+        try{ localStorage.setItem("eggs_custom", JSON.stringify(custom)); }catch(e){}
+      } else if(!custom.some(e => e && e.id === "c:meow") && !custom.some(e => Array.isArray(e.triggers) && e.triggers.indexOf("喵") >= 0)){
+        custom = DEFAULT_EGGS.concat(custom);
+        try{ localStorage.setItem("eggs_custom", JSON.stringify(custom)); }catch(e){}
+      }
+      EmojiRain.setCustom(custom);
     }catch(e){}
     try{
       const off = JSON.parse(localStorage.getItem("eggs_off") || "[]");
