@@ -23760,8 +23760,9 @@ function pillTakeForSend(){
   state.pillLastTaken = taken;
   return blocks;
 }
-function pillInjectIntoApiMsgs(apiMsgs){
+function pillInjectIntoApiMsgs(apiMsgs, consume){
   try{
+    if(!consume) return apiMsgs;
     const blocks = pillTakeForSend();
     if(!blocks.length || !apiMsgs || !apiMsgs.length) return apiMsgs;
     // 紧贴本轮用户原话：挂在最后一条 user 消息 content 最前面
@@ -43542,7 +43543,8 @@ function crossThreadBridgeBlock(target){
   const where = other === "a2" ? "订阅" : "API";
   return `【另一个窗口（${where}）里，你在这边上次说话之后和她聊过的】\n${picked.join("\n")}\n（那也是你自己说的话。自然接上，别复述，也别主动提「另一个窗口/渠道」这种说法。）`;
 }
-function buildMainChatRequest(ag, extraHint){
+function buildMainChatRequest(ag, extraHint, opts){
+  opts = opts || {};
   const target = state.chatTarget || "a1";
   const threadMsgs = (state.chatThreads && state.chatThreads[target] && state.chatThreads[target].messages) || [];
   const allMsgs = threadMsgs.length ? threadMsgs : (state.messages || []);
@@ -43691,7 +43693,7 @@ function buildMainChatRequest(ag, extraHint){
     };
   }catch(e){}
   // 药盒：只注入本轮 API，不写进 state.messages（阅后即焚）
-  try{ apiMsgs = pillInjectIntoApiMsgs(apiMsgs); }catch(e){}
+  try{ apiMsgs = pillInjectIntoApiMsgs(apiMsgs, !!opts.consumePills); }catch(e){}
   return { apiMsgs, sys };
 }
 
@@ -44324,7 +44326,7 @@ async function triggerAIReply(){
     } else {
       const ag = agentById(target);
       // 带滚动摘要的窗口：contextLimit=0（无限）时启用压缩，token 有界；有限窗口退化为截断
-      const req = buildMainChatRequest(ag, null);
+      const req = buildMainChatRequest(ag, null, { consumePills:true });
       await callOneAgentReply(ag, req.apiMsgs, req.sys);
     }
   }catch(e){
