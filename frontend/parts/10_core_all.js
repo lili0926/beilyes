@@ -3255,6 +3255,8 @@ const state = {
   thoughtOn: LS.get("thoughtOn", false) === true, // 思考链总开关（她 2026-09-21 改成默认关）：关则连 API 的 thinking 参数都不发
   ariesCameraOn: LS.get("ariesCameraOn", false) === true, // Aries 看一眼
   cardsToolOn: LS.get("cardsToolOn", false) === true, // 小卡片工具默认关，避免每条挂 write_cards 多轮扣费
+  xEnabled: LS.get("xEnabled", true) !== false, // 推特协议注入聊天；关=不进 system
+  pocketInjectOn: LS.get("pocketInjectOn", false) === true, // 小浏览器协议；默认关（已用推特替代）
   showThoughtGuide: false,
   editingThinkId: null, // 正在编辑的思考块 tid
   // diary
@@ -5397,7 +5399,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -26286,7 +26288,22 @@ function renderSettings(){
             <span class="toggle-knob" style="left:${state.streamOn===true?18:2}px;pointer-events:none"></span>
           </button>
         </div>
+        
         <div class="setting-row">
+          <span class="setting-label">推特协议注入</span>
+          <button type="button" id="x-inject-toggle" class="toggle-switch" aria-label="推特协议注入" style="background:${state.xEnabled!==false?"var(--accent)":"var(--border)"};border:none;padding:0;flex:none !important;width:36px;height:20px;display:inline-block !important;">
+            <span class="toggle-knob" style="left:${state.xEnabled!==false?18:2}px;pointer-events:none"></span>
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--sub);padding:0 2px 8px;line-height:1.45">关了后聊天 system 不再带 ⟪推特刷/发/…⟫ 说明（约几百字）。要他刷推时再开。</div>
+        <div class="setting-row">
+          <span class="setting-label">小浏览器协议注入</span>
+          <button type="button" id="pocket-inject-toggle" class="toggle-switch" aria-label="小浏览器协议注入" style="background:${state.pocketInjectOn===true?"var(--accent)":"var(--border)"};border:none;padding:0;flex:none !important;width:36px;height:20px;display:inline-block !important;">
+            <span class="toggle-knob" style="left:${state.pocketInjectOn===true?18:2}px;pointer-events:none"></span>
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--sub);padding:0 2px 8px;line-height:1.45">默认关。打开后会注入浏览器暗号；若缓存了刚读的页面正文，还会多出最多约 3500 字摘录。</div>
+<div class="setting-row">
           <span class="setting-label">聊天彩蛋雨</span>
           <button type="button" id="eggs-on-toggle" class="toggle-switch" aria-label="聊天彩蛋雨" style="background:${(typeof localStorage!=="undefined"&&localStorage.getItem("eggs")==="0")?"var(--border)":"var(--accent)"};border:none;padding:0;flex:none !important;width:36px;height:20px;display:inline-block !important;">
             <span class="toggle-knob" style="left:${(typeof localStorage!=="undefined"&&localStorage.getItem("eggs")==="0")?2:18}px;pointer-events:none"></span>
@@ -26912,6 +26929,20 @@ if(!window.__mpDelegated){
         e.preventDefault(); e.stopImmediatePropagation();
         state.cardsToolOn = !state.cardsToolOn;
         try{ persist("cardsToolOn"); }catch(e){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="x-inject-toggle" || raw.closest("#x-inject-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.xEnabled = !(state.xEnabled !== false);
+        try{ persist("xEnabled"); }catch(e){}
+        if(typeof render==="function") render();
+        return;
+      }
+      if(id==="pocket-inject-toggle" || raw.closest("#pocket-inject-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.pocketInjectOn = !state.pocketInjectOn;
+        try{ persist("pocketInjectOn"); }catch(e){}
         if(typeof render==="function") render();
         return;
       }
@@ -38985,9 +39016,8 @@ async function galateaGameWake(){
   finally{ __galateaWakeLock = false; }
 }
 function pocketPromptBlock(){
-  // 小浏览器 2026-09-19 她要删掉：看推改走「推特」暗号（服务器上他自己的号）。
-  // 代码先留着（截图/读页/自动接话牵连多处），只是不再注入，他就不会用。
-  return "";
+  // 默认关：看推走「推特」暗号。设置页可重新打开「小浏览器协议注入」。
+  if(state.pocketInjectOn !== true) return "";
   if(!pocketNative()) return "";
   let cacheBlock = "";
   const c = state.pocketPageCache;
