@@ -1433,8 +1433,7 @@ function claudeThinkingParam(){
  *   Y 断点打在 messages[0]（假 ack）   → read = 6727   命中
  *   Z 同时打 messages[0] 和 len-2      → read = 6742   命中
  * 也就是说这套「假 ack」结构不是历史包袱，是**这家中转唯一吃得到缓存的摆法**。
- * 另外：OpenAI 兼容口（/chat/completions）的自动缓存**只在整个请求逐字节相同时**才命中，
- * 对增长中的对话等于没有 —— 主聊天要吃到缓存就得走 Claude 通道 + claudeBase。
+ * OpenAI 兼容口的缓存行为取决于上游；官方 OpenAI 会复用相同的提示词前缀。
  *
  * ⚠️ 最小可缓存前缀随模型变，而且**不是越新越小**：Opus 5 是 512 token，
  * 但**默认的 Opus 4.6 要 4096**（Haiku 4.5 也是 4096）。低于这个数不报错、也不建条目，
@@ -1537,6 +1536,10 @@ function __claudeCacheMark(msgs){
   }catch(e){ return msgs; }
 }
 
+function __openaiPromptCacheKey(ag){
+  return ag && ag.openaiCacheKeyOn && ag.id ? "eden-chat:" + String(ag.id) : "";
+}
+
 async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
   // 支持直接传 agent 对象（apiConfig._agent 或 apiConfig 本身带 channel=gemini）
   const ag = apiConfig._agent || null;
@@ -1628,6 +1631,7 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
           // 缺字段就留 null，别兜成 0 —— 见 __usageLine 里那段
           cache_read: __cacheNum(data.usage.cache_read_input_tokens),
           cache_write: __cacheNum(data.usage.cache_creation_input_tokens),
+          cacheFields: __cacheUsageFields(data.usage),
           ts: Date.now(),
         };
         if (typeof __pushUsageLog === "function") __pushUsageLog(state.__lastUsage);
@@ -1659,7 +1663,10 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
         const sp = __sysCacheSplit(systemPrompt);
         const conv = messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m);
         const msgs = sp.head ? [{ role:"system", content: sp.head }, ...conv] : conv;
-        return { model: openaiModel || "gpt-4o", messages: __appendVolatile(msgs, sp.tail) };
+        const body = { model: openaiModel || "gpt-4o", messages: __appendVolatile(msgs, sp.tail) };
+        const key = __openaiPromptCacheKey(ag);
+        if(key) body.prompt_cache_key = key;
+        return body;
       })()),
     }, __timeoutMs);
     const data = await res.json();
@@ -2096,7 +2103,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
     // cacheRead/Write 初值是 **null 不是 0** —— 没收到这两个字段时要能说「看不到」，
     // 而不是印一个我们自己兜出来的 0。流式和非流式是两条链路，
     // 缓存很可能只在其中一条上生效，所以这里也必须分得清「没命中」和「看不见」。
-    let input=0, output=0, cacheRead=null, cacheWrite=null;
+    let input=0, output=0, cacheRead=null, cacheWrite=null, cacheFields="";
     let curType = null;
     for await (const ev of __sse(res.body)){
       const d = ev.data;
@@ -2106,6 +2113,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
         input = u.input_tokens||0;
         cacheRead = __cacheNum(u.cache_read_input_tokens);
         cacheWrite = __cacheNum(u.cache_creation_input_tokens);
+        cacheFields = __cacheUsageFields(u);
       } else if(ev.event === "message_delta"){
         const u = d.usage || {};
         if(u.output_tokens != null) output = u.output_tokens;
@@ -2117,7 +2125,7 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
         else if(curType === "text" && dl.text){ text += dl.text; throttledLive(); }
       }
     }
-    return finish({ input, output, cache_read: cacheRead, cache_write: cacheWrite, ts: Date.now() });
+    return finish({ input, output, cache_read: cacheRead, cache_write: cacheWrite, cacheFields, ts: Date.now() });
   }
 
   // —— Gemini（streamGenerateContent?alt=sse）——
@@ -2154,6 +2162,8 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
       __spO.head ? [{ role:"system", content: __spO.head }, ...__convO] : __convO,
       __spO.tail),
   };
+  const cacheKey = __openaiPromptCacheKey(ag);
+  if(cacheKey) body.prompt_cache_key = cacheKey;
   const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
@@ -2176,11 +2186,10 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   }
   let u = null;
   if(usageObj){
-    const pd = usageObj.prompt_tokens_details || {};
     u = { input: usageObj.prompt_tokens||0, output: usageObj.completion_tokens||0,
-          cache_read: pd.cached_tokens || usageObj.prompt_cache_hit_tokens || usageObj.cache_read_input_tokens
-            || usageObj.claude_cache_read_input_tokens || pd.cache_read_input_tokens || 0,
-          cache_write: __oaiCacheWrite(usageObj), ts: Date.now() };
+          cache_read: __oaiCacheRead(usageObj),
+          cache_write: __oaiCacheWrite(usageObj), cacheFields:__cacheUsageFields(usageObj),
+          inputIncludesCache:true, ts: Date.now() };
   }
   return finish(u);
 }
@@ -2295,7 +2304,8 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
         state.__lastUsage = {
           input: data.usage.input_tokens||0, output: data.usage.output_tokens||0,
           cache_read: __cacheNum(data.usage.cache_read_input_tokens),
-          cache_write: __cacheNum(data.usage.cache_creation_input_tokens), ts: Date.now(),
+          cache_write: __cacheNum(data.usage.cache_creation_input_tokens),
+          cacheFields: __cacheUsageFields(data.usage), ts: Date.now(),
         };
         if(typeof __pushUsageLog==="function") __pushUsageLog(state.__lastUsage);
       }
@@ -2325,6 +2335,7 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
       __spO.head ? [{ role:"system", content: __spO.head }, ...convo] : convo,
       __spO.tail),
   };
+  if(creds.openaiCacheKey) body.prompt_cache_key = creds.openaiCacheKey;
   if(toolsParam){ body.tools = toolsParam; body.tool_choice = "auto"; }
   const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
@@ -2486,6 +2497,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     openaiKey: ag ? ag.openaiKey : cfg.openaiKey,
     openaiBase: (ag ? ag.openaiBase : cfg.openaiBase) || "https://api.openai.com/v1",
     openaiModel: (ag ? ag.openaiModel : cfg.openaiModel) || "gpt-4o",
+    openaiCacheKey: __openaiPromptCacheKey(ag),
     geminiKey: ag ? ag.geminiKey : (cfg.geminiKey || ""),
     geminiModel: (ag ? ag.geminiModel : cfg.geminiModel) || "gemini-2.0-flash",
   };
@@ -5378,7 +5390,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
 /**
  * OpenAI 兼容口的「缓存写入」到底记在哪个字段。
  *
- * 原来只读 `prompt_tokens_details.cache_creation_input_tokens` —— 那是 OpenAI 的形状，
+ * 原来只读 `prompt_tokens_details.cache_creation_input_tokens` —— 部分中转不用这个字段，
  * **她的中转（九十 `[AG2缓存按量]`）不用这个**。2026-09-24 实测那条 usage 长这样：
  *   { prompt_tokens, prompt_tokens_details:{cached_tokens}, input_tokens,
  *     claude_cache_creation_5_m_tokens, claude_cache_creation_1_h_tokens, usage_source:"anthropic" }
@@ -5386,16 +5398,33 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
  * 于是第一发（真的在写缓存）被印成「没走缓存」—— 那行字撒了很久的谎。
  * 顺带这两个字段还能白拿一个信息：**这次写的是 5 分钟档还是 1 小时档**，
  * 也就是文章里「排查第一步：先确认档位」那件事，一分钱不花就看得到。
+ * `prompt_cache_miss_tokens` 只是未命中，不能算成写入。
  */
 function __oaiCacheWrite(u){
-  if(!u || typeof u !== "object") return 0;
-  const pd = u.prompt_tokens_details || {};
-  const n = (x)=> (typeof x === "number" && isFinite(x)) ? x : 0;
-  return n(pd.cache_creation_input_tokens)
-    + n(u.claude_cache_creation_5_m_tokens)
-    + n(u.claude_cache_creation_1_h_tokens)
-    + n(u.cache_creation_input_tokens)
-    + n(u.prompt_cache_miss_tokens);
+  if(!u || typeof u !== "object") return null;
+  const pd = u.prompt_tokens_details || u.input_tokens_details || {};
+  const n = (x)=> (typeof x === "number" && isFinite(x)) ? x : null;
+  const five = n(u.claude_cache_creation_5_m_tokens), hour = n(u.claude_cache_creation_1_h_tokens);
+  if(five != null || hour != null) return (five || 0) + (hour || 0);
+  // These are alternative representations of the same write count, not additive.
+  return n(pd.cache_write_tokens) ?? n(pd.cache_creation_input_tokens) ?? n(u.cache_creation_input_tokens);
+}
+function __oaiCacheRead(u){
+  const pd = (u && (u.prompt_tokens_details || u.input_tokens_details)) || {};
+  return __cacheNum(pd.cached_tokens ?? u?.prompt_cache_hit_tokens ?? u?.cache_read_input_tokens ?? u?.claude_cache_read_input_tokens ?? pd.cache_read_input_tokens);
+}
+function __cacheUsageFields(u){
+  if(!u || typeof u !== "object") return "";
+  const fields = [];
+  const add = (obj, prefix)=>Object.entries(obj || {}).forEach(([k,v])=>{
+    if(/cache/i.test(k) && typeof v === "number") fields.push(prefix + k + "=" + v);
+  });
+  add(u, "");
+  add(u.prompt_tokens_details || u.input_tokens_details, "details.");
+  Object.entries(u.cache_creation || {}).forEach(([k,v])=>{
+    if(typeof v === "number") fields.push("cache_creation." + k + "=" + v);
+  });
+  return fields.join(" · ");
 }
 /** 这次的缓存写入落在哪个档：返回 "1h" / "5m" / "" */
 function __oaiCacheTier(u){
@@ -19405,8 +19434,8 @@ try{ migrateVpsIp(); }catch(e){}   // 启动就跑一次，不等打开电话页
  * 一次性迁移：把走「OpenAI 兼容 + 九十中转」的联系人切到 Claude 通道。
  *
  * 为什么非切不可（2026-09-24 在她的中转上实测的，别再重测，那是花钱买的）：
- *   - OpenAI 兼容口（/chat/completions）的自动缓存**只在整个请求逐字节相同时**才命中，
- *     对增长中的对话等于没有缓存。
+ *   - 当时这家中转的 OpenAI 兼容口对增长中的对话没有读到缓存；
+ *     这是该中转的实测结果，不代表官方 OpenAI 的前缀缓存行为。
  *   - 原生 /messages + 打在 messages[0] 的 cache_control：对话增长、动态块变化，
  *     第二发照样 read=6727。**只有这条路吃得到缓存。**
  * 同一把 key、同一个 base、同一个模型名都能用，换的只是请求格式。
@@ -25961,7 +25990,7 @@ function renderPrompts(){
    把这位 AI 当前填的整套通道配置（渠道 + Key + Base + 模型）存成一张卡，
    换渠道时点一下切回来，不用把输入框清空重填。
    只覆盖下面这几个字段 —— 名字/头像/气泡色/专属思考引导是人设，不跟着换。 */
-const AP_FIELDS = ["channel","claudeBase","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel",
+const AP_FIELDS = ["channel","claudeBase","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel","openaiCacheKeyOn",
                    "geminiKey","geminiModel","ccWsUrl","ccPin","ccModel"];
 const AP_CH_LABEL = { claude:"Claude", openai:"OpenAI", gemini:"Gemini", cc:"CC" };
 
@@ -26066,6 +26095,8 @@ function renderAgentSettingsBlock(ag, idx){
           <input id="${prefix}-openaiBase" value="${escAttr(ag.openaiBase||"https://api.openai.com/v1")}" placeholder="https://api.openai.com/v1"/></div>
         <div class="setting-row"><span class="setting-label">模型</span>
           <input id="${prefix}-openaiModel" value="${escAttr(ag.openaiModel||"gpt-4o")}" placeholder="gpt-4o"/></div>
+        <div class="setting-row"><span class="setting-label">尝试缓存键</span>
+          <label><input type="checkbox" id="${prefix}-openaiCacheKeyOn" ${ag.openaiCacheKeyOn?"checked":""}/> 同一位 Aries 使用固定键；先关闭测普通请求，再开启对比。兼容网关可能不支持。</label></div>
       `}
       <div class="setting-row"><span class="setting-label">气泡强调色</span>
         <input id="${prefix}-color" type="color" value="${escAttr(ag.color||"#D4A5A5")}" style="width:48px;height:28px;border:none;background:transparent;padding:0"/></div>
@@ -29012,10 +29043,29 @@ function bindEvents(){
       const val = btn.dataset.val;
       const ag = agentById(id);
       if(!ag) return;
+      if(val==="openai" && ag.channel==="claude" && !ag.openaiKey
+         && (!ag.openaiBase || ag.openaiBase==="https://api.openai.com/v1")){
+        try{
+          const base = new URL(ag.claudeBase || "");
+          if(base.hostname === "api.jumenai.net"){
+            ag.openaiBase = base.origin + "/v1";
+            ag.openaiKey = ag.claudeKey || "";
+            ag.openaiModel = ag.claudeModel || "claude-opus-4-6";
+          }
+        }catch(e){}
+      }
       ag.channel = val;
       persist("agents");
       // 同步 AI1 到旧 apiConfig，供辅助 API 复用
-      if(id==="a1"){ state.apiConfig.channel = val==="gemini"?"openai":val; persist("apiConfig"); }
+      if(id==="a1"){
+        state.apiConfig.channel = val==="gemini"?"openai":val;
+        if(val==="openai"){
+          state.apiConfig.openaiBase = ag.openaiBase;
+          state.apiConfig.openaiKey = ag.openaiKey;
+          state.apiConfig.openaiModel = ag.openaiModel;
+        }
+        persist("apiConfig");
+      }
       render();
     };
   });
@@ -29104,6 +29154,8 @@ function bindEvents(){
     bind("openaiKey", prefix+"-openaiKey");
     bind("openaiBase", prefix+"-openaiBase");
     bind("openaiModel", prefix+"-openaiModel");
+    const cacheKeyToggle = document.getElementById(prefix+"-openaiCacheKeyOn");
+    if(cacheKeyToggle) cacheKeyToggle.onchange = ()=>{ ag.openaiCacheKeyOn = cacheKeyToggle.checked; persist("agents"); };
     bind("color", prefix+"-color", true);
     bind("avatar", prefix+"-avatar", true);
     bind("thoughtGuide", prefix+"-thoughtGuide");
@@ -36730,6 +36782,8 @@ function prefixWatchLine(w){
     const more = w.nChanged > w.changed.length ? ` 等 ${w.nChanged} 块` : "";
     head = `前缀：变了 —— ${w.changed.join("、")}${more}${win}`;
   }
+  if(w.wireHeadSame === false) head += "；实际请求的人设前缀变了";
+  if(w.toolsSame === false) head += "；工具定义变了";
 
   // ② 历史那层。**只有这两层都干净，缓存才可能命中** ——
   // 人设没变但第 5 条历史变了的话，第 6 条往后照样全 miss，
@@ -36739,6 +36793,19 @@ function prefixWatchLine(w){
   if(d == null || d < 0 || !w.msgPrevN) return head + "；历史：还比不出来";
   if(d >= w.msgPrevN - 1) return head + `；历史 ${w.msgN} 条，缓存边界内一条没动 ✓ 应当命中`;
   return head + `；**历史从第 ${d} 条起就变了**（共 ${w.msgN} 条）${w.msgCulprit ? " —— " + w.msgCulprit : ""}，从那儿往后全 miss`;
+}
+
+function __cacheShapeWatch(sys, tools){
+  const next = {
+    head: __strHash(__sysCacheSplit(sys).head),
+    tools: __strHash(JSON.stringify(tools || [])),
+  };
+  const prev = state.__cacheShape;
+  if(state.__prefixWatch){
+    state.__prefixWatch.wireHeadSame = prev ? prev.head === next.head : null;
+    state.__prefixWatch.toolsSame = prev ? prev.tools === next.tools : null;
+  }
+  state.__cacheShape = next;
 }
 
 /** 把上面记下的分解写成一行人话。中文约 1.5 token/字，所以顺手把 token 估出来。 */
@@ -36832,7 +36899,7 @@ function __pushUsageLog(u){
  * 一条请求的 token 账，人话版。
  * 加这句判定是因为**缓存失效是静默的** —— 请求照样成功，只是账单变贵，不报任何错。
  * 唯一的地面真相就是 cache_read / cache_write 这两个数。
- * 注意 input 只是「没命中缓存的那部分」，整条请求的大小 = input + read + write。
+ * Claude 原生的 input 是未缓存部分；OpenAI 的 prompt_tokens 已包含缓存命中部分。
  */
 /**
  * 缓存字段要**三态**：命中 / 没命中 / **看不见**。
@@ -36858,12 +36925,13 @@ function __usageLine(u){
            `（输出 ${u.output||0}）`;
   }
   const rr = r||0, ww = w||0;
-  const total = rr + ww + i;
+  const total = u.inputIncludesCache ? i : rr + ww + i;
   let verdict;
   if(rr > 0)      verdict = `缓存命中 ${Math.round(rr*100/Math.max(1,total))}%`;
-  else if(ww > 0) verdict = "首次写入缓存（下一条才开始省）";
-  else            verdict = "没走缓存";
-  return `${verdict} · 读 ${rr} · 写 ${ww} · 未命中 ${i} · 输出 ${u.output||0}（共 ${total}）`;
+  else if(ww > 0) verdict = "本次写入缓存（后续是否命中待确认）";
+  else            verdict = "本次未读到缓存";
+  const inputLabel = u.inputIncludesCache ? `输入总计 ${i}` : `未命中 ${i}`;
+  return `${verdict} · 读 ${rr} · 写 ${w == null ? "—" : ww} · ${inputLabel} · 输出 ${u.output||0}（共 ${total}）`;
 }
 function __recordUsage(u){
   if(!u) return;
@@ -36879,9 +36947,10 @@ function __recordUsageFromData(data){
     __recordUsage({
       input: u.prompt_tokens || 0,
       output: u.completion_tokens || 0,
-      cache_read: pd.cached_tokens || u.prompt_cache_hit_tokens || u.cache_read_input_tokens
-        || u.claude_cache_read_input_tokens || pd.cache_read_input_tokens || 0,
+      cache_read: __oaiCacheRead(u),
       cache_write: __oaiCacheWrite(u),
+      cacheFields: __cacheUsageFields(u),
+      inputIncludesCache: true,
       ts: Date.now(),
     });
   } else if(u.input_tokens != null || u.output_tokens != null){
@@ -36892,6 +36961,7 @@ function __recordUsageFromData(data){
       output: u.output_tokens || 0,
       cache_read: __cacheNum(u.cache_read_input_tokens),
       cache_write: __cacheNum(u.cache_creation_input_tokens),
+      cacheFields: __cacheUsageFields(u),
       ts: Date.now(),
     });
   }
@@ -36905,6 +36975,7 @@ function __recordUsageFromGemini(data){
     output: um.candidatesTokenCount || 0,
     cache_read: um.cachedContentTokenCount || 0,
     cache_write: 0,
+    inputIncludesCache: true,
     ts: Date.now(),
   });
 }
@@ -36914,7 +36985,9 @@ function usageLogText(){
   const n = v => (v == null ? "看不到" : v);   // null＝站子没回这个字段，别印成 0
   const s = v => (v == null ? "—" : v);
   const parts = __usageLog.slice(-8).map(u=>`${fmtClock(u.ts)} r${s(u.cache_read)} w${s(u.cache_write)} i${u.input} o${u.output}`).join("\n");
-  return `最近一次：读 ${n(last.cache_read)} · 写 ${n(last.cache_write)} · 输入 ${last.input} · 输出 ${last.output}\n\n最近 8 条：\n${parts}`;
+  return `最近一次：读 ${n(last.cache_read)} · 写 ${n(last.cache_write)} · 输入 ${last.input} · 输出 ${last.output}`
+    + (last.cacheFields ? `\n网关原始缓存字段：${last.cacheFields}` : "\n网关未返回可辨认的缓存数字字段")
+    + `\n\n最近 8 条：\n${parts}`;
 }
 function fmtClock(ts){
   if(!ts) return "--:--";
@@ -37036,6 +37109,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
           sysCam = (sysCam||sys||"")+ctip;
         }
       }
+      __cacheShapeWatch(sysCam, tools);
       const r = await callChatAPIAdvanced(cfg, apiMsgs, sysCam, {
         tools,
         toolHandler: __ariesToolHandler,
@@ -37065,6 +37139,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
         sysStream = { static:(sysStream.static||"")+ctip, dynamic:sysStream.dynamic||"" };
       } else sysStream = (sysStream||"")+ctip;
     }
+    __cacheShapeWatch(sysStream, []);
     streamLiveStart({ id: ag.id, name: ag.name, color: ag.color });
     try{
       const r = await callChatAPIStream(cfg, apiMsgs, sysStream, {
@@ -37078,6 +37153,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     }
     streamLiveEnd();
   } else {
+    __cacheShapeWatch(sys, []);
     reply = await callChatAPI(cfg, apiMsgs, sys||null);
   }
   const { thinking, body } = parseThinking(reply);
