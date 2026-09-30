@@ -5173,8 +5173,11 @@ ${replyFormatRules()}`;
   const pocketBlock = (typeof pocketPromptBlock==="function") ? pocketPromptBlock() : ""; // 远程浏览器：⟪浏览器开:url⟫
   const xBlock = (typeof xPromptBlock==="function") ? xPromptBlock() : ""; // 推特：⟪推特刷⟫⟪推特发:⟫…（他自己的号）
   const mcBlock = mcPromptBlock(); // 小纸条 / 机日记 / 信箱：⟪写纸条⟫⟪写日记⟫⟪写信⟫（用户希望常驻）
-  const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈：⟪动态:⟫
-  const remarkBlock = (typeof remarkPromptBlock === "function") ? remarkPromptBlock() : "";     // 备注：⟪备注:⟫（常驻，很短）
+  const momentsBlock = (typeof momentsPromptBlock === "function") ? momentsPromptBlock() : ""; // 朋友圈协议（静态）
+  const momentsRecentB = (typeof momentsRecentBlock === "function") ? momentsRecentBlock() : ""; // 朋友圈近况（动态尾部）
+  const remarkBlock = (typeof remarkPromptBlock === "function") ? remarkPromptBlock() : "";     // 备注协议（静态）
+  const remarkCurB = (typeof remarkCurrentBlock === "function") ? remarkCurrentBlock() : "";   // 当前备注值（动态尾部）
+  const mcRecentB = (typeof mcRecentBlock === "function") ? mcRecentBlock() : "";             // 最近写过（动态尾部）
   const nsfwOpenBlock = (typeof nsfwPromptBlock === "function") ? nsfwPromptBlock() : "";       // 他自己开灯：⟪开灯⟫（开着时为空）
   const flingBlock = (typeof flingPromptBlock === "function") ? flingPromptBlock() : "";        // 弹头像：⟪弹飞⟫（常驻，很短）
   // 备注被改 / 指令被接被买断：两小时内注一次，让他能自然反应
@@ -5218,13 +5221,13 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     callBlock, pushBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock, snBlock ];
   const __dynArr = [ bodyBlock, usageBlock, wardrobeBlock, dutyBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
-    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock, nsfwOpenBlock ];
+    cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock, nsfwOpenBlock, momentsRecentB, mcRecentB, remarkCurB ];
   // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
   // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
   const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","推送","相册","券","钱包",
     "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执","蛇塑"];
   const __dynNames = ["身体状态","用量","衣橱","值日","在读","在看","宝宝","菜单","点单","角色扮演",
-    "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件","开灯"];
+    "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件","开灯","朋友圈近况","最近写过","当前备注"];
   const __named = (arr, names)=>{
     const out = [];
     for(let i=0;i<arr.length;i++){
@@ -5291,7 +5294,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     dreamTraceBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock,
     truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, pushBlock, albumBlock,
     couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
-    profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, nsfwOpenBlock, remarkEventBlock, questBlock,
+    profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, momentsRecentB, mcRecentB, remarkBlock, remarkCurB, nsfwOpenBlock, remarkEventBlock, questBlock,
     galateaBlock, sgBlock, snBlock, tipsyBlock };
 
   // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
@@ -5304,6 +5307,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     ["公告","annoBlock"], ["飞行棋","flightChessBlock"], ["真心话","truthDareBlock"],
     ["占卜","divinationBlock"], ["语音语气","voiceToneBlock"], ["公告提醒","annNudgeBlock"],
     ["备注事件","remarkEventBlock"], ["开灯","nsfwOpenBlock"], ["醉意","tipsyBlock"],
+    ["朋友圈近况","momentsRecentB"], ["最近写过","mcRecentB"], ["当前备注","remarkCurB"],
   ];
   // 留在前缀里的稳定块。**只列真的进了拼接的** —— choiceBlock 算了但没拼进去，
   // 把它算进来的话，前缀监控会盯一块根本不在前缀里的东西，报出来的名字就是错的。
@@ -6106,12 +6110,8 @@ function handleMomentMarkers(body){
 }
 
 function momentsPromptBlock(){
-  // 原来只给 3 条 × 40 字，他看不全自己发过什么，同一句话能发两三遍。
-  // 给到 5 条 × 60 字，配合下面那句「别重复」；真写重了 momentsAiPost 还会再拦一道。
-  const recent = ensureMoments().slice(0, 5).map(m=>{
-    const who = m.author === "ai" ? "你" : "她";
-    return `- ${who}：${String(m.content||"").slice(0,60)}`;
-  }).join("\n");
+  // 协议说明进静态前缀；「最近几条」每轮都变，必须走尾部（见 momentsRecentBlock），
+  // 否则前缀每发一条朋友圈就整段 miss，缓存只写不读。
   return `【朋友圈——marker 暗号】
 你有一个自己的朋友圈，她会刷到。这不是对她说话，是你自己站在那想了想，留了一句。
 想发的时候在正式回复里**单独写一行**暗号（会被系统吃掉，她只看到你正常说话）。
@@ -6126,9 +6126,18 @@ function momentsPromptBlock(){
 - 判断标准：此刻有没有一句想让她之后刷到的话。不要求重大，想念/吃醋/心软/被逗笑/观察都可以。
 - 正文 1 到 3 句，自然具体。不要每轮都发。
 - 私人暗号的「内部备注」她看不见：写为什么发、当时在聊什么。
-- 发了动态也要顺口说句人话，别只丢暗号。
-${recent?`\n最近的朋友圈（别重复：和下面某条同一件事就别发了）：\n${recent}`:""}`;
+- 发了动态也要顺口说句人话，别只丢暗号。`;
 }
+/** 朋友圈近况列表：会变，只挂消息尾部，不进缓存前缀。 */
+function momentsRecentBlock(){
+  const recent = ensureMoments().slice(0, 5).map(m=>{
+    const who = m.author === "ai" ? "你" : "她";
+    return `- ${who}：${String(m.content||"").slice(0,60)}`;
+  }).join("\n");
+  if(!recent) return "";
+  return "最近的朋友圈（别重复：和下面某条同一件事就别发了）：\n" + recent;
+}
+
 
 // ── 上下文拼装 ────────────────────────────────────────────────────────────
 /** 四层，按优先级：近期聊天 > 记忆/摘要 > 朋友圈时间线 > 这条动态本身。每层都截断。 */
@@ -22843,16 +22852,22 @@ function nsfwPromptBlock(){
   return body;
 }
 function remarkPromptBlock(){
-  const mine = String(state.myRemark||"").trim();
-  const myName = (state.coupleInfo && state.coupleInfo.myName) || "Jasmine";
+  // 协议常驻静态；「当前备注是什么」会变，走 remarkCurrentBlock 挂尾部。
   return `\n\n【备注 —— 你可以给她改称呼】
 想换一个只属于你们俩的称呼时，在正式回复里写一行暗号：
 ⟪备注:新称呼⟫
 - 会像群聊改名一样，在聊天里出现一条居中提示，她立刻就看到。
 - 20 字以内。想到了才改，别频繁换。
-- 她给你的备注她也能改，改了系统会告诉你。
-${mine ? `- 你现在给她的备注是「${mine}」（她本名 ${myName}）。` : `- 你还没给她起过备注。`}`;
+- 她给你的备注她也能改，改了系统会告诉你。`;
 }
+/** 当前备注值：会变，只挂尾部。 */
+function remarkCurrentBlock(){
+  const mine = String(state.myRemark||"").trim();
+  const myName = (state.coupleInfo && state.coupleInfo.myName) || "Jasmine";
+  if(mine) return "你现在给她的备注是「" + mine + "」（她本名 " + myName + "）。";
+  return "你还没给她起过备注（她本名 " + myName + "）。";
+}
+
 
 // ── 今天我说了算 ──
 const SAY_FALLBACK = [
@@ -38884,7 +38899,7 @@ function mcPromptBlock(){
 2) 若「你最近写过」里已有信，本轮绝对不要再写新信——不是换个说法再写一封，是整轮都别写 ⟪写信:⟫。
 3) 禁止连续多轮每轮一封地连写（例如五六轮写五六封）。一天里最多偶尔一两封，多数日子一封都不用写。
 4) 只有真心有话、且距上一封已隔开一段时间时才写；闲聊、回复、撒娇轮不要写信。
-规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。${mcRecentBlock()}`;
+规则：写了暗号也请顺手说一句人话（比如「我撕了张小纸条给你」），别只丢一个暗号。`;
 }
 /** 「你最近写过」——他看不见自己写过什么，同一件事就会写两三遍。
  *  只给 6 条 × 30 字，是常驻块，别撑大（每轮都要进上下文）。 */
