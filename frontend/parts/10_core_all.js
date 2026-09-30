@@ -2213,10 +2213,21 @@ function sanitizeMcpSchema(schema){
         delete node[k];
       } else if(k==="type" && Array.isArray(v)){
         node.type = v[0] || "string";
-      } else if(v && typeof v === "object"){
+      } else if(v && typeof v === "object" && !Array.isArray(v)){
         clean(v);
       } else if(Array.isArray(v)){
         v.forEach(x=>{ if(x && typeof x==="object") clean(x); });
+      }
+    }
+    // 部分中转（Claude 工具协议）要求 enum 必须是字符串，数字 1/3 会 400
+    if(Array.isArray(node.enum) && node.enum.length){
+      let coerced = false;
+      node.enum = node.enum.map(x=>{
+        if(typeof x === "number" || typeof x === "boolean"){ coerced = true; return String(x); }
+        return x;
+      });
+      if(coerced && (node.type === "number" || node.type === "integer" || node.type == null)){
+        node.type = "string";
       }
     }
   })(out);
