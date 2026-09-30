@@ -1491,9 +1491,26 @@ function __appendVolatile(msgs, tail){
   return out;
 }
 const CLAUDE_CACHE_TTL = "1h";
+function __mergeConsecutiveRoles(msgs){
+  // Claude 要求 user/assistant 严格交替；本轮上下文可能紧跟在最后一条 user 后
+  if(!Array.isArray(msgs) || msgs.length < 2) return msgs;
+  const out = [];
+  for(let i=0;i<msgs.length;i++){
+    const m = msgs[i];
+    if(!m) continue;
+    const prev = out.length ? out[out.length-1] : null;
+    if(prev && prev.role === m.role && typeof prev.content === "string" && typeof m.content === "string"){
+      out[out.length-1] = Object.assign({}, prev, { content: prev.content + "\n\n" + m.content });
+    } else {
+      out.push(m);
+    }
+  }
+  return out;
+}
 function __claudeCacheMark(msgs){
   try{
     if(state.claudeCacheOn === false) return msgs;
+    msgs = __mergeConsecutiveRoles(msgs);
     if(!Array.isArray(msgs) || msgs.length < 2) return msgs;
     // ⚠️ 先把**所有**消息统一成 block 数组，再打断点。
     // 不统一的话会踩一个自己把自己废掉的坑：断点每轮往后挪一格，
@@ -2161,7 +2178,8 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   if(usageObj){
     const pd = usageObj.prompt_tokens_details || {};
     u = { input: usageObj.prompt_tokens||0, output: usageObj.completion_tokens||0,
-          cache_read: pd.cached_tokens || usageObj.prompt_cache_hit_tokens || 0,
+          cache_read: pd.cached_tokens || usageObj.prompt_cache_hit_tokens || usageObj.cache_read_input_tokens
+            || usageObj.claude_cache_read_input_tokens || pd.cache_read_input_tokens || 0,
           cache_write: __oaiCacheWrite(usageObj), ts: Date.now() };
   }
   return finish(u);
@@ -5310,16 +5328,20 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     ["占卜","divinationBlock"], ["语音语气","voiceToneBlock"], ["公告提醒","annNudgeBlock"],
     ["备注事件","remarkEventBlock"], ["开灯","nsfwOpenBlock"], ["醉意","tipsyBlock"],
     ["朋友圈近况","momentsRecentB"], ["最近写过","mcRecentB"], ["当前备注","remarkCurB"],
+    // 关键词/状态会闪的协议：放尾部，否则前缀每轮字节都变 → 缓存只写不读
+    ["电话","callBlock"], ["推送","pushBlock"], ["券","couponBlock"], ["钱包","walletBlock"],
+    ["项目文件","projectFileBlock"], ["狗狗动作","puppyActionBlock"], ["资料","profileBlock"],
+    ["任务","questBlock"], ["口袋","pocketBlock"], ["推特","xBlock"], ["Galatea","galateaBlock"],
   ];
   // 留在前缀里的稳定块。**只列真的进了拼接的** —— choiceBlock 算了但没拼进去，
   // 把它算进来的话，前缀监控会盯一块根本不在前缀里的东西，报出来的名字就是错的。
   const __STATIC_ORDER = [
+    // 只留真稳定的：关键词闪的协议已挪到 __DYN_ORDER
     ["人设","base"], ["时间提示","timeHint"], ["思考引导","guide"], ["NSFW格式","nsfwFormatBlock"],
-    ["电话","callBlock"], ["推送","pushBlock"], ["相册","albumBlock"], ["券","couponBlock"],
-    ["钱包","walletBlock"], ["项目文件","projectFileBlock"], ["狗狗动作","puppyActionBlock"],
-    ["表情","stickerBlock"], ["拽头像","flingBlock"], ["资料","profileBlock"], ["口袋","pocketBlock"], ["推特","xBlock"],
-    ["MC","mcBlock"], ["朋友圈","momentsBlock"], ["备注","remarkBlock"], ["任务","questBlock"],
-    ["Galatea","galateaBlock"], ["回执","sgBlock"], ["蛇塑","snBlock"],
+    ["相册","albumBlock"],
+    ["表情","stickerBlock"], ["拽头像","flingBlock"],
+    ["MC","mcBlock"], ["朋友圈","momentsBlock"], ["备注","remarkBlock"],
+    ["回执","sgBlock"], ["蛇塑","snBlock"],
   ];
 
   const __STATIC_ONLY = Object.assign({}, __ALL);
@@ -36544,12 +36566,20 @@ function buildMainChatRequest(ag, extraHint, opts){
   const keepFull = guardKeepFull(win.messages); // 只有最近两条被拦的给完整措辞
   const apiMsgs = win.messages.map(m=>{
     if(m.role==="user"){
-      const out = { role:"user", content:`[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${toneLabel(m)}${truthDareCardLabel(m)}${m.content}` };
+      // 冻结首次进 API 的正文：语气精修事后改 m.tone 不会改写历史字节（否则前缀必 miss）
+      if(!m._apiFrozen){
+        m._apiFrozen = `[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${toneLabel(m)}${truthDareCardLabel(m)}${m.content}`;
+      }
+      const out = { role:"user", content: m._apiFrozen };
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
       return out;
     }
     const gc = guardApiContent(m, keepFull.has(m)); // 被拦那条：只说「没送到」，不给原文
-    return { role:"assistant", content: gc != null ? gc : (truthDareCardLabel(m) + m.content) };
+    if(gc != null) return { role:"assistant", content: gc };
+    if(!m._apiFrozen){
+      m._apiFrozen = truthDareCardLabel(m) + m.content;
+    }
+    return { role:"assistant", content: m._apiFrozen };
   });
   if(win.summary){
     sys = (sys? sys+"\n\n" : "") + "【早前对话摘要（压缩前的逐字记录已不必再看）】\n" + win.summary;
@@ -36571,9 +36601,9 @@ function buildMainChatRequest(ag, extraHint, opts){
     dynLen = dynB.length; memLen = memB.length; ruleLen = toneRule.length; tickLen = tickB.length;
     const tail = [dynB, bridgeB, memB, toneRule, tickB].filter(Boolean).join("\n\n");
     tailLen = tail.length;
-    if(tail && apiMsgs.length){
-      const last = apiMsgs[apiMsgs.length - 1];
-      if(last && typeof last.content === "string") last.content = last.content + "\n\n" + tail;
+    if(tail){
+      // 独立末条，不改写历史。以前挂最后一条 → 下轮变历史去掉尾部 → 前缀 miss。
+      apiMsgs.push({ role:"user", content:"【本轮上下文·仅本轮有效】\n" + tail });
     }
   }catch(e){}
   // ── 这一条请求到底由谁占的 ──────────────────────────────────────────────
@@ -36849,7 +36879,8 @@ function __recordUsageFromData(data){
     __recordUsage({
       input: u.prompt_tokens || 0,
       output: u.completion_tokens || 0,
-      cache_read: pd.cached_tokens || u.prompt_cache_hit_tokens || 0,
+      cache_read: pd.cached_tokens || u.prompt_cache_hit_tokens || u.cache_read_input_tokens
+        || u.claude_cache_read_input_tokens || pd.cache_read_input_tokens || 0,
       cache_write: __oaiCacheWrite(u),
       ts: Date.now(),
     });
