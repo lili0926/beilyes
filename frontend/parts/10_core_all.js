@@ -26931,7 +26931,6 @@ if(!window.__mpDelegated){
         if(typeof render==="function") render();
         return;
       }
-      }
       if(id==="ward-feed-toggle" || id==="ward-feed"){
         e.preventDefault(); e.stopImmediatePropagation();
         state.wardrobeFeedChat = !state.wardrobeFeedChat;
