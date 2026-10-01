@@ -2757,6 +2757,123 @@ function memStamp(obj, who){
   return obj;
 }
 
+// ─── 记忆检索 / 去重 / 注入（2026-10-01，参考 github.com/1205peng/ai-memory-gateway，MIT）──
+// 她让我照着那个仓库优化记忆库。借过来的是这几样，都在这一段：
+//   · 停用词：「的/了/我/你」不再参与打分（以前几乎每条记忆都沾一点，分数虚高）
+//   · 打分 = 关键词相关度 + 重要度 + 新旧（时间衰减），并且**相关度不够就一条都不给**
+//     （以前搜不到就退回 slice(-5)，而记忆数组新的在前，于是每轮塞进去的是最旧那 5 条）
+//   · 新旧按记下的日期算，不按数组位置 —— 手动添加是 push、自动沉淀是 unshift，位置不可信
+//   · 三层去重：一模一样 / 互相包含 / 字面重合度（字二元组 Jaccard），提炼入库前过一遍
+const MEM_STOP = new Set(("的 了 在 是 我 你 他 她 它 们 这 那 有 和 与 也 都 又 就 但 而 或 到 被 把 让 从 对 为 以 及 等 个 不 没 很 太 吗 呢 吧 啊 嗯 哦 哈 呀 嘛 么 啦 哇 喔 会 能 要 想 去 来 说 做 看 给 上 下 里 中 大 小 多 少 好 "
+  + "可以 什么 怎么 如何 哪里 哪个 为什么 还是 然后 因为 所以 虽然 但是 已经 一个 一些 一下 一点 一起 一样 比较 应该 可能 如果 这个 那个 自己 知道 觉得 感觉 时候 现在 我们 你们 他们 她们 就是 还有 没有 不是 真的 今天 有点 这样 那样 宝宝 哈哈 哈哈哈").split(/\s+/));
+const MEM_MIN_REL = 0.06;     // 关键词相关度下限：低于它 = 跟这句话不沾边，不注入
+const MEM_MIN_SCORE = 0.15;   // 综合分下限（同那个仓库的 MIN_SCORE_THRESHOLD）
+const MEM_RECENCY_DAYS = 30;  // 新旧衰减的尺度：30 天前的记忆新旧分减半
+let __memSeg = null;
+function memWords(text){
+  const s = String(text||"").toLowerCase().replace(/\[时间[^\]]*\]/g, " ");
+  let words = [];
+  try{
+    if(!__memSeg) __memSeg = new Intl.Segmenter("zh", { granularity:"word" });
+    for(const x of __memSeg.segment(s)){ if(x.isWordLike) words.push(x.segment); }
+  }catch(e){
+    words = s.replace(/[^\p{L}\p{N}]+/gu, " ").split(/\s+/);
+  }
+  return words.map(w=>w.trim()).filter(w=>w && !MEM_STOP.has(w) && !/^\d{1,3}$/.test(w));
+}
+/** 记忆的日期：createdAt → time → 时间戳形状的 id，都没有就 null */
+function memDateOf(m){
+  if(!m) return null;
+  const raw = m.createdAt || m.created_at || m.time || ((+m.id > 1e12) ? +m.id : null);
+  if(!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+function memDateStr(m){
+  const d = memDateOf(m);
+  if(!d) return "";
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+/** 在 pool 里按 query 排序，返回 [{mem, score, rel}]（只含过线的） */
+function memRank(pool, query, topK){
+  const qWords = [...new Set(memWords(query))];
+  if(!qWords.length || !pool.length) return [];
+  if(!window.__memWordCache) window.__memWordCache = new Map();
+  const cache = window.__memWordCache;
+  const now = Date.now();
+  const out = [];
+  pool.forEach(mem=>{
+    const raw = String(mem.content || mem.text || "");
+    if(!raw) return;
+    const key = (mem.id||"") + ":" + raw.length + ":" + (mem.updatedAt || "");
+    let ws = cache.get(key);
+    if(!ws){
+      ws = new Set(memWords(raw));
+      cache.set(key, ws);
+      if(cache.size > 6000){ let i=0; for(const k of cache.keys()){ cache.delete(k); if(++i>3000) break; } }
+    }
+    let hit = 0, hitW = 0, allW = 0;
+    qWords.forEach(w=>{
+      const wt = Math.min(3, w.length);           // 长词比单字有分量
+      allW += wt;
+      if(ws.has(w) || (w.length >= 2 && raw.indexOf(w) >= 0)){ hit++; hitW += wt; }
+    });
+    if(!hit) return;
+    // 相关度：命中的词占查询的多少（加权），再按记忆自己的长度轻微归一，免得长记忆靠体积取胜
+    const rel = (hitW / allW) * (1 / Math.sqrt(Math.max(1, ws.size / 12)));
+    if(rel < MEM_MIN_REL) return;
+    const d = memDateOf(mem);
+    const days = d ? Math.max(0, (now - d.getTime()) / 86400000) : 365;
+    const rec = 1 / (1 + days / MEM_RECENCY_DAYS);
+    const imp = Math.min(10, Math.max(1, +mem.importance || 5)) / 10;
+    const score = 0.7 * Math.min(1, rel * 1.6) + 0.15 * imp + 0.15 * rec + (mem.pinned ? 0.1 : 0);
+    if(score < MEM_MIN_SCORE) return;
+    out.push({ mem, score, rel });
+  });
+  out.sort((a,b)=> b.score - a.score);
+  return out.slice(0, topK);
+}
+/** 去重用的规整：去掉标点空白，统一大小写 */
+function memNorm(s){ return String(s||"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""); }
+function memBigrams(n){ const b = new Set(); for(let i=0;i<n.length-1;i++) b.add(n.slice(i,i+2)); return b; }
+/** 三层去重（同那个仓库的 check_duplicate_memory）：返回命中的旧记忆和原因，没重复返回 null */
+function memFindDuplicate(content, pool){
+  const a = memNorm(content);
+  if(a.length < 4) return null;
+  const A = memBigrams(a);
+  for(const m of pool){
+    const b = memNorm(m && (m.content || m.text));
+    if(b.length < 4) continue;
+    if(a === b) return { mem:m, reason:"exact" };
+    if(b.indexOf(a) >= 0) return { mem:m, reason:"contained" };           // 新的被旧的包含：旧的已经说全了
+    if(a.indexOf(b) >= 0) return { mem:m, reason:"contains" };            // 新的包含旧的：新的更全
+    const B = memBigrams(b);
+    let inter = 0; A.forEach(x=>{ if(B.has(x)) inter++; });
+    const jac = inter / (A.size + B.size - inter || 1);
+    if(jac >= 0.6) return { mem:m, reason:"similar", jac };
+  }
+  return null;
+}
+/** 给提炼提示词用：跟这段聊天相关的已有记忆（让模型知道哪些已经记过了） */
+function memKnownForPrompt(text, who, k){
+  const pool = (state.memories||[]).filter(m=>m && !m.archived && memBelongsTo(m, who));
+  const ranked = memRank(pool, String(text||"").slice(-6000), k || 20).map(x=>x.mem);
+  return ranked.map(m=>`- ${memDateStr(m) ? "["+memDateStr(m)+"] " : ""}${String(m.content||"").slice(0,120)}`).join("\n");
+}
+/** 注入给他看的那一段：带日期 + 用法（同那个仓库的「记忆应用」） */
+function memInjectText(list){
+  if(!list || !list.length) return "";
+  const LBL = { core:"核心", diary:"日记", daily:"日常", handoff:"待办", plans:"计划", pr:"PR" };
+  const lines = list.map(m=>{
+    const d = memDateStr(m);
+    const tag = [d, LBL[m.layer] || ""].filter(Boolean).join(" · ");
+    return `- ${tag ? "["+tag+"] " : ""}${m.content}`;
+  }).join("\n");
+  return "以下是与当前对话最相关的记忆（方括号里是记下的日期）：\n" + lines
+    + "\n【记忆怎么用】自然地用，只在话题碰到时提；别说「根据我的记忆」这种话，像「上次你说…」那样带出来。"
+    + "日期旧的可能已经变了，和她现在说的冲突时以现在为准；拿不准就说「我记得你好像说过…」。";
+}
+
 function retrieveRelevantMemories(query, topK = 5) {
   const who = memAgentId();
   // 只在**当前联系人**的记忆里检索。云端预热结果已按 agent 过滤（见 memRemote*）。
@@ -2768,75 +2885,9 @@ function retrieveRelevantMemories(query, topK = 5) {
      && (Date.now() - (state.memRemoteCacheAt||0)) < 60000){
     return state.memRemoteCache.slice(0, topK);
   }
-  if (!memories.length) return [];
-  if (!query || !query.trim()) return memories.slice(-topK);
-
-  function tokenize(text) {
-    // 支持中英文：按标点/空白切分后保留单字，再加相邻二元组
-    const words = text.toLowerCase()
-      .replace(/[，。！？、；：""''（）【】\t,\.!\?;:'"()\[\]\s]+/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 1);
-    const bigrams = [];
-    for (let i = 0; i < words.length - 1; i++) bigrams.push(words[i] + words[i+1]);
-    return [...words, ...bigrams];
-  }
-
-  // 尝试使用 Intl.Segmenter 做更好的中文分词（Chrome 87+）
-  function tokenizeZh(text) {
-    try {
-      const seg = new Intl.Segmenter('zh', { granularity: 'word' });
-      const words = [...seg.segment(text)].map(s => s.segment.trim()).filter(w => w.length >= 1);
-      const bigrams = [];
-      for (let i = 0; i < words.length - 1; i++) bigrams.push(words[i] + words[i+1]);
-      return [...words, ...bigrams];
-    } catch(e) {
-      return tokenize(text);
-    }
-  }
-
-  const queryTokens = tokenizeZh(query);
-  if (!queryTokens.length) return memories.slice(-topK);
-
-  // 记忆分词缓存：避免每次检索对上千条全量 tokenize（13k 级会明显卡）
-  if(!window.__memTokCache) window.__memTokCache = new Map();
-  const tokCache = window.__memTokCache;
-  const scores = memories.map(mem => {
-    const raw = mem.content || '';
-    const cacheKey = (mem.id || '') + ":" + raw.length + ":" + (mem.updatedAt || mem.time || "");
-    let memTokens = tokCache.get(cacheKey);
-    if(!memTokens){
-      memTokens = tokenizeZh(raw);
-      tokCache.set(cacheKey, memTokens);
-      if(tokCache.size > 5000){
-        // 简单淘汰：清一半
-        let i=0; for(const k of tokCache.keys()){ tokCache.delete(k); if(++i>2500) break; }
-      }
-    }
-    if (!memTokens.length) return { mem, score: 0 };
-
-    const tfMem = {}, tfQ = {};
-    memTokens.forEach(t => { tfMem[t] = (tfMem[t] || 0) + 1; });
-    queryTokens.forEach(t => { tfQ[t] = (tfQ[t] || 0) + 1; });
-
-    let dot = 0, normMem = 0, normQ = 0;
-    // 只扫 query 侧 token，避免全表 allT 大集合
-    Object.keys(tfQ).forEach(t => {
-      const vm = tfMem[t] || 0, vq = tfQ[t] || 0;
-      dot += vm * vq;
-    });
-    memTokens.forEach(t => { const c=tfMem[t]||0; normMem += c*c; });
-    queryTokens.forEach(t => { const c=tfQ[t]||0; normQ += c*c; });
-    const cos = (normMem && normQ) ? dot / (Math.sqrt(normMem) * Math.sqrt(normQ)) : 0;
-    const w = (mem.importance || 5) / 10;
-    return { mem, score: cos * (0.8 + 0.2 * w) };
-  });
-
-  scores.sort((a, b) => b.score - a.score);
-  // score 全为 0 时（查询词完全没匹配到），退化为取最近几条
-  const hasMatch = scores[0]?.score > 0;
-  if (!hasMatch) return memories.slice(-topK);
-  return scores.slice(0, topK).map(s => s.mem);
+  if (!memories.length || !query || !String(query).trim()) return [];
+  // 搜不到相关的就**一条都不给** —— 以前退回 slice(-topK)，拿到的是最旧那几条，跟这句话毫无关系
+  return memRank(memories.filter(m=>m && !m.archived), query, topK).map(x=>x.mem);
 }
 
 // ─── 每日任务（bdsm-daily-quest-page 组件化）───────────────────────────────────
@@ -11999,6 +12050,7 @@ async function memRemoteWarmup(q){
         content: m.content,
         layer: _memTypeToLayer(m.type),
         importance: _memImpToNum(m.importance),
+        createdAt: m.created_at || m.createdAt || m.time || m.date || null,   // 注入时带日期要用
         fromRemote: true,
       }));
       state.memRemoteCacheAt = Date.now();
@@ -12464,7 +12516,10 @@ function __proShadow(reason, opts){
     const rel = (typeof retrieveRelevantMemories === "function") ? retrieveRelevantMemories(q, 6) : [];
     mems = rel.map(m => String(m.content||m.text||"").slice(0,120)).filter(Boolean);
   }catch(e){}
-  if(!mems.length) mems = (state.memories||[]).slice(-8).map(m => (m.content||m.text||"").slice(0,120)).filter(Boolean);
+  // 兜底取**最新**的 8 条（按日期）。以前 slice(-8) 拿到的是数组尾巴 —— 自动沉淀是往前插的，尾巴是最旧的
+  if(!mems.length) mems = (state.memories||[]).filter(m=>m && !m.archived)
+    .slice().sort((a,b)=>((memDateOf(b)||0) - (memDateOf(a)||0))).slice(0,8)
+    .map(m => (m.content||m.text||"").slice(0,120)).filter(Boolean);
   const silentH = (typeof proactiveHoursSinceLastChat === "function") ? proactiveHoursSinceLastChat() : 0;
   // 欲望六轴：让 AI 从真实情绪开口，而非凭空惦记
   const six = state.sixAxis || {};
@@ -24501,7 +24556,8 @@ function renderMemory(){
           <p class="mem-content${expanded?" expanded":""}">${esc(m.content)}</p>
           ${m.content.length>60?`<button class="mem-expand" data-expand="${m.id}">${expanded?"收起":"展开"}</button>`:""}
           <div class="mem-footer">
-            <span>${new Date(m.createdAt).toLocaleDateString("zh")}</span>
+            <span>${memDateStr(m) || ""}</span>
+            ${Array.isArray(m.mergedSrc)&&m.mergedSrc.length?`<button type="button" class="mem-expand" data-mem-unmerge="${m.id}" title="拆回合并前的 ${m.mergedSrc.length} 条">撤回合并</button>`:""}
           </div>
         </div>
         <button class="mem-del" data-del="${m.id}">×</button>
@@ -27629,6 +27685,18 @@ function bindEvents(){
   $$("[data-expand]").forEach(el=>{
     el.onclick=()=>{ state.expandedMems[el.dataset.expand]=!state.expandedMems[el.dataset.expand]; render(); };
   });
+  $$("[data-mem-unmerge]").forEach(el=>{
+    el.onclick=()=>{
+      const id = +el.dataset.memUnmerge;
+      const m = state.memories.find(x=>x.id===id);
+      if(!m || !Array.isArray(m.mergedSrc)) return;
+      if(!confirm(`把这条拆回合并前的 ${m.mergedSrc.length} 条？`)) return;
+      const back = m.mergedSrc.map(x=>Object.assign({}, x));
+      state.memories = [...back, ...state.memories.filter(x=>x.id!==id)];
+      state.memSelected = state.memSelected.filter(x=>x!==id);
+      persist("memories"); render();
+    };
+  });
   const memSave=document.getElementById("mem-save");
   if(memSave) memSave.onclick=()=>{
     const content=document.getElementById("mem-content").value.trim();
@@ -30563,15 +30631,14 @@ async function bgGenPollResult(){
  */
 function retrievedMemoryBlock(queryOverride){
   try{
-    if(!state.memories || !state.memories.length) return "";
+    // （以前这里先判「本地一条都没有就返回」，把只有云端记忆的情况也一起挡掉了）
     // queryOverride：通话里她说的话不进 state.messages，不给 query 的话整通电话都在
     // 拿「打电话之前那三条」去检索，聊到哪都不变。见 callAiTurn。
     const recentUserMsgs = (typeof queryOverride === "string" && queryOverride.trim())
       ? queryOverride
       : state.messages.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
     const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
-    if(!relevant.length) return "";
-    return "以下是与当前对话最相关的记忆：\n" + relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
+    return memInjectText(relevant);
   }catch(e){ return ""; }
 }
 
@@ -36078,11 +36145,8 @@ async function regenFromThinking(msgIdx, thinkingText){
     let sys = buildSysForAgent(ag, null);
     if(state.memories.length>0){
       const recentUserMsgs = history.filter(m=>m.role==="user").slice(-3).map(m=>m.content).join(" ");
-      const relevant = retrieveRelevantMemories(recentUserMsgs, 5);
-      if(relevant.length){
-        const memStr = relevant.map(m=>`[${m.layer}] ${m.content}`).join("\n");
-        sys=(sys?sys+"\n\n":"")+`以下是与当前对话最相关的记忆：\n${memStr}`;
-      }
+      const memT = memInjectText(retrieveRelevantMemories(recentUserMsgs, 5));
+      if(memT) sys=(sys?sys+"\n\n":"")+memT;
     }
     sys += `\n\n【本次必须使用的思考内容——原样采纳后只输出正式回复】
 用户已写好/改好你的思考过程。请把下面这段当作你的 <thinking> 结论，不要再另写思考标签，直接输出正式回复正文（多条短消息，换行分隔）：
@@ -36279,6 +36343,13 @@ async function integrateMemoriesFromChat(){
   const rangeLabel = dateFrom + " ~ " + dateTo;
   try{
     const created = await memDigestTranscript(transcript, rangeLabel, msgCount);
+    if(!created.length){
+      // 提炼出来的全是库里已经有的（去重全拦下了）—— 不是失败，也没东西要上云
+      const note = (state.__memNote && state.__memNote.text) || "";
+      alert("这段聊天里没有新的东西要记：提炼出来的都和已有记忆重复了。" + (note ? "\n" + note : ""));
+      state.memMergeLoading=false; render();
+      return;
+    }
     state.memories = [...created, ...state.memories];
     const saved = persist("memories");
     const up = await memPushToCloud(created); // 同步进云端向量库
@@ -36332,9 +36403,13 @@ async function memDigestTranscript(transcript, rangeLabel, msgCount, opts){
     }
   }
   const callMemOnce = (prompt)=> memModelCall(prompt, opts);
+  const who0 = (opts && opts.agentId) || memAgentId();
   let result = "";
   for(let ci=0; ci<chunks.length; ci++){
     const part = chunks[ci];
+    // 已经记过的（跟这段聊天相关的那些）一起给模型：同一件事换个说法不该再记一条。
+    // 这是那个仓库「已知信息对比」那一招 —— 以前提炼时模型完全不知道库里有什么，重复越积越多。
+    const known = memKnownForPrompt(part, who0, 20);
     const prompt = `你是记忆整理助手。请根据以下情侣/恋人聊天记录（${rangeLabel}${chunks.length>1?`，第 ${ci+1}/${chunks.length} 段`:""}，约 ${msgCount} 条消息）提炼值得长期保存的记忆。
 
 要求：
@@ -36358,7 +36433,11 @@ LAYER|重要性1-10|效价-1到1|唤醒0到1|记忆正文
 聊天记录：
 ${part}
 
-只输出记忆行，不要前言后语。`;
+${known ? `
+已经记下的（不要重复记；同一件事换个说法也算重复。只有新的事、或者对下面某条的更新/补充/推翻才写，写更新时把变化说清楚）：
+${known}
+` : ""}
+只输出记忆行，不要前言后语。没有新东西就什么都不输出。`;
     const piece = await callMemOnce(prompt);
     result += (result ? "\n" : "") + piece;
   }
@@ -36404,7 +36483,29 @@ ${part}
   // 盖章：用调用方传进来的 agentId（正在整理的那条线程），没传才回落当前联系人
   const who = (opts && opts.agentId) || memAgentId();
   created.forEach(m=>memStamp(m, who));
-  return created;
+  // 入库前去重（三层：一模一样 / 互相包含 / 字面重合度高）。
+  // 新的更全（把旧的整句包含进去了）就原地把旧的那条换成新的，不另起一条。
+  const pool = (state.memories||[]).filter(m=>m && !m.archived && memBelongsTo(m, who));
+  const kept = [];
+  let dropped = 0, updated = 0;
+  created.forEach(c=>{
+    const dup = memFindDuplicate(c.content, pool.concat(kept));
+    if(!dup){ kept.push(c); return; }
+    if(dup.reason === "contains" && pool.includes(dup.mem)){
+      dup.mem.content = c.content;
+      dup.mem.importance = Math.max(+dup.mem.importance||5, +c.importance||5);
+      dup.mem.updatedAt = new Date().toISOString();
+      updated++;
+      return;
+    }
+    dropped++;
+  });
+  if(updated){ try{ persist("memories"); }catch(e){} }
+  if(dropped || updated){
+    try{ __memNote(`去重：跳过 ${dropped} 条重复${updated?`，补全 ${updated} 条旧记忆`:""}`); }catch(e){}
+  }
+  // 全是重复也算这段处理过了：返回空数组（不能抛错 —— 抛了游标不前进，会一直反复提炼同一段）
+  return kept;
 }
 
 /** 每线程 user/assistant 消息数（自动沉淀检查点口径） */
@@ -36661,15 +36762,18 @@ async function mergeMemories(){
   state.memMergeLoading=true; render();
   try{
     const result=await memModelCall(prompt);
-    const merged={
+    const merged=memStamp({
       id:Date.now(), content:result, layer:"diary",
       importance:Math.max(...toMerge.map(m=>m.importance||5)),
       valence:toMerge.reduce((s,m)=>s+(m.valence||0),0)/toMerge.length,
       arousal:toMerge.reduce((s,m)=>s+(m.arousal||0.5),0)/toMerge.length,
       createdAt:new Date().toISOString(), activations:1,
-      resolved:false, pinned:false, mergedFrom:state.memSelected.length,
-    };
-    state.memories=[...state.memories.filter(m=>!state.memSelected.includes(m.id)), merged];
+      resolved:false, pinned:toMerge.some(m=>m.pinned), mergedFrom:state.memSelected.length,
+      // 原来那几条整份留着：合并能撤回（同那个仓库的 revert-merge）。以前合并完原文就没了。
+      mergedSrc: toMerge.map(m=>Object.assign({}, m)),
+    }, toMerge[0] && toMerge[0].agentId);
+    // 放最前面（新的在前）。以前 push 到末尾，等于把刚合并的这条当成了最旧的
+    state.memories=[merged, ...state.memories.filter(m=>!state.memSelected.includes(m.id))];
     state.memSelected=[]; persist("memories");
   }catch(e){ alert("合并失败："+e.message); }
   state.memMergeLoading=false; render();
