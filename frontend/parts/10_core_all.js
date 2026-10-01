@@ -17890,7 +17890,45 @@ const TTS_SAMPLE_RATE = 24000;
  *  她那把 key 是 free 档（一个月 10000 字符），打满时网关回 402；
  *  这里抛一个带 __ttsFallback 标记的错，上面那层据此换回 MiniMax ——
  *  额度满了该是「换个声音继续说」，不是一通哑掉的电话。 */
-async function elevenSynthesize(text){
+// ─── ElevenLabs v3 / v4：模型、声口标签、上下句 ─────────────────────────────
+// 她 2026-10-01 要试 v4。参考那篇实测（sanqianzilanyue/ai-voice-breath-kiss-water）定的几条：
+//   · v4 中英一把嗓子念、标签认得最好；v4 不认 speed，要慢就在字里多留「……」
+//   · stability 0.35 有戏、0.5 像平常说话（电话里 0.35 会「用力过猛」）
+//   · v4 支持 previous_text：一句一句念时把上一句递过去，语气才接得上；v3 递了会报错
+//   · [low, close] 这类英文声口标签只有 v3/v4 认，别的型号会照字念出来 → 送去前剥掉
+const ELEVEN_MODELS = [
+  ["", "服务端默认"],
+  ["eleven_v4", "eleven_v4 · 最有感情（推荐语音条）"],
+  ["eleven_v4_turbo", "eleven_v4_turbo · 低延迟（推荐电话）"],
+  ["eleven_v3", "eleven_v3"],
+  ["eleven_flash_v2_5", "eleven_flash_v2_5 · 最快"],
+  ["eleven_turbo_v2_5", "eleven_turbo_v2_5"],
+  ["eleven_multilingual_v2", "eleven_multilingual_v2"],
+];
+/** kind: "call" 电话 / "msg" 语音条。语音条不赶时间，默认用 v4 */
+function elevenModelFor(kind){
+  const cfg = state.callConfig || {};
+  if(kind === "msg"){
+    const m = String(cfg.elevenMsgModel == null ? "eleven_v4" : cfg.elevenMsgModel).trim();
+    if(m) return m;
+  }
+  return String(cfg.elevenModel || "").trim();
+}
+function elevenTagsOn(kind){
+  const cfg = state.callConfig || {};
+  return cfg.ttsProvider === "elevenlabs" && /eleven_v[34]/.test(elevenModelFor(kind));
+}
+/** [low, close] 这种纯英文方括号标签 —— 给人看的地方、不认标签的型号都要剥掉 */
+function stripVoiceTags(t){
+  return String(t||"").replace(/\[[A-Za-z][A-Za-z ,'\-]{0,48}\]/g, "").replace(/[ \t]{2,}/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+}
+function voiceDisplayText(t){ return stripVoiceTags(t); }
+const VOICE_TAG_RULE = `- 声口变了的时候，可以在那句话前写一个轻的英文声口标签，例如 [low, close]、[soft]、[quiet laugh]、[whispering]、[unhurried]。
+  一轮最多两三个，其余的话沿用上一个声口；往轻里写，别用 intense / heavy / growl 这类猛词，一猛就像在演。
+  喘和停顿靠「……」和话说到一半断开，不要写 [heavy breathing]；亲吻、水声这类响动不要写成字。`;
+
+async function elevenSynthesize(text, opts){
+  opts = opts || {};
   const cfg = state.callConfig || {};
   const proxy = ttsProxyBase();
   if(!proxy) throw new Error("ElevenLabs 要走网关：电话页的「TTS 代理」那格不能空");
@@ -17903,13 +17941,27 @@ async function elevenSynthesize(text){
   // 「用的时候回落」，别指望默认值 —— 老存档里的 callConfig 是整份覆盖默认值的，
   // 后加的这两格在她机器上是 undefined（ttsProxy 当年就是这么空掉的）。
   // 两格都空就用服务端 .env 里的那套。
-  const body = { text: clean };
+  const m = elevenModelFor(opts.kind);
+  const tagOk = /eleven_v[34]/.test(m);
+  const body = { text: tagOk ? clean : stripVoiceTags(clean) };
+  if(!body.text) return null;
   const v = String(cfg.elevenVoice || "").trim(); if(v) body.voice_id = v;
-  const m = String(cfg.elevenModel || "").trim(); if(m) body.model_id = m;
+  if(m) body.model_id = m;
+  // 稳定度：0.5 平常说话（默认），0.35 有戏。v3/v4 不认 style，不发
+  const stab = +cfg.elevenStability;
+  body.voice_settings = { stability: (stab > 0 && stab <= 1) ? stab : 0.5, similarity_boost: 0.8 };
+  // 上一句：只有 v4 认（v3 递了会报错）
+  if(/eleven_v4/.test(m) && opts.previous_text) body.previous_text = stripVoiceTags(opts.previous_text).slice(-300);
 
-  const res = await fetch(proxy + "/tts/elevenlabs", {
+  let res = await fetch(proxy + "/tts/elevenlabs", {
     method: "POST", headers, body: JSON.stringify(body),
   });
+  // 网关代码不在这个仓库里：它要是不认 voice_settings / previous_text 而回 400/422，
+  // 去掉这两格再发一次 —— 声音照常出，只是少了那两项调校
+  if((res.status === 400 || res.status === 422) && (body.voice_settings || body.previous_text)){
+    delete body.voice_settings; delete body.previous_text;
+    res = await fetch(proxy + "/tts/elevenlabs", { method: "POST", headers, body: JSON.stringify(body) });
+  }
   if(res.status === 402){
     const e = new Error("ElevenLabs 额度用完了");
     e.__ttsFallback = true;
@@ -17928,21 +17980,21 @@ async function elevenSynthesize(text){
 }
 
 /** TTS 总入口：按 provider 分发。所有要出声的地方都走这里，别再直接调某一家。 */
-async function ttsSynthesize(text){
+async function ttsSynthesize(text, opts){
   const cfg = state.callConfig || {};
   if(!cfg.ttsEnabled || cfg.ttsProvider === "none") return null;
   if(cfg.ttsProvider === "elevenlabs"){
     try{
-      return await elevenSynthesize(text);
+      return await elevenSynthesize(text, opts);
     }catch(e){
       if(!e || !e.__ttsFallback) throw e;
       // 额度打满：从这句起改用 MiniMax，并且把原因写出来 ——
       // 不写的话她只会发现「声音突然变了」，不知道为什么
       try{ ensureCallSession().ttsError = "ElevenLabs 额度用完，已换回 MiniMax"; }catch(_){}
-      return await minimaxSynthesize(text);
+      return await minimaxSynthesize(stripVoiceTags(text));
     }
   }
-  return await minimaxSynthesize(text);
+  return await minimaxSynthesize(stripVoiceTags(text));
 }
 
 async function minimaxSynthesize(text){
@@ -18168,18 +18220,21 @@ function callTtsReset(){
 /** 把一句话排进播报队列，并**立刻**发起合成（不 await —— 后面几句要并行合成）。 */
 function callTtsPush(text){
   // 暗号不能念出来（⟪挂断⟫ 这类）。流式切句可能把暗号切在句中，这里统一擦一道。
+  // 方括号里是英文的是 v3/v4 的声口标签（[low, close]），留给 ttsSynthesize 决定念不念
   const t = String(text||"")
-    .replace(/[⟪《【\[][^⟫》】\]]{0,20}[⟫》】\]]/g, "")
+    .replace(/[⟪《【][^⟫》】]{0,20}[⟫》】]/g, "")
+    .replace(/\[[^\]]{0,20}[^\x00-\x7f][^\]]{0,20}\]/g, "")
     .replace(/\s+/g, " ").trim();
-  if(!t) return;
+  if(!stripVoiceTags(t)) return;
   const cfg = state.callConfig || {};
   if(!cfg.ttsEnabled) return;
   if(!cfg.minimaxKey && !ttsProxyBase()) return;
 
   const gen = __callTts.gen;
   const idx = __callTts.items.length;
+  const prevText = idx > 0 && __callTts.items[idx-1] ? __callTts.items[idx-1].text : "";
   __callTts.items.push({ status:"pending", url:null, external:false, text:t });
-  ttsSynthesize(t).then(result=>{
+  ttsSynthesize(t, { kind:"call", previous_text: prevText }).then(result=>{
     if(gen !== __callTts.gen) return;            // 这通电话已经过去了
     const it = __callTts.items[idx];
     if(!it) return;
@@ -18721,15 +18776,17 @@ function voiceMsgPromptBlock(){
 想用声音说的时候（撒娇、哄她、晚安、想她了、她给你发了语音），把那句话写成单独一行暗号：
 ⟪语音:要说的话⟫
 - 系统会用你的声音念出来，变成聊天里一条语音条，她点开就能听。
-- 只写说出口的话（口语、短句，≤60 字），不要写动作描写、括号、表情符号。
+- 只写说出口的话（口语、短句，≤60 字），不要写动作描写、圆括号、表情符号。${elevenTagsOn("msg") ? "\n" + VOICE_TAG_RULE : ""}
 - 一条回复最多一两条语音，别每轮都发；平时还是打字。`;
 }
 /** 擦掉 ⟪语音:…⟫，返回 { text, voices:[要念的话] } */
 function handleVoiceMsgMarkers(body){
   let text = String(body||"");
   const voices = [];
-  const RE = /[⟪《【\[]\s*语音\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/g;
-  text = text.replace(RE, (_, said)=>{
+  // 里面可能带 [soft] 这种声口标签，所以 ⟪⟫ 形式不能拿 ] 当结尾
+  const RE = /[⟪《【]\s*语音\s*[:：]\s*([^⟫》】]+)[⟫》】]|\[\s*语音\s*[:：]\s*([^\]]+)\]/g;
+  text = text.replace(RE, (_, a, b)=>{
+    const said = a || b;
     const t = String(said||"").replace(/[（(][^）)]*[）)]/g, "").replace(/\*[^*]*\*/g, "").trim().slice(0, 120);
     if(t) voices.push(t);
     return "";
@@ -18766,7 +18823,7 @@ async function voiceMsgSynthesize(msg){
     try{ if(callInChatView()) render(); }catch(e){}
   };
   try{
-    const r = await ttsSynthesize(text);
+    const r = await ttsSynthesize(text, { kind:"msg" });
     if(!r) throw new Error("TTS 没开");
     const src = r.type === "url" ? r.value : await __blobToDataUrl(r.value);
     const dur = await __audioDuration(src);
@@ -18796,7 +18853,7 @@ function callCapsHtml(s, limit){
         (l.ko?`<div class="cap-ko">${esc(l.ko)}</div>`:"") + (l.zh?`<div class="cap-zh">${esc(l.zh)}</div>`:"")
       ).join("") + `</div>`;
     }
-    return `<div class="ccard-cap ${c.who}">${esc(c.text)}</div>`;
+    return `<div class="ccard-cap ${c.who}">${esc(stripVoiceTags(c.text))}</div>`;
   }).join("");
 }
 function renderChatCallCard(){
@@ -18907,7 +18964,7 @@ function renderPhone(){
         ).join("");
         return `<div class="call-bub ${c.who}">${src}${body}</div>`;
       }
-      return `<div class="call-bub ${c.who}">${src}<div>${esc(c.text)}</div></div>`;
+      return `<div class="call-bub ${c.who}">${src}<div>${esc(stripVoiceTags(c.text))}</div></div>`;
     }).join("");
     body = `
       <div class="call-status-bar ${st.cls}"><span class="dot"></span><span>${esc(st.text)}</span></div>
@@ -18999,12 +19056,25 @@ function renderPhone(){
           ${cfg.ttsProvider === "elevenlabs" ? `
           <span class="setting-label" style="margin-top:8px">音色 voice_id</span>
           <input id="call-eleven-voice" value="${escAttr(cfg.elevenVoice||"")}" placeholder="留空用服务端那把"/>
-          <span class="setting-label" style="margin-top:8px">模型</span>
+          <span class="setting-label" style="margin-top:8px">电话用的模型</span>
           <select id="call-eleven-model" style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);font-size:13px">
-            ${[["","服务端默认（flash v2.5）"],["eleven_flash_v2_5","eleven_flash_v2_5"],["eleven_turbo_v2_5","eleven_turbo_v2_5"],["eleven_multilingual_v2","eleven_multilingual_v2"]].map(([v,t])=>
+            ${ELEVEN_MODELS.map(([v,t])=>
               `<option value="${v}" ${(cfg.elevenModel||"")===v?"selected":""}>${t}</option>`
             ).join("")}
           </select>
+          <span class="setting-label" style="margin-top:8px">语音条用的模型（不赶时间，可以用最好的）</span>
+          <select id="call-eleven-msg-model" style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);font-size:13px">
+            ${ELEVEN_MODELS.map(([v,t])=>
+              `<option value="${v}" ${(cfg.elevenMsgModel==null?"eleven_v4":cfg.elevenMsgModel)===v?"selected":""}>${v?t:"跟电话一样"}</option>`
+            ).join("")}
+          </select>
+          <span class="setting-label" style="margin-top:8px">稳定度</span>
+          <div class="sw-chip-row" style="margin:4px 0 4px">
+            ${[["0.35","0.35 有戏"],["0.5","0.5 自然"],["0.65","0.65 平稳"]].map(([v,t])=>
+              `<button type="button" class="sw-chip${String(cfg.elevenStability||"0.5")===v?" on":""}" data-eleven-stab="${v}">${t}</button>`
+            ).join("")}
+          </div>
+          <div style="font-size:11px;color:var(--sub);line-height:1.5">v3 / v4 认 [low, close] 这类声口标签，TA 会偶尔用；其他型号会自动剥掉。v4 不认语速，想慢一点靠「……」。</div>
           ` : `
           <span class="setting-label">MiniMax API Key</span>
           <input type="password" id="call-minimax-key" value="${escAttr(cfg.minimaxKey||"")}" placeholder="Bearer 密钥"/>
@@ -19282,6 +19352,8 @@ async function callAiTurn(userText){
     if(ccTail) prompt += "\n\n" + ccTail;
     // CC 通道不塞完整 sys（会污染那条长会话），韩语的格式约定只能跟在这一条里
     if(isKo) prompt += "\n" + KO_RULE;
+    // 声口标签的说法只在接通那轮交代一次（CC 会话自己记得）
+    if(elevenTagsOn("call") && userText && userText.startsWith("（")) prompt += "\n【声口标签】\n" + VOICE_TAG_RULE;
     ccOpts = { timeoutMs: 60000 };  // 打电话等 3 分钟没有意义
   } else {
     // 直连通道没有记忆，仍要把背景和历史带上。
@@ -19300,7 +19372,7 @@ async function callAiTurn(userText){
 - 匹配对方的能量：她轻你就轻，她急你就跟上。
 - 你的人设、称呼、和她的关系，和聊天里完全一样。
 - 电话是聊天的延续，不是新的开始：下面「更早的事」和「刚才在聊天里说的」就是你们几分钟前还在聊的，
-  可以直接接着往下说，不要重新自我介绍、不要问已经知道答案的事。${isKo ? "\n\n" + KO_RULE : ""}`, { skipMemory:true });
+  可以直接接着往下说，不要重新自我介绍、不要问已经知道答案的事。${elevenTagsOn("call") ? "\n" + VOICE_TAG_RULE : ""}${isKo ? "\n\n" + KO_RULE : ""}`, { skipMemory:true });
     } finally {
       state.nsfwOn = _nsfw;
       state.thoughtOn = _thought;
@@ -23375,7 +23447,7 @@ const VOICE_EMOJI = {
 
 function fmtDur(sec){ sec = Math.max(0, Math.round(sec||0)); return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
 
-function voiceWaveformHtml(seed, n=28){
+function voiceWaveformHtml(seed, n=28, maxH=22){
   // 确定性伪随机波形（同一文本渲染稳定）
   let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))>>>0;
   const rng=()=> (h=(h*1664525+1013904223)>>>0)/4294967296;
@@ -23383,7 +23455,7 @@ function voiceWaveformHtml(seed, n=28){
   let out="";
   for(let i=0;i<n;i++){
     const v=Math.max(0.08, Math.min(1, env(i)*(rng()*0.6+0.4)));
-    out+=`<span style="height:${Math.round(v*22)+2}px"></span>`;
+    out+=`<span style="height:${Math.round(v*maxH)+2}px"></span>`;
   }
   return `<div class="voice-wave">${out}</div>`;
 }
@@ -23397,26 +23469,26 @@ function __chatVoiceBarRaw(m, isMe, glassCls, bubbleColor){
   const src=v.dataUrl||"";
   const dur=Math.max(1, Math.round(v.duration||0));
   const emo=v.emotion||"";
-  const text=v.text||m.content||"";
-  const bars=voiceWaveformHtml(text||src, 28);
+  const text=voiceDisplayText(v.text||m.content||"");
+  // 细条：和文字气泡一样高，宽度跟着时长走（1 秒最短，~20 秒封顶）
+  const w=Math.round(Math.min(150, 34 + dur*6));
+  const bars=voiceWaveformHtml(text||src, Math.max(6, Math.round(w/6)), 14);
   if(v.pending){
-    return `<div class="bubble them${glassCls} voice-pending" ${bubbleColor||""}>
+    return `<div class="bubble them${glassCls} voice-bubble voice-pending" ${bubbleColor||""}>
     <div class="voice-bar">
       <span class="voice-play"><i data-lucide="loader"></i></span>
       ${bars}
-      <div class="voice-meta"><span class="voice-dur">录音中…</span></div>
+      <span class="voice-dur">录音中</span>
     </div>
   </div>`;
   }
-  return `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor||""}>
+  return `<div class="bubble ${isMe?"me":"them"}${glassCls} voice-bubble" ${bubbleColor||""}>
     <div class="voice-bar">
       <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}" aria-label="播放语音"><i data-lucide="play"></i></button>
       ${bars}
-      <div class="voice-meta">
-        <span class="voice-dur">${fmtDur(dur)}</span>
-        ${emo?`<span class="voice-emo" title="${escAttr(v.hint||emo)}">${VOICE_EMOJI[emo]||"🎤"}</span>`:""}
-        ${text?`<button type="button" class="voice-text-toggle" aria-label="显示转写文字">文</button>`:""}
-      </div>
+      <span class="voice-dur">${fmtDur(dur)}</span>
+      ${emo?`<span class="voice-emo" title="${escAttr(v.hint||emo)}">${VOICE_EMOJI[emo]||"🎤"}</span>`:""}
+      ${text?`<button type="button" class="voice-text-toggle" aria-label="显示转写文字">文</button>`:""}
     </div>
     ${text?`<div class="voice-transcript">${esc(text)}</div>`:""}
   </div>`;
@@ -29660,6 +29732,14 @@ const sttUrl = document.getElementById("call-stt-url");
   bindCallCfg("call-tts-proxy", "ttsProxy");
   bindCallCfg("call-eleven-voice", "elevenVoice");
   bindCallCfg("call-eleven-model", "elevenModel");
+  bindCallCfg("call-eleven-msg-model", "elevenMsgModel");
+  $$("[data-eleven-stab]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.callConfig = state.callConfig || {};
+      state.callConfig.elevenStability = btn.getAttribute("data-eleven-stab");
+      persist("callConfig"); render();
+    };
+  });
   // TTS 引擎切换。要 render() —— 两家的字段不一样，不重绘她看不到对应的那几格。
   $$("[data-tts-prov]").forEach(btn=>{
     btn.onclick = ()=>{
@@ -35627,7 +35707,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   // 语音条：先落 pending 气泡（转圈），合成完原地换成能播的
   __vm.voices.forEach(said=>{
     const vm = {
-      role:"assistant", content: said, time: now, msgId, turn_id: turnId,
+      role:"assistant", content: stripVoiceTags(said), time: now, msgId, turn_id: turnId,
       speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color,
       voice: { pending: true, text: said },
     };

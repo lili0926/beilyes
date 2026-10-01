@@ -3774,35 +3774,35 @@
     .coupon-pick.on { border-color: var(--text, #333); background: var(--text, #333); color: var(--bg, #fff); }
     .coupon-editor-actions { display: flex; gap: 10px; margin-top: 18px; }
     /* ── 语音消息 · 气泡内语音条 ── */
-    .voice-bar { display: flex; align-items: center; gap: 8px; min-width: 190px; max-width: 250px; }
+    .bubble.voice-bubble { white-space: normal; }
+    .voice-bar { display: flex; align-items: center; gap: 6px; min-height: 20px; }
     .voice-play {
-      width: 34px; height: 34px; border-radius: 50%; border: none; flex: none;
+      width: 20px; height: 20px; border-radius: 50%; border: none; flex: none; padding: 0;
       background: var(--accent); color: #fff; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: transform .1s, background .15s;
     }
-    .voice-play:active { transform: scale(.92); }
-    .voice-play svg { width: 14px; height: 14px; fill: currentColor; }
-    .bubble.me .voice-play { background: rgba(255,255,255,.22); color: #fff; }
-    .voice-wave { flex: 1; display: flex; align-items: center; gap: 2px; height: 26px; min-width: 0; }
+    .voice-play:active { transform: scale(.88); }
+    .voice-play svg { width: 9px; height: 9px; fill: currentColor; }
+    .bubble.me .voice-play { background: rgba(255,255,255,.28); color: #fff; }
+    .voice-wave { display: flex; align-items: center; gap: 2px; height: 16px; flex: none; }
     .voice-wave span {
-      flex: 1; max-width: 4px; border-radius: 2px; background: rgba(127,127,127,.28);
+      width: 2.5px; flex: none; border-radius: 2px; background: rgba(127,127,127,.32);
       min-height: 2px; transition: background .15s;
     }
-    .bubble.me .voice-wave span { background: rgba(255,255,255,.28); }
+    .bubble.me .voice-wave span { background: rgba(255,255,255,.35); }
     .voice-wave span.on { background: var(--accent); }
-    .bubble.me .voice-wave span.on { background: rgba(255,255,255,.85); }
-    .voice-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
-    .voice-dur { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
-    .bubble.me .voice-dur { color: rgba(255,255,255,.65); }
-    .voice-emo { font-size: 12px; line-height: 1; }
+    .bubble.me .voice-wave span.on { background: rgba(255,255,255,.9); }
+    .voice-dur { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums; flex: none; }
+    .bubble.me .voice-dur { color: rgba(255,255,255,.75); }
+    .voice-emo { font-size: 12px; line-height: 1; flex: none; }
     .voice-text-toggle {
-      font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px;
+      font-size: 10px; font-weight: 700; padding: 0 5px; line-height: 16px; border-radius: 5px; flex: none;
       border: 1px solid rgba(127,127,127,.35); background: transparent; color: var(--sub); cursor: pointer;
     }
-    .bubble.me .voice-text-toggle { color: rgba(255,255,255,.7); border-color: rgba(255,255,255,.3); }
+    .bubble.me .voice-text-toggle { color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.35); }
     .voice-text-toggle.on { background: var(--accent); color: #fff; border-color: transparent; }
-    .voice-transcript { display: none; margin-top: 6px; font-size: 12px; color: var(--sub); line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-width: 250px; }
+    .voice-transcript { display: none; margin-top: 5px; font-size: 12.5px; color: var(--sub); line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-width: 250px; }
     .voice-transcript.open { display: block; }
 
     /* ── Hyalite 水玻璃：顶栏/底栏/输入条同样吃 --hyalite ───────────────── */
