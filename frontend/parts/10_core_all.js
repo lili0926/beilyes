@@ -5873,6 +5873,7 @@ function render(){
   EdenGames.afterRender();
   EdenColorStudio.mount();
   DoodleShell.afterRender();
+  DoodleRP.afterRender();
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
     const fel = document.getElementById(savedFocus.id);
@@ -9637,6 +9638,7 @@ function prRefreshSummary(){
 }
 
 function renderPrHub(){
+  if(state.uiShell==="doodle") return DoodleRP.hub(); // 星光涂鸦壳：梦境彩票
   const pr = ensurePr();
   const active = pr.active;
   const archives = pr.archives||[];
@@ -9698,6 +9700,7 @@ function renderPrHub(){
 
 function renderPrPanel(){
   if(!state.prOpen || state.prMin) return "";
+  if(state.uiShell==="doodle") return DoodleRP.panel(); // 星光涂鸦壳：入梦聊天
   const pr = ensurePr();
   const a = pr.active;
   if(!a) return "";
@@ -24877,7 +24880,6 @@ function renderChat(){
         <button type="button" id="sticker-btn" class="chat-more-item" title="表情包"><i data-lucide="smile"></i><span>表情</span></button>
         <button type="button" id="puppy-open" class="chat-more-item" title="小狗按钮"><i data-lucide="paw-print"></i><span>小狗</span></button>
         <button type="button" id="chat-voice-btn" class="chat-more-item" title="语音消息（录音转文字发给TA）"><i data-lucide="audio-lines"></i><span>语音消息</span></button>
-        <button type="button" id="chat-pr-btn" class="chat-more-item" title="RP快穿"><i data-lucide="sparkles"></i><span>RP</span></button>
         <button type="button" id="pill-box-btn" class="chat-more-item${(state.pillSelectedIds&&state.pillSelectedIds.length)?" active":""}" title="药盒（只影响下一句）"><i data-lucide="pill"></i><span>药盒${(state.pillSelectedIds&&state.pillSelectedIds.length)?` · ${state.pillSelectedIds.length}`:""}</span></button>
       </div>`:""}
       <input type="file" id="chat-img-input" accept="image/*" style="display:none"/>

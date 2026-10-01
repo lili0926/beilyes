@@ -1218,5 +1218,5 @@ const DoodleShell = (() => {
     openNP(true);
   }
 
-  return {palette, afterRender, renderHomeSpacer, renderNav, chatHeader, chatMeta, bubbleAv, sidebarTop, renderSettings, playLocal, onEnded, isOn:ON};
+  return {pixelName:(w,o)=>pixelNameURL(w,o||{}), palette, afterRender, renderHomeSpacer, renderNav, chatHeader, chatMeta, bubbleAv, sidebarTop, renderSettings, playLocal, onEnded, isOn:ON};
 })();
