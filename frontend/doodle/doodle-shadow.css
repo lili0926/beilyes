@@ -532,3 +532,6 @@ p,h2,h3,ul{margin:0}
 .lt-count{font:inherit;font-size:14px}
 .npv-ph .s-btn{flex-shrink:0}
 img.pxname{object-fit:contain;max-width:60%}
+
+/* 外观里选了「奈の小猫」字体时，隔离层也跟着换 */
+:host([data-kitten]){--font:'NaiKitten','PingFang SC',sans-serif;--font-ko:'NaiKitten',sans-serif}

@@ -1146,7 +1146,8 @@ const DoodleShell = (() => {
     Object.values(layers).forEach(({host}) => {
       if(p.theme === 'system') host.removeAttribute('data-theme'); else host.setAttribute('data-theme', p.theme);
       host.toggleAttribute('data-dark', dark);
-      host.setAttribute('data-boil', p.boil ? 'on' : 'off'); host.setAttribute('data-twinkle', p.twinkle ? 'on' : 'off');
+      host.setAttribute('data-boil', p.boil ? 'on' : 'off');
+      host.toggleAttribute('data-kitten', state.uiFont === 'kitten'); host.setAttribute('data-twinkle', p.twinkle ? 'on' : 'off');
     });
     if(back) back.host.style.setProperty('--wall-a', (+p.wall)/100);
     if(over) over.host.style.setProperty('--wall-a', (+p.wall)/100);
