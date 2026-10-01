@@ -1537,6 +1537,7 @@ function __claudeCacheMark(msgs){
 }
 
 function __openaiPromptCacheKey(ag){
+  if(state.claudeCacheOn !== true) return "";
   return ag && ag.openaiCacheKeyOn && ag.id ? "eden-chat:" + String(ag.id) : "";
 }
 
@@ -3105,7 +3106,7 @@ const state = {
   // AI 语气精修是额外的一次请求；旧版默认开启，这里改为显式选择后才开启。
   toneOn: LS.get("toneOn", true),
   toneAi: LS.get("toneAiExplicit", false) ? LS.get("toneAi", false) : false,
-  claudeCacheOn: LS.get("claudeCacheOn", true),  // Claude 通道的 cache_control，见 __claudeCacheMark
+  claudeCacheOn: LS.get("claudeCacheOn", false) === true,  // 默认关：只写不读时写入更贵；见 __claudeCacheMark
   // 生成超时（秒）。默认 240 —— 实测她的中转会在 4 秒和 238 秒之间抽风，
   // 而且掐断**不退输入那部分的钱**，短超时等于白付。见 apiTimeoutMs。
   apiTimeoutSec: LS.get("apiTimeoutSec", 0),
@@ -26347,6 +26348,13 @@ function renderSettings(){
       <div class="section-title"><i data-lucide="zap"></i> 回复输出</div>
       <div class="section-body">
         <div class="setting-row">
+          <span class="setting-label">提示词缓存写入</span>
+          <button type="button" id="claude-cache-toggle" class="toggle-switch" aria-label="提示词缓存写入" style="background:${state.claudeCacheOn===true?"var(--accent)":"var(--border)"};border:none;padding:0;flex:none !important;width:36px;height:20px;display:inline-block !important;">
+            <span class="toggle-knob" style="left:${state.claudeCacheOn===true?18:2}px;pointer-events:none"></span>
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--sub);padding:0 2px 8px;line-height:1.45">默认关。开了会在 Claude 通道打 cache_control。若模型名带「AG2缓存按量」且一直只写不读，请改成非缓存档模型（按次/普通名），否则网关仍可能按写入计费。</div>
+        <div class="setting-row">
           <span class="setting-label">流式输出</span>
           <button type="button" id="stream-on-toggle" class="toggle-switch" aria-label="流式输出" style="background:${state.streamOn===true?"var(--accent)":"var(--border)"};border:none;padding:0;flex:none !important;width:36px;height:20px;display:inline-block !important;">
             <span class="toggle-knob" style="left:${state.streamOn===true?18:2}px;pointer-events:none"></span>
@@ -26902,6 +26910,7 @@ if(!window.__mpDelegated){
         if(typeof showToast==="function") showToast(state.streamOn ? "流式输出：开" : "流式输出：关");
         if(typeof render==="function") render();
         return;
+      }
       if(id==="eggs-on-toggle" || raw.closest("#eggs-on-toggle")){
         e.preventDefault(); e.stopImmediatePropagation();
         try{
@@ -26912,6 +26921,14 @@ if(!window.__mpDelegated){
           if(typeof showToast==="function") showToast(next!=="0"?"彩蛋雨已开":"彩蛋雨已关");
         }catch(err){}
         render();
+        return;
+      }
+      if(id==="claude-cache-toggle" || raw.closest("#claude-cache-toggle")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.claudeCacheOn = !(state.claudeCacheOn === true);
+        try{ persist("claudeCacheOn"); }catch(err){}
+        if(typeof showToast==="function") showToast(state.claudeCacheOn ? "提示词缓存写入：开" : "提示词缓存写入：关");
+        if(typeof render==="function") render();
         return;
       }
       }
