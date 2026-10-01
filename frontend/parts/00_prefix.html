@@ -4431,6 +4431,38 @@
 .sg-fadein{ animation:sg-fadein .22s ease both; }
 @keyframes sg-fadein{ from{ opacity:0; transform:translateY(2px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce){ .sg-fadein{ animation:none; } .sg-star, .sg-star::after{ transition:none; } }
+    /* ── Spotify 嵌入播放器（一起听 · Spotify 歌单） ── */
+    .sp-dock { position: fixed; left: -9999px; top: 0; width: 320px; height: 80px; z-index: 60; border-radius: 12px; overflow: hidden; pointer-events: none; }
+    .sp-dock.show { pointer-events: auto; }
+    .sp-dock iframe { border: 0; width: 100%; height: 100%; border-radius: 12px; display: block; }
+    .sp-wrap { display: flex; flex-direction: column; gap: 12px; }
+    .sp-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 14px; box-shadow: 0 4px 14px -10px rgba(0,0,0,.25); }
+    .sp-now { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .sp-cover { width: 64px; height: 64px; border-radius: 12px; object-fit: cover; flex-shrink: 0; background: var(--accent2); display: flex; align-items: center; justify-content: center; color: var(--accent); }
+    .sp-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .sp-meta b { font-size: 16px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sp-meta small { font-size: 12px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sp-slot { height: 80px; border-radius: 12px; background: var(--bg); border: 1px dashed var(--border); }
+    .sp-slot[hidden] { display: none; }
+    .sp-lyrics { height: 200px; overflow-y: auto; text-align: center; scroll-behavior: smooth; margin-top: 10px; -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent); padding: 70px 0; }
+    .sp-lyrics p { margin: 0; padding: 5px 4px; color: var(--sub); line-height: 1.5; font-size: 14px; transition: color .3s, transform .3s; }
+    .sp-lyrics p.on { color: var(--accent); font-weight: 700; font-size: 16px; transform: scale(1.04); }
+    .sp-item { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px dashed var(--border); cursor: pointer; }
+    .sp-item:last-child { border-bottom: 0; }
+    .sp-item img, .sp-ph { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: var(--accent2); display: flex; align-items: center; justify-content: center; color: var(--accent); }
+    .sp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .sp-info b { font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sp-info small { font-size: 12px; color: var(--sub); }
+    .sp-item.on b { color: var(--accent); }
+    .sp-del { width: 32px; height: 32px; border: 0; background: none; color: var(--sub); font-size: 14px; flex-shrink: 0; }
+    .sp-empty { margin: 0; color: var(--sub); font-size: 13px; text-align: center; padding: 8px 0; }
+    .sp-add { display: flex; flex-direction: column; gap: 8px; }
+    .sp-add input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; font-size: 14px; background: var(--bg); color: var(--text); outline: none; }
+    .sp-add input:focus { border-color: var(--accent); }
+    .sp-add-row { display: flex; gap: 8px; }
+    .sp-add .btn-accent { padding: 10px; border-radius: 12px; }
+    .sp-tip { margin: 0; font-size: 11px; color: var(--sub); line-height: 1.5; }
+
 </style>
   <script src="emoji-rain.js"></script>
 </head>

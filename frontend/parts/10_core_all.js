@@ -2926,9 +2926,8 @@ const state = {
   musicConfig: LS.get("musicConfig", {
     baseUrl: "http://43.142.110.120:9090",
     token: "",
-    source: "netease", // netease | spotify
-    // gateway = 自建 /music/* 网关；duetto = Duetto /api/ncm/*（官方可扫码）
-    backend: "auto", // auto | gateway | duetto
+    source: "netease", // netease（Duetto）| spotify（嵌入播放器）
+    // 网易云走 Duetto（/api/ncm/*，官方可扫码）；spotify = 官方嵌入播放器，不用登录
     duettoPin: "",   // Duetto 应用 PIN（与网易扫码无关）
   }),
   musicQuery: "",
@@ -2939,7 +2938,7 @@ const state = {
   musicNow: LS.get("musicNow", null), // {id,name,artists,cover,source,url?}
   musicPlaying: false,
   musicQr: { key: "", img: "", status: "idle", timer: null }, // netease qr
-  musicSpotifyAuthed: LS.get("musicSpotifyAuthed", false),
+  spotifyList: LS.get("spotifyList", []), // Spotify 嵌入播放器歌单 [{id,title,artist,cover}]
   musicNeteaseAuthed: LS.get("musicNeteaseAuthed", false),
   musicError: "",
   // 播放队列/浏览（内存，不持久化）
@@ -5321,7 +5320,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -5731,6 +5730,7 @@ function render(){
   EdenColorStudio.mount();
   DoodleShell.afterRender();
   DoodleRP.afterRender();
+  spotifyAfterRender();
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
     const fel = document.getElementById(savedFocus.id);
@@ -10495,30 +10495,16 @@ const SIX_AXIS_META = [
 function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
 
 
-// ─── 一起听（网易扫码 + Spotify · 兼容 自建网关 / Duetto）────────────────────
+// ─── 一起听（网易云扫码 · Duetto；Spotify 用官方嵌入播放器）────────────────────
 function musicBase(){
   return (state.musicConfig.baseUrl || "").replace(/\/$/, "");
 }
-/** auto：探测路径；gateway：/music/*；duetto：/api/ncm/*（与 Duetto 官方一致） */
-function musicBackend(){
-  const b = (state.musicConfig && state.musicConfig.backend) || "auto";
-  if(b === "gateway" || b === "duetto") return b;
-  // auto 启发：端口 4183 或路径含 duetto 时优先 Duetto
-  const u = (state.musicConfig.baseUrl || "").toLowerCase();
-  if(/:4183\b/.test(u) || u.includes("duetto")) return "duetto";
-  return state._musicBackendResolved || "gateway";
-}
+
 function musicHeaders(){
   const h = { "Accept": "application/json" };
   const t = (state.musicConfig && state.musicConfig.token) || "";
-  const be = musicBackend();
-  if(be === "duetto"){
-    // Duetto 门禁：Authorization Bearer（token 来自 PIN 登录）
-    if(t) h["Authorization"] = "Bearer " + t;
-    // 也带一份 query 备用
-  } else {
-    if(t) h["X-Auth-Token"] = t;
-  }
+  // Duetto 门禁：Authorization Bearer（token 来自 PIN 登录）
+  if(t) h["Authorization"] = "Bearer " + t;
   return h;
 }
 let musicAuthRefresh = null;
@@ -10527,11 +10513,11 @@ async function musicFetch(path, opts={}, retried=false){
   if(!base) throw new Error("请先填写一起听 API 地址");
   const token=state.musicConfig.token;
   let url=base+path;
-  if(musicBackend()==="duetto" && token && !/[?&]token=/.test(url)) url+=(url.includes("?")?"&":"?")+"token="+encodeURIComponent(token);
+  if(token && !/[?&]token=/.test(url)) url+=(url.includes("?")?"&":"?")+"token="+encodeURIComponent(token);
   const headers={...musicHeaders(),...(opts.headers||{})};
   if(opts.body!=null) headers["Content-Type"]=headers["Content-Type"]||"application/json";
   const res=await fetch(url,{...opts,headers});
-  if(res.status===401 && !retried && musicBackend()==="duetto" && state.musicConfig.duettoPin){
+  if(res.status===401 && !retried && state.musicConfig.duettoPin){
     if(token===state.musicConfig.token){
       if(!musicAuthRefresh) musicAuthRefresh=musicDuettoLoginWithPin().finally(()=>{musicAuthRefresh=null;});
       await musicAuthRefresh;
@@ -10566,28 +10552,7 @@ function normalizeSong(s, source){
     dur: s.dur || s.duration || 0,
   };
 }
-async function musicDetectBackend(){
-  if((state.musicConfig.backend || "auto") !== "auto") return musicBackend();
-  const base = musicBase();
-  if(!base) return "gateway";
-  // 先试 Duetto health / ncm status（不强依赖已登录）
-  try{
-    const res = await fetch(base + "/api/health", { headers: { Accept:"application/json" } });
-    if(res.ok){
-      state._musicBackendResolved = "duetto";
-      return "duetto";
-    }
-  }catch(e){}
-  try{
-    const res = await fetch(base + "/api/ncm/status", { headers: musicHeaders() });
-    if(res.status === 401 || res.ok){
-      state._musicBackendResolved = "duetto";
-      return "duetto";
-    }
-  }catch(e){}
-  state._musicBackendResolved = "gateway";
-  return "gateway";
-}
+
 async function musicDuettoLoginWithPin(pin){
   const p=String(pin||state.musicConfig.duettoPin||"").trim();
   if(!p) throw new Error("请填写 Duetto 应用 PIN（不是网易云密码）");
@@ -10600,8 +10565,8 @@ async function musicDuettoLoginWithPin(pin){
   const data=await res.json().catch(()=>({}));
   if(!res.ok){const error=new Error(data.error||data.message||"应用 PIN 登录失败，请检查音乐服务的 PIN");error.status=res.status;throw error;}
   if(!data.token)throw new Error("音乐服务未返回登录凭证");
-  state.musicConfig.token=data.token;state.musicConfig.duettoPin=p;state.musicConfig.backend="duetto";
-  state._musicBackendResolved="duetto";persist("musicConfig");return data.token;
+  state.musicConfig.token=data.token;state.musicConfig.duettoPin=p;
+  persist("musicConfig");return data.token;
 }
 function musicCapturePin(){
   const typed=document.getElementById("music-duetto-pin")?.value?.trim();
@@ -10637,8 +10602,6 @@ function renderMusic(){
   const now = state.musicNow;
   const results = state.musicResults || [];
 
-  const be = musicBackend();
-  const beLabel = be==="duetto" ? "Duetto" : (be==="gateway" ? "自建网关" : "自动");
   let authBlock = "";
   if(src==="netease"){
     const st = state.musicQr.status;
@@ -10661,27 +10624,19 @@ function renderMusic(){
          <button id="music-qr-start" class="btn-accent" style="margin-top:10px">${st==="waiting"||st==="scanning"?"刷新二维码":"生成二维码"}</button>`;
     authBlock = `<div class="qr-box">
       <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">网易云 · 扫码登录</div>
-      <div style="font-size:10px;color:var(--sub);margin-bottom:8px">后端：${beLabel} · ${esc((cfg.baseUrl||"").replace(/^https?:\/\//,"").slice(0,40))||"未配置地址"}</div>
-      ${be==="duetto" || (cfg.backend||"auto")==="auto" || (cfg.backend||"")==="duetto" ? `
+      <div style="font-size:10px;color:var(--sub);margin-bottom:8px">Duetto · ${esc((cfg.baseUrl||"").replace(/^https?:\/\//,"").slice(0,40))||"未配置地址"}</div>
+      ${`
       <div style="text-align:left;margin-bottom:10px;padding:10px;border-radius:12px;background:var(--bg);border:1px solid var(--border)">
         <div style="font-size:11px;color:var(--sub);margin-bottom:6px">Duetto 应用 PIN（门禁，不是网易密码）</div>
         <div style="display:flex;gap:8px">
           <input id="music-duetto-pin" type="password" placeholder="PIN ≥4 位" value="${escAttr(cfg.duettoPin||"")}" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:13px;background:var(--card);color:var(--text)"/>
           <button type="button" id="music-duetto-login" class="btn-accent2" style="padding:8px 12px;white-space:nowrap">登录门禁</button>
         </div>
-      </div>` : ""}
+      </div>`}
       ${qrInner}
     </div>`;
   } else {
-    authBlock = `<div class="qr-box">
-      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">Spotify · 授权登录</div>
-      ${state.musicSpotifyAuthed
-        ? `<div class="qr-status" style="color:var(--accent)">已授权 ✓</div>
-           <button id="music-spotify-logout" class="btn-ghost" style="margin-top:10px">断开</button>`
-        : `<div class="qr-status">跳转 Spotify 授权（需在设置填好 API，后端完成 OAuth）</div>
-           <button id="music-spotify-auth" class="btn-accent" style="margin-top:10px">去授权</button>`
-      }
-    </div>`;
+    authBlock = `<div class="qr-box"><div class="qr-status">Spotify 用官方嵌入播放器，不用登录。贴歌曲链接就能加进歌单。</div></div>`;
   }
 
   // 播放器：仿网易云的黑胶唱片 —— 圆形封面，播放时转，暂停就停
@@ -10717,7 +10672,7 @@ function renderMusic(){
     </div>`;
   }
 
-  const browseChips = (be==="duetto" && src==="netease") ? `
+  const browseChips = (src==="netease") ? `
     <div class="chip-row" style="margin-bottom:14px">
       ${[["search","<i data-lucide=\"search\"></i> 搜索"],["playlists","<i data-lucide=\"list-music\"></i> 我的歌单"],["recommend","<i data-lucide=\"sun\"></i> 每日推荐"],["fm","<i data-lucide=\"radio\"></i> 私人FM"],["toplist","<i data-lucide=\"trophy\"></i> 排行榜"]].map(([k,label])=>
         `<button type="button" class="filter-chip${state.musicBrowse===k?" active":""}" data-music-browse="${k}">${label}</button>`
@@ -10786,16 +10741,16 @@ function renderMusic(){
   }
 
   // 顶部只留浏览分区；音源/后端/登录收进齿轮，不再糊在脸上
-  const navs = (be==="duetto" && src==="netease")
+  const navs = (src==="netease")
     ? [["search","搜索"],["playlists","歌单"],["recommend","推荐"],["fm","私人FM"],["toplist","排行榜"]]
-    : [["search","搜索"]];
+    : [["spotify","Spotify 歌单"]];
+  if(src==="spotify") contentHtml = renderSpotifyEmbed();
   const settingsOpen = !!state.musicSettingsOpen;
 
   if(state.uiShell==="eden") return EdenMusic.page({authBlock,contentHtml,navs,nowBlock,src,settingsOpen});
   return `<div class="page nm">
     ${subHeader('<i data-lucide="music"></i> 一起听')}
-    ${state.uiShell==="eden"&&!now?'<section class="nm-hero"><p>Music is always with you.</p><small>音乐，永远与你同在。</small></section>':""}
-
+    
     <div class="nm-nav">
       ${navs.map(([k,label])=>`<button type="button" class="nm-tab${state.musicBrowse===k?" on":""}" data-music-browse="${k}">${label}</button>`).join("")}
       <button type="button" class="nm-gear${settingsOpen?" on":""}" id="music-settings-toggle" aria-label="音源与登录"><i data-lucide="settings-2"></i></button>
@@ -10805,11 +10760,6 @@ function renderMusic(){
       <div class="nm-seg">
         <button type="button" class="${src==="netease"?"on":""}" data-music-src="netease">网易云</button>
         <button type="button" class="${src==="spotify"?"on":""}" data-music-src="spotify">Spotify</button>
-      </div>
-      <div class="nm-seg">
-        <button type="button" class="${(cfg.backend||"auto")==="auto"?"on":""}" data-music-backend="auto">自动</button>
-        <button type="button" class="${(cfg.backend||"")==="duetto"?"on":""}" data-music-backend="duetto">Duetto</button>
-        <button type="button" class="${(cfg.backend||"")==="gateway"?"on":""}" data-music-backend="gateway">自建网关</button>
       </div>
       ${authBlock}
     </div>` : ""}
@@ -10829,19 +10779,9 @@ async function musicSearch(){
   state.musicError = "";
   render();
   try{
-    await musicDetectBackend();
-    const src = state.musicConfig.source || "netease";
-    const be = musicBackend();
-    let data;
-    if(be === "duetto" && src === "netease"){
-      data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(q)}`);
-      const raw = data.songs || data.result || [];
-      state.musicResults = (Array.isArray(raw)?raw:[]).map(s=>normalizeSong(s,"netease")).filter(Boolean);
-    } else {
-      data = await musicFetch(`/music/search?q=${encodeURIComponent(q)}&source=${src}`);
-      const raw = Array.isArray(data) ? data : (data.songs || data.result || []);
-      state.musicResults = raw.map(s=>normalizeSong(s, src) || s).filter(Boolean);
-    }
+    const data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(q)}`);
+    const raw = data.songs || data.result || [];
+    state.musicResults = (Array.isArray(raw)?raw:[]).map(s=>normalizeSong(s,"netease")).filter(Boolean);
   }catch(e){
     state.musicError = e.message;
     state.musicResults = [];
@@ -10864,34 +10804,20 @@ async function musicResolveAndPlay(song){
   if(song.source === "local" && typeof DoodleShell !== "undefined") return DoodleShell.playLocal(song);
   state.musicError = "";
   try{
-    await musicDetectBackend();
-    const src = song.source || state.musicConfig.source || "netease";
-    const be = musicBackend();
-    let url = "";
-    if(be === "duetto" && src === "netease"){
-      const data = await musicFetch(`/api/ncm/song-url?id=${encodeURIComponent(song.id)}`);
-      url = data.url || (data.data && data.data.url) || "";
-    } else {
-      const data = await musicFetch(`/music/url?id=${encodeURIComponent(song.id)}&source=${src}`);
-      url = data.url || data.data?.url || (typeof data === "string" ? data : "");
-    }
+    const data = await musicFetch(`/api/ncm/song-url?id=${encodeURIComponent(song.id)}`);
+    let url = data.url || (data.data && data.data.url) || "";
     if(!url || typeof url !== "string") throw new Error("未拿到播放地址（可能需要会员或重新登录）");
     url = url.replace(/^http:/, "https:");
+    if(typeof spotifyPause === "function") spotifyPause();
     const a = ensureAudio();
     a.src = url;
     await a.play();
-    state.musicNow = { ...normalizeSong(song, src), source: src, url };
+    state.musicNow = { ...normalizeSong(song, "netease"), source: "netease", url };
     state.musicPlaying = true;
     persist("musicNow");
-    // 歌词
     try{
-      if(be === "duetto" && src === "netease"){
-        const ly = await musicFetch(`/api/ncm/lyric?id=${encodeURIComponent(song.id)}`);
-        state.musicLyric = ly.lyric || ly.lrc || ly.tlyric || "";
-      } else {
-        const ly = await musicFetch(`/music/lyric?id=${encodeURIComponent(song.id)}&source=${src}`);
-        state.musicLyric = (typeof ly === "string") ? ly : (ly.lrc || ly.lyric || ly.tlyric || "");
-      }
+      const ly = await musicFetch(`/api/ncm/lyric?id=${encodeURIComponent(song.id)}`);
+      state.musicLyric = ly.lyric || ly.lrc || ly.tlyric || "";
     }catch{ state.musicLyric = ""; }
     render();
   }catch(e){
@@ -10966,16 +10892,10 @@ async function musicAutoNext(){
 }
 
 // ─── 歌单/推荐/FM/榜单 浏览加载（Duetto /api/ncm/*）────────────────────────
-async function musicBrowseDuettoOnly(){
-  try{ await musicDetectBackend(); }catch(e){}
-  if(musicBackend() !== "duetto"){
-    alert("歌单/推荐需要 Duetto 后端：在「VPS」页把一起听地址填到 Duetto 根地址并 PIN 登录");
-    return false;
-  }
-  return true;
-}
+
 
 async function musicBrowseGo(kind){
+  if(kind === "spotify"){ state.musicBrowse = "spotify"; render(); return; }
   if(kind === "search"){
     state.musicBrowse = "search";
     state.musicResults = [];
@@ -10983,7 +10903,6 @@ async function musicBrowseGo(kind){
     render();
     return;
   }
-  if(!await musicBrowseDuettoOnly()) return;
   if(kind === "playlists"){
     state.musicBrowse = "playlists";
     state.musicLoading = true;
@@ -11009,8 +10928,6 @@ async function musicBrowseGo(kind){
 }
 
 async function musicLoadPlaylists(){
-  await musicDetectBackend();
-  if(musicBackend() !== "duetto") return;
   const data = await musicFetch("/api/ncm/playlists");
   if(data && data.logged === false){
     state.musicPlaylists = [];
@@ -11024,8 +10941,6 @@ async function musicLoadPlaylists(){
 }
 
 async function musicLoadSongs(kind){
-  await musicDetectBackend();
-  if(musicBackend() !== "duetto") return;
   let data;
   if(kind === "recommend"){
     data = await musicFetch("/api/ncm/recommend");
@@ -11046,8 +10961,6 @@ async function musicLoadSongs(kind){
 
 async function musicOpenPlaylist(id, name){
   if(id == null) return;
-  await musicDetectBackend();
-  if(musicBackend() !== "duetto") return;
   state.musicLoading = true;
   state.musicBrowse = "playlist";
   state.musicBrowseTitle = name || "歌单";
@@ -11108,40 +11021,22 @@ async function musicStartNeteaseQr(){
   state.musicQr.key = "";
   render();
   try{
-    await musicDetectBackend();
-    const be = musicBackend();
-    let data;
-    if(be === "duetto"){
-      // Duetto：先确保过 PIN 门禁拿到有效 token，再要二维码（否则 401 / 未配置）
-      try{
-        await musicDuettoEnsureAuthed();
-      }catch(ae){
-        state.musicQr.status = "error";
-        state.musicError = ae.message;
-        render();
-        return;
-      }
-      // Duetto 官方：GET /api/ncm/qr → { ok, key, qrimg }
-      data = await musicFetch("/api/ncm/qr");
-    } else {
-      // 自建网关：优先新路径，失败再试 Duetto 路径（防配错）
-      try{
-        data = await musicFetch("/music/netease/qr/create", { method:"POST", body:"{}" });
-      }catch(e1){
-        try{
-          data = await musicFetch("/api/ncm/qr");
-          state._musicBackendResolved = "duetto";
-          if(state.musicConfig.backend === "auto"){ /* keep auto */ }
-        }catch(e2){
-          throw e1;
-        }
-      }
+    // 先确保过 Duetto PIN 门禁拿到有效 token，再要二维码（否则 401 / 未配置）
+    try{
+      await musicDuettoEnsureAuthed();
+    }catch(ae){
+      state.musicQr.status = "error";
+      state.musicError = ae.message;
+      render();
+      return;
     }
+    // Duetto 官方：GET /api/ncm/qr → { ok, key, qrimg }
+    const data = await musicFetch("/api/ncm/qr");
     const key = data.key || data.unikey || (data.data && (data.data.unikey || data.data.key)) || "";
     let img = data.qrimg || data.qrImage || data.img || data.qrurl || (data.data && (data.data.qrimg || data.data.qrurl)) || "";
     img = musicNormalizeQrImg(img);
     if(!key){
-      throw new Error("后端未返回 qr key。若用 Duetto，请确认地址指向 Duetto 根（含 /api），并已 PIN 登录。");
+      throw new Error("后端未返回 qr key。请确认地址指向 Duetto 根（含 /api），并已 PIN 登录。");
     }
     if(!img){
       // 有 key 无图：用网易云登录页链接做兜底二维码内容提示
@@ -11163,17 +11058,7 @@ async function musicPollNeteaseQr(){
   const key = state.musicQr.key;
   if(!key) return;
   try{
-    const be = musicBackend();
-    let data;
-    if(be === "duetto"){
-      data = await musicFetch(`/api/ncm/check?key=${encodeURIComponent(key)}`);
-    } else {
-      try{
-        data = await musicFetch(`/music/netease/qr/status?key=${encodeURIComponent(key)}`);
-      }catch(e){
-        data = await musicFetch(`/api/ncm/check?key=${encodeURIComponent(key)}`);
-      }
-    }
+    const data = await musicFetch(`/api/ncm/check?key=${encodeURIComponent(key)}`);
     // 网易：800 过期, 801 等待, 802 已扫, 803 确认
     const code = data.code ?? data.status;
     if(code===803 || code==="ok" || data.success || data.logged === true){
@@ -11201,35 +11086,201 @@ async function musicPollNeteaseQr(){
   }
 }
 
-async function musicSpotifyAuth(){
-  try{
-    const data = await musicFetch("/music/spotify/auth-url");
-    const url = data.url || data.authUrl;
-    if(!url) throw new Error("后端未返回授权链接");
-    window.open(url, "_blank");
-    alert("请在新窗口完成 Spotify 授权，完成后回来点「刷新状态」或重新打开本页");
-  }catch(e){
-    alert(e.message);
-  }
-}
+
 
 async function musicRefreshAuthStatus(){
   try{
-    await musicDetectBackend();
-    const be = musicBackend();
-    if(be === "duetto"){
-      const data = await musicFetch("/api/ncm/status");
-      state.musicNeteaseAuthed = !!(data.logged || data.nickname);
-      persist("musicNeteaseAuthed");
-      render();
-      return;
-    }
-    const data = await musicFetch("/music/auth/status");
-    if(typeof data.netease === "boolean") { state.musicNeteaseAuthed = data.netease; persist("musicNeteaseAuthed"); }
-    if(typeof data.spotify === "boolean") { state.musicSpotifyAuthed = data.spotify; persist("musicSpotifyAuthed"); }
+    const data = await musicFetch("/api/ncm/status");
+    state.musicNeteaseAuthed = !!(data.logged || data.nickname);
+    persist("musicNeteaseAuthed");
     render();
   }catch{}
 }
+
+// ─── Spotify · 官方嵌入播放器（不用登录）──────────────────────────────────
+// 播放器是官方 iframe，放在 #app 外面一个固定的「坞」里：页面每次 render() 都会重建 #app，
+// iframe 要是跟着重建，歌就会断。坞按页面里的占位格 #sp-slot 摆位置，离开页面就挪到屏幕外继续放。
+// 不登录 Spotify 时官方嵌入一般只给 30 秒试听；在这个 App 的网页里登录过 Spotify 就能听整首。
+// 封面：iTunes Search（免 key）；歌词：LRCLIB（免 key，带时间轴）。
+let __spCtrl = null, __spPending = null, __spCur = -1, __spLines = [], __spActive = -1, __spLyricHtml = "", __spPlaying = false;
+function spotifyList(){ if(!Array.isArray(state.spotifyList)) state.spotifyList = []; return state.spotifyList; }
+function spotifyEnsureDock(){
+  let dock = document.getElementById("sp-dock");
+  if(dock) return dock;
+  dock = document.createElement("div");
+  dock.id = "sp-dock";
+  dock.className = "sp-dock";
+  dock.innerHTML = '<div id="sp-embed"></div>';
+  document.body.appendChild(dock);
+  window.onSpotifyIframeApiReady = (API)=>{
+    API.createController(document.getElementById("sp-embed"),
+      { width: "100%", height: 80, uri: __spPending || "spotify:track:4cOdK2wGLETKBW3PvgPWqT" },
+      (c)=>{
+        __spCtrl = c;
+        c.addListener("playback_update", e=>{
+          const d = e.data || {};
+          __spPlaying = !d.isPaused;
+          spotifySyncLyrics((d.position || 0) / 1000);
+        });
+        if(__spPending){ c.loadUri(__spPending); c.play(); __spPending = null; }
+      });
+  };
+  const sc = document.createElement("script");
+  sc.src = "https://open.spotify.com/embed/iframe-api/v1";
+  sc.async = true;
+  document.head.appendChild(sc);
+  return dock;
+}
+function spotifyPause(){ try{ if(__spCtrl && __spPlaying) __spCtrl.pause(); }catch(e){} }
+/** 坞贴在页面占位格上；没有占位格就藏到屏幕外（歌照放） */
+function spotifyPlaceDock(){
+  const dock = document.getElementById("sp-dock");
+  if(!dock) return;
+  const slot = document.getElementById("sp-slot");
+  const r = slot && slot.getBoundingClientRect();
+  if(r && r.width){
+    // 往上滚到顶栏底下的那截裁掉，别盖住返回钮
+    const page = slot.closest(".page"), head = page && page.querySelector(".sub-header");
+    const limit = head ? head.getBoundingClientRect().bottom : (page ? page.getBoundingClientRect().top : 0);
+    const cutTop = Math.max(0, Math.min(r.height, limit - r.top));
+    dock.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;clip-path:inset(${cutTop}px 0 0 0 round 12px)`;
+    dock.classList.add("show");
+  } else {
+    dock.style.cssText = "";
+    dock.classList.remove("show");
+  }
+}
+function spotifyParseLrc(text){
+  const out = [];
+  String(text||"").split("\n").forEach(line=>{
+    const m = line.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+    if(m) out.push({ t: +m[1]*60 + +m[2], text: m[3].trim() });
+  });
+  return out;
+}
+async function spotifyFetchCover(s){
+  if(s.cover) return s.cover;
+  try{
+    const r = await fetch("https://itunes.apple.com/search?entity=song&limit=1&term=" + encodeURIComponent((s.artist||"") + " " + s.title));
+    const d = await r.json();
+    if(d.results && d.results[0]){ s.cover = d.results[0].artworkUrl100.replace("100x100", "600x600"); persist("spotifyList"); }
+  }catch(e){}
+  return s.cover || "";
+}
+async function spotifyFetchLyrics(s){
+  try{
+    const r = await fetch("https://lrclib.net/api/search?q=" + encodeURIComponent((s.artist||"") + " " + s.title));
+    const d = await r.json();
+    const hit = (Array.isArray(d) ? d : []).find(x=>x.syncedLyrics) || (Array.isArray(d) ? d[0] : null);
+    if(!hit) return null;
+    if(hit.syncedLyrics) return { synced: spotifyParseLrc(hit.syncedLyrics) };
+    return { plain: hit.plainLyrics || "" };
+  }catch(e){ return null; }
+}
+function spotifySyncLyrics(sec){
+  if(!__spLines.length) return;
+  let i = __spLines.findIndex(l=>l.t > sec) - 1;
+  if(i < 0 && sec >= __spLines[__spLines.length-1].t) i = __spLines.length - 1;
+  if(i === __spActive) return;
+  __spActive = i;
+  const box = document.getElementById("sp-lyrics");
+  if(!box) return;
+  box.querySelectorAll("p").forEach((p,k)=>p.classList.toggle("on", k === i));
+  const el = box.children[i];
+  if(el) box.scrollTop = el.offsetTop - box.clientHeight/2 + el.clientHeight/2;
+}
+async function spotifyPlay(i){
+  const list = spotifyList(), s = list[i];
+  if(!s) return;
+  __spCur = i;
+  spotifyEnsureDock();
+  try{ const a = document.getElementById("mp-audio"); if(a && !a.paused) a.pause(); }catch(e){}
+  const uri = "spotify:track:" + s.id;
+  if(__spCtrl){ __spCtrl.loadUri(uri); __spCtrl.play(); } else __spPending = uri;
+  __spLines = []; __spActive = -1;
+  __spLyricHtml = "<p>歌词找找看…</p>";
+  render();
+  spotifyFetchCover(s).then(()=>{ if(__spCur === i) render(); });
+  const ly = await spotifyFetchLyrics(s);
+  if(__spCur !== i) return;
+  if(!ly) __spLyricHtml = "<p>没找到歌词（换个英文歌名试试）</p>";
+  else if(ly.synced && ly.synced.length){ __spLines = ly.synced; __spLyricHtml = __spLines.map(l=>"<p>"+esc(l.text || "♪")+"</p>").join(""); }
+  else __spLyricHtml = String(ly.plain||"").split("\n").map(t=>"<p>"+esc(t)+"</p>").join("") || "<p>这首没有歌词</p>";
+  render();
+}
+async function spotifyAdd(){
+  const title = (document.getElementById("sp-in-title")?.value || "").trim();
+  const artist = (document.getElementById("sp-in-artist")?.value || "").trim();
+  const link = (document.getElementById("sp-in-link")?.value || "").trim();
+  const m = link.match(/track[\/:]([A-Za-z0-9]+)/);
+  if(!m){ alert("贴一条 Spotify 歌曲链接（分享 → 复制链接）"); return; }
+  const s = { id: m[1], title, artist, cover: "" };
+  // 没填歌名：问 Spotify 官方 oEmbed 要一个（同时拿缩略图当封面兜底）
+  if(!s.title){
+    try{
+      const r = await fetch("https://open.spotify.com/oembed?url=" + encodeURIComponent("https://open.spotify.com/track/" + s.id));
+      const d = await r.json();
+      s.title = d.title || "";
+      if(d.thumbnail_url) s.cover = d.thumbnail_url;
+    }catch(e){}
+  }
+  if(!s.title){ alert("没认出歌名，手动填一下歌名吧"); return; }
+  spotifyList().push(s);
+  persist("spotifyList");
+  render();
+}
+function spotifyDel(i){
+  const list = spotifyList();
+  if(!list[i] || !confirm("从歌单删掉「" + list[i].title + "」？")) return;
+  list.splice(i, 1);
+  if(__spCur === i) __spCur = -1; else if(__spCur > i) __spCur--;
+  persist("spotifyList");
+  render();
+}
+function renderSpotifyEmbed(){
+  const list = spotifyList(), s = list[__spCur];
+  return `<div class="sp-wrap">
+    <div class="sp-card">
+      <div class="sp-now">
+        ${s && s.cover ? `<img class="sp-cover" src="${escAttr(s.cover)}" alt=""/>` : `<span class="sp-cover sp-cover-blank"><i data-lucide="music"></i></span>`}
+        <div class="sp-meta"><b>${esc(s ? s.title : "还没在放")}</b><small>${esc(s ? (s.artist || "Spotify") : "点下面歌单里的歌开始听")}</small></div>
+      </div>
+      <div class="sp-slot" id="sp-slot"${__spCur < 0 && !__spCtrl ? ' hidden' : ''}></div>
+      <div class="sp-lyrics" id="sp-lyrics">${__spLyricHtml || "<p>点下面歌单里的歌开始听</p>"}</div>
+    </div>
+    <div class="sp-card">
+      ${list.length ? list.map((x,i)=>`<div class="sp-item${i===__spCur?" on":""}" data-sp-play="${i}">
+        ${x.cover ? `<img src="${escAttr(x.cover)}" alt=""/>` : `<span class="sp-ph"><i data-lucide="music"></i></span>`}
+        <div class="sp-info"><b>${esc(x.title)}</b><small>${esc(x.artist || "")}</small></div>
+        <button type="button" class="sp-del" data-sp-del="${i}" aria-label="删除">✕</button>
+      </div>`).join("") : `<p class="sp-empty">歌单还是空的，在下面加几首吧</p>`}
+    </div>
+    <div class="sp-card sp-add">
+      <input id="sp-in-link" placeholder="Spotify 歌曲链接（分享 → 复制链接）" autocomplete="off"/>
+      <div class="sp-add-row">
+        <input id="sp-in-title" placeholder="歌名（可不填）" autocomplete="off"/>
+        <input id="sp-in-artist" placeholder="歌手" autocomplete="off"/>
+      </div>
+      <button type="button" class="btn-accent" data-sp-add>加进歌单</button>
+      <p class="sp-tip">不登录 Spotify 一般只能听 30 秒试听；登录过就能听整首。歌手填上，封面和歌词更好找。</p>
+    </div>
+  </div>`;
+}
+function spotifyAfterRender(){
+  if(document.getElementById("sp-slot") || document.getElementById("sp-dock")) spotifyEnsureDock();
+  spotifyPlaceDock();
+  if(__spActive >= 0){ const box = document.getElementById("sp-lyrics"); const el = box && box.children[__spActive]; if(el){ el.classList.add("on"); box.scrollTop = el.offsetTop - box.clientHeight/2 + el.clientHeight/2; } }
+}
+document.addEventListener("click", e=>{
+  const t = e.target.closest && e.target.closest("[data-sp-play],[data-sp-del],[data-sp-add]");
+  if(!t) return;
+  e.preventDefault(); e.stopPropagation();
+  if(t.hasAttribute("data-sp-del")) spotifyDel(+t.dataset.spDel);
+  else if(t.hasAttribute("data-sp-add")) spotifyAdd();
+  else spotifyPlay(+t.dataset.spPlay);
+}, true);
+document.addEventListener("scroll", ()=>{ if(document.getElementById("sp-dock")) requestAnimationFrame(spotifyPlaceDock); }, true);
+window.addEventListener("resize", ()=>{ if(document.getElementById("sp-dock")) spotifyPlaceDock(); });
 
 
 function formatMinutes(m){
@@ -15973,18 +16024,9 @@ function handlePlaylistMarkers(body){
 async function songSearchFirst(q){
   const query = String(q||"").trim();
   if(!query) return null;
-  try{ if(typeof musicDetectBackend === "function") await musicDetectBackend(); }catch(e){}
-  const src = (state.musicConfig && state.musicConfig.source) || "netease";
-  const be = (typeof musicBackend === "function") ? musicBackend() : "gateway";
-  let raw;
-  if(be === "duetto" && src === "netease"){
-    const data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(query)}`);
-    raw = (data && (data.songs || data.result)) || [];
-  } else {
-    const data = await musicFetch(`/music/search?q=${encodeURIComponent(query)}&source=${src}`);
-    raw = Array.isArray(data) ? data : ((data && (data.songs || data.result)) || []);
-  }
-  const list = (Array.isArray(raw) ? raw : []).map(s=>normalizeSong(s, src)).filter(Boolean);
+  const data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(query)}`);
+  const raw = (data && (data.songs || data.result)) || [];
+  const list = (Array.isArray(raw) ? raw : []).map(s=>normalizeSong(s, "netease")).filter(Boolean);
   return list[0] || null;
 }
 
@@ -19234,16 +19276,9 @@ function renderVps(){
       <div class="section-title"><i data-lucide="music"></i> 一起听</div>
       <div class="section-body">
         <div class="setting-row"><span class="setting-label">Base URL</span>
-          <input id="cfg-musicBase" value="${escAttr(m.baseUrl||"")}" placeholder="Duetto: http://host:4183 或 自建网关"/></div>
-        <div class="setting-row"><span class="setting-label">Token / Duetto PIN 登录后的 Bearer</span>
-          <input type="password" id="cfg-musicToken" value="${escAttr(m.token||"")}" placeholder="自建=X-Auth-Token；Duetto=PIN 登录后自动填"/></div>
-        <div class="setting-row"><span class="setting-label">后端模式</span>
-          <div class="channel-btns">
-            <button type="button" class="channel-btn${(m.backend||"auto")==="auto"?" active":""}" data-cfg-music-backend="auto">自动</button>
-            <button type="button" class="channel-btn${m.backend==="duetto"?" active":""}" data-cfg-music-backend="duetto">Duetto</button>
-            <button type="button" class="channel-btn${m.backend==="gateway"?" active":""}" data-cfg-music-backend="gateway">自建网关</button>
-          </div>
-        </div>
+          <input id="cfg-musicBase" value="${escAttr(m.baseUrl||"")}" placeholder="Duetto: http://host:4183"/></div>
+        <div class="setting-row"><span class="setting-label">Token（Duetto PIN 登录后的 Bearer）</span>
+          <input type="password" id="cfg-musicToken" value="${escAttr(m.token||"")}" placeholder="PIN 登录后自动填"/></div>
       </div>
     </div>
     <div class="section">
@@ -27643,6 +27678,7 @@ function bindEvents(){
   $$("[data-music-src]").forEach(btn=>{
     btn.onclick = ()=>{
       state.musicConfig.source = btn.dataset.musicSrc;
+      state.musicBrowse = btn.dataset.musicSrc === "spotify" ? "spotify" : "search";
       persist("musicConfig");
       state.musicResults = [];
       state.musicError = "";
@@ -27685,18 +27721,9 @@ function bindEvents(){
   const mnl = document.getElementById("music-netease-logout");
   if(mnl) mnl.onclick = async ()=>{
     try{
-      await musicDetectBackend();
-      if(musicBackend()==="duetto") await musicFetch("/api/ncm/logout", { method:"POST", body:"{}" });
-      else await musicFetch("/music/netease/logout", { method:"POST", body:"{}" });
+      await musicFetch("/api/ncm/logout", { method:"POST", body:"{}" });
     }catch{}
     state.musicNeteaseAuthed=false; persist("musicNeteaseAuthed"); render();
-  };
-  const msa = document.getElementById("music-spotify-auth");
-  if(msa) msa.onclick = ()=> musicSpotifyAuth();
-  const msl = document.getElementById("music-spotify-logout");
-  if(msl) msl.onclick = async ()=>{
-    try{ await musicFetch("/music/spotify/logout", { method:"POST", body:"{}" }); }catch{}
-    state.musicSpotifyAuthed=false; persist("musicSpotifyAuthed"); render();
   };
   const mra = document.getElementById("music-refresh-auth");
   if(mra) mra.onclick = ()=> musicRefreshAuthStatus();
@@ -27709,26 +27736,9 @@ function bindEvents(){
       render();
     }catch(e){ alert(e.message); }
   };
-  $$("[data-music-backend]").forEach(btn=>{
-    btn.onclick = ()=>{
-      state.musicConfig.backend = btn.dataset.musicBackend || "auto";
-      state._musicBackendResolved = null;
-      persist("musicConfig");
-      render();
-    };
-  });
-  $$("[data-cfg-music-backend]").forEach(btn=>{
-    btn.onclick = ()=>{
-      state.musicConfig.backend = btn.dataset.cfgMusicBackend || "auto";
-      state._musicBackendResolved = null;
-      persist("musicConfig");
-      render();
-    };
-  });
   const cfgBase = document.getElementById("cfg-musicBase");
   if(cfgBase) cfgBase.onchange = ()=>{
     state.musicConfig.baseUrl = cfgBase.value.trim();
-    state._musicBackendResolved = null;
     persist("musicConfig");
   };
   const cfgTok = document.getElementById("cfg-musicToken");
@@ -36056,7 +36066,7 @@ window.reinitState = function(){
     albumData:"albumData",htmlGameSrc:"htmlGameSrc",htmlGameName:"htmlGameName",
     thoughtGuide:"thoughtGuide",htmlGameCollection:"htmlGameCollection",cmdList:"cmdList",
     contextLimit:"contextLimit",musicConfig:"musicConfig",musicNow:"musicNow",
-    musicNeteaseAuthed:"musicNeteaseAuthed",musicSpotifyAuthed:"musicSpotifyAuthed",
+    musicNeteaseAuthed:"musicNeteaseAuthed",spotifyList:"spotifyList",
     
     wardrobeItems:"wardrobeItems",todayOutfit:"todayOutfit",wardrobeFeedChat:"wardrobeFeedChat",
     books:"books",readingNow:"readingNow",
