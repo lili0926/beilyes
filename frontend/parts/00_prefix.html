@@ -6289,171 +6289,58 @@
     body.shell-korean .kr-home .home-track.page3 { transform: translateX(-60%) !important; }
     body.shell-korean .kr-home .home-track.page4 { transform: translateX(-80%) !important; }
 
-    /* ========== Kakao 图气泡皮肤 ==========
-       水色(suisei) 的四张图是「云朵铺满整张画布」，9-slice（border-image）切得干净，保留原做法。
-       轻松熊/鱼饼熊/彩虹熊 的素材不是 9-patch：本体是圆形/圆角块 + 挂件(熊)蹲在角上，
-       而且本体只占画布的一半（另一半全透明）。用 9-slice 会有两个后果：
-         1) 边/角从透明区采样 → 气泡缺一条边；
-         2) 挂件落在 top 切片里 → 被压成十几 px 高再横向拉伸 → 糊成一条。
-       所以这三个皮肤改成：本体用纯 CSS 画（颜色直接取自原图），
-       挂件用 ::before 按原比例裁切贴在气泡角上，永不拉伸。 */
 
     /* ---- 水色：保留 9-slice ---- */
-    body.bubble-skin-suisei .bubble.them.skin-suisei,
-    body.bubble-skin-suisei .bubble.me.skin-suisei {
-      background: transparent !important;
-      background-image: none !important;
-      border-style: solid !important;
-      border-color: transparent !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      border-image-repeat: stretch !important;
-      padding: 2px 4px !important;
-      border-width: 12px 14px !important;
-      border-image-slice: 40 32 40 32 fill !important;
-      border-image-width: 12px 14px !important;
-      color: #627075 !important;
-    }
-    body.bubble-skin-suisei .bubble.them.skin-suisei { border-image-source: url("bubbles/suisei/them-01.png") !important; }
-    body.bubble-skin-suisei .bubble.them.skin-suisei.cont { border-image-source: url("bubbles/suisei/them-02.png") !important; }
-    body.bubble-skin-suisei .bubble.me.skin-suisei { border-image-source: url("bubbles/suisei/me-01.png") !important; }
-    body.bubble-skin-suisei .bubble.me.skin-suisei.cont { border-image-source: url("bubbles/suisei/me-02.png") !important; }
+    
+    
+    
+    
+    
 
     /* ---- 三个熊系皮肤：CSS 本体 ---- */
-    body.bubble-skin-cool .bubble.skin-cool,
-    body.bubble-skin-fish .bubble.skin-fish,
-    body.bubble-skin-rainbow .bubble.skin-rainbow {
-      background-image: none !important;
-      border-style: solid !important;
-      border-width: 1.5px !important;
-      border-image: none !important;
-      padding: 9px 14px !important;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-      position: relative;
-      overflow: visible;
-    }
+    
     /* 挂件只挂在一轮消息的第一条上（.cont = 同一轮的后续气泡） */
-    body.bubble-skin-cool .bubble.skin-cool:not(.cont)::before,
-    body.bubble-skin-fish .bubble.skin-fish:not(.cont)::before,
-    body.bubble-skin-rainbow .bubble.skin-rainbow:not(.cont)::before {
-      content: "";
-      position: absolute;
-      background-repeat: no-repeat;
-      pointer-events: none;
-      z-index: 1;
-    }
+    
 
     /* 轻松熊 쿨쿨 */
-    body.bubble-skin-cool .bubble.them.skin-cool {
-      background: #E4EEF6 !important; border-color: #BCD6E9 !important;
-      border-radius: 6px 18px 18px 18px !important; color: #5a5048 !important;
-    }
-    body.bubble-skin-cool .bubble.me.skin-cool {
-      background: #FDDDDE !important; border-color: #F1C6C8 !important;
-      border-radius: 18px 6px 18px 18px !important; color: #5a5048 !important;
-    }
-    body.bubble-skin-cool .bubble.skin-cool:not(.cont) { margin-top: 30px; }
-    body.bubble-skin-cool .bubble.them.skin-cool:not(.cont)::before {
-      width: 66.6px; height: 42.4px; left: -2px; top: -30px;
-      background-image: url("bubbles/cool/them-01.png");
-      background-size: 82.5px 91.9px; background-position: -1.1px -6.1px;
-    }
-    body.bubble-skin-cool .bubble.me.skin-cool:not(.cont)::before {
-      width: 56.2px; height: 42.1px; right: -2px; top: -30px;
-      background-image: url("bubbles/cool/me-01.png");
-      background-size: 81.1px 86.8px; background-position: -20.3px -3.6px;
-    }
+    
+    
+    
+    
+    
 
     /* 鱼饼熊 붕어빵 */
-    body.bubble-skin-fish .bubble.them.skin-fish {
-      background: #F1F3DF !important; border-color: #DFE3C2 !important;
-      border-radius: 8px 20px 20px 20px !important; color: #5c5348 !important;
-    }
-    body.bubble-skin-fish .bubble.me.skin-fish {
-      background: #F3DFDF !important; border-color: #E7C9CB !important;
-      border-radius: 20px 8px 20px 20px !important; color: #5c5348 !important;
-    }
-    body.bubble-skin-fish .bubble.skin-fish:not(.cont) { margin-top: 21px; }
-    body.bubble-skin-fish .bubble.them.skin-fish:not(.cont)::before {
-      width: 47.7px; height: 29.1px; left: -4px; top: -21px;
-      background-image: url("bubbles/fish/them-01.png");
-      background-size: 93px 73.8px; background-position: -1.2px -0.6px;
-    }
-    body.bubble-skin-fish .bubble.me.skin-fish:not(.cont)::before {
-      width: 46.5px; height: 28.5px; right: -4px; top: -21px;
-      background-image: url("bubbles/fish/me-01.png");
-      background-size: 93px 73.8px; background-position: -45.3px -1.2px;
-    }
+    
+    
+    
+    
+    
 
     /* 彩虹熊：素材里首条/续条本来就是两种配色，照搬 */
-    body.bubble-skin-rainbow .bubble.them.skin-rainbow {
-      background: #FFE3E1 !important; border-color: #F6C8CA !important;
-      border-radius: 8px 20px 20px 20px !important; color: #4a4450 !important;
-    }
-    body.bubble-skin-rainbow .bubble.them.skin-rainbow.cont {
-      background: #E9F5FB !important; border-color: #C9E2D0 !important;
-    }
-    body.bubble-skin-rainbow .bubble.me.skin-rainbow {
-      background: #EAF8DA !important; border-color: #CBE7B2 !important;
-      border-radius: 20px 8px 20px 20px !important; color: #4a4450 !important;
-    }
-    body.bubble-skin-rainbow .bubble.me.skin-rainbow.cont {
-      background: #FFF9C8 !important; border-color: #C6E9FA !important;
-    }
-    body.bubble-skin-rainbow .bubble.them.skin-rainbow:not(.cont) { margin-top: 30px; }
-    body.bubble-skin-rainbow .bubble.me.skin-rainbow:not(.cont) { margin-top: 22px; }
-    body.bubble-skin-rainbow .bubble.them.skin-rainbow:not(.cont)::before {
-      width: 47.5px; height: 41.5px; right: -6px; top: -30px;
-      background-image: url("bubbles/rainbow/them-01.png");
-      background-size: 74.5px 85px; background-position: -26px -4px;
-    }
-    body.bubble-skin-rainbow .bubble.me.skin-rainbow:not(.cont)::before {
-      width: 29.1px; height: 28.5px; right: -2px; top: -22px;
-      background-image: url("bubbles/rainbow/me-01.png");
-      background-size: 66.3px 60.8px; background-position: -37.2px 0;
-    }
+    
+    
+    
+    
+    
+    
+    
+    
 
     /* ---- 蕾丝十字架 / 蝴蝶：装饰边框图，9-slice；me 用水平翻转图 ---- */
-    body.bubble-skin-lace .bubble.them.skin-lace,
-    body.bubble-skin-lace .bubble.me.skin-lace,
-    body.bubble-skin-butterfly .bubble.them.skin-butterfly,
-    body.bubble-skin-butterfly .bubble.me.skin-butterfly {
-      background: transparent !important;
-      background-image: none !important;
-      border-style: solid !important;
-      border-color: transparent !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      border-image-repeat: stretch !important;
-      color: #4a4450 !important;
-    }
-    body.bubble-skin-lace .bubble.them.skin-lace,
-    body.bubble-skin-lace .bubble.me.skin-lace {
-      padding: 6px 10px !important;
-      border-width: 18px 48px !important;
-      border-image-slice: 90 220 90 220 fill !important;
-      border-image-width: 18px 48px !important;
-    }
-    body.bubble-skin-lace .bubble.them.skin-lace { border-image-source: url("bubbles/lace/them-01.png") !important; }
-    body.bubble-skin-lace .bubble.them.skin-lace.cont { border-image-source: url("bubbles/lace/them-02.png") !important; }
-    body.bubble-skin-lace .bubble.me.skin-lace { border-image-source: url("bubbles/lace/me-01.png") !important; }
-    body.bubble-skin-lace .bubble.me.skin-lace.cont { border-image-source: url("bubbles/lace/me-02.png") !important; }
+    
+    
+    
+    
+    
+    
 
-    body.bubble-skin-butterfly .bubble.them.skin-butterfly,
-    body.bubble-skin-butterfly .bubble.me.skin-butterfly {
-      padding: 8px 14px !important;
-      border-width: 22px 36px !important;
-      border-image-slice: 120 160 120 160 fill !important;
-      border-image-width: 22px 36px !important;
-    }
-    body.bubble-skin-butterfly .bubble.them.skin-butterfly { border-image-source: url("bubbles/butterfly/them-01.png") !important; }
-    body.bubble-skin-butterfly .bubble.them.skin-butterfly.cont { border-image-source: url("bubbles/butterfly/them-02.png") !important; }
-    body.bubble-skin-butterfly .bubble.me.skin-butterfly { border-image-source: url("bubbles/butterfly/me-01.png") !important; }
-    body.bubble-skin-butterfly .bubble.me.skin-butterfly.cont { border-image-source: url("bubbles/butterfly/me-02.png") !important; }
+    
+    
+    
+    
+    
 
-    body[class*="bubble-skin-"] .bubble[class*="skin-"] {
-      max-width: 92% !important;
-    }
+    
 
     /* ══════════════════════════════════════════════════════════════════
        蓝晒壳 shell-blueprint

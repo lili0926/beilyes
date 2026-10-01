@@ -2860,7 +2860,7 @@ const state = {
   pattern: LS.get("pattern","素色"),
   customWallpaper: LS.get("customWallpaper", ""), // dataURL 自定义壁纸
   // 气泡材质：solid | fog | water | soft（水色系 Kakao 九宫格）；透明度与自定义色
-  bubbleStyle: LS.get("bubbleStyle", "solid"),
+  bubbleStyle: ["solid","fog","water"].includes(LS.get("bubbleStyle", "solid")) ? LS.get("bubbleStyle", "solid") : "solid",
   bubbleGrad: LS.get("bubbleGrad", 0),   // 0=无渐变，1-4=渐变色卡组
   bubbleOpacity: LS.get("bubbleOpacity", 0.72),
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
@@ -4483,21 +4483,10 @@ function applyThemeVars(){
     }catch(e){}
     // 「界面材质」（雾玻璃/水玻璃/图片皮肤）会往卡片上刷一层半透明白 !important，
     // 蓝晒壳整套自成体系，这几个 class 一律不挂
-    app.classList.remove("ui-glass-fog", "ui-glass-water", "ui-bubble-soft");
+    app.classList.remove("ui-glass-fog", "ui-glass-water");
     if(isBp){ /* 蓝晒壳的玻璃在 CSS 里自己做 */ }
     else if((state.bubbleStyle||"solid")==="fog") app.classList.add("ui-glass-fog");
     else if((state.bubbleStyle||"solid")==="water") app.classList.add("ui-glass-water");
-    else if(typeof isBubbleImageSkin==="function" && isBubbleImageSkin()) app.classList.add("ui-bubble-soft");
-    try{
-      const bs = isBp ? "solid" : (state.bubbleStyle || "solid");
-      document.body.classList.remove("bubble-skin-soft","bubble-skin-suisei","bubble-skin-cool","bubble-skin-fish","bubble-skin-rainbow","bubble-skin-lace","bubble-skin-butterfly");
-      if(bs==="soft"||bs==="suisei") document.body.classList.add("bubble-skin-suisei");
-      else if(bs==="cool") document.body.classList.add("bubble-skin-cool");
-      else if(bs==="fish") document.body.classList.add("bubble-skin-fish");
-      else if(bs==="rainbow") document.body.classList.add("bubble-skin-rainbow");
-      else if(bs==="lace") document.body.classList.add("bubble-skin-lace");
-      else if(bs==="butterfly") document.body.classList.add("bubble-skin-butterfly");
-    }catch(e){}
     app.style.backgroundColor=t.bg;
     if(isBp){
       // 蓝晒壳的底是 CSS 里那张晒图纸网格：壁纸和布料纹理都不上，
@@ -4813,17 +4802,7 @@ function bubbleGlassClass(raw){
   const s = state.bubbleStyle || "solid";
   if(s === "fog") return " glass-fog";
   if(s === "water") return " glass-water";
-  if(s === "soft" || s === "suisei") return " skin-suisei";
-  if(s === "cool") return " skin-cool";
-  if(s === "fish") return " skin-fish";
-  if(s === "rainbow") return " skin-rainbow";
-  if(s === "lace") return " skin-lace";
-  if(s === "butterfly") return " skin-butterfly";
   return "";
-}
-function isBubbleImageSkin(s){
-  s = s || state.bubbleStyle || "solid";
-  return s==="soft"||s==="suisei"||s==="cool"||s==="fish"||s==="rainbow"||s==="lace"||s==="butterfly";
 }
 
 function daysSince(){ return Math.floor((Date.now()-new Date(state.coupleInfo.startDate))/86400000); }
@@ -24253,8 +24232,6 @@ function renderTheme(){
   const meCol = (state.bubbleMeColor && state.bubbleMeColor.trim()) || t.bubble_me;
   const themCol = (state.bubbleThemColor && state.bubbleThemColor.trim()) || t.bubble_them;
   const glassCls = bStyle==="fog" ? " glass-fog" : (bStyle==="water" ? " glass-water" : "");
-  const imgSkin = (typeof isBubbleImageSkin==="function") && isBubbleImageSkin(bStyle);
-  const skinCls = imgSkin ? ((typeof bubbleGlassClass==="function") ? bubbleGlassClass(true) : "") : "";
   const grad = (typeof bubbleGrad==="function") ? bubbleGrad() : null;
   const meBg = grad ? `linear-gradient(135deg, ${grad.c1}, ${grad.c2}, ${grad.c3})`
     : (bStyle==="solid" ? meCol : (typeof hexToRgba==="function" ? hexToRgba(meCol, (Number(state.bubbleOpacity)||0.72)) : meCol));
@@ -24284,8 +24261,8 @@ function renderTheme(){
 
     <div class="sw-preview" style="background-color:${t.bg};background-image:${wallBg};background-size:${wallSize};background-position:center">
       <div class="sw-preview-chat">
-        <div class="bubble them${glassCls}${skinCls}" style="${imgSkin?"":`background:${themBg};color:${themFg}`}">今天天气不错呢</div>
-        <div class="bubble me${glassCls}${skinCls}" style="${imgSkin?"":`background:${meBg};color:${meFg}`}">外观可以这样换～</div>
+        <div class="bubble them${glassCls}" style="background:${themBg};color:${themFg}">今天天气不错呢</div>
+        <div class="bubble me${glassCls}" style="background:${meBg};color:${meFg}">外观可以这样换～</div>
         <div class="sw-preview-tag">${esc(t.name||state.theme||"")} · ${bStyle}</div>
       </div>
     </div>
@@ -24325,12 +24302,6 @@ function renderTheme(){
         <button type="button" class="sw-chip${bStyle==="solid"?" on":""}" data-bubble-style="solid">实心</button>
         <button type="button" class="sw-chip${bStyle==="fog"?" on":""}" data-bubble-style="fog">雾玻璃</button>
         <button type="button" class="sw-chip${bStyle==="water"?" on":""}" data-bubble-style="water">水玻璃</button>
-        <button type="button" class="sw-chip${bStyle==="soft"?" on":""}" data-bubble-style="soft">水色系</button>
-        <button type="button" class="sw-chip${bStyle==="cool"?" on":""}" data-bubble-style="cool">轻松熊</button>
-        <button type="button" class="sw-chip${bStyle==="fish"?" on":""}" data-bubble-style="fish">鱼饼熊</button>
-        <button type="button" class="sw-chip${bStyle==="rainbow"?" on":""}" data-bubble-style="rainbow">彩虹熊</button>
-        <button type="button" class="sw-chip${bStyle==="lace"?" on":""}" data-bubble-style="lace">蕾丝</button>
-        <button type="button" class="sw-chip${bStyle==="butterfly"?" on":""}" data-bubble-style="butterfly">蝴蝶</button>
       </div>
       <div class="sw-slider-row">
         <span>气泡透明度</span>
