@@ -4463,6 +4463,86 @@
     .sp-add .btn-accent { padding: 10px; border-radius: 12px; }
     .sp-tip { margin: 0; font-size: 11px; color: var(--sub); line-height: 1.5; }
 
+    /* ─── 聊天内电话卡 ─── */
+    .ccard{position:relative;z-index:6;margin:6px 12px 4px;padding:12px 12px 10px;border-radius:22px;background:var(--card);color:var(--text);border:1px solid var(--border);box-shadow:0 10px 28px -12px rgba(0,0,0,.28);flex:0 0 auto;animation:ccardIn .32s cubic-bezier(.2,.9,.3,1.2);overflow:hidden}
+    .ccard::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 0% 0%,var(--accent) 0%,transparent 60%);opacity:.13;pointer-events:none}
+    .ccard>*{position:relative}
+    @keyframes ccardIn{from{opacity:0;transform:translateY(-10px) scale(.97)}to{opacity:1;transform:none}}
+    .ccard-top{display:flex;align-items:center;gap:10px}
+    .ccard-av{position:relative;width:44px;height:44px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;background:var(--bg);color:var(--accent);overflow:visible}
+    .ccard-av img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+    .ccard-av svg{width:20px;height:20px}
+    .ccard-av.sm{width:30px;height:30px}
+    .ccard-av.sm svg{width:14px;height:14px}
+    .ccard-av.ring::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent);opacity:.55;animation:ccardRing 1.6s ease-out infinite}
+    .ccard-av.talk::after{animation-duration:.8s;opacity:.9}
+    @keyframes ccardRing{0%{transform:scale(.92);opacity:.8}100%{transform:scale(1.28);opacity:0}}
+    .ccard-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+    .ccard-who b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ccard-st{font-size:11.5px;color:var(--sub);display:flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+    .ccard-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);animation:callRip 1.4s infinite}
+    .ccard-dot.live{background:#3fbf7f}
+    .ccard-ic{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--bg);color:var(--text);display:grid;place-items:center;flex:0 0 auto;cursor:pointer;padding:0;transition:transform .15s}
+    .ccard-ic:active{transform:scale(.9)}
+    .ccard-ic svg{width:17px;height:17px}
+    .ccard-ic.on{background:var(--accent);color:#fff;border-color:transparent}
+    .ccard-ic.hang{background:#ef5a6f;color:#fff;border-color:transparent}
+    .ccard-ic.ok{background:#3fbf7f;color:#fff;border-color:transparent}
+    .ccard-ic:disabled{opacity:.45}
+    .ccard-reason{margin:10px 2px 0;font-size:13px;line-height:1.5;color:var(--text);opacity:.85}
+    .ccard-quick{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+    .ccard-quick button{border:1px dashed var(--border);background:transparent;color:var(--sub);border-radius:999px;padding:5px 11px;font-size:11.5px;cursor:pointer}
+    .ccard-ans{display:flex;gap:10px;margin-top:12px}
+    .ccard-big{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:16px;padding:11px 0;font-size:14px;font-weight:600;color:#fff;cursor:pointer}
+    .ccard-big svg{width:17px;height:17px}
+    .ccard-big.hang{background:#ef5a6f}
+    .ccard-big.ok{background:#3fbf7f;animation:ccardBob 1.2s ease-in-out infinite}
+    @keyframes ccardBob{50%{transform:translateY(-2px)}}
+    .ccard-caps{margin-top:10px;max-height:min(22vh,170px);overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:2px;scrollbar-width:none}
+    .ccard-caps::-webkit-scrollbar{display:none}
+    .ccard-cap{max-width:86%;padding:7px 11px;border-radius:14px;font-size:13px;line-height:1.45;word-break:break-word}
+    .ccard-cap.them{align-self:flex-start;background:var(--bg);border-bottom-left-radius:5px}
+    .ccard-cap.me{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:5px}
+    .ccard-cap .cap-zh{font-size:11.5px;opacity:.75;margin-top:2px}
+    .ccard-hint{font-size:11.5px;color:var(--sub);text-align:center;padding:6px 0}
+    .ccard-err{font-size:11px;color:#d0455a;margin-top:6px}
+    .ccard-ctrl{display:flex;align-items:center;gap:8px;margin-top:10px}
+    .ccard-hold{flex:1;height:40px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none}
+    .ccard-hold.rec{background:var(--accent);color:#fff;animation:ccardRec 1s ease-in-out infinite}
+    .ccard-hold.locked{background:var(--accent);color:#fff}
+    .ccard-hold:disabled{opacity:.5}
+    @keyframes ccardRec{50%{box-shadow:0 0 0 6px rgba(239,90,111,.0),0 0 0 3px var(--accent)}}
+    .ccard-type{display:flex;gap:6px;margin-top:8px}
+    .ccard-type input{flex:1;min-width:0;border:1px solid var(--border);border-radius:999px;padding:8px 13px;font-size:13px;background:var(--bg);color:var(--text);outline:none}
+    .ccard-type button{width:36px;height:36px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer}
+    .ccard-type button svg{width:15px;height:15px}
+    .ccard-pill{display:flex;align-items:center;gap:8px;margin:6px 12px 2px;padding:5px 5px 5px 6px;border-radius:999px;background:var(--card);border:1px solid var(--border);box-shadow:0 6px 18px -10px rgba(0,0,0,.3);flex:0 0 auto;animation:ccardIn .25s ease}
+    .ccard-pill-main{flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--text);cursor:pointer;padding:0;text-align:left}
+    .ccard-pill-main>svg{width:16px;height:16px;color:var(--sub)}
+    .ccard-pill-txt{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;font-size:13px}
+    .ccard-pill-txt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ccard-pill-txt span{color:#3fbf7f;font-variant-numeric:tabular-nums;font-size:12px}
+    .ccard-pill .ccard-ic{width:32px;height:32px}
+    .ccard-banner{position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:9000;display:flex;align-items:center;gap:10px;padding:9px 9px 9px 12px;border-radius:20px;background:var(--card);color:var(--text);border:1px solid var(--border);box-shadow:0 14px 34px -12px rgba(0,0,0,.4);animation:ccardDrop .4s cubic-bezier(.2,.9,.3,1.25)}
+    @keyframes ccardDrop{from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:none}}
+    .ccard-banner-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+    .ccard-banner-txt b{font-size:14px}
+    .ccard-banner-txt span{font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* 聊天里的通话记录 */
+    .bubble.call-log{display:flex;align-items:center;gap:10px;min-width:170px;max-width:250px}
+    .call-log-ic{width:34px;height:34px;border-radius:50%;border:0;flex:0 0 auto;display:grid;place-items:center;background:rgba(63,191,127,.16);color:#2f9e68;cursor:pointer;padding:0}
+    .call-log.miss .call-log-ic{background:rgba(239,90,111,.14);color:#d0455a}
+    .bubble.me .call-log-ic{background:rgba(255,255,255,.24);color:#fff}
+    .call-log-ic svg{width:16px;height:16px}
+    .call-log-txt{min-width:0;display:flex;flex-direction:column;gap:2px}
+    .call-log-txt b{font-size:13.5px;font-weight:600}
+    .call-log-txt span{font-size:11.5px;opacity:.7;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    /* 他的语音条：合成中 */
+    .voice-pending .voice-play svg{animation:ccardSpin 1s linear infinite;fill:none}
+    .voice-pending .voice-wave{opacity:.35}
+    @keyframes ccardSpin{to{transform:rotate(360deg)}}
+    /* 星光涂鸦壳：手写体 + 虚线描边 */
+    body.shell-doodle .ccard,body.shell-doodle .ccard-pill,body.shell-doodle .ccard-banner{font-family:var(--dd-font,inherit);border:2px dashed var(--dd-line,var(--border));background:var(--dd-glass,var(--card));-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:var(--dd-line,var(--border))}
 </style>
   <script src="emoji-rain.js"></script>
 </head>

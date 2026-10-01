@@ -5064,7 +5064,7 @@ ${replyFormatRules()}`;
 - 只在真心觉得值得珍藏时用，不要每张都收藏。
 - 感想 ≤30 字，温柔自然，是配给照片的话。
 - 暗号会被系统识别并擦除，用户只看到它悄悄存进相册。
-- 这一轮没有收到照片时不要用。`;
+- 这一轮没有收到照片时不要用。` + voiceMsgPromptBlock(); // 语音条协议挂在这块：常驻、只随开关变，不破缓存
   const couponBlock = __featHot("券","优惠券","用券","奖励券","送券") ? couponStatusPromptBlock() : ""; // 券夹：⟪使用券:券名⟫
   // 钱包：余额/货架/[pay:][buy:] 暗号。聊到钱或想要东西时才注入，省 token
   const walletBlock = __featHot("钱","钱包","余额","转账","零花","买","兑换","攒","打赏","小鱼干") ? walletPromptBlock() : "";
@@ -5650,7 +5650,7 @@ function render(){
   // 通话字幕：新字幕往下长，一重绘就跳顶，她得重新翻下来看翻译。
   // 记住位置 + 是否本来就贴着底：贴底就跟新句走（看最新那句），翻上去看旧的就停在原处。
   let savedCapScroll = null, capNearBottom = false;
-  if(state.subPage==="phone"){
+  if(callUiOn()){
     const cap = document.getElementById("call-caps");
     if(cap){
       savedCapScroll = cap.scrollTop;
@@ -5696,6 +5696,7 @@ function render(){
       </div>`;
   }
   try{ if(typeof biscaBotPanelHtml==="function") html += biscaBotPanelHtml(); }catch(e){}
+  try{ html += renderCallIncomingBanner(); }catch(e){}
   app.innerHTML=inlineIcons(html);
   // 缓存全命中时这一段整段跳过 —— 稳定态下不再有全文档扫描和逐个造 SVG。
   // 只有出现没见过的图标（或首屏、lucide 刚加载好）才走一次真的 createIcons，
@@ -5783,7 +5784,7 @@ function render(){
     const el = document.querySelector(".page.mo-page");
     if(el) el.scrollTop = savedMoScroll;
   }
-  if(state.subPage==="phone"){
+  if(callUiOn()){
     const cap = document.getElementById("call-caps");
     // 本来贴着底 → 贴新底看最新；否则停回原处（翻旧字幕时不被新句拽走、更不跳顶）
     if(cap) cap.scrollTop = capNearBottom ? cap.scrollHeight : (savedCapScroll || 0);
@@ -17411,8 +17412,8 @@ function callhomePostInvite(reason){
         s.phase = "incoming";
         s.reason = reason || "想听听你的声音";
         s.inviteId = d.invite.id;
-        if(state.subPage !== "phone"){ state.tab = "home"; state.subPage = "phone"; }
-        render();
+        render(); // 聊天里浮电话卡 / 别处顶部来电条，不再强跳电话页
+
       } else if(d && d.dnd){
         if(typeof proactivePushToChat === "function") proactivePushToChat("（勿扰开着，Ta 想打电话但被静音了）", { from:"call" });
       }
@@ -17429,7 +17430,7 @@ function callhomeSetDnd(on){
       state.callConfig = state.callConfig || {};
       state.callConfig.dnd = !!on;
       persist("callConfig");
-      if(state.subPage === "phone") render();
+      if(callUiOn()) render();
     }).catch(()=>{});
 }
 /** 解析并擦除 AI 回复中的 callhome 暗号，执行副作用，返回干净正文。容忍 ⟪⟫《》【】[] 定界符。 */
@@ -17443,6 +17444,11 @@ function handleCallMarkers(body){
     const reason = (dm[1]||"").trim() || "想听听你的声音";
     text = text.replace(dm[0], "").replace(/\n{3,}/g, "\n\n").trim();
     if(base) callhomePostInvite(reason);
+    else if(!(state.callConfig||{}).dnd){
+      // 没配网关也能打：本地直接在聊天里弹来电卡
+      const s = ensureCallSession();
+      if(s.phase === "idle"){ s.phase = "incoming"; s.reason = reason; s.inviteId = ""; setTimeout(()=>{ try{ render(); }catch(e){} }, 300); }
+    }
   }
   // ⟪挂断⟫
   text = text.replace(/[⟪《【\[]\s*挂断\s*[⟫》】\]]/g, "").trim();
@@ -17751,7 +17757,7 @@ function scheduleInviteDismiss(inviteId, expiresAt){
     __inviteDismissTimer = null;
     if(s.phase === "incoming" && s.inviteId === inviteId){
       s.phase = "idle"; s.inviteId = ""; s.expiresAt = 0;
-      if(state.subPage === "phone") render();
+      if(callUiOn()) render();
     }
   }, wait);
 }
@@ -17773,7 +17779,7 @@ async function callInvitePoll(){
     const inv = data.invite || data;
     if(data.expired || !inv || inv.status !== "pending"){
       // 过期/已解决 → 本地还挂着来电卡就自动收起（服务端会写入未接留言）
-      if(s.phase === "incoming"){ s.phase = "idle"; s.inviteId = ""; s.expiresAt = 0; callClearInviteTimer(); if(state.subPage==="phone") render(); }
+      if(s.phase === "incoming"){ s.phase = "idle"; s.inviteId = ""; s.expiresAt = 0; callClearInviteTimer(); render(); }
       return;
     }
     s.phase = "incoming";
@@ -17782,10 +17788,7 @@ async function callInvitePoll(){
     s.expiresAt = inv.expires_at || 0;
     // expires_at 驱动卡片自动消失，不写死前端常量
     if(s.expiresAt) scheduleInviteDismiss(s.inviteId, s.expiresAt);
-    if(state.subPage !== "phone"){
-      state.tab = "home"; state.subPage = "phone";
-    }
-    render();
+    render(); // 聊天里浮电话卡 / 别处顶部来电条
   }catch(e){}
 }
 
@@ -18095,7 +18098,7 @@ function callLatMark(which){
         s.latLog = [__callLat.last, ...(s.latLog||[])].slice(0, 8);
       }catch(e){}
       __callLat.t0 = 0;                        // 一轮只记一次「第一声」
-      if(state.subPage === "phone") render();
+      if(callUiOn()) render();
     }
   }catch(e){}
 }
@@ -18566,7 +18569,7 @@ function aicallPushCap(msg){
       sp.feed(content).concat(sp.flush()).forEach(sent=> callTtsPush(sent));
     }catch(e){}
   }
-  if(state.subPage === "phone") render();
+  if(callUiOn()) render();
 }
 function aicallHandleMessage(raw){
   let data = raw;
@@ -18588,7 +18591,7 @@ function aicallHandleMessage(raw){
       s.aicallRemoteLive = false;
     }
     if(data.in_call === true) s.aicallRemoteLive = true;
-    if(state.subPage === "phone") render();
+    if(callUiOn()) render();
     return;
   }
   if(data.role || data.content || data.text){
@@ -18615,7 +18618,7 @@ function aicallConnect(force){
     __aicallWs = ws;
     ws.onopen = ()=>{
       __aicallWsState = "open";
-      if(state.subPage === "phone") render();
+      if(callUiOn()) render();
       // 可选：报到
       try{
         ws.send(JSON.stringify({ type:"hello", client:"memory-palace", time: new Date().toISOString() }));
@@ -18624,11 +18627,11 @@ function aicallConnect(force){
     ws.onmessage = (ev)=>{
       try{ aicallHandleMessage(ev.data); }catch(e){ console.warn("[aicall]", e); }
     };
-    ws.onerror = ()=>{ __aicallWsState = "error"; if(state.subPage==="phone") render(); };
+    ws.onerror = ()=>{ __aicallWsState = "error"; if(callUiOn()) render(); };
     ws.onclose = ()=>{
       __aicallWsState = "closed";
       __aicallWs = null;
-      if(state.subPage==="phone") render();
+      if(callUiOn()) render();
       // 电话页内自动轻量重连
       if(state.subPage==="phone" && (state.callConfig||{}).aicallEnabled !== false){
         setTimeout(()=>{ if(state.subPage==="phone") aicallConnect(false); }, 4000);
@@ -18700,6 +18703,187 @@ function renderPhoneIncomingOverlay(){
         </div>
       </div>
     </div>
+  </div>`;
+}
+// ─── 他发语音条 ──────────────────────────────────────────────────────────────
+// 她 2026-10-01 要的：「语音就是他给我发语音」。模型写 ⟪语音:要说的话⟫，
+// App 用电话那套 TTS（MiniMax / ElevenLabs，同一把声音）合成，变成聊天里一条可播的语音条。
+// 合成失败就退回成普通文字气泡 —— 话不能丢。
+function voiceMsgOn(){
+  const cfg = state.callConfig || {};
+  if(cfg.voiceMsg === false) return false;
+  if(cfg.ttsEnabled === false || cfg.ttsProvider === "none") return false;
+  return !!((cfg.minimaxKey||"").trim() || (typeof ttsProxyBase==="function" && ttsProxyBase()) || cfg.ttsProvider === "elevenlabs");
+}
+function voiceMsgPromptBlock(){
+  if(!voiceMsgOn()) return "";
+  return `\n\n【语音条 —— 你可以给她发语音】
+想用声音说的时候（撒娇、哄她、晚安、想她了、她给你发了语音），把那句话写成单独一行暗号：
+⟪语音:要说的话⟫
+- 系统会用你的声音念出来，变成聊天里一条语音条，她点开就能听。
+- 只写说出口的话（口语、短句，≤60 字），不要写动作描写、括号、表情符号。
+- 一条回复最多一两条语音，别每轮都发；平时还是打字。`;
+}
+/** 擦掉 ⟪语音:…⟫，返回 { text, voices:[要念的话] } */
+function handleVoiceMsgMarkers(body){
+  let text = String(body||"");
+  const voices = [];
+  const RE = /[⟪《【\[]\s*语音\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/g;
+  text = text.replace(RE, (_, said)=>{
+    const t = String(said||"").replace(/[（(][^）)]*[）)]/g, "").replace(/\*[^*]*\*/g, "").trim().slice(0, 120);
+    if(t) voices.push(t);
+    return "";
+  }).replace(/\n{3,}/g, "\n\n").trim();
+  return { text, voices };
+}
+function __blobToDataUrl(blob){
+  return new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>res(String(fr.result||""));
+    fr.onerror = ()=>rej(fr.error);
+    fr.readAsDataURL(blob);
+  });
+}
+function __audioDuration(src){
+  return new Promise(res=>{
+    try{
+      const a = new Audio();
+      const done = d=>{ a.onloadedmetadata = a.onerror = null; res(isFinite(d) && d > 0 ? d : 0); };
+      a.preload = "metadata";
+      a.onloadedmetadata = ()=>done(a.duration);
+      a.onerror = ()=>done(0);
+      setTimeout(()=>done(0), 4000);
+      a.src = src;
+    }catch(e){ res(0); }
+  });
+}
+/** 给一条助手消息合成声音：先挂 pending（气泡显示「录音中」），合成好了原地换成可播的语音条 */
+async function voiceMsgSynthesize(msg){
+  if(!msg || !msg.voice) return;
+  const text = msg.voice.text || msg.content || "";
+  const finish = ()=>{
+    try{ if(typeof saveActiveThread==="function") saveActiveThread(); persist("chatThreads"); }catch(e){}
+    try{ if(callInChatView()) render(); }catch(e){}
+  };
+  try{
+    const r = await ttsSynthesize(text);
+    if(!r) throw new Error("TTS 没开");
+    const src = r.type === "url" ? r.value : await __blobToDataUrl(r.value);
+    const dur = await __audioDuration(src);
+    msg.voice = { dataUrl: src, duration: dur || Math.max(1, Math.round(text.length / 4)), text, fromAi: true };
+  }catch(e){
+    console.warn("语音条合成失败:", e);
+    delete msg.voice;   // 退回文字气泡
+  }
+  finish();
+}
+// ─── 聊天内电话卡 ─────────────────────────────────────────────────────────────
+// 她 2026-10-01 要的：打电话不再跳去电话页，就在聊天里浮一张卡。
+// 卡里复用电话页那套 id（call-hold / call-caps / call-hang …），所以按住说话、免提、
+// 计时、挂断这些绑定一行不用改；电话页本身还留着（通话记录、声音设置都在那）。
+function callInChatView(){ return state.tab === "chat" && !state.subPage; }
+/** 电话界面此刻是否在屏幕上（电话页 或 聊天里那张卡）—— 通话状态变了就该重绘 */
+function callUiOn(){
+  if(state.subPage === "phone") return true;
+  const s = state.callSession;
+  return callInChatView() && !!s && s.phase && s.phase !== "idle";
+}
+function callCapsHtml(s, limit){
+  const list = (s.caps||[]).slice(-(limit||40));
+  return list.map(c=>{
+    if(Array.isArray(c.lines) && c.lines.length){
+      return `<div class="ccard-cap ${c.who}">` + c.lines.map(l=>
+        (l.ko?`<div class="cap-ko">${esc(l.ko)}</div>`:"") + (l.zh?`<div class="cap-zh">${esc(l.zh)}</div>`:"")
+      ).join("") + `</div>`;
+    }
+    return `<div class="ccard-cap ${c.who}">${esc(c.text)}</div>`;
+  }).join("");
+}
+function renderChatCallCard(){
+  const s = state.callSession;
+  if(!s || !s.phase || s.phase === "idle") return "";
+  const name = esc(callPartnerName());
+  if(s.phase === "incoming"){
+    return `<div class="ccard ccard-in" id="ccard">
+      <div class="ccard-top">
+        <div class="ccard-av ring">${callAvatarHtml()}</div>
+        <div class="ccard-who">
+          <b>${name}</b>
+          <span class="ccard-st"><i class="ccard-dot"></i>邀请你语音通话</span>
+        </div>
+      </div>
+      <div class="ccard-reason">“${esc(s.reason||"想听听你的声音")}”</div>
+      <div class="ccard-quick">
+        <button type="button" data-call-decline-note="在忙，等下打给你">在忙</button>
+        <button type="button" data-call-decline-note="现在不方便，打字聊吧">打字聊</button>
+      </div>
+      <div class="ccard-ans">
+        <button type="button" class="ccard-big hang" id="call-decline"><i data-lucide="phone-off"></i><span>挂断</span></button>
+        <button type="button" class="ccard-big ok" id="call-accept"><i data-lucide="phone"></i><span>接听</span></button>
+      </div>
+    </div>`;
+  }
+  const sec = s.startAt ? Math.floor((Date.now()-s.startAt)/1000) : 0;
+  const speaking = !!(s.loading || s.ttsPlaying);
+  if(state.callCardMin){
+    return `<div class="ccard-pill" id="ccard">
+      <button type="button" class="ccard-pill-main" id="ccard-max">
+        <span class="ccard-av sm${speaking?" talk":""}">${callAvatarHtml()}</span>
+        <span class="ccard-pill-txt"><b>${name}</b><span id="call-timer">${callFormatDuration(sec)}</span></span>
+        <i data-lucide="chevron-down"></i>
+      </button>
+      <button type="button" class="ccard-ic hang" id="call-hang" title="挂断"><i data-lucide="phone-off"></i></button>
+    </div>`;
+  }
+  const caps = callCapsHtml(s, 30);
+  return `<div class="ccard ccard-live" id="ccard">
+    <div class="ccard-top">
+      <div class="ccard-av ring${speaking?" talk":""}">${callAvatarHtml()}</div>
+      <div class="ccard-who">
+        <b>${name}</b>
+        <span class="ccard-st"><i class="ccard-dot live"></i>语音通话 · <span id="call-timer">${callFormatDuration(sec)}</span></span>
+      </div>
+      <button type="button" class="ccard-ic" id="ccard-min" title="收起"><i data-lucide="chevron-up"></i></button>
+    </div>
+    <div class="ccard-caps" id="call-caps">${caps || `<div class="ccard-hint">接通了，说点什么吧</div>`}</div>
+    ${s.linger?`<div class="ccard-hint">说完晚安了…… 15 秒内说话就能留住 Ta</div>`:""}
+    ${s.sttError?`<div class="ccard-err">🎤 ${esc(s.sttError)}</div>`:""}
+    ${s.ttsError?`<div class="ccard-err">🔊 ${esc(s.ttsError)}</div>`:""}
+    <div class="ccard-ctrl">
+      <button type="button" class="ccard-ic${s.muted?" on":""}" id="call-mute" title="${s.muted?"取消静音":"静音"}"><i data-lucide="${s.muted?"mic-off":"mic"}"></i></button>
+      ${s.handsFree
+        ? `<button type="button" class="ccard-hold${s.recording?" rec":""} locked" id="call-handsfree">${s.recording?"听见你了…":"免提中 · 点一下关"}</button>`
+        : `<button type="button" class="ccard-hold${s.recording?" rec":""}${s.holdLocked?" locked":""}" id="call-hold" ${s.muted||s.loading?"disabled":""}>${s.recording?(s.holdLocked?"录音中 · 点一下发送":"松开发送"):"按住说话"}</button>
+           <button type="button" class="ccard-ic" id="call-handsfree" title="免提（自动断句）" ${s.muted?"disabled":""}><i data-lucide="volume-2"></i></button>`}
+      <button type="button" class="ccard-ic hang" id="call-hang" title="挂断"><i data-lucide="phone-off"></i></button>
+    </div>
+    <div class="ccard-type">
+      <input id="call-input" placeholder="${s.muted?"已静音 · 可以打字":"打字说给 Ta 听…"}" value="${escAttr(s.draft||"")}" autocomplete="off"/>
+      <button type="button" id="call-send" title="发送"><i data-lucide="send"></i></button>
+    </div>
+  </div>`;
+}
+/** 不在聊天页也不在电话页时来电：顶部浮一条，接听就回到聊天 */
+function renderCallIncomingBanner(){
+  const s = state.callSession;
+  if(!s || s.phase !== "incoming" || state.subPage === "phone" || callInChatView()) return "";
+  return `<div class="ccard-banner" id="ccard-banner">
+    <span class="ccard-av sm ring">${callAvatarHtml()}</span>
+    <span class="ccard-banner-txt"><b>${esc(callPartnerName())}</b><span>${esc(s.reason||"邀请你语音通话")}</span></span>
+    <button type="button" class="ccard-ic hang" id="call-decline" title="挂断"><i data-lucide="phone-off"></i></button>
+    <button type="button" class="ccard-ic ok" id="call-accept" title="接听"><i data-lucide="phone"></i></button>
+  </div>`;
+}
+/** 聊天里那条通话记录：📞 语音通话 · 3:12\n摘要 → 一张小卡 */
+function callLogCardHtml(m, isMe){
+  const raw = String(m.content||"");
+  const first = raw.split("\n")[0] || "";
+  const rest = raw.split("\n").slice(1).join(" ").trim();
+  const miss = m.from === "call-miss";
+  const title = first.replace(/^📞\s*/, "") || (miss ? "未接来电" : "语音通话");
+  return `<div class="bubble ${isMe?"me":"them"} call-log${miss?" miss":""}">
+    <button type="button" class="call-log-ic" id="call-start" title="回拨"><i data-lucide="${miss?"phone-missed":"phone"}"></i></button>
+    <div class="call-log-txt"><b>${esc(title)}</b>${rest?`<span>${esc(rest)}</span>`:""}</div>
   </div>`;
 }
 function renderPhone(){
@@ -18794,6 +18978,12 @@ function renderPhone(){
             <span class="setting-label">通话时播放 TA 的声音</span>
             <div class="toggle-switch" id="call-tts-toggle" style="background:${cfg.ttsEnabled!==false?"var(--accent)":"var(--border)"}">
               <div class="toggle-knob" style="left:${cfg.ttsEnabled!==false?"18px":"2px"}"></div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="setting-label">TA 会在聊天里给我发语音条</span>
+            <div class="toggle-switch" id="call-vmsg-toggle" style="background:${cfg.voiceMsg!==false?"var(--accent)":"var(--border)"}">
+              <div class="toggle-knob" style="left:${cfg.voiceMsg!==false?"18px":"2px"}"></div>
             </div>
           </div>
           <span class="setting-label">引擎</span>
@@ -18915,6 +19105,8 @@ async function callStartOutgoing(){
   callUnlockAudio(); // 必须在这一下手势里解锁，等模型回完就来不及了
   s.phase = "active";
   s.reason = "你拨出的电话";
+  state.callCardMin = false;
+  state.chatMoreOpen = false;
   callClearInviteTimer();
   s.startAt = Date.now();
   s.caps = [];
@@ -18945,6 +19137,9 @@ async function callSimulateIncoming(){
 }
 function callAccept(){
   const s = ensureCallSession();
+  // 在别的页面接起来：回到聊天，电话卡就浮在那
+  if(state.subPage !== "phone" && !callInChatView()){ state.tab = "chat"; state.subPage = null; }
+  state.callCardMin = false;
   callUnlockAudio(); // 同上：接听这一下是手势，TTS 播放时已经不是了
   callAnswerApi("accept", "");
   callClearInviteTimer();
@@ -19156,7 +19351,7 @@ async function callAiTurn(userText){
           }
           // render() 是整页重绘，每个 token 刷一次会卡死 —— 节流到 250ms
           const now = Date.now();
-          if(state.subPage === "phone" && now - lastPaint > 250){ lastPaint = now; render(); }
+          if(callUiOn() && now - lastPaint > 250){ lastPaint = now; render(); }
         },
       });
       text = String((r && r.reply) || "");
@@ -19336,7 +19531,7 @@ function callScheduleLinger(ms){
     __lingerTimeout = null;
     if(s.phase === "active") callHangup();
   }, remain);
-  if(state.subPage === "phone") render();
+  if(callUiOn()) render();
 }
 function callCancelLinger(){
   if(__lingerTimeout){ clearTimeout(__lingerTimeout); __lingerTimeout = null; }
@@ -23193,13 +23388,26 @@ function voiceWaveformHtml(seed, n=28){
   return `<div class="voice-wave">${out}</div>`;
 }
 
+// 气泡是 white-space:pre-wrap，模板里的换行缩进会被当成空行渲染（语音条曾经被撑到 160px 高）
 function chatVoiceBarHtml(m, isMe, glassCls, bubbleColor){
+  return __chatVoiceBarRaw(m, isMe, glassCls, bubbleColor).replace(/>\s+</g, "><");
+}
+function __chatVoiceBarRaw(m, isMe, glassCls, bubbleColor){
   const v=m.voice||{};
   const src=v.dataUrl||"";
   const dur=Math.max(1, Math.round(v.duration||0));
   const emo=v.emotion||"";
   const text=v.text||m.content||"";
   const bars=voiceWaveformHtml(text||src, 28);
+  if(v.pending){
+    return `<div class="bubble them${glassCls} voice-pending" ${bubbleColor||""}>
+    <div class="voice-bar">
+      <span class="voice-play"><i data-lucide="loader"></i></span>
+      ${bars}
+      <div class="voice-meta"><span class="voice-dur">录音中…</span></div>
+    </div>
+  </div>`;
+  }
   return `<div class="bubble ${isMe?"me":"them"}${glassCls}" ${bubbleColor||""}>
     <div class="voice-bar">
       <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}" aria-label="播放语音"><i data-lucide="play"></i></button>
@@ -23362,7 +23570,9 @@ function renderChat(){
       let bubbleInner;
       if(m.song){
         bubbleInner = songShareCardHtml(m, isMe);
-      } else if(m.voice && m.voice.dataUrl){
+      } else if(m.from==="call-record" || m.from==="call-miss"){
+        bubbleInner = callLogCardHtml(m, isMe);
+      } else if(m.voice && (m.voice.dataUrl || (m.voice.pending && Date.now()-new Date(m.time).getTime() < 90000))){
         bubbleInner = chatVoiceBarHtml(m, isMe, glassCls, bubbleColor);
       } else if(pureAct){
         const tag = isMe ? "span" : "button";
@@ -23526,6 +23736,7 @@ function renderChat(){
   }
   return `<div class="chat-page${viewMode==="rpg"?" rpg-on":""}${isClaude?" claude-layout":""}${isKorean?" korean-layout":""}">
     ${headerHtml}
+    ${renderChatCallCard()}
     ${typeof renderWatchFloatBar==="function"?renderWatchFloatBar():""}
     <div class="chat-messages" id="chat-msgs">${msgs}${state.streamLive && typeof renderStreamLiveMsg==="function" ? renderStreamLiveMsg() : ""}</div>
     ${typeof thinkModalHtml==="function" ? thinkModalHtml() : ""}
@@ -23585,6 +23796,7 @@ function renderChat(){
         <button type="button" id="chat-file-btn" class="chat-more-item" title="发文本文件（txt/md/json/代码）"><i data-lucide="paperclip"></i><span>文件</span></button>
         <button type="button" id="sticker-btn" class="chat-more-item" title="表情包"><i data-lucide="smile"></i><span>表情</span></button>
         <button type="button" id="puppy-open" class="chat-more-item" title="小狗按钮"><i data-lucide="paw-print"></i><span>小狗</span></button>
+        <button type="button" id="call-start" class="chat-more-item" title="语音通话（就在聊天里）"><i data-lucide="phone"></i><span>电话</span></button>
         <button type="button" id="chat-voice-btn" class="chat-more-item" title="语音消息（录音转文字发给TA）"><i data-lucide="audio-lines"></i><span>语音消息</span></button>
         <button type="button" id="pill-box-btn" class="chat-more-item${(state.pillSelectedIds&&state.pillSelectedIds.length)?" active":""}" title="药盒（只影响下一句）"><i data-lucide="pill"></i><span>药盒${(state.pillSelectedIds&&state.pillSelectedIds.length)?` · ${state.pillSelectedIds.length}`:""}</span></button>
       </div>`:""}
@@ -25799,6 +26011,7 @@ if(!window.__mpDelegated){
 
       // —— 电话 ——
       if(id==="call-start" || id==="call-start-out"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callStartOutgoing==="function") callStartOutgoing(); return; }
+      if(id==="ccard-min" || id==="ccard-max"){ e.preventDefault(); e.stopImmediatePropagation(); state.callCardMin = id==="ccard-min"; render(); return; }
       if(id==="call-accept"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callAccept==="function") callAccept(); return; }
       if(id==="call-decline"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callDecline==="function") callDecline(""); return; }
       if(id==="call-decline-send"){ e.preventDefault(); e.stopImmediatePropagation(); const n=(document.getElementById("call-decline-input")?.value||"").trim(); if(typeof callDecline==="function") callDecline(n); return; }
@@ -25809,6 +26022,7 @@ if(!window.__mpDelegated){
       if(id==="call-sim-in"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callSimulateIncoming==="function") callSimulateIncoming(); return; }
       if(id==="call-dnd" || id==="call-dnd-toggle"){ e.preventDefault(); e.stopImmediatePropagation(); state.callConfig=state.callConfig||{}; state.callConfig.dnd=!state.callConfig.dnd; persist("callConfig"); render(); return; }
       if(id==="call-tts-test"){ e.preventDefault(); e.stopImmediatePropagation(); if(typeof callTtsTest==="function") callTtsTest(); return; }
+      if(id==="call-vmsg-toggle"){ e.preventDefault(); state.callConfig=state.callConfig||{}; state.callConfig.voiceMsg=state.callConfig.voiceMsg===false; persist("callConfig"); render(); return; }
       if(id==="call-tts-toggle"){ e.preventDefault(); state.callConfig=state.callConfig||{}; state.callConfig.ttsEnabled=state.callConfig.ttsEnabled===false?true:false; persist("callConfig"); render(); return; }
 
       // —— 碎星 ——
@@ -29540,7 +29754,7 @@ const sttUrl = document.getElementById("call-stt-url");
   if(state.callSession && state.callSession.phase==="active"){
     if(!window.__callTimer){
       window.__callTimer = setInterval(()=>{
-        if(state.callSession && state.callSession.phase==="active" && state.subPage==="phone"){
+        if(state.callSession && state.callSession.phase==="active" && callUiOn()){
           const el = document.getElementById("call-timer");
           if(el && state.callSession.startAt){
             el.textContent = callFormatDuration(Math.floor((Date.now()-state.callSession.startAt)/1000));
@@ -35306,6 +35520,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     }
   }
   let cleanBody = handleCallMarkers(body); // callhome 暗号：拨号/挂断/勿扰
+  const __vm = handleVoiceMsgMarkers(cleanBody); // 语音条：⟪语音:话⟫ → 合成成可播的语音气泡
+  cleanBody = __vm.text;
   cleanBody = handleAlbumMarkers(cleanBody);   // 相册收藏：⟪收藏:感想⟫ / ⟪收藏第N张:感想⟫
   cleanBody = handleWalletMarkers(cleanBody);  // 钱包：[buy:东西] 立即扣款，[pay:金额|理由] 留给她点
   const couponRes = handleCouponMarkers(cleanBody); // 券夹：⟪使用券:券名⟫
@@ -35370,7 +35586,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     __body = "";
   }
   let parts = (state.chatMode === "story" || state.nsfwOn)
-    ? (__body ? [__body] : (projectFilesFromReply.length ? [] : (__turnHasCards ? ["\u200b"] : ["……"])))
+    ? (__body ? [__body] : ((projectFilesFromReply.length || __vm.voices.length) ? [] : (__turnHasCards ? ["\u200b"] : ["……"])))
     : (__body ? splitReply(__body) : []);
   // 有卡无字：仍推一条载体消息挂活动，正文用零宽字符，渲染时当空气泡处理
   if(!parts.length && __turnHasCards) parts = ["\u200b"];
@@ -35407,6 +35623,16 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       cardOnly: isCardCarrier || undefined,
       pillsTaken: i===0 && state.pillLastTaken && state.pillLastTaken.length ? state.pillLastTaken.slice() : undefined,
     });
+  });
+  // 语音条：先落 pending 气泡（转圈），合成完原地换成能播的
+  __vm.voices.forEach(said=>{
+    const vm = {
+      role:"assistant", content: said, time: now, msgId, turn_id: turnId,
+      speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color,
+      voice: { pending: true, text: said },
+    };
+    state.messages.push(vm);
+    setTimeout(()=>{ voiceMsgSynthesize(vm); }, 0);
   });
   // 真写卡成功才留痕（工具或标记）；模型嘴上说记下了不会进这里
   try{ attachCardsToMsgId(msgId, turnId); }catch(e){}
