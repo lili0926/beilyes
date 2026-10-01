@@ -1560,6 +1560,71 @@ function __geminiContents(convo, systemPrompt, partsOf){
   return contents;
 }
 
+/**
+ * OpenAI 兼容口的显式缓存断点（站子用）。
+ *
+ * 她 2026-10-01：「openai 接口缓存可以，站子要么不管、要么只写不读」。
+ * 只写不读的原因：这条口我们一个断点都不打，交给站子自己定。站子「自动缓存」一般把断点
+ * 打在**最后一条**消息上 —— 而主聊天的最后一条是「本轮上下文」（此刻/记忆/状态），
+ * 下一轮它就没了。缓存只能在**写过的位置**命中，于是每轮都写在一个下一轮够不着的地方。
+ *
+ * 开了这个开关就按 Claude 通道那套自己打：system 一个、倒数第二条一个
+ * （倒数第二条 = 她这句话本身，下一轮它原样还在）。写法是 new-api / OpenRouter 认的
+ * content part 上带 `cache_control`，站子会把它原样转给 Claude。
+ *
+ * 不认的站子会 400：先去掉 ttl 再试，还不行就整个不打，并记住这一档，不再每条都撞一次。
+ * 级别：2 = 带 1h ttl，1 = 只 ephemeral，0 = 不打。
+ */
+function __oaiMarkLevel(ag){
+  if(!ag || !ag.openaiCacheMarkOn) return 0;
+  const l = ag.openaiCacheMarkLvl;
+  return (l === 0 || l === 1 || l === 2) ? l : 2;
+}
+function __oaiCacheMark(msgs, level){
+  if(!level || !Array.isArray(msgs) || msgs.length < 2) return msgs;
+  // 跟 Claude 那边同一个坑：断点每轮挪一格，被打到的那条从字符串变成数组、下一轮又变回来，
+  // 字节就不一样了。所以**全部**统一成 part 数组再打（tool 消息和空内容不动）。
+  const out = msgs.map(m=>{
+    if(!m || m.role === "tool") return m;
+    if(typeof m.content === "string" && m.content) return Object.assign({}, m, { content:[{ type:"text", text:m.content }] });
+    if(Array.isArray(m.content)) return Object.assign({}, m, { content: m.content.slice() });
+    return m;
+  });
+  const cc = level >= 2 ? { type:"ephemeral", ttl: CLAUDE_CACHE_TTL } : { type:"ephemeral" };
+  const markable = i => { const m = out[i]; return m && m.role !== "tool" && Array.isArray(m.content) && m.content.length && m.content.some(p=>p && p.type === "text"); };
+  const mark = i => {
+    const parts = out[i].content.slice();
+    let j = parts.length - 1;
+    while(j >= 0 && !(parts[j] && parts[j].type === "text")) j--;   // 打在最后一个 text 上（图片 part 不打）
+    if(j < 0) return;
+    parts[j] = Object.assign({}, parts[j], { cache_control: cc });
+    out[i] = Object.assign({}, out[i], { content: parts });
+  };
+  if(out[0] && out[0].role === "system" && markable(0)) mark(0);
+  if(out.length >= 4){
+    for(let i = out.length - 2; i >= 1; i--){ if(markable(i)){ mark(i); break; } }
+  }
+  return out;
+}
+/** 带断点发；站子 400 说不认就降一档重发，并把档位记在这位 AI 身上 */
+async function __oaiPostMarked(url, init, body, ag, timeoutMs){
+  let level = __oaiMarkLevel(ag);
+  const send = (lv)=>{
+    const b = lv ? Object.assign({}, body, { messages: __oaiCacheMark(body.messages, lv) }) : body;
+    return __apiFetch(url, Object.assign({}, init, { body: JSON.stringify(b) }), timeoutMs);
+  };
+  let res = await send(level);
+  while(level > 0 && res.status === 400){
+    const t = await res.clone().text().catch(()=>"");
+    if(!/cache_control|ttl|extra|unrecognized|unknown|not permitted|additional/i.test(t)) break;
+    level -= 1;
+    try{ ag.openaiCacheMarkLvl = level; persist("agents"); }catch(e){}
+    if(level === 0){ try{ showToast("这个站子不认缓存标记，已自动关掉"); }catch(e){} }
+    res = await send(level);
+  }
+  return res;
+}
+
 function __openaiPromptCacheKey(ag){
   return ag && ag.openaiCacheKeyOn && ag.id ? "eden-chat:" + String(ag.id) : "";
 }
@@ -1666,23 +1731,24 @@ async function callChatAPI(apiConfig, messages, systemPrompt, opts) {
     return thinking ? (`<thinking>\n${thinking}\n</thinking>\n\n${text}`) : text;
   } else {
     // OpenAI 兼容（含后续把 Gemini 走代理的情况）
-    const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
+    // OpenAI 兼容口：system 只放稳定段，会变的挂到最后一条消息尾部。
+    // 实测九十中转这条口**不用 cache_control 也会自动缓存**（第二发 cached_tokens 6752），
+    // 前提就是 system + 历史逐字节稳定 —— 以前把 dynamic 拼进 system，等于自己把它关了。
+    // 站子自己打的断点够不着时，开「站子缓存标记」由这边打，见 __oaiCacheMark。
+    const __oBody = (()=>{
+      const sp = __sysCacheSplit(systemPrompt);
+      const conv = messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m);
+      const msgs = sp.head ? [{ role:"system", content: sp.head }, ...conv] : conv;
+      const body = { model: openaiModel || "gpt-4o", messages: __appendVolatile(msgs, sp.tail) };
+      const key = __openaiPromptCacheKey(ag);
+      if(key) body.prompt_cache_key = key;
+      return body;
+    })();
+    const res = await __oaiPostMarked(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
       signal: chatAbortSignal(),
-      // OpenAI 兼容口：system 只放稳定段，会变的挂到最后一条消息尾部。
-      // 实测九十中转这条口**不用 cache_control 也会自动缓存**（第二发 cached_tokens 6752），
-      // 前提就是 system + 历史逐字节稳定 —— 以前把 dynamic 拼进 system，等于自己把它关了。
-      body: JSON.stringify((()=>{
-        const sp = __sysCacheSplit(systemPrompt);
-        const conv = messages.map(m=> m.image ? { role:m.role, content: __chatContentForChannel("openai", m) } : m);
-        const msgs = sp.head ? [{ role:"system", content: sp.head }, ...conv] : conv;
-        const body = { model: openaiModel || "gpt-4o", messages: __appendVolatile(msgs, sp.tail) };
-        const key = __openaiPromptCacheKey(ag);
-        if(key) body.prompt_cache_key = key;
-        return body;
-      })()),
-    }, __timeoutMs);
+    }, __oBody, ag, __timeoutMs);
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     __recordUsageFromData(data); // 记 token 用量（OpenAI 兼容 / DeepSeek / MiniMax）
@@ -2173,12 +2239,11 @@ async function callChatAPIStream(cfg, messages, systemPrompt, opts){
   };
   const cacheKey = __openaiPromptCacheKey(ag);
   if(cacheKey) body.prompt_cache_key = cacheKey;
-  const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
+  const res = await __oaiPostMarked(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
     signal: chatAbortSignal(),
-    body: JSON.stringify(body),
-  });
+  }, body, ag);
   if(!res.ok){ const e = await res.text().catch(()=>""); throw new Error(e || ("HTTP "+res.status)); }
   let usageObj = null;
   for await (const ev of __sse(res.body)){
@@ -2348,12 +2413,11 @@ async function __chatApiSingleRound(channel, creds, convo, systemPrompt, toolsPa
   };
   if(creds.openaiCacheKey) body.prompt_cache_key = creds.openaiCacheKey;
   if(toolsParam){ body.tools = toolsParam; body.tool_choice = "auto"; }
-  const res = await __apiFetch(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
+  const res = await __oaiPostMarked(`${openaiBase.replace(/\/$/,"")}/chat/completions`, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
     signal: chatAbortSignal(),
-    body: JSON.stringify(body),
-  });
+  }, body, creds._agent || null);
   const data = await res.json();
   if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
   __recordUsageFromData(data); // 记 token 用量（OpenAI 兼容 / DeepSeek / MiniMax）
@@ -2509,6 +2573,7 @@ async function callChatAPIAdvanced(cfg, messages, systemPrompt, opts){
     openaiBase: (ag ? ag.openaiBase : cfg.openaiBase) || "https://api.openai.com/v1",
     openaiModel: (ag ? ag.openaiModel : cfg.openaiModel) || "gpt-4o",
     openaiCacheKey: __openaiPromptCacheKey(ag),
+    _agent: ag,
     geminiKey: ag ? ag.geminiKey : (cfg.geminiKey || ""),
     geminiModel: (ag ? ag.geminiModel : cfg.geminiModel) || "gemini-2.0-flash",
   };
@@ -24957,7 +25022,7 @@ function renderPrompts(){
    把这位 AI 当前填的整套通道配置（渠道 + Key + Base + 模型）存成一张卡，
    换渠道时点一下切回来，不用把输入框清空重填。
    只覆盖下面这几个字段 —— 名字/头像/气泡色/专属思考引导是人设，不跟着换。 */
-const AP_FIELDS = ["channel","claudeBase","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel","openaiCacheKeyOn",
+const AP_FIELDS = ["channel","claudeBase","claudeKey","claudeModel","openaiKey","openaiBase","openaiModel","openaiCacheKeyOn","openaiCacheMarkOn",
                    "geminiKey","geminiModel","ccWsUrl","ccPin","ccModel"];
 const AP_CH_LABEL = { claude:"Claude", openai:"OpenAI", gemini:"Gemini", cc:"CC" };
 
@@ -25064,6 +25129,9 @@ function renderAgentSettingsBlock(ag, idx){
           <input id="${prefix}-openaiModel" value="${escAttr(ag.openaiModel||"gpt-4o")}" placeholder="gpt-4o"/></div>
         <div class="setting-row"><span class="setting-label">尝试缓存键</span>
           <label><input type="checkbox" id="${prefix}-openaiCacheKeyOn" ${ag.openaiCacheKeyOn?"checked":""}/> 同一位 Aries 使用固定键；先关闭测普通请求，再开启对比。兼容网关可能不支持。</label></div>
+        <div class="setting-row"><span class="setting-label">站子缓存标记</span>
+          <label><input type="checkbox" id="${prefix}-openaiCacheMarkOn" ${ag.openaiCacheMarkOn?"checked":""}/> 站子转 Claude、缓存「只写不读」时开：由 App 自己在人设和她那句话上打 cache_control。站子不认会自动降级关掉。</label>
+          ${ag.openaiCacheMarkOn && ag.openaiCacheMarkLvl === 0 ? `<div style="font-size:11px;color:#c45;margin-top:4px">这个站子不认，已自动停用（重新勾一次会再试）</div>` : (ag.openaiCacheMarkOn && ag.openaiCacheMarkLvl === 1 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">站子不认 1 小时档，现在用 5 分钟档</div>` : "")}</div>
       `}
       <div class="setting-row"><span class="setting-label">气泡强调色</span>
         <input id="${prefix}-color" type="color" value="${escAttr(ag.color||"#D4A5A5")}" style="width:48px;height:28px;border:none;background:transparent;padding:0"/></div>
@@ -28037,6 +28105,9 @@ function bindEvents(){
     bind("openaiModel", prefix+"-openaiModel");
     const cacheKeyToggle = document.getElementById(prefix+"-openaiCacheKeyOn");
     if(cacheKeyToggle) cacheKeyToggle.onchange = ()=>{ ag.openaiCacheKeyOn = cacheKeyToggle.checked; persist("agents"); };
+    const cacheMarkToggle = document.getElementById(prefix+"-openaiCacheMarkOn");
+    // 重新勾 = 重新试最高档（站子可能升级过）
+    if(cacheMarkToggle) cacheMarkToggle.onchange = ()=>{ ag.openaiCacheMarkOn = cacheMarkToggle.checked; delete ag.openaiCacheMarkLvl; persist("agents"); };
     bind("color", prefix+"-color", true);
     bind("avatar", prefix+"-avatar", true);
     bind("thoughtGuide", prefix+"-thoughtGuide");
