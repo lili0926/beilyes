@@ -1173,6 +1173,12 @@ const DoodleShell = (() => {
     syncSound(); paint();
     const app = document.getElementById('app');
     if(app){
+      /* 功能页的「‹ 返回」换成手绘箭头（文字留给读屏） */
+      app.querySelectorAll('.sub-header .back-btn, .page-head .back-btn').forEach(b => {
+        if(b.querySelector('[data-doodle]')) return;
+        if(!b.getAttribute('aria-label')) b.setAttribute('aria-label', '返回');
+        b.innerHTML = '<span data-doodle="back" data-boil="hover"></span>';
+      });
       drawIcons(app);
       const page = app.querySelector('.chat-page');
       if(page){

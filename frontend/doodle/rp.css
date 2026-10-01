@@ -79,7 +79,7 @@ body.shell-doodle .page.ddrp{position:relative;padding:0 18px 40px;font-family:v
 
 /* ===== 入梦：大光圈聊天 ===== */
 .ddrp-dream{position:fixed;inset:0;margin:0 auto;max-width:480px;z-index:400;display:flex;flex-direction:column;overflow:hidden;font-family:var(--dd-font,"Gaegu","ZCOOL KuaiLe",sans-serif);color:#FBF8FF;
-  background:radial-gradient(130% 80% at 50% 115%,#F6C9DD 0%,#C8A3E6 28%,#7C68B8 58%,#3B3270 82%,#221C45 100%);animation:ddrp-fade .6s ease}
+  background:radial-gradient(130% 80% at 50% 115%,#FFE6F2 0%,#F0D9F7 26%,#D6C3F2 52%,#B9A8E6 76%,#A595DC 100%);animation:ddrp-fade .6s ease}
 @keyframes ddrp-fade{from{opacity:0}}
 .ddrp-sky{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .ddrp-sky i{position:absolute;left:50%;top:44%;border-radius:50%;transform:translate(-50%,-50%);mix-blend-mode:screen}
@@ -94,15 +94,15 @@ body.shell-doodle .page.ddrp{position:relative;padding:0 18px 40px;font-family:v
 @keyframes ddrp-drift{to{transform:translate(-40%,-60%) scale(1.15)}}
 @keyframes ddrp-dust{to{transform:translateY(-260px)}}
 .ddrp-dhead{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 6px}
-.ddrp-round.glass{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ddrp-round.glass{background:rgba(124,98,190,.22);border-color:rgba(255,255,255,.3);color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .ddrp-dtitle{flex:1;min-width:0;text-align:center;display:flex;flex-direction:column}
-.ddrp-dtitle b{font-size:21px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 14px rgba(255,220,250,.8)}
-.ddrp-dtitle small{font-size:13px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddrp-dtitle b{font-size:21px;color:#fff;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 14px rgba(255,220,250,.8)}
+.ddrp-dtitle small{font-size:13px;opacity:.85;text-shadow:0 1px 6px rgba(70,40,120,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ddrp-msgs{position:relative;flex:1;min-height:0;overflow-y:auto;padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px;-webkit-mask-image:linear-gradient(transparent,#000 24px,#000 calc(100% - 16px),transparent);mask-image:linear-gradient(transparent,#000 24px,#000 calc(100% - 16px),transparent)}
 .ddrp-line{display:flex;animation:ddrp-float .7s ease-out both}
 @keyframes ddrp-float{from{opacity:0;transform:translateY(10px);filter:blur(4px)}}
 .ddrp-line p{margin:0;white-space:pre-wrap;word-break:break-word;font-size:17px;line-height:1.6}
-.ddrp-line.ai p{max-width:90%;padding:12px 16px;border-radius:22px 22px 22px 8px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.28);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 0 26px -6px rgba(255,210,245,.55),inset 0 0 18px rgba(255,255,255,.08);text-shadow:0 1px 8px rgba(60,30,110,.35)}
+.ddrp-line.ai p{max-width:90%;padding:12px 16px;border-radius:22px 22px 22px 8px;background:rgba(124,98,190,.26);border:1px solid rgba(255,255,255,.28);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 0 26px -6px rgba(255,210,245,.55),inset 0 0 18px rgba(255,255,255,.08);text-shadow:0 1px 6px rgba(70,40,120,.55)}
 .ddrp-line.me{justify-content:flex-end}
 .ddrp-line.me p{max-width:78%;padding:10px 15px;border-radius:22px 22px 8px 22px;color:#3F3A52;background:linear-gradient(135deg,rgba(255,240,250,.92),rgba(226,236,255,.9));box-shadow:0 8px 20px -10px rgba(30,20,70,.6)}
 .ddrp-open{margin:auto;text-align:center;opacity:.9}
@@ -113,9 +113,9 @@ body.shell-doodle .page.ddrp{position:relative;padding:0 18px 40px;font-family:v
 .ddrp-wait i{width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 12px 3px rgba(255,210,245,.8);animation:ddrp-orb 1.4s ease-in-out infinite}
 .ddrp-wait i:nth-child(2){animation-delay:.2s}.ddrp-wait i:nth-child(3){animation-delay:.4s}
 @keyframes ddrp-orb{50%{transform:translateY(-6px);opacity:.4}}
-.ddrp-comp{position:relative;display:flex;align-items:center;gap:8px;margin:0 14px calc(12px + env(safe-area-inset-bottom,0px));padding:6px 6px 6px 16px;border-radius:26px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.34);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 0 30px -10px rgba(255,210,245,.7)}
+.ddrp-comp{position:relative;display:flex;align-items:center;gap:8px;margin:0 14px calc(12px + env(safe-area-inset-bottom,0px));padding:6px 6px 6px 16px;border-radius:26px;background:rgba(124,98,190,.28);border:1px solid rgba(255,255,255,.34);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 0 30px -10px rgba(255,210,245,.7)}
 .ddrp-comp input{flex:1;min-width:0;border:0;background:transparent;outline:none;font:17px var(--dd-font,"Gaegu",sans-serif);color:#fff;padding:8px 0}
-.ddrp-comp input::placeholder{color:rgba(255,255,255,.6)}
+.ddrp-comp input::placeholder{color:rgba(255,255,255,.85)}
 .ddrp-comp button{flex:0 0 40px;width:40px;height:40px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#F7C6E0,#B9D3FA);box-shadow:0 0 16px rgba(255,220,250,.8)}
 .ddrp-comp button [data-doodle]{width:22px;height:22px;color:#fff}
 @media (prefers-reduced-motion:reduce){.ddrp-sky *,.ddrp-line,.ddrp-ticket.fresh,.ddrp-wait i,.ddrp-ticket.open .ddrp-prize{animation:none!important}}

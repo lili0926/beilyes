@@ -165,3 +165,19 @@ body.shell-doodle .dd-s-more .section{margin-bottom:14px}
 body.shell-doodle .dd-s-more .section-title{font:400 16px var(--dd-font);color:var(--dd-text-2);letter-spacing:.12em;margin:0 4px 6px}
 body.shell-doodle .dd-s-more .section-body{overflow:hidden}
 body.shell-doodle .dd-s-more .setting-row{border-bottom:1px dotted rgba(140,134,160,.3)}
+
+/* ===== 功能页顶部：不要整条顶栏，只留一颗浮着的返回钮 + 居中标题 ===== */
+body.shell-doodle #app>.page:has(>.sub-header:first-child),body.shell-doodle #app>.page:has(>.page-head:first-child){padding-top:0}
+body.shell-doodle .sub-header,body.shell-doodle .page-head{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:44px minmax(0,1fr) 44px;grid-auto-flow:column;align-items:center;gap:8px;
+  margin:0 -20px 10px;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 18px;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;
+  background:linear-gradient(rgba(255,255,255,.94) 0,rgba(255,255,255,.86) 62%,rgba(255,255,255,0) 100%)}
+body.shell-doodle.dd-dark .sub-header,body.shell-doodle.dd-dark .page-head{background:linear-gradient(rgba(0,0,0,.9) 0,rgba(0,0,0,.8) 62%,rgba(0,0,0,0) 100%)}
+body.shell-doodle .sub-header .back-btn,body.shell-doodle .page-head .back-btn{width:44px;height:44px;min-width:0;padding:0;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:var(--dd-glass);border:1px solid var(--dd-line);box-shadow:var(--dd-shadow);color:var(--dd-accent);font-size:0;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+body.shell-doodle .sub-header .back-btn [data-doodle],body.shell-doodle .page-head .back-btn [data-doodle]{width:26px;height:26px}
+body.shell-doodle .sub-header .back-btn:active,body.shell-doodle .page-head .back-btn:active{transform:scale(.9)}
+body.shell-doodle .sub-header .page-title,body.shell-doodle .sub-header .sub-title,body.shell-doodle .page-head .page-title{grid-column:2;justify-self:center;position:relative;display:flex;align-items:center;gap:6px;max-width:100%;margin:0;
+  font:700 22px/1.2 var(--dd-font);color:var(--dd-text);letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-bottom:6px;
+  background:radial-gradient(circle,var(--dd-lilac) 1.1px,transparent 1.5px) left bottom/7px 3px repeat-x}
+body.shell-doodle .sub-header .page-title svg,body.shell-doodle .sub-header .page-title i,body.shell-doodle .page-head .page-title svg{width:20px;height:20px;color:var(--dd-lilac);flex-shrink:0}
+body.shell-doodle .sub-header>*:nth-child(n+3){grid-column:auto;justify-self:end}
