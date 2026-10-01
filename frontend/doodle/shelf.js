@@ -2,7 +2,8 @@
  * 数据还是 state.books / state.readingNow，打开、导入、在读都走原来的 data-read-* 绑定；
  * 这里只负责长相：两层画出来的书架，书脊就是她真的书（点一下就开始读），
  * 下面一张「正在读」卡，进度条上骑着一颗星。
- * 右下角那只小猫可以点一下换成她自己生成的图（存在 doodlePrefs.shelfCat）。 */
+ * 右下角坐着图书管理员小黑猫（doodle/shelf-cat.png，她给的图抠出来的）：一进来就冒气泡「今天看哪本？」，
+ * 点它换一句；长按可以换成她自己的图（存在 doodlePrefs.shelfCat）。 */
 const DoodleShelf = (() => {
   const h = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ON = () => typeof state !== 'undefined' && state.uiShell === 'doodle';
@@ -57,9 +58,42 @@ const DoodleShelf = (() => {
       <ellipse cx="60" cy="72" rx="7" ry="5" fill="#F29CBE" stroke="#D97BA3" stroke-width="2"/>
       <path d="M53 81q7 6 14 0" stroke="#B79AE0" stroke-width="2.5" fill="none" stroke-linecap="round"/>
     </svg>`;
+  /* ── 图书管理员 ── */
+  const L = {i:0, last:0};
+  function libLines(){
+    const all = books(), now = state.readingNow, b = now && all.find(x => x.id === now.bookId);
+    if(!all.length) return ['书架空空的…导入一本给我看看？', '喵。我在等第一本书。'];
+    const out = ['今天看哪本？'];
+    if(b){
+      const p = progressOf(b), t = String(b.title || '');
+      const name = t.length > 7 ? t.slice(0, 6) + '…' : t;   // 气泡最多两行，书名太长就截
+      out.push(p && p.pct >= 100 ? `《${name}》读完啦，换一本？` : `《${name}》第 ${p ? p.idx + 1 : 1} 章，接着看？`);
+    }
+    out.push(`这里有 ${all.length} 本，随便挑。`, '要不要换一本新的？', '翻页轻一点，我在打盹。', '喜欢的句子记得划线哦。');
+    return out;
+  }
   function cat(){
-    const src = (state.doodlePrefs || {}).shelfCat;
-    return `<button type="button" class="ddsh-cat" data-ddsh="cat" title="点一下换成你自己的图" aria-label="换小猫图片">${src ? `<img src="${h(src)}" alt="">` : catSvg}</button>`;
+    const src = (state.doodlePrefs || {}).shelfCat || 'doodle/shelf-cat.png';
+    /* 每次「进来」（离开超过 1.5 秒再回来）气泡都从「今天看哪本？」重新弹一下；页面里的重绘不重弹 */
+    const now = Date.now(), fresh = now - L.last > 1500;
+    if(fresh) L.i = 0;
+    L.last = now;
+    const lines = libLines();
+    return `<div class="ddsh-lib">
+      <p class="ddsh-say${fresh ? ' pop' : ''}" id="ddsh-say">${h(lines[L.i % lines.length])}</p>
+      <button type="button" class="ddsh-cat" data-ddsh="cat" aria-label="图书管理员（点一下说话，长按换图）">
+        <img src="${h(src)}" alt="" draggable="false" onerror="this.replaceWith(document.createRange().createContextualFragment(DoodleShelf._catSvg))">
+      </button>
+    </div>`;
+  }
+  /* 点一下：换一句，气泡重新弹；不重绘整页 */
+  function libTalk(){
+    const el = document.getElementById('ddsh-say'); if(!el) return;
+    const lines = libLines();
+    L.i = (L.i + 1) % lines.length; L.last = Date.now();
+    el.textContent = lines[L.i];
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    const c = el.parentNode.querySelector('.ddsh-cat'); if(c){ c.classList.remove('hop'); void c.offsetWidth; c.classList.add('hop'); }
   }
 
   /* ── 书 ── */
@@ -196,7 +230,7 @@ const DoodleShelf = (() => {
       <div class="ddsh-foot">
         <button type="button" class="ddsh-pill main" data-read-tab="add"><span data-doodle="plus" data-boil="hover"></span>导入一本</button>
         <button type="button" class="ddsh-pill${feedOn ? ' on' : ''}" id="read-feed-toggle">${feedOn ? '在读的会告诉他' : '不告诉他在读什么'}</button>
-        ${custom ? `<button type="button" class="ddsh-pill" data-ddsh="cat-reset">小猫换回默认</button>` : ''}
+        ${custom ? `<button type="button" class="ddsh-pill" data-ddsh="cat-reset">管理员换回小黑猫</button>` : ''}
       </div>
       <input type="file" id="ddsh-cat-file" accept="image/*" hidden>
     </div>`;
@@ -241,9 +275,18 @@ const DoodleShelf = (() => {
     e.preventDefault(); e.stopPropagation();
     const k = b.dataset.ddsh;
     if(k === 'all'){ state.ddshAll = !state.ddshAll; render(); }
-    else if(k === 'cat') pickCat();
+    else if(k === 'cat'){ if(L.long){ L.long = false; return; } libTalk(); }
     else if(k === 'cat-reset'){ const p = Object.assign({}, state.doodlePrefs || {}); delete p.shelfCat; state.doodlePrefs = p; try{ persist('doodlePrefs'); }catch(_){} render(); }
   }, true);
 
-  return {page, isOn: ON};
+  /* 长按小猫 = 换图（短按是说话，见上面的 click） */
+  let pressT = null;
+  document.addEventListener('pointerdown', e => {
+    if(!ON() || !e.target.closest || !e.target.closest('.ddsh-cat')) return;
+    L.long = false; clearTimeout(pressT);
+    pressT = setTimeout(() => { L.long = true; pickCat(); }, 600);
+  }, true);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => document.addEventListener(t, () => clearTimeout(pressT), true));
+
+  return {page, isOn: ON, _catSvg: catSvg};
 })();
