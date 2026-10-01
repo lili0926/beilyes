@@ -3,6 +3,8 @@
  * 固定不变），装满了就进「图鉴」，下一条记忆长在新的一棵树上。
  * 树全是代码画的：同一棵树每次画出来一模一样（种子 = 树的序号），叶子按记忆本身长成不同的样子：
  *   核心 → 开花   日记 → 本树的叶子   日常 → 嫩一点的叶子   待办 / 计划 → 花苞
+ *   树形按树种长：樱花宽伞、蓝花楹花瓶平顶、银杏塔形、枫层层圆顶、桉瘦高垂枝、月桂丛生椭圆（HABIT）
+ *   画风是水彩铅笔：天、山、草地是水彩薄涂 + 湿边，暗处留彩铅排线，树干彩铅描边，最后压一层水彩纸纹
  *   重要度 → 叶子大小   情绪（效价）→ 叶色冷暖   置顶 → 叶尖一点星光
  * 点一片叶子就读到那一条记忆。原来的记忆列表还在：右上角「列表」。 */
 const DoodleTree = (() => {
@@ -29,6 +31,36 @@ const DoodleTree = (() => {
     {name:'月桂', en:'Laurel',       leaf:'almond', greens:['#8FC79A','#77B886','#AFD8B5','#5FA672'], young:'#D6EED9', bloom:'#FFFBEF', bloomCore:'#F2C14E', bud:'#4F9363', bark:['#6A5848','#998370','#46382C'], glow:'#DDF2DF'},
   ];
   const speciesOf = i => SPECIES[i % SPECIES.length];
+
+  /* ── 树形：每个树种自己的长法 ──
+   * trunk 主干长 / trunkW 主干粗 / split 第一次分几杈 / spread(d) 每层张开多大 / lenK(d) 子枝相对父枝多长
+   * up(d) 往上拉 / flat(d) 往水平拉 / droop(d) 往下垂 / n3(d) 分三杈的概率 / side 侧生小枝概率 / maxd 最多几层 / twigD 第几层起长叶 */
+  const HABIT = [
+    /* 樱花：矮干，三四根主枝一下子张得很开，横着长、梢头微垂 → 又宽又扁的伞 */
+    {form: 'spread', trunk: [190, 215], trunkW: [56, 64], split: 4, maxd: 8, twigD: 3, side: 0.55,
+     spread: d => d < 1 ? [1.05, 1.2] : d < 3 ? [0.62, 0.78] : [0.5, 0.7], lenK: d => d < 1 ? [0.85, 0.98] : [0.7, 0.82],
+     up: d => d < 2 ? 0.02 : 0.03, flat: d => d >= 1 && d < 4 ? 0.12 : 0, droop: d => d >= 5 ? 0.08 : 0, n3: d => d < 5 ? 0.4 : 0},
+    /* 蓝花楹：短干上分出几根往上斜的长主枝（花瓶形），到顶再平平摊开 → 平顶大伞 */
+    {form: 'spread', trunk: [150, 175], trunkW: [48, 54], split: 3, maxd: 8, twigD: 3, side: 0.4,
+     spread: d => d < 1 ? [0.75, 0.9] : d < 3 ? [0.4, 0.55] : [0.7, 0.95], lenK: d => d < 1 ? [1.05, 1.15] : d < 3 ? [0.85, 0.95] : [0.62, 0.74],
+     up: d => d < 3 ? 0.08 : 0, flat: d => d >= 3 ? 0.22 : 0, droop: 0, n3: d => d >= 3 && d < 6 ? 0.5 : 0.15},
+    /* 银杏：一根主干到顶，侧枝一层层斜伸，短枝多 → 塔形 */
+    {form: 'leader', trunk: [560, 620], trunkW: [44, 50], split: 2, maxd: 6, twigD: 3, side: 0.5,
+     spread: [0.5, 0.7], lenK: [0.62, 0.74], up: 0.06, flat: 0, droop: d => d >= 4 ? 0.05 : 0, n3: 0.25},
+    /* 枫（鸡爪枫）：一小段干就分成几根茎，枝条一层层水平铺开 → 比高还宽的圆顶 */
+    {form: 'spread', stems: 3, trunk: [70, 90], trunkW: [52, 58], stemSpread: [1.1, 1.3], stemLen: [150, 175], split: 3, maxd: 8, twigD: 3, side: 0.6,
+     spread: d => d < 3 ? [0.75, 0.95] : [0.55, 0.75], lenK: d => d < 3 ? [0.8, 0.9] : [0.68, 0.78],
+     up: 0.02, flat: d => d >= 2 ? 0.3 : 0.1, droop: d => d >= 5 ? 0.06 : 0, n3: d => d < 6 ? 0.45 : 0},
+    /* 薄荷桉：瘦高、弯的主干，树冠稀疏不规整，细枝和叶子都往下垂 */
+    {form: 'sinuous', trunk: [400, 450], trunkW: [36, 42], split: 3, maxd: 7, twigD: 3, side: 0.35,
+     spread: d => d < 3 ? [0.6, 0.9] : [0.5, 0.7], lenK: d => d < 3 ? [0.75, 0.88] : [0.7, 0.85],
+     up: d => d < 2 ? 0.06 : 0, flat: 0, droop: d => d >= 3 ? 0.28 : 0.04, n3: 0.2, hang: true},
+    /* 月桂：几根茎贴着往上长，分得窄、分得密 → 紧凑的椭圆树冠 */
+    {form: 'spread', stems: 4, trunk: [40, 55], trunkW: [50, 56], stemSpread: [0.5, 0.65], stemLen: [190, 220], split: 2, maxd: 8, twigD: 3, side: 0.65,
+     spread: d => d < 3 ? [0.4, 0.52] : [0.55, 0.75], lenK: d => d < 3 ? [0.82, 0.92] : [0.62, 0.72],
+     up: d => d < 4 ? 0.14 : 0.06, flat: 0, droop: 0, n3: d => d >= 2 && d < 6 ? 0.55 : 0.2},
+  ];
+
 
   /* ── 记忆排队，分进一棵棵树 ── */
   function dateOf(m){
@@ -58,35 +90,93 @@ const DoodleTree = (() => {
   function skeleton(i){
     if(skelCache.has(i)) return skelCache.get(i);
     const R = rng(hashN(i * 104729 + 7)), r = (a, b) => a + (b - a) * R();
-    const segs = [], tips = [];
-    const lean = r(-0.08, 0.08);
-    const MAXD = 8;
-    function branch(x, y, ang, len, w, d){
+    const segs = [], tips = [], hab = HABIT[i % HABIT.length];
+    const lean = r(-0.06, 0.06);
+    const pick = v => Array.isArray(v) ? r(v[0], v[1]) : v;
+    const at = (f, d) => typeof f === 'function' ? f(d) : f;
+    /* 把角 a 往目标角 t 拧 k（走短的那边，不会绕一圈） */
+    const turn = (a, t, k) => a + Math.atan2(Math.sin(t - a), Math.cos(t - a)) * k;
+    function push(x, y, ang, len, w0, w1, d, bendK){
       const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
-      const bend = r(-0.16, 0.16) * len * (d === 0 ? 0.5 : 1);
+      const bend = r(-0.16, 0.16) * len * (bendK == null ? 1 : bendK);
       const mx = (x + ex) / 2 + Math.cos(ang + Math.PI / 2) * bend, my = (y + ey) / 2 + Math.sin(ang + Math.PI / 2) * bend;
-      const w1 = Math.max(0.9, w * (d === 0 ? 0.62 : 0.7));
-      segs.push({x, y, cx: mx, cy: my, ex, ey, w0: w, w1, d, ang, len});
-      if(d >= MAXD || len < 16){ tips.push({x: ex, y: ey, ang}); return; }
-      const n = d < 1 ? 3 : (d < 6 && R() < 0.42 ? 3 : 2);
-      const spread = d < 1 ? r(0.78, 0.92) : d < 3 ? r(0.62, 0.8) : r(0.5, 0.72);   // 低处张得开 → 圆的树冠
+      const sg = {x, y, cx: mx, cy: my, ex, ey, w0, w1, d, ang, len, tw: d >= hab.twigD};
+      segs.push(sg); return sg;
+    }
+    /* 子枝的方向：向光（往上拉）/ 平展（往水平拉）/ 下垂（往下拉） */
+    function steer(a, d){
+      const up = at(hab.up, d), flat = at(hab.flat, d), droop = at(hab.droop, d);
+      if(up) a = turn(a, -Math.PI / 2, up);
+      if(flat) a = turn(a, Math.cos(a) >= 0 ? -0.1 : -Math.PI + 0.1, flat);
+      if(droop) a = turn(a, Math.cos(a) >= 0 ? 0.7 : Math.PI - 0.7, droop);
+      return a;
+    }
+    function branch(x, y, ang, len, w, d){
+      const sg = push(x, y, ang, len, w, Math.max(0.9, w * (d === 0 ? 0.62 : 0.7)), d, d === 0 ? 0.5 : 1);
+      const {ex, ey, w1} = sg;
+      if(d >= hab.maxd || len < 14){ tips.push({x: ex, y: ey, ang}); return; }
+      const n = d === 0 ? hab.split : (R() < at(hab.n3, d) ? 3 : 2);
+      const spread = pick(at(hab.spread, d));
       for(let k = 0; k < n; k++){
-        let a = ang + (n === 1 ? 0 : (k / (n - 1) - 0.5) * spread * (n === 3 ? 1.5 : 1.2)) + r(-0.14, 0.14);
-        a = a + (-Math.PI / 2 - a) * (d < 1 ? 0.04 : d < 3 ? 0.1 : 0.06);  // 向光：往上拉一点
-        if(d >= 4) a += (Math.abs(Math.cos(a)) > 0.8 ? 0.06 : 0) * Math.sign(Math.sin(a)); // 外侧细枝微微下垂
-        const ln = len * (d < 1 ? r(0.82, 0.95) : r(0.7, 0.82)) * (n === 3 && k === 1 ? 0.88 : 1);
+        let a = ang + (n === 1 ? 0 : (k / (n - 1) - 0.5) * spread * (n >= 3 ? 1.5 : 1.2)) + r(-0.14, 0.14);
+        a = steer(a, d);
+        const ln = len * pick(at(hab.lenK, d)) * (n === 3 && k === 1 ? 0.88 : 1);
         branch(ex, ey, a, ln, w1 * r(0.74, 0.84), d + 1);
       }
       /* 侧生小枝：让树冠里面不空 */
-      if(d >= 3 && d <= 6 && R() < 0.55){
+      if(d >= 2 && d <= hab.maxd - 2 && R() < hab.side){
         const t = r(0.35, 0.7), sx = x + (ex - x) * t, sy = y + (ey - y) * t;
-        const sa = ang + (R() < 0.5 ? -1 : 1) * r(0.7, 1.1);
-        branch(sx, sy, sa, len * r(0.36, 0.5), w1 * 0.5, Math.min(MAXD, d + 2));
+        const sa = steer(ang + (R() < 0.5 ? -1 : 1) * r(0.7, 1.1), d + 1);
+        branch(sx, sy, sa, len * r(0.36, 0.5), w1 * 0.5, Math.min(hab.maxd, d + 2));
       }
     }
-    /* 主干：先长一段，再分 */
-    const trunkLen = r(230, 262), trunkW = r(56, 64);
-    branch(W / 2 + r(-10, 10), GROUND, -Math.PI / 2 + lean, trunkLen, trunkW, 0);
+    const trunkW = pick(hab.trunkW), X0 = W / 2 + r(-10, 10);
+    if(hab.form === 'leader'){
+      /* 银杏：一根主干笔直往上，侧枝一层层斜着伸出去，越往上越短 → 塔形 */
+      let x = X0, y = GROUND, w = trunkW, ang = -Math.PI / 2 + lean * 0.4;
+      const nodes = Math.round(r(8, 10)), seg = pick(hab.trunk) / nodes;
+      let side = R() < 0.5 ? -1 : 1;
+      for(let k = 0; k < nodes; k++){
+        const h = k / (nodes - 1), w1 = Math.max(2, w * 0.86);
+        const sg = push(x, y, ang + r(-0.04, 0.04), seg * r(0.92, 1.08), w, w1, 0, 0.25);
+        if(h > 0.22){
+          const nl = R() < 0.5 ? 2 : 1;
+          for(let q = 0; q < nl; q++){
+            side = -side;
+            const la = -Math.PI / 2 + side * r(0.85, 1.15) * (1 - h * 0.25);
+            const ll = (1.05 - h) * r(250, 300) + 40;
+            branch(sg.ex, sg.ey, la, ll * 0.5, Math.max(3, w1 * 0.55), 2);
+          }
+        }
+        x = sg.ex; y = sg.ey; w = w1; ang = turn(ang, -Math.PI / 2, 0.5);
+      }
+      branch(x, y, ang, 60, Math.max(2, w * 0.8), 3);
+    } else if(hab.form === 'sinuous'){
+      /* 桉：瘦高、弯弯扭扭的主干，上头才散开 */
+      let x = X0, y = GROUND, w = trunkW, ang = -Math.PI / 2 + lean;
+      const parts = 3, total = pick(hab.trunk);
+      for(let k = 0; k < parts; k++){
+        const w1 = w * 0.84;
+        const sg = push(x, y, ang, total / parts * r(0.9, 1.1), w, w1, 0, 1.1);
+        x = sg.ex; y = sg.ey; w = w1; ang = turn(ang + (k % 2 ? 1 : -1) * r(0.12, 0.22), -Math.PI / 2, 0.3);
+        /* 半路上一根往外斜的长枝 */
+        if(k === 1){ const sa = ang + (R() < 0.5 ? -1 : 1) * r(0.55, 0.8); branch(x, y, sa, r(150, 190), w * 0.5, 1); }
+      }
+      for(let k = 0; k < hab.split; k++){
+        const a = ang + (k / (hab.split - 1) - 0.5) * r(0.9, 1.2) + r(-0.1, 0.1);
+        branch(x, y, a, r(160, 200), w * 0.62, 1);
+      }
+    } else if(hab.stems > 1){
+      /* 丛生：一小段主干之后几根茎一起往上（月桂、鸡爪枫） */
+      const base = push(X0, GROUND, -Math.PI / 2 + lean, pick(hab.trunk), trunkW, trunkW * 0.8, 0, 0.4);
+      const ns = hab.stems;
+      for(let k = 0; k < ns; k++){
+        const a = -Math.PI / 2 + lean + (k / (ns - 1) - 0.5) * pick(hab.stemSpread) + r(-0.08, 0.08);
+        branch(base.ex, base.ey, a, pick(hab.stemLen) * (k === Math.floor(ns / 2) ? 1.08 : r(0.85, 1)), trunkW * 0.8 * r(0.55, 0.68), 1);
+      }
+    } else {
+      branch(X0, GROUND, -Math.PI / 2 + lean, pick(hab.trunk), trunkW, 0);
+    }
     /* 根：从树干底部往两边钻进土里 */
     const roots = [];
     const nr = 5;
@@ -98,7 +188,7 @@ const DoodleTree = (() => {
     const knots = [{t: r(0.35, 0.6), side: R() < 0.5 ? -1 : 1, s: r(0.8, 1.2)}];
     /* 叶位：沿细枝撒点（够用 1.7 倍容量，再按种子洗牌 —— 洗出来的顺序就是叶子长出来的顺序） */
     const cap = capOf(i), slots = [];
-    const twigs = segs.filter(s => s.d >= 3);
+    const twigs = segs.filter(s => s.tw);
     let guard = 0;
     while(slots.length < cap * 1.7 && guard++ < 60){
       twigs.forEach(s => {
@@ -109,7 +199,8 @@ const DoodleTree = (() => {
           const py = (1 - t) * (1 - t) * s.y + 2 * (1 - t) * t * s.cy + t * t * s.ey;
           const off = r(-1, 1) * (16 + s.w1 * 2), na = s.ang + Math.PI / 2;
           const side = off >= 0 ? 1 : -1;
-          slots.push({x: px + Math.cos(na) * off, y: py + Math.sin(na) * off, a: s.ang + side * r(0.4, 1.2) + r(-0.3, 0.3), z: R()});
+          const la = hab.hang ? turn(Math.PI / 2, s.ang, r(0.05, 0.3)) + r(-0.45, 0.45) : s.ang + side * r(0.4, 1.2) + r(-0.3, 0.3);   // 桉叶往下垂
+          slots.push({x: px + Math.cos(na) * off, y: py + Math.sin(na) * off, a: la, z: R()});
         }
       });
     }
@@ -137,7 +228,11 @@ const DoodleTree = (() => {
     const grass = [], flowers = [];
     for(let k = 0; k < 150; k++) grass.push({x: r(40, 960), h: r(10, 30), b: r(-0.4, 0.4), c: R()});
     for(let k = 0; k < 14; k++) flowers.push({x: r(70, 930), y: GROUND + r(8, 46), s: r(0.7, 1.3), c: R()});
-    const out = {segs, tips, roots, knots, slots, grass, flowers, trunkW};
+    /* 树冠的中心和大小：画树冠里的影子、天上的光晕用 */
+    let sx = 0, sy = 0; slots.forEach(q => { sx += q.x; sy += q.y; });
+    const crown = slots.length ? {x: sx / slots.length, y: sy / slots.length} : {x: 500, y: 470};
+    crown.r = slots.reduce((m, q) => Math.max(m, Math.hypot(q.x - crown.x, q.y - crown.y)), 120);
+    const out = {segs, tips, roots, knots, slots, grass, flowers, trunkW, crown};
     skelCache.set(i, out);
     return out;
   }
@@ -211,6 +306,40 @@ const DoodleTree = (() => {
     });
     return out;
   }
+  /* 水彩：一团颜色 = 边缘不规则的一块薄涂，边上颜料积得深一点（湿边） */
+  function blob(g, R, cx, cy, rx, ry){
+    const n = 56, ph = [R() * TAU, R() * TAU, R() * TAU], amp = [0.07 + R() * 0.06, 0.04 + R() * 0.04, 0.025];
+    g.beginPath();
+    for(let k = 0; k <= n; k++){
+      const t = k / n * TAU, f = 1 + amp[0] * Math.sin(2 * t + ph[0]) + amp[1] * Math.sin(3 * t + ph[1]) + amp[2] * Math.sin(7 * t + ph[2]) + (R() - 0.5) * 0.025;
+      const x = cx + Math.cos(t) * rx * f, y = cy + Math.sin(t) * ry * f;
+      k ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.closePath();
+  }
+  function wash(g, R, cx, cy, rx, ry, col, a, edge){
+    blob(g, R, cx, cy, rx, ry);
+    g.fillStyle = col; g.globalAlpha = a; g.fill();
+    if(edge !== 0){ g.strokeStyle = col; g.lineWidth = edge || 2.2; g.lineJoin = 'round'; g.globalAlpha = Math.min(1, a * 1.3); g.stroke(); }
+    /* 里面再淡淡叠一小层：颜料干得不均匀 */
+    blob(g, R, cx + (R() - 0.5) * rx * 0.3, cy + (R() - 0.5) * ry * 0.3, rx * (0.45 + R() * 0.25), ry * (0.45 + R() * 0.25));
+    g.globalAlpha = a * 0.5; g.fill();
+    g.globalAlpha = 1;
+  }
+  /* 水彩纸：大块的深浅不匀（冷压纸的起伏）+ 细颗粒 */
+  let mottleCv = null;
+  function mottle(){
+    if(mottleCv) return mottleCv;
+    const c = document.createElement('canvas'); c.width = c.height = 40;
+    const x = c.getContext('2d'), d = x.createImageData(40, 40), R = rng(777);
+    for(let k = 0; k < d.data.length; k += 4){ d.data[k] = 120; d.data[k + 1] = 104; d.data[k + 2] = 150; d.data[k + 3] = R() * 46; }
+    x.putImageData(d, 0, 0); mottleCv = c; return c;
+  }
+  function paperMottle(g, cv, a){
+    g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.globalAlpha = a; g.drawImage(mottle(), 0, 0, cv.width, cv.height);
+    g.globalAlpha = 1;
+  }
   /* 纸纹：一块 192² 的噪点，铺满整张 */
   let grainCv = null;
   function grain(){
@@ -256,7 +385,8 @@ const DoodleTree = (() => {
     g.closePath();
     /* 圆柱感：横着一条渐变，左暗中亮右更暗（光从左上来） */
     const m = Math.floor(N / 2), gr = g.createLinearGradient(L[m][0], L[m][1], Rr[m][0], Rr[m][1]);
-    gr.addColorStop(0, b0); gr.addColorStop(0.32, b1); gr.addColorStop(0.62, b0); gr.addColorStop(1, b2);
+    const lt = c => fine ? mix(c, '#FBF4EE', 0.14) : c;     // 水彩：颜色薄一点、透一点
+    gr.addColorStop(0, lt(b0)); gr.addColorStop(0.32, lt(b1)); gr.addColorStop(0.62, lt(b0)); gr.addColorStop(1, b2);
     g.fillStyle = gr; g.fill();
     /* 树皮纹：粗枝上几道断续的深色细线 */
     if(s.w0 > 12){
@@ -305,7 +435,7 @@ const DoodleTree = (() => {
     for(let q = 0; q < rows; q++){
       const off = (q + 0.5) / rows - 0.5 + (R() - 0.5) * 0.04;     // + 向光（左），− 背光（右）
       const col = off < -0.18 ? b2 : off > 0.12 ? (R() < 0.45 ? '#FFFFFF' : b1) : (R() < 0.5 ? b0 : b2);
-      const a = off < -0.18 ? 0.55 : off > 0.12 ? 0.4 : 0.3;
+      const a = off < -0.18 ? 0.45 : off > 0.12 ? 0.26 : 0.22;
       let t = -R() * 0.15;
       while(t < 1){
         const t1 = Math.min(1.02, t + 0.12 + R() * 0.3);
@@ -317,14 +447,15 @@ const DoodleTree = (() => {
         t = t1 + R() * 0.06;
       }
     }
-    /* 背光侧的斜排线 */
-    if(s.w0 >= 9){
-      const n = Math.round(s.len / 3.2);
-      for(let k = 0; k < n; k++){
-        const t = k / n + R() * 0.01, o0 = -0.52, o1 = -0.08 - R() * 0.18;
-        const [ax, ay] = frame(t, o0), [bx, by] = frame(Math.min(1, t + 0.035 + R() * 0.02), o1);
-        pencil(g, ax, ay, bx, by, b2, pw * 0.8, 0.32 + R() * 0.2, 0);
-      }
+    /* 背光侧一道化开的水彩阴影，向光侧一道淡淡的亮 */
+    if(s.w0 >= 7){
+      const line = (off) => { g.beginPath(); for(let k = 0; k <= 12; k++){ const [x, y] = frame(k / 12, off); k ? g.lineTo(x, y) : g.moveTo(x, y); } };
+      g.filter = 'blur(' + Math.max(1.5, s.w0 * 0.09).toFixed(1) + 'px)';
+      g.lineCap = 'round'; g.strokeStyle = b2; g.globalAlpha = 0.38; g.lineWidth = Math.max(2, (s.w0 + s.w1) * 0.18);
+      line(-0.36); g.stroke();
+      g.strokeStyle = '#FFF6EE'; g.globalAlpha = 0.3; g.lineWidth = Math.max(1.5, (s.w0 + s.w1) * 0.08);
+      line(0.22); g.stroke();
+      g.filter = 'none'; g.globalAlpha = 1;
     }
     /* 粗枝上的树皮小记号：短弧、眼睛形的小疤 */
     if(s.w0 >= 16){
@@ -459,10 +590,15 @@ const DoodleTree = (() => {
       const glow = g.createRadialGradient(500, 430, 40, 500, 430, 520);
       glow.addColorStop(0, sp.glow); glow.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = glow; g.globalAlpha = 0.85; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
-      /* 天空上的彩铅：很淡的斜排线，越往地平线越浓 */
+      /* 天空：几大片很薄的水彩晕开（树后一团本树的颜色），彩铅只在地平线附近轻轻扫几笔 */
       if(fine){
-        hatch(g, PR, [0, 0, W, GROUND], {ang: -0.62, gap: 6.5, len: [26, 60], cols: ['#E2D3F7', '#EBDDF8', '#F6DCE8'], w: 2.4, a: 0.32,
-          fade: (x, y) => 0.25 + 0.75 * Math.min(1, y / 900) - 0.35 * Math.max(0, 1 - Math.hypot(x - 500, y - 430) / 330)});
+        const cr = skeleton(i).crown;
+        wash(g, PR, cr.x, cr.y - 20, cr.r * 1.25, cr.r * 1.1, sp.glow, 0.3, 3);
+        wash(g, PR, 180, 260, 260, 150, '#EADCF8', 0.24, 2.5);
+        wash(g, PR, 840, 200, 240, 130, '#F8E0EA', 0.22, 2.5);
+        wash(g, PR, 520, 760, 560, 110, '#F3E6F6', 0.35, 2);
+        hatch(g, PR, [0, 560, W, GROUND], {ang: -0.5, gap: 9, len: [26, 60], cols: ['#E0D0F5', '#F2D8E6'], w: 2, a: 0.2,
+          fade: (x, y) => Math.max(0, (y - 600) / 300)});
       }
       if(fine){
         /* 远山：两层，各自排线 + 手描山脊 */
@@ -473,12 +609,17 @@ const DoodleTree = (() => {
         hills.forEach(hl => {
           const pts = cubicPts(hl.st, hl.cs, 18);
           const path = () => { g.beginPath(); pts.forEach((q, k) => k ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); };
-          g.fillStyle = hl.fill; path(); g.fill();
+          g.fillStyle = hl.fill; g.globalAlpha = 0.8; path(); g.fill(); g.globalAlpha = 1;
           g.save(); path(); g.clip();
-          hatch(g, PR, [0, 800, W, GROUND + 40], {ang: hl.ang, gap: 4.6, len: [18, 46], cols: hl.cols, w: 2.2, a: 0.6,
-            fade: (x, y) => { let top = 2000; for(let k = 1; k < pts.length; k++) if(pts[k][0] >= x){ top = pts[k][1]; break; } return Math.max(0.25, 1 - (y - top) / 90); }});
+          /* 山体：几块水彩叠出深浅 */
+          for(let k = 0; k < 5; k++) wash(g, PR, 100 + k * 200 + (PR() - 0.5) * 80, pts[Math.min(pts.length - 1, Math.round((k + 0.5) / 5 * (pts.length - 1)))][1] + 30, 150 + PR() * 60, 45 + PR() * 20, hl.cols[k % hl.cols.length], 0.35, 0);
+          hatch(g, PR, [0, 800, W, GROUND + 40], {ang: hl.ang, gap: 7, len: [18, 46], cols: hl.cols, w: 2, a: 0.32,
+            fade: (x, y) => { let top = 2000; for(let k = 1; k < pts.length; k++) if(pts[k][0] >= x){ top = pts[k][1]; break; } return Math.max(0, 1 - (y - top) / 40); }});
           g.restore();
-          sketch(g, PR, pts, hl.line, 1.6, 0.55, 2);
+          /* 山脊：颜料在边上积起来的一道深色湿边，再用彩铅轻轻描一遍 */
+          g.strokeStyle = hl.line; g.lineWidth = 3.2; g.globalAlpha = 0.28; g.lineJoin = 'round';
+          g.beginPath(); pts.forEach((q, k) => k ? g.lineTo(q[0], q[1] + 1) : g.moveTo(q[0], q[1] + 1)); g.stroke(); g.globalAlpha = 1;
+          sketch(g, PR, pts, hl.line, 1.2, 0.4, 1);
         });
         /* 星点 */
         const R = rng(hashN(i + 99));
@@ -493,21 +634,31 @@ const DoodleTree = (() => {
       if(fine){
         g.save(); groundPath(); g.clip();
         const box = [0, GROUND - 40, W, H];
-        hatch(g, PR, box, {ang: -0.16, gap: 3.6, len: [16, 44], cols: ['#A6D8BC', '#93CFAF', '#BCE4CC', '#C9E9C4'], w: 2.3, a: 0.62,
-          fade: (x, y) => 0.55 + 0.45 * Math.min(1, (y - gTop(x)) / 110)});
-        hatch(g, PR, box, {ang: 0.52, gap: 5.2, len: [10, 26], cols: ['#7EC09D', '#6FB592', '#88C6A0'], w: 1.9, a: 0.5,
-          fade: (x, y) => Math.min(1, Math.max(0, (y - GROUND - 60) / 120) * 0.7 + Math.max(0, 1 - (y - gTop(x)) / 14) * 0.6)});
+        /* 草地的水彩：几块深浅不同的绿（偏黄的、偏蓝的）互相叠着，边上有湿边 */
+        const GW = ['#B5E0C4', '#A3D6B6', '#C9E8B8', '#A6D8D0', '#BFE3C8', '#98CFAE'];
+        for(let k = 0; k < 9; k++){
+          const x = (k + 0.5) / 9 * W + (PR() - 0.5) * 60;
+          wash(g, PR, x, gTop(x) + 40 + PR() * 60, 120 + PR() * 70, 34 + PR() * 26, GW[k % GW.length], 0.42, 2);
+        }
+        wash(g, PR, 300, H - 20, 380, 60, '#95CDAA', 0.35, 2);
+        wash(g, PR, 760, H - 10, 340, 55, '#9ED3BE', 0.35, 2);
+        /* 彩铅只在暗处留着：近处一层，地平线一层 */
+        hatch(g, PR, box, {ang: -0.16, gap: 5, len: [16, 44], cols: ['#8FCBA8', '#7EC09D', '#A6D8BC'], w: 2, a: 0.42,
+          fade: (x, y) => Math.max(0, (y - GROUND - 40) / 130) + Math.max(0, 1 - (y - gTop(x)) / 16) * 0.8});
         /* 树影：先一层很淡的晕，再顺着地面的方向密密压几层深绿 */
         const sh = g.createRadialGradient(500, GROUND + 8, 10, 500, GROUND + 8, 290);
-        sh.addColorStop(0, 'rgba(80,120,100,.22)'); sh.addColorStop(1, 'rgba(80,120,100,0)');
+        sh.addColorStop(0, 'rgba(80,120,100,.16)'); sh.addColorStop(1, 'rgba(80,120,100,0)');
+        g.save(); g.translate(500, GROUND + 8); g.scale(1, 0.14); wash(g, PR, 0, 0, 250, 250, '#7FB89A', 0.35, 3); g.restore();
         g.fillStyle = sh; g.save(); g.translate(500, GROUND + 8); g.scale(1, 0.13); g.translate(-500, -(GROUND + 8)); g.beginPath(); g.arc(500, GROUND + 8, 290, 0, TAU); g.fill(); g.restore();
-        hatch(g, PR, [180, GROUND - 30, 820, GROUND + 50], {ang: -0.08, gap: 2.6, len: [14, 34], cols: ['#6FAE8C', '#5E9F80', '#7A9E95'], w: 1.8, a: 0.55, jit: 0.08, fade: (x, y) => shade(x, y) ** 0.7});
+        hatch(g, PR, [180, GROUND - 30, 820, GROUND + 50], {ang: -0.08, gap: 2.6, len: [14, 34], cols: ['#6FAE8C', '#5E9F80', '#7A9E95'], w: 1.7, a: 0.4, jit: 0.08, fade: (x, y) => shade(x, y) ** 0.7});
         /* 一点暖色：草地里零星几笔黄绿 */
         hatch(g, PR, box, {ang: -0.3, gap: 14, len: [10, 22], cols: ['#DDEBA8', '#F2E6B0'], w: 2, a: 0.45, fade: (x, y) => (Math.sin(x * 0.013) * 0.5 + 0.5) * (Math.cos(y * 0.05 + x * 0.004) * 0.5 + 0.5)});
         g.restore();
         const edge = []; for(let k = 0; k <= 40; k++){ const x = k * 25; edge.push([x, gTop(x)]); }
-        sketch(g, PR, edge, '#79B996', 1.7, 0.7, 3);
-        paperGrain(g, cv, 0.55);
+        g.strokeStyle = '#86C2A0'; g.lineWidth = 3.5; g.globalAlpha = 0.3; g.beginPath(); edge.forEach((q, k) => k ? g.lineTo(q[0], q[1] + 1.5) : g.moveTo(q[0], q[1] + 1.5)); g.stroke(); g.globalAlpha = 1;
+        sketch(g, PR, edge, '#79B996', 1.3, 0.5, 2);
+        paperMottle(g, cv, 0.32);
+        paperGrain(g, cv, 0.45);
         g.setTransform(sc, 0, 0, sc, 0, 0);
       } else {
         const sh = g.createRadialGradient(500, GROUND + 6, 10, 500, GROUND + 6, 300);
@@ -538,8 +689,8 @@ const DoodleTree = (() => {
     });
     /* 树冠里面那团若有若无的影子：叶子越多越浓，看着有体积 */
     if(fill > 0.05){
-      const cx = 500, cy = 470;
-      const cg = g.createRadialGradient(cx, cy, 40, cx, cy, 420);
+      const cx = sk.crown.x, cy = sk.crown.y;
+      const cg = g.createRadialGradient(cx, cy, 40, cx, cy, sk.crown.r * 1.1);
       cg.addColorStop(0, mix(sp.greens[3], '#5a4a6a', 0.25)); cg.addColorStop(1, 'rgba(0,0,0,0)');
       g.globalAlpha = 0.18 * Math.min(1, fill * 1.4); g.fillStyle = cg; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
     }
@@ -599,9 +750,9 @@ const DoodleTree = (() => {
           const [lc, dc] = GC[Math.floor(GR() * GC.length)];
           const bx = t.x + (GR() - 0.5) * 16 * t.s, hgt = (12 + GR() * 20) * t.s, lean = ((k / (t.n - 1 || 1)) - 0.5) * 1.2 + (GR() - 0.5) * 0.4;
           const tx = bx + lean * hgt * 0.7, ty = t.y - hgt, cx = bx + lean * hgt * 0.15, cy = t.y - hgt * 0.6;
-          g.strokeStyle = lc; g.lineCap = 'round'; g.globalAlpha = 0.8; g.lineWidth = 2.5 * t.s;
+          g.strokeStyle = lc; g.lineCap = 'round'; g.globalAlpha = 0.7; g.lineWidth = 2.5 * t.s;
           g.beginPath(); g.moveTo(bx, t.y); g.quadraticCurveTo(cx, cy, tx, ty); g.stroke();
-          g.strokeStyle = dc; g.globalAlpha = 0.6; g.lineWidth = 1.1 * t.s;
+          g.strokeStyle = dc; g.globalAlpha = 0.45; g.lineWidth = 1 * t.s;
           g.beginPath(); g.moveTo(bx + 1.2 * t.s, t.y); g.quadraticCurveTo(cx + 1.4 * t.s, cy, tx, ty); g.stroke();
         }
         /* 草根处一小笔阴影 */
