@@ -9,7 +9,6 @@ const DoodleRP = (() => {
   const T = {worldId:null, revealed:false, serial:0, fresh:false};
   const PAPERS = [['#FFF0F5','#F2A7C3'],['#EEF5FE','#8FBCEB'],['#F4EEFB','#CFA0E8'],['#FFF8EC','#E8C27A'],['#EEFAF4','#8CCFAE']];
   const tint = id => { let n = 7; String(id).split('').forEach(c => { n = (n*31 + c.charCodeAt(0)) | 0; }); return PAPERS[Math.abs(n) % PAPERS.length]; };
-  const blurb = w => String(w.world || '').split(/\n+/).map(s => s.replace(/^[#·\-\s]*(世界[:：].*)?/, '').trim()).filter(s => s && !/^[一二三四五六七八九十]、/.test(s))[0] || '';
   const pix = (word, o) => (typeof DoodleShell !== 'undefined' && DoodleShell.pixelName) ? DoodleShell.pixelName(word, o) : '';
 
   function draw(){
@@ -33,13 +32,10 @@ const DoodleRP = (() => {
     }
     const [paper, ink] = tint(w.id), stages = w.stages || [];
     return `<div class="ddrp-ticket${T.fresh ? ' fresh' : ''}${T.revealed ? ' open' : ''}" style="--paper:${paper};--ink:${ink}">
-      <div class="ddrp-stub"><span>DREAM</span><b>No.${T.serial}</b><i data-doodle="moon" data-boil="off"></i></div>
+      <div class="ddrp-stub"><span>DREAM</span><b>No.${T.serial}</b></div>
       <div class="ddrp-tmain">
         <div class="ddrp-prize">
-          <small>今晚的梦</small>
           <h3>${h(w.name)}</h3>
-          <p>${h(blurb(w).slice(0, 54))}${blurb(w).length > 54 ? '…' : ''}</p>
-          <span class="ddrp-stamp">${stages.length} 幕</span>
         </div>
         ${T.revealed ? '' : `<canvas class="ddrp-scratch" id="ddrp-scratch" aria-label="刮开涂层"></canvas><button type="button" class="ddrp-peek" data-ddrp="reveal">一下刮开</button>`}
       </div>

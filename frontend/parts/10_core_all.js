@@ -5851,6 +5851,7 @@ function render(){
   EdenColorStudio.mount();
   DoodleShell.afterRender();
   DoodleRP.afterRender();
+  if(typeof DoodleTree!=="undefined") DoodleTree.afterRender();
   spotifyAfterRender();
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
@@ -24538,6 +24539,8 @@ function renderSavedChat(){
 }
 
 function renderMemory(){
+  // 星光涂鸦壳：记忆库默认是一棵树（doodle/tree.js），右上角「列表」回到这一页
+  if(state.uiShell==="doodle" && state.memView!=="list" && typeof DoodleTree!=="undefined") return DoodleTree.page();
   if(typeof memRemoteRefresh==="function") memRemoteRefresh(); // 异步刷新云端计数（30s 节流）
   const layers=["all","core","diary","daily","handoff","plans","pr"];
   const filtered=state.memFilter==="all"?state.memories:state.memories.filter(m=>m.layer===state.memFilter);

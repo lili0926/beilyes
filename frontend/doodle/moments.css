@@ -29,25 +29,6 @@ body.shell-doodle .ddmo .ddmo-seg .wx-tab{position:relative;z-index:1;border:0;b
 body.shell-doodle .ddmo .ddmo-seg .wx-tab.active{color:#7E5CB8;font-weight:700}
 body.shell-doodle .ddmo .ddmo-seg .wx-tab::after{display:none}
 
-/* 封面：一张拍立得，两角贴胶带 */
-.ddmo-polaroid{position:relative;margin:4px 6px 18px;padding:10px 10px 0;border-radius:6px;background:#fff;transform:rotate(-1.2deg);
-  box-shadow:0 16px 28px -18px rgba(90,70,130,.55),0 0 0 1.5px #EFE8F8}
-body.shell-doodle.dd-dark .ddmo-polaroid{background:#2A2633;box-shadow:0 16px 28px -18px rgba(0,0,0,.8),0 0 0 1.5px #3A3548}
-body.shell-doodle .ddmo .ddmo-photo{position:relative;height:178px;margin:0;border-radius:3px;overflow:hidden;background:#E9D9FB center/cover no-repeat;box-shadow:none}
-.ddmo-sky{position:absolute;inset:0;width:100%;height:100%}
-.ddmo-chip{position:absolute;right:8px;bottom:8px;display:inline-flex;align-items:center;gap:4px;padding:5px 10px 5px 8px;border:0;border-radius:999px;
-  background:rgba(255,255,255,.86);font:inherit;font-size:13px;color:#8B6CC0;cursor:pointer;backdrop-filter:blur(4px)}
-.ddmo-chip [data-doodle]{width:16px;height:16px}
-.ddmo-chip.x{right:auto;left:8px;padding:5px}
-.ddmo-cap{display:flex;align-items:center;gap:10px;padding:10px 6px 14px}
-.ddmo-cap b{display:block;font-size:20px;line-height:1.1}
-.ddmo-cap small{display:block;margin-top:2px;font-size:13px;color:var(--mo-sub)}
-.ddmo-me{width:46px;height:46px;flex:0 0 auto;border-radius:50%;overflow:hidden;box-shadow:0 0 0 3px #fff,0 0 0 5px #E3D0F6;display:flex;align-items:center;justify-content:center;background:#F1E8FB}
-.ddmo-me img{width:100%;height:100%;object-fit:cover}
-.ddmo-me .ddmo-av-fb,.ddmo-me .wx-cover-av-fallback{font-size:20px;color:#8B6CC0}
-.ddmo-tape{position:absolute;top:-9px;width:62px;height:20px;background:rgba(207,160,232,.42);border-left:2px dashed rgba(255,255,255,.7);border-right:2px dashed rgba(255,255,255,.7)}
-.ddmo-tape.l{left:14px;transform:rotate(-8deg)}
-.ddmo-tape.r{right:14px;transform:rotate(7deg);background:rgba(143,188,235,.42)}
 .ddmo-count{margin:0 0 12px;text-align:center;font-size:14px;color:var(--mo-sub)}
 .ddmo-count b{color:#C08AE6;font-size:17px}
 
