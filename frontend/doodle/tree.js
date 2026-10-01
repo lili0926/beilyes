@@ -1,5 +1,5 @@
 /* 星光涂鸦壳 · 记忆树（记忆库页）
- * 每一条记忆是一片叶子。记忆按记下的先后排队，一棵树装满 300–500 片（每棵的容量由它的序号决定，
+ * 每一条记忆是一簇叶子（2–4 片，越重要越多）。记忆按记下的先后排队，一棵树装满 300–500 条（每棵的容量由它的序号决定，
  * 固定不变），装满了就进「图鉴」，下一条记忆长在新的一棵树上。
  * 树全是代码画的：同一棵树每次画出来一模一样（种子 = 树的序号），叶子按记忆本身长成不同的样子：
  *   核心 → 开花   日记 → 本树的叶子   日常 → 嫩一点的叶子   待办 / 计划 → 花苞
@@ -115,8 +115,16 @@ const DoodleTree = (() => {
     }
     for(let k = slots.length - 1; k > 0; k--){ const j = Math.floor(R() * (k + 1)); [slots[k], slots[j]] = [slots[j], slots[k]]; }
     slots.length = Math.min(slots.length, cap);
+    /* 一条记忆不止一片：主叶旁边再抽 1–3 片小叶，凑成一小簇（偏移按叶子大小算，单位 = 叶长） */
+    slots.forEach(q => {
+      q.sp = [];
+      for(let k = 0; k < 3; k++){
+        const side = k % 2 ? 1 : -1, fan = side * r(0.45, 1.0) + (k === 2 ? r(-0.25, 0.25) : 0);
+        q.sp.push({a: q.a + fan, d: r(0.12, 0.38), o: fan * 0.6, s: r(0.62, 0.86), z: q.z - r(0.01, 0.2), t: R()});
+      }
+    });
     /* 整棵塞进画框：以树根为中心等比缩放（树干还扎在地上），树冠上沿离顶 70、左右各留 50 */
-    const BX = W / 2, PAD = 34;
+    const BX = W / 2, PAD = 44;
     let minY = GROUND, maxDX = 1;
     segs.forEach(s => { minY = Math.min(minY, s.ey, s.cy); maxDX = Math.max(maxDX, Math.abs(s.ex - BX)); });
     slots.forEach(q => { minY = Math.min(minY, q.y - PAD); maxDX = Math.max(maxDX, Math.abs(q.x - BX) + PAD); });
@@ -346,14 +354,29 @@ const DoodleTree = (() => {
     }
     /* 叶子：后排先画（暗一点），前排后画 */
     const placed = [];
-    const order = mems.map((m, k) => ({m, s: sk.slots[k], k})).filter(x => x.s).sort((a, b) => a.s.z - b.s.z);
-    order.forEach(({m, s}) => {
-      const L = leafLook(m, sp, s), back = s.z < 0.35;
-      if(L.kind === 'bloom') drawBloom(g, s.x, s.y, L.size * 0.5, sp, s.a);
-      else if(L.kind === 'bud') drawBud(g, s.x, s.y, L.size * 0.75, s.a, sp);
-      else drawLeaf(g, s.x, s.y, s.a, L.size, back ? mix(L.col, '#4a3e5c', 0.12) : L.col, sp.leaf, back);
-      if(L.pinned && !opt.thumb) sparkle(g, s.x + Math.cos(s.a) * L.size, s.y + Math.sin(s.a) * L.size, 7);
-      placed.push({x: s.x + Math.cos(s.a) * L.size * 0.5, y: s.y + Math.sin(s.a) * L.size * 0.5, r: Math.max(18, L.size * 0.7), m});
+    /* 每条记忆一簇：重要度 ≤3 两片，4–7 三片，≥8 四片；花和花苞是主叶，旁边陪着叶子 */
+    const order = [];
+    mems.forEach((m, k) => {
+      const s = sk.slots[k]; if(!s) return;
+      const L = leafLook(m, sp, s), imp = +m.importance || 5;
+      const extra = imp <= 3 ? 1 : imp >= 8 ? 3 : 2;
+      for(let e = 0; e < extra; e++){
+        const q = s.sp[e], len = L.size * (L.kind === 'leaf' ? 1 : 0.8);
+        const x = s.x + Math.cos(s.a) * len * q.d + Math.cos(s.a + Math.PI / 2) * len * q.o * 0.35;
+        const y = s.y + Math.sin(s.a) * len * q.d + Math.sin(s.a + Math.PI / 2) * len * q.o * 0.35;
+        const col = mix(L.col, q.t < 0.5 ? sp.greens[Math.floor(q.t * 8) % 4] : (q.t < 0.8 ? sp.young : L.col), 0.35);
+        order.push({m, z: q.z, x, y, a: q.a, size: len * q.s, col, kind: 'leaf'});
+      }
+      order.push({m, z: s.z, x: s.x, y: s.y, a: s.a, size: L.size, col: L.col, kind: L.kind, pinned: L.pinned, main: true});
+    });
+    order.sort((a, b) => a.z - b.z);
+    order.forEach(o => {
+      const back = o.z < 0.35;
+      if(o.kind === 'bloom') drawBloom(g, o.x, o.y, o.size * 0.5, sp, o.a);
+      else if(o.kind === 'bud') drawBud(g, o.x, o.y, o.size * 0.75, o.a, sp);
+      else drawLeaf(g, o.x, o.y, o.a, o.size, back ? mix(o.col, '#4a3e5c', 0.12) : o.col, sp.leaf, back);
+      if(o.pinned && !opt.thumb) sparkle(g, o.x + Math.cos(o.a) * o.size, o.y + Math.sin(o.a) * o.size, 7);
+      placed.push({x: o.x + Math.cos(o.a) * o.size * 0.5, y: o.y + Math.sin(o.a) * o.size * 0.5, r: Math.max(o.main ? 18 : 14, o.size * 0.7), m: o.m});
     });
     /* 草和小花（盖在树根前面） */
     if(!opt.thumb){
@@ -389,13 +412,13 @@ const DoodleTree = (() => {
     const pct = Math.round(T.mems.length / T.cap * 100);
     const card = T.full
       ? `<span class="mt-done">已长满</span>`
-      : `<div class="mt-bar"><i style="width:${Math.max(2, pct)}%"></i></div><span class="mt-left">还差 ${T.cap - T.mems.length} 片长满</span>`;
+      : `<div class="mt-bar"><i style="width:${Math.max(2, pct)}%"></i></div><span class="mt-left">还差 ${T.cap - T.mems.length} 条记忆长满</span>`;
     const atlas = F.trees.map(t => {
       const s = speciesOf(t.i), a = t.mems[0], z = t.mems[t.mems.length - 1];
       return `<button type="button" class="mt-cell${t.i === vi ? ' on' : ''}${t.full ? '' : ' growing'}" data-mt-view="${t.i}">
         <canvas class="mt-thumb" data-mt-thumb="${t.i}" width="240" height="276"></canvas>
         <b>第 ${t.i + 1} 棵 · ${h(s.name)}</b>
-        <span>${t.full ? `${t.mems.length} 片 · ${fmtD(dateOf(a))}–${fmtD(dateOf(z)).slice(5)}` : `正在长 · ${t.mems.length}/${t.cap}`}</span>
+        <span>${t.full ? `${t.mems.length} 条 · ${fmtD(dateOf(a))}–${fmtD(dateOf(z)).slice(5)}` : `正在长 · ${t.mems.length}/${t.cap}`}</span>
       </button>`;
     }).join('') + `<div class="mt-cell locked" aria-hidden="true"><div class="mt-q">?</div><b>第 ${F.trees.length + 1} 棵</b><span>长满这一棵就会冒芽</span></div>`;
     return `<div class="page mt" style="padding-top:0">
@@ -405,7 +428,7 @@ const DoodleTree = (() => {
       <section class="mt-card">
         <div class="mt-head">
           <div><b>第 ${vi + 1} 棵 · ${h(sp.name)}</b><small>${h(sp.en)}${first ? ` · 从 ${fmtD(dateOf(first))} 开始` : ''}</small></div>
-          <div class="mt-num"><b>${T.mems.length}</b><small>/ ${T.cap} 片</small></div>
+          <div class="mt-num"><b>${T.mems.length}</b><small>/ ${T.cap} 条</small></div>
         </div>
         <div class="mt-stage">
           <canvas id="mt-canvas" data-mt-tree="${vi}" width="10" height="10" aria-label="记忆树，点叶子读记忆"></canvas>
