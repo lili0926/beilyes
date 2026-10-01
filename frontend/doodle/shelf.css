@@ -75,22 +75,24 @@ body.shell-doodle .ddsh .sub-header .page-title{font-family:"ZCOOL KuaiLe",var(-
 .ddsh-dash{position:absolute;left:64%;top:44px;width:30px;height:0;border-top:2px dashed #C9DCF2;transform:rotate(-28deg)}
 
 /* 图书管理员小黑猫：坐在下层书架右端，比书高一点，气泡在她左上方 */
-.ddsh-row.r2{padding-right:96px}
-.ddsh-lib{position:absolute;right:-6px;bottom:0;width:112px;height:158px;z-index:3;pointer-events:none}
-.ddsh-cat{position:absolute;right:0;bottom:0;width:112px;height:158px;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto;
+.ddsh-row.r2{padding-right:70px}
+.ddsh-lib{position:absolute;right:-4px;bottom:0;width:80px;height:114px;z-index:3;pointer-events:none}
+.ddsh-cat{position:absolute;right:0;bottom:0;width:80px;height:114px;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto;
   -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transform-origin:50% 100%;animation:ddshBreath 4.2s ease-in-out infinite}
 .ddsh-cat img,.ddsh-cat svg{width:100%;height:100%;display:block;object-fit:contain;object-position:50% 100%;
   filter:drop-shadow(0 6px 6px rgba(70,50,110,.18));pointer-events:none}
 .ddsh-cat.hop{animation:ddshHop .5s cubic-bezier(.3,1.6,.5,1)}
 @keyframes ddshBreath{0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,.988)}}
 @keyframes ddshHop{0%{transform:translateY(0)}40%{transform:translateY(-10px) rotate(-3deg)}100%{transform:translateY(0)}}
-.ddsh-say{position:absolute;right:40px;bottom:150px;margin:0;max-width:206px;width:max-content;padding:8px 13px 9px;border-radius:16px;
+.ddsh-say{position:absolute;right:30px;bottom:112px;margin:0;max-width:206px;width:max-content;padding:8px 13px 9px;border-radius:16px;
   background:#fff;border:2px dashed #CFA0E8;font-family:var(--dd-font);font-size:15px;line-height:1.35;color:#6E58A0;white-space:normal;
   box-shadow:0 8px 16px -10px rgba(120,90,180,.6);pointer-events:none;transform-origin:80% 100%}
 .ddsh-say::after{content:"";position:absolute;right:22px;bottom:-8px;width:12px;height:12px;background:#fff;
   border-right:2px dashed #CFA0E8;border-bottom:2px dashed #CFA0E8;border-bottom-right-radius:3px;transform:rotate(45deg)}
-.ddsh-say.pop{animation:ddshSay .55s cubic-bezier(.3,1.7,.5,1) both}
-@keyframes ddshSay{0%{opacity:0;transform:scale(.3) translateY(10px)}100%{opacity:1;transform:none}}
+/* 气泡说完就走：弹出 → 停 4 秒 → 淡掉，不一直挡着书；点猫再弹 */
+.ddsh-say{opacity:0}
+.ddsh-say.pop{animation:ddshSay 5s cubic-bezier(.3,1.7,.5,1) both}
+@keyframes ddshSay{0%{opacity:0;transform:scale(.3) translateY(10px)}10%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-6px)}}
 body.shell-doodle.dd-dark .ddsh-say{background:#2E2A3B;color:#D9CCF5;border-color:#7E64B0}
 body.shell-doodle.dd-dark .ddsh-say::after{background:#2E2A3B;border-color:#7E64B0}
 
@@ -125,5 +127,5 @@ body.shell-doodle.dd-dark .ddsh-say::after{background:#2E2A3B;border-color:#7E64
 .ddsh-pill [data-doodle]{width:18px;height:18px}
 
 /* 窄屏：装饰缩一点，书脊不挤 */
-@media (max-width:370px){.ddsh-jar{width:60px;height:60px}.ddsh-badge{width:64px;height:64px}.ddsh-lib,.ddsh-cat{width:96px;height:136px}.ddsh-row.r2{padding-right:80px}.ddsh-say{right:30px;bottom:130px;font-size:14px;max-width:180px}.ddsh-row{height:156px}.ddsh-spine em{font-size:11px}.ddsh-slab{max-width:68px}.ddsh-lean{margin:0 8px 0 2px}.ddsh-bow{margin-left:18px}.ddsh-card{padding-left:12px;padding-right:12px}}
-@media (prefers-reduced-motion:reduce){.ddsh-spk,.ddsh-cat,.ddsh-say.pop{animation:none}}
+@media (max-width:370px){.ddsh-jar{width:60px;height:60px}.ddsh-badge{width:64px;height:64px}.ddsh-lib,.ddsh-cat{width:70px;height:100px}.ddsh-row.r2{padding-right:60px}.ddsh-say{right:24px;bottom:98px;font-size:14px;max-width:180px}.ddsh-row{height:156px}.ddsh-spine em{font-size:11px}.ddsh-slab{max-width:68px}.ddsh-lean{margin:0 8px 0 2px}.ddsh-bow{margin-left:18px}.ddsh-card{padding-left:12px;padding-right:12px}}
+@media (prefers-reduced-motion:reduce){.ddsh-spk,.ddsh-cat{animation:none}.ddsh-say.pop{animation:none;opacity:1}}

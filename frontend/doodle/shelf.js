@@ -64,6 +64,9 @@ const DoodleShelf = (() => {
     const all = books(), now = state.readingNow, b = now && all.find(x => x.id === now.bookId);
     if(!all.length) return ['书架空空的…导入一本给我看看？', '喵。我在等第一本书。'];
     const out = ['今天看哪本？'];
+    /* 半夜（23 点到 5 点）：紧跟在开场白后面说 */
+    const hr = new Date().getHours();
+    if(hr >= 23 || hr < 5) out.push('这么晚还不睡？那就读一章，就一章哦。', '嘘…小声翻页，别吵醒月亮。');
     if(b){
       const p = progressOf(b), t = String(b.title || '');
       const name = t.length > 7 ? t.slice(0, 6) + '…' : t;   // 气泡最多两行，书名太长就截
@@ -76,11 +79,13 @@ const DoodleShelf = (() => {
     const src = (state.doodlePrefs || {}).shelfCat || 'doodle/shelf-cat.png';
     /* 每次「进来」（离开超过 1.5 秒再回来）气泡都从「今天看哪本？」重新弹一下；页面里的重绘不重弹 */
     const now = Date.now(), fresh = now - L.last > 1500;
-    if(fresh) L.i = 0;
+    if(fresh){ L.i = 0; L.popAt = now; }
     L.last = now;
     const lines = libLines();
+    /* 气泡 5 秒的「弹出→停→淡掉」：中途页面重绘就从刚才那一刻接着播，不会一闪就没 */
+    const age = now - (L.popAt || 0), showing = age < 5000;
     return `<div class="ddsh-lib">
-      <p class="ddsh-say${fresh ? ' pop' : ''}" id="ddsh-say">${h(lines[L.i % lines.length])}</p>
+      <p class="ddsh-say${showing ? ' pop' : ''}" id="ddsh-say"${showing && age > 0 ? ` style="animation-delay:-${age}ms"` : ''}>${h(lines[L.i % lines.length])}</p>
       <button type="button" class="ddsh-cat" data-ddsh="cat" aria-label="图书管理员（点一下说话，长按换图）">
         <img src="${h(src)}" alt="" draggable="false" onerror="this.replaceWith(document.createRange().createContextualFragment(DoodleShelf._catSvg))">
       </button>
@@ -92,6 +97,7 @@ const DoodleShelf = (() => {
     const lines = libLines();
     L.i = (L.i + 1) % lines.length; L.last = Date.now();
     el.textContent = lines[L.i];
+    L.popAt = Date.now(); el.style.animationDelay = '';
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
     const c = el.parentNode.querySelector('.ddsh-cat'); if(c){ c.classList.remove('hop'); void c.offsetWidth; c.classList.add('hop'); }
   }
