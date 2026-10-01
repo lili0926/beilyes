@@ -6633,7 +6633,7 @@ function renderMoments(){
     if(typeof bubbleAvatarHtml === "function") coverAvHtml = bubbleAvatarHtml("me");
   }catch(e){}
   if(!coverAvHtml){
-    coverAvHtml = `<div class="wx-cover-av-fallback">${esc((myName||"我").slice(0,1))}</div>`;
+    coverAvHtml = `<div class="wx-cover-av-fallback">${esc(Array.from(myName||"我")[0])}</div>`;
   }
 
   const composer = composing ? `
@@ -6714,7 +6714,7 @@ function renderMoments(){
           ? `回复 ${state.mfReplyToName}` : "评论…";
         return `<div class="wx-post mo-card">
           <div class="wx-post-row">
-            <div class="wx-av">${avatar || `<div class="wx-cover-av-fallback">${esc(String(shownName||"?").slice(0,1))}</div>`}</div>
+            <div class="wx-av">${avatar || `<div class="wx-cover-av-fallback">${esc(Array.from(String(shownName||"?"))[0])}</div>`}</div>
             <div class="wx-body">
               <div class="wx-author">${esc(shownName)}</div>
               ${it.content?`<div class="wx-text">${esc(it.content)}</div>`:""}
@@ -6808,6 +6808,7 @@ function renderMoments(){
   }
 
   if(state.uiShell==="eden") return EdenTheme.renderMoments(composer,feed,scope);
+  if(state.uiShell==="doodle" && typeof DoodleMoments!=="undefined") return DoodleMoments.page(composer,feed,scope); // 星光涂鸦：带退出键的手账风
   return `<div class="page mo-page wx-moments">
     <div class="wx-tabs">
       <button type="button" class="wx-tab${scope==="public"?" active":""}" data-mo-scope="public">公共朋友圈</button>
@@ -8316,7 +8317,8 @@ function bubbleAvatarHtml(who, speakerId){
       <img src="${escAttr(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/>
     </div>`;
   }
-  const initial = useAg && useAg.name ? useAg.name.slice(0,1) : "💬";
+  // 按「字」取第一个，不按 UTF-16：名字以 🦊 这种 emoji 开头时 slice(0,1) 只拿到半个，显示成「�」
+  const initial = useAg && useAg.name ? (Array.from(useAg.name)[0] || "💬") : "💬";
   return `<div class="bubble-avatar" style="${border}">${esc(initial)}</div>`;
 }
 

@@ -1,0 +1,99 @@
+/* 星光涂鸦壳 · 动态（结构见 moments.js；帖子本体还是 renderMoments 拼的 wx-*，这里改它们的长相） */
+body.shell-doodle .ddmo{--mo-card:#fff;--mo-line:#E6DDF3;--mo-dash:#C9DCF2;--mo-sub:#9C95B4;--mo-ink:#3F3A52;--mo-zone:#F7F2FD;
+  padding:0 14px calc(90px + env(safe-area-inset-bottom,0px));font-family:var(--dd-font);color:var(--mo-ink);
+  background:linear-gradient(180deg,#F6F1FD 0%,#F9F6FE 45%,#FBFAFE 100%)!important;min-height:100%}
+body.shell-doodle.dd-dark .ddmo{--mo-card:#24212D;--mo-line:#3A3548;--mo-dash:#41506A;--mo-sub:#9D97B2;--mo-ink:#EDE9F6;--mo-zone:#2C2838;
+  background:linear-gradient(180deg,#17151D,#1B1824)!important}
+
+/* 顶栏：退出键 / 标题 / 好友 + 发一条 */
+.ddmo-top{position:sticky;top:0;z-index:30;display:grid;grid-template-columns:96px 1fr 96px;align-items:center;margin:0 -14px;
+  padding:calc(8px + env(safe-area-inset-top,0px)) 14px 6px;background:linear-gradient(#F6F1FD 0,#F6F1FD 82%,rgba(246,241,253,0) 100%)}
+body.shell-doodle.dd-dark .ddmo-top{background:linear-gradient(#17151D 0,#17151D 82%,rgba(23,21,29,0) 100%)}
+.ddmo-top-r{display:flex;gap:8px;justify-content:flex-end}
+.ddmo-ic{width:44px;height:44px;border-radius:14px;border:1.5px solid var(--mo-line);background:var(--mo-card);display:flex;align-items:center;justify-content:center;
+  padding:0;cursor:pointer;color:#B57EDC;box-shadow:0 6px 14px -10px rgba(120,90,180,.55)}
+.ddmo-ic [data-doodle]{width:24px;height:24px}
+.ddmo-ic.main{border:0;color:#fff;background:linear-gradient(135deg,var(--dd-lilac),var(--dd-blue))}
+.ddmo-ic:active{transform:scale(.92)}
+.ddmo-title{margin:0;text-align:center;font-family:"ZCOOL KuaiLe",var(--dd-font);font-size:26px;font-weight:400;letter-spacing:.14em;color:#C08AE6;
+  text-shadow:3px 3px 0 #BFDAF5;-webkit-text-stroke:.4px #B57EDC}
+.ddmo-ko{margin:-2px 0 12px;text-align:center;font-family:var(--dd-font-ko);font-size:14px;letter-spacing:.06em;color:#B9AED6}
+
+/* 私人 / 公共：带滑块的两格 */
+body.shell-doodle .ddmo .ddmo-seg{position:relative;display:grid;grid-template-columns:1fr 1fr;margin:0 auto 16px;max-width:320px;padding:4px;border-radius:999px;
+  background:var(--mo-card);border:1.5px solid var(--mo-line);box-shadow:none;gap:0}
+.ddmo-seg-dot{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:999px;background:linear-gradient(90deg,#E9D9FB,#D9E6FC);
+  transition:transform .35s cubic-bezier(.3,1.4,.5,1)}
+.ddmo-seg.pub .ddmo-seg-dot{transform:translateX(100%)}
+body.shell-doodle .ddmo .ddmo-seg .wx-tab{position:relative;z-index:1;border:0;background:none!important;padding:8px 0;font:inherit;font-size:15px;color:var(--mo-sub);border-radius:999px;box-shadow:none}
+body.shell-doodle .ddmo .ddmo-seg .wx-tab.active{color:#7E5CB8;font-weight:700}
+body.shell-doodle .ddmo .ddmo-seg .wx-tab::after{display:none}
+
+/* 封面：一张拍立得，两角贴胶带 */
+.ddmo-polaroid{position:relative;margin:4px 6px 18px;padding:10px 10px 0;border-radius:6px;background:#fff;transform:rotate(-1.2deg);
+  box-shadow:0 16px 28px -18px rgba(90,70,130,.55),0 0 0 1.5px #EFE8F8}
+body.shell-doodle.dd-dark .ddmo-polaroid{background:#2A2633;box-shadow:0 16px 28px -18px rgba(0,0,0,.8),0 0 0 1.5px #3A3548}
+body.shell-doodle .ddmo .ddmo-photo{position:relative;height:178px;margin:0;border-radius:3px;overflow:hidden;background:#E9D9FB center/cover no-repeat;box-shadow:none}
+.ddmo-sky{position:absolute;inset:0;width:100%;height:100%}
+.ddmo-chip{position:absolute;right:8px;bottom:8px;display:inline-flex;align-items:center;gap:4px;padding:5px 10px 5px 8px;border:0;border-radius:999px;
+  background:rgba(255,255,255,.86);font:inherit;font-size:13px;color:#8B6CC0;cursor:pointer;backdrop-filter:blur(4px)}
+.ddmo-chip [data-doodle]{width:16px;height:16px}
+.ddmo-chip.x{right:auto;left:8px;padding:5px}
+.ddmo-cap{display:flex;align-items:center;gap:10px;padding:10px 6px 14px}
+.ddmo-cap b{display:block;font-size:20px;line-height:1.1}
+.ddmo-cap small{display:block;margin-top:2px;font-size:13px;color:var(--mo-sub)}
+.ddmo-me{width:46px;height:46px;flex:0 0 auto;border-radius:50%;overflow:hidden;box-shadow:0 0 0 3px #fff,0 0 0 5px #E3D0F6;display:flex;align-items:center;justify-content:center;background:#F1E8FB}
+.ddmo-me img{width:100%;height:100%;object-fit:cover}
+.ddmo-me .ddmo-av-fb,.ddmo-me .wx-cover-av-fallback{font-size:20px;color:#8B6CC0}
+.ddmo-tape{position:absolute;top:-9px;width:62px;height:20px;background:rgba(207,160,232,.42);border-left:2px dashed rgba(255,255,255,.7);border-right:2px dashed rgba(255,255,255,.7)}
+.ddmo-tape.l{left:14px;transform:rotate(-8deg)}
+.ddmo-tape.r{right:14px;transform:rotate(7deg);background:rgba(143,188,235,.42)}
+.ddmo-count{margin:0 0 12px;text-align:center;font-size:14px;color:var(--mo-sub)}
+.ddmo-count b{color:#C08AE6;font-size:17px}
+
+/* ── 帖子卡 ── */
+body.shell-doodle .ddmo .ddmo-feed{padding:0;background:none}
+body.shell-doodle .ddmo .wx-post{position:relative;margin:0 0 14px;padding:14px 14px 12px;border-radius:24px;background:var(--mo-card);border:2px solid var(--mo-line);
+  box-shadow:0 12px 24px -20px rgba(120,90,180,.5)}
+body.shell-doodle .ddmo .wx-post::before{content:"";position:absolute;inset:6px;border:1.5px dashed var(--mo-dash);border-radius:19px;pointer-events:none}
+body.shell-doodle .ddmo .wx-post-row{position:relative;display:flex;gap:11px;padding:0;border:0}
+body.shell-doodle .ddmo .wx-av{width:42px;height:42px;flex:0 0 auto;border-radius:50%;overflow:hidden;box-shadow:0 0 0 2.5px #fff,0 0 0 4px #E3D0F6}
+body.shell-doodle .ddmo .wx-av img{width:100%;height:100%;object-fit:cover}
+body.shell-doodle .ddmo .wx-av .bubble-avatar{width:100%!important;height:100%!important;margin:0;border:0!important;display:flex;align-items:center;justify-content:center;font-size:20px;background:#F1E8FB}
+body.shell-doodle .ddmo .wx-body{flex:1;min-width:0}
+body.shell-doodle .ddmo .wx-author{font-size:17px;font-weight:700;color:#8B6CC0}
+body.shell-doodle .ddmo .wx-text{margin-top:4px;font-size:16px;line-height:1.6;color:var(--mo-ink);white-space:pre-wrap;word-break:break-word}
+body.shell-doodle .ddmo .wx-imgs{margin-top:8px;gap:4px}
+body.shell-doodle .ddmo .wx-img{border-radius:12px}
+body.shell-doodle .ddmo .wx-imgs.single .wx-img{border-radius:16px;max-height:260px;box-shadow:0 8px 14px -10px rgba(90,70,130,.5)}
+body.shell-doodle .ddmo .wx-meta{margin-top:8px;display:flex;align-items:center;justify-content:space-between}
+body.shell-doodle .ddmo .wx-time{font-size:13px;color:var(--mo-sub)}
+body.shell-doodle .ddmo .wx-more{width:34px;height:24px;border-radius:9px;border:1.5px solid var(--mo-line);background:var(--mo-zone);color:#B57EDC;font-size:14px;line-height:1;letter-spacing:1px}
+body.shell-doodle .ddmo .wx-panel{border-radius:999px;background:linear-gradient(90deg,#CB8EDD,#8FB6E6);box-shadow:0 8px 16px -10px rgba(120,90,180,.8)}
+body.shell-doodle .ddmo .wx-panel button{color:#fff;font:inherit;font-size:14px}
+/* 赞和评论：浅紫便签 */
+body.shell-doodle .ddmo .wx-zone{margin-top:8px;padding:8px 11px;border-radius:14px;background:var(--mo-zone);border:0}
+body.shell-doodle .ddmo .wx-zone::before{display:none}
+body.shell-doodle .ddmo .wx-likes{font-size:14px;color:#8B6CC0;border-bottom:1px dashed var(--mo-line);padding-bottom:5px;margin-bottom:5px}
+body.shell-doodle .ddmo .wx-likes:last-child{border:0;padding:0;margin:0}
+body.shell-doodle .ddmo .wx-heart{color:#F29CBE;margin-right:4px}
+body.shell-doodle .ddmo .wx-likes b{font-weight:700}
+body.shell-doodle .ddmo .wx-cmt{font-size:14.5px;line-height:1.55;color:var(--mo-ink);padding:1px 0}
+body.shell-doodle .ddmo .wx-cn,body.shell-doodle .ddmo .wx-reply-to{color:#8B6CC0;font-weight:700}
+body.shell-doodle .ddmo .wx-cmt-box{margin-top:8px;display:flex;gap:6px;border:0;background:none;padding:0}
+body.shell-doodle .ddmo .wx-cmt-box input{flex:1;min-width:0;border:1.5px solid var(--mo-line);border-radius:999px;padding:8px 13px;font:inherit;font-size:15px;background:var(--mo-card);color:var(--mo-ink);outline:none}
+body.shell-doodle .ddmo .wx-cmt-box button{border:0;border-radius:999px;padding:0 14px;font:inherit;font-size:14px;color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+
+/* 发一条：信纸 */
+body.shell-doodle .ddmo .wx-composer{position:relative;margin:0 0 16px;padding:14px;border-radius:24px;background:var(--mo-card);border:2px solid #E3D0F6;box-shadow:0 14px 26px -20px rgba(120,90,180,.6)}
+body.shell-doodle .ddmo .wx-composer textarea{width:100%;box-sizing:border-box;min-height:96px;border:0;outline:none;resize:vertical;padding:4px 2px;font:inherit;font-size:17px;line-height:1.75;color:var(--mo-ink);
+  background:repeating-linear-gradient(transparent 0,transparent calc(1.75em - 1px),rgba(143,188,235,.35) calc(1.75em - 1px),rgba(143,188,235,.35) 1.75em)}
+body.shell-doodle .ddmo .mo-compose-img{border-radius:14px;margin-top:8px}
+body.shell-doodle .ddmo .mo-composer-bar{margin-top:8px;display:flex;align-items:center;gap:8px}
+body.shell-doodle .ddmo .mo-mini{border:1.5px solid var(--mo-line);background:var(--mo-zone);border-radius:999px;padding:6px 12px;font:inherit;font-size:14px;color:#8B6CC0}
+body.shell-doodle .ddmo .mo-post{border:0;border-radius:999px;padding:8px 20px;font:inherit;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue));box-shadow:0 8px 16px -10px rgba(120,90,180,.8)}
+
+/* 空的 / 公共圈刷新条 */
+body.shell-doodle .ddmo .wx-empty{margin:10px 0 18px;padding:26px 16px;border-radius:24px;border:2px dashed #E3D0F6;background:var(--mo-card);text-align:center;font-size:16px;color:var(--mo-sub);line-height:1.7}
+body.shell-doodle .ddmo .mf-refresh-bar{display:flex;justify-content:center;margin:0 0 10px}
+.ddmo-end{margin:6px 0 0;text-align:center;font-size:13px;color:#C9BEDF;letter-spacing:.2em}
