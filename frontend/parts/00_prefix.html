@@ -124,7 +124,6 @@
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
 
-
     /* ── 聊天侧边栏 ── */
     .chat-sidebar-mask {
       position: fixed; inset: 0; z-index: 80;
@@ -277,7 +276,6 @@
       background: rgba(255,255,255,.55); border-radius: 999px; padding: 2px 8px;
     }
 
-
     .sb-file-preview.sb-preview-wide {
       max-width: min(960px, 96vw); width: 96vw; max-height: 90vh; height: 90vh;
     }
@@ -307,7 +305,6 @@
     }
     .sb-html-run-body { flex: 1; min-height: 0; background: #fff; }
     .sb-html-run-body iframe { width: 100%; height: 100%; border: 0; display: block; }
-
 
     /* 底部导航 — 仅 3 项 */
     .bottom-nav {
@@ -389,39 +386,7 @@
       margin: 14px 0 8px; padding-left: 2px;
     }
     .feat-section-label:first-child { margin-top: 4px; }
-    .duty-day {
-      aspect-ratio: 1; border-radius: 10px; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; font-size: 11px; color: var(--text);
-      border: 1px solid var(--border); background: var(--card); min-height: 40px; cursor: pointer;
-      position: relative;
-    }
-    .duty-day.scheduled { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-    .duty-day.done {
-      background: color-mix(in srgb, var(--accent) 55%, var(--card));
-      color: #fff; font-weight: 700; border-color: transparent;
-    }
-    .duty-day.today { box-shadow: inset 0 0 0 2px var(--accent); }
-    .duty-day .duty-mark { font-size: 10px; line-height: 1; margin-top: 1px; }
-    .duty-modal-mask {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 120;
-      display: flex; align-items: flex-end; justify-content: center;
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-    .duty-modal {
-      width: 100%; max-width: 420px; background: var(--card); border-radius: 18px 18px 0 0;
-      padding: 0; border: 1px solid var(--border); border-bottom: none;
-      max-height: 72vh; display: flex; flex-direction: column;
-      box-shadow: 0 -8px 32px rgba(0,0,0,0.12);
-    }
-    .duty-modal-body {
-      flex: 1; overflow-y: auto; padding: 16px 16px 8px;
-      -webkit-overflow-scrolling: touch;
-    }
-    .duty-modal-foot {
-      flex-shrink: 0; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
-      border-top: 1px solid var(--border); background: var(--card);
-      display: flex; gap: 8px; flex-wrap: wrap;
-    }
+
     /* ─── 每日任务面板 + 聊天任务弹窗（bdsm-daily-quest-page 组件化）── */
     .quest-head { text-align: center; padding: 6px 0 4px; margin-bottom: 4px; }
     .quest-head-title { font-size: 17px; letter-spacing: .1em; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
@@ -505,8 +470,7 @@
       flex: 1; padding: 10px 0; border-radius: 12px; border: 1px solid var(--border);
       background: var(--bg); color: var(--sub); font-size: 14px; font-weight: 500; cursor: pointer;
     }
-    
-    
+
     /* ─── RP 快穿（类名沿用 .pr-*，只改显示名） ─── */
     .pr-float-min {
       position: fixed; bottom: 70px; right: 16px; z-index: 2090;
@@ -1002,75 +966,12 @@
     }
     .diary-actions { display: flex; gap: 8px; margin-top: 12px; }
     /* 日记：实体书双页 */
-    .book-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin:4px 0 10px; }
-    .book-nav button { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:7px 16px; color:var(--text); font-size:13px; cursor:pointer; }
-    .book-nav button:disabled { opacity:.4; }
-    .book-indicator { text-align:center; font-size:11px; color:var(--sub); margin-bottom:10px; }
-    .book-wrap { perspective:1600px; touch-action:pan-y; }
-    .book-spread { display:flex; position:relative; transform-style:preserve-3d; transition:transform .5s ease, opacity .5s ease; border-radius:10px; overflow:hidden; }
-    .book-spread.flip-out { opacity:.55; }
-    .book-spread.flip-out.forward { transform:rotateY(50deg) scale(.96); }
-    .book-spread.flip-out.back { transform:rotateY(-50deg) scale(.96); }
-    .book-page { flex:1 1 0; min-width:0; max-height:52vh; overflow-y:auto; -webkit-overflow-scrolling:touch; background:#f7efdd; color:#4a3b2a; padding:14px 16px 20px; background-image:repeating-linear-gradient(to bottom, transparent 0 25px, rgba(74,59,42,.06) 25px 26px); }
-    .book-page.left { border-radius:10px 0 0 10px; }
-    .book-page.right { border-radius:0 10px 10px 0; }
-    .book-spine { flex:0 0 16px; background:linear-gradient(to bottom,#f0e3c4,#e3d0a8 50%,#f0e3c4); box-shadow:inset -4px 0 6px rgba(0,0,0,.16), inset 3px 0 5px rgba(0,0,0,.08); }
-    .book-page-head { font-size:13px; font-weight:700; letter-spacing:.06em; text-align:center; color:#5a472c; }
-    .book-page-date { font-size:11px; text-align:center; color:#8a7a5f; margin:2px 0 12px; }
-    .book-notes { display:flex; flex-direction:column; gap:14px; }
-    .book-note { border-radius:8px; padding:8px 10px; }
-    .book-note.user { background:rgba(90,60,20,.06); }
-    .book-note.char { background:rgba(120,30,60,.05); }
-    .book-note.user .book-note-text { font-family:'Ma Shan Zheng','KaiTi','STKaiti',serif; font-size:16px; line-height:1.7; }
-    .book-note.char .book-note-text { font-family:'Zhi Mang Xing','KaiTi','STKaiti',serif; font-size:16px; line-height:1.7; }
-    .book-note-meta { display:flex; align-items:center; gap:6px; font-size:10px; color:#8a7a5f; margin-top:6px; }
-    .book-note-meta .book-del { background:none; border:none; color:#b08d6a; font-size:12px; cursor:pointer; margin-left:auto; padding:0 2px; }
-    .book-empty-notes { font-size:11px; color:#8a7a5f; text-align:center; padding:20px 0; line-height:1.7; cursor:pointer; }
-    .book-actions { display:flex; gap:8px; margin-top:14px; }
-    .book-actions .btn-accent, .book-actions .btn-accent2 { flex:1; padding:11px 8px; font-size:13px; }
-    .book-inp { width:100%; min-height:120px; resize:vertical; background:transparent; border:none; outline:none; font-family:'Ma Shan Zheng','KaiTi','STKaiti',serif; font-size:18px; line-height:1.8; color:#4a3b2a; }
-    .book-inp.char-font { font-family:'Zhi Mang Xing','KaiTi','STKaiti',serif; }
-    .book-composer textarea { background:#faf3e3; }
+
     /* 实体书封面（笔记本封面图） */
-    .book-cover-view { display:flex; flex-direction:column; align-items:center; gap:18px; padding-top:14px; }
-    .book-cover-view img { width:80%; max-width:340px; border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,.18); }
-    .book-cover-view .btn-accent { padding:12px 36px; font-size:15px; border-radius:999px; }
+
     /* 内联写：编辑器直接长在书页上 */
-    .book-inline-edit { margin-top:12px; background:rgba(255,255,255,.55); border:1px solid rgba(74,59,42,.25); border-radius:10px; padding:8px; }
-    .book-inline-edit textarea { width:100%; min-height:120px; resize:vertical; background:transparent; border:none; outline:none; font-family:'Ma Shan Zheng','KaiTi','STKaiti',serif; font-size:16px; line-height:1.7; color:#4a3b2a; }
-    .book-inline-edit textarea.char-font { font-family:'Zhi Mang Xing','KaiTi','STKaiti',serif; }
-    .book-inline-actions { display:flex; gap:6px; margin-top:6px; }
-    .book-inline-actions .btn-ghost, .book-inline-actions .btn-accent, .book-inline-actions .btn-accent2 { flex:1; padding:8px; font-size:12px; }
 
     /* 日记：一屏一面（真实本子，一页一条，翻页即新页） */
-    .book-single-wrap { perspective:1600px; touch-action:pan-y; padding: 2px 0 6px; }
-    .book-single-page {
-      margin: 0 auto;
-      width: min(88vw, calc((100vh - 330px) * 0.7302));
-      aspect-ratio: 1080 / 1479;
-      background-size: cover; background-position: center top; background-repeat: no-repeat;
-      border-radius: 8px; box-shadow: 0 12px 28px rgba(0,0,0,.22);
-      color:#4a3b2a; position:relative; overflow:hidden;
-      display:flex; flex-direction:column;
-      transform-style:preserve-3d; transition: transform .5s ease, opacity .5s ease;
-    }
-    .book-single-page.flip-out { opacity:.55; }
-    .book-single-page.flip-out.forward { transform: rotateY(48deg) scale(.96); }
-    .book-single-page.flip-out.back { transform: rotateY(-48deg) scale(.96); }
-    .book-single-page .book-page-head { margin-top: 8%; font-size:14px; letter-spacing:.08em; }
-    .book-single-page .book-page-date { font-size:12px; margin:2px 0 10px; }
-    .book-single-page .book-notes { flex:1; min-height:0; overflow-y:auto; padding: 0 9% 8%; display:flex; flex-direction:column; gap:12px; }
-    .book-single-page .book-note { background:transparent; padding:2px 0; }
-    .book-single-page .book-note-text { font-size:18px; line-height:1.9; }
-    .book-single-page .book-note-meta { font-size:10px; }
-    .book-single-page .book-empty-notes { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 8%; cursor:pointer; }
-    .book-single-page .book-inline-edit {
-      position:absolute; inset:0; margin:0; border:none; border-radius:8px;
-      background:rgba(253,244,224,.93);
-      display:flex; flex-direction:column; padding: 11% 8% 6%;
-    }
-    .book-single-page .book-inline-edit textarea { flex:1; min-height:0; width:100%; }
-    .book-single-page .book-inline-actions { margin-top:10px; }
 
     /* 游戏 */
     .game-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
@@ -1230,7 +1131,6 @@
       display: none !important;
     }
 
-
     #app.chat-style-imessage .imsg-read {
       display: flex;
       justify-content: flex-end;
@@ -1286,7 +1186,6 @@
       border-radius: 50%;
     }
 
-
     /* iMessage 回应（tapback） */
     .imsg-reacts {
       display: flex; gap: 4px; margin: -6px 10px 4px;
@@ -1331,9 +1230,6 @@
       font-size: 11px;
       padding: 4px 8px;
     }
-
-
-
 
     .msg-bar { display: none; align-items: center; gap: 2px; padding: 1px 6px 2px; margin: 1px 0 3px; }
     .msg-bar.show { display: flex; }
@@ -1446,10 +1342,6 @@
     #app.ui-glass-water {
       --card: color-mix(in srgb, var(--card-opaque) 56%, transparent);
       --border: color-mix(in srgb, #fff 52%, var(--border-opaque));
-    }
-    #app.ui-glass-fog .duty-day.done,
-    #app.ui-glass-water .duty-day.done {
-      background: color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.35)) !important;
     }
 
     /* ── 玻璃的例外：思考链 / 收藏记录 ────────────────────────────────────
@@ -1745,8 +1637,6 @@
     .album-actions { display:flex; gap:8px; margin-top:12px; }
     .album-actions .btn-ghost, .album-actions .btn-accent { flex:1; padding:10px 8px; font-size:12px; }
 
-
-
     /* 音乐 / 一起听 */
     .music-topbar {
       position: sticky; top: 0; z-index: 40; /* 低于 .chat-header(50)，勿挡顶栏按钮 */
@@ -1887,7 +1777,6 @@
     .body-switch-hint { font-size: 10px; color: var(--sub); margin-top: 2px; }
     .body-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
-
     /* 囚禁模拟器外链 */
     .captivity-frame-wrap {
       position: fixed; inset: 0; z-index: 9990;
@@ -2009,7 +1898,6 @@
     .cab-item .ci-name { font-size: 13px; font-weight: 600; color: var(--text); }
     .cab-item .ci-note { font-size: 11px; color: var(--sub); margin-top: 4px; line-height: 1.45; }
     .cab-item .ci-by { font-size: 10px; color: var(--sub); opacity: 0.75; margin-top: 4px; }
-
 
     /* 电话 / 来电 */
     .call-status-bar {
@@ -2340,13 +2228,6 @@
       color:#ddd; border-radius:999px; padding:4px 10px; font-size:11px; cursor:pointer;
     }
     .hp-nav button.on { background: var(--accent); border-color: transparent; color:#fff; }
-    .brand-preview {
-      border-radius: 16px; border:1px solid var(--border); padding: 20px; text-align:center;
-      background: linear-gradient(180deg,#fdf6f2,#f5e4db); min-height: 140px;
-      position: relative; overflow: hidden;
-    }
-    .brand-preview img.bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.85; }
-    .brand-preview .txt { position:relative; z-index:1; }
 
     /* ─── 对话页 UI 改造 · 信件/参考图风格（仅结构布局，配色沿用主题变量） ─── */
     .chat-header { gap: 6px; padding: 8px 6px 6px 12px; }
@@ -2818,7 +2699,6 @@
     .bed-row-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
     .bed-row-c { font-size: 11px; color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
 
-    
     /* ─── 朋友圈微信风 ─────────────────────────────────── */
     .wx-moments { padding: 0 0 96px; max-width: 480px; margin: 0 auto; }
     .wx-tabs {
@@ -4071,7 +3951,6 @@
     }
     .msg-card-activity:active { opacity: 0.75; }
 
-    
     /* ── 卡匣：左右翻牌（洗牌感）─────────────────────────────────────────── */
     .card-deck-page { padding-bottom: 24px; }
     .card-deck-meta {
@@ -4481,14 +4360,12 @@
       -webkit-backdrop-filter: none !important;
     }
 
-  
     .wx-cmt-tap { cursor: pointer; }
     .wx-cmt-tap:active { opacity: .72; }
     .wx-reply-to { color: #576b95; margin: 0 2px; font-weight: 600; }
     .wx-cmt .wx-cn { color: #576b95; font-weight: 600; }
     .mf-mode-lab { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--sub); margin-top:6px; width:100%; }
     .mf-mode { padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:12px; }
-
 
     .mf-refresh-bar { display:flex; justify-content:center; padding:8px 12px 4px; }
     .mf-refresh-bar .mo-mini { font-size:12px; opacity:.75; }
@@ -4848,7 +4725,6 @@
     .chat-page.rpg-on .rpg-stage { display: flex; }
     .chat-page:not(.rpg-on) .rpg-stage { display: none; }
 
-
     /* ═══ 选择题：普通聊天选项卡 + RPG 横条 ═══ */
     .choice-card {
       max-width: min(320px, 88vw);
@@ -4918,7 +4794,6 @@
       backdrop-filter: none; -webkit-backdrop-filter: none;
     }
 
-
     /* RPG 立绘：他靠最左完整显示，我靠右；禁止一律贴右导致截断 */
     .rpg-sprite-slot {
       position: absolute !important;
@@ -4980,7 +4855,6 @@
       color: #fff; border-radius: 8px; padding: 2px 8px; font-size: 11px; cursor: pointer;
     }
 
-
 .bisca-bot-panel {
       position: fixed !important;
       left: 10px !important; right: 10px !important;
@@ -5037,7 +4911,6 @@
       padding: 6px 12px !important;
       border-radius: 8px !important;
     }
-
 
     /* ═══════════ 壳：深渊 · 克苏鲁暗黑 ═══════════ */
     body.shell-eldritch {
@@ -5196,7 +5069,6 @@
         radial-gradient(ellipse 20% 12% at 100% 100%, rgba(40, 70, 55, 0.28), transparent 70%);
     }
 
-
     .think-peek-btn {
       display: inline-flex; align-items: center; justify-content: center;
       width: 22px; height: 22px; margin-left: 4px; padding: 0;
@@ -5252,7 +5124,6 @@
       font-size: 11px; color: var(--sub); opacity: 0.7; margin-bottom: 4px;
     }
     .stream-think-label { display: inline-flex; align-items: center; gap: 4px; }
-
 
     /* ═══════════ 壳：纸感 Claude（仿官端暖米白） ═══════════ */
     body.shell-claude {
@@ -5360,7 +5231,6 @@
       color: #1A1815 !important;
     }
 
-
     /* Claude 布局专属：顶栏圆钮 + 侧栏抽屉纸感 + Thought process sheet */
     body.shell-claude .claude-header {
       display: flex; align-items: center; gap: 10px;
@@ -5445,7 +5315,6 @@
     body.shell-claude .claude-thought-sheet .think-modal-body {
       padding: 8px 18px 28px;
     }
-
 
     /* ═══════════ 壳：韩系（极简白气泡 + 右侧栏） ═══════════ */
     body.shell-korean {
@@ -5619,7 +5488,6 @@
       box-shadow: none !important;
     }
 
-
     /* 韩系桌面主页 */
     body.shell-korean .kr-home {
       height: 100%;
@@ -5733,7 +5601,6 @@
       -webkit-backdrop-filter: blur(20px) saturate(160%);
       padding: 6px 10px !important;
     }
-
 
     /* ══ 韩系：全 App 铺开 + 聊天精修 + Dock 不露边 ══ */
     body.shell-korean #app {
@@ -5909,7 +5776,6 @@
     body.shell-korean .settings-block {
       background: transparent !important;
     }
-
 
     /* 韩系首页 v2：唱片 + 四格 + 有趣卡片 */
     body.shell-korean .kr-mid-row {
@@ -6090,7 +5956,6 @@
       box-shadow: 0 0 0 1px rgba(0,0,0,0.04) !important;
     }
 
-
     /* 韩系三面板：Desk / Space / More */
     body.shell-korean .home-swipe-wrap.kr-home {
       flex: 1; min-height: 0; overflow: hidden;
@@ -6179,7 +6044,6 @@
     body.shell-korean .kr-more-sub {
       font-size: 12px; color: #AEAEB2; margin-top: 4px;
     }
-
 
     /* ── 韩系桌面（Desk）────────────────────────────────────────────── */
     body.shell-korean .kr-desk-scroll {
@@ -6450,31 +6314,7 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.07);
     }
 
-
     /* 工作间 */
-    .ws-page { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 0 !important; }
-    .ws-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; flex-wrap: wrap; }
-    .ws-status { font-size: 12px; color: var(--sub); flex: 1; }
-    .ws-cfg { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); }
-    .ws-cfg input { width: 100%; margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; }
-    .ws-err { background: #fee; color: #a30; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 8px; }
-    .ws-last-meta { font-size: 11px; color: var(--sub); margin-bottom: 8px; word-break: break-all; }
-    .ws-msgs { flex: 1; min-height: 180px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0 12px; }
-    .ws-empty { text-align: center; color: var(--sub); font-size: 13px; padding: 40px 16px; line-height: 1.6; }
-    .ws-row { margin-bottom: 10px; }
-    .ws-row.me { display: flex; flex-direction: column; align-items: flex-end; }
-    .ws-row.bot { display: flex; flex-direction: column; align-items: flex-start; }
-    .ws-bubble { max-width: 92%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; word-break: break-word; }
-    .ws-bubble.me { background: var(--accent); color: #fff; border-radius: 12px 12px 4px 12px; }
-    .ws-bubble.bot { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px 12px 12px 4px; }
-    .ws-text { white-space: pre-wrap; }
-    .ws-code { margin: 8px 0; padding: 10px; background: #1e1e1e; color: #d4d4d4; border-radius: 8px; overflow-x: auto; font-size: 11px; line-height: 1.4; }
-    .ws-code code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .ws-meta { font-size: 11px; color: var(--sub); margin-top: 4px; }
-    .ws-input-bar { display: flex; gap: 8px; padding: 8px 0 calc(8px + env(safe-area-inset-bottom,0px)); border-top: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
-    .ws-input-bar textarea { flex: 1; border-radius: 12px; border: 1px solid var(--border); padding: 8px 10px; font-size: 14px; resize: none; background: var(--card); color: var(--text); font-family: inherit; }
-    .ws-input-bar button { flex-shrink: 0; padding: 0 16px; border-radius: 12px; }
-
 
     /* 韩系主页五面：桌面 | 日子 | 一起 | 他 | 机房。
        每页 20%，轨道 500%。步长和 JS 的 homePageCount() 是同一个数，改页数要一起改。 */
@@ -6489,7 +6329,6 @@
     body.shell-korean .kr-home .home-track.page2 { transform: translateX(-40%) !important; }
     body.shell-korean .kr-home .home-track.page3 { transform: translateX(-60%) !important; }
     body.shell-korean .kr-home .home-track.page4 { transform: translateX(-80%) !important; }
-
 
     /* ========== Kakao 图气泡皮肤 ==========
        水色(suisei) 的四张图是「云朵铺满整张画布」，9-slice（border-image）切得干净，保留原做法。
@@ -6614,7 +6453,6 @@
       background-image: url("bubbles/rainbow/me-01.png");
       background-size: 66.3px 60.8px; background-position: -37.2px 0;
     }
-
 
     /* ---- 蕾丝十字架 / 蝴蝶：装饰边框图，9-slice；me 用水平翻转图 ---- */
     body.bubble-skin-lace .bubble.them.skin-lace,
@@ -7155,7 +6993,6 @@
       margin-bottom: 8px; padding: 8px 0; text-align: center;
     }
 
-  
     /* ── 药盒（pilulier 第一轮：极简选药） ── */
     .pill-picker{
       margin: 6px 10px 0; padding: 10px 12px; border-radius: 14px;

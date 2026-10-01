@@ -2,13 +2,12 @@
 const EdenTheme = (() => {
   const h = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const sections = [
-    ['together','与你相伴','TOGETHER',['music','read','watch','shufang','phone','trip','body','usage']],
-    ['memories','时光藏匣','OUR MEMORIES',['diary','mdiary','notes','mailbox','memory','savedchat','album','calendar','sparkvault','cabinets','dream','sigillo']],
-    ['life','花园日常','LITTLE THINGS',['coupon','wallet','sayday','love','wardrobe','duty','quest','baby']],
-    ['play','梦中奇境','WONDERLAND',['duel_gomoku','duel_blackjack','duel_zhajinhua','duel_mahjong','explore','tavern','rewrite','hisphone','game','cooking','menu','cmdgame','htmlgame','roleplay','pr','flightchess','bisca_cards','bisca_daifugo','bisca_monopoly','captivity','divination','truthdare','eatapple']],
-    ['tools','羽翼之下','THE ATELIER',['workshop','mcphall','vps','ntfy','theme','branding','prompts']]
+    ['together','与你相伴','TOGETHER',['music','read','watch','shufang','phone','trip','body']],
+    ['memories','时光藏匣','OUR MEMORIES',['mdiary','notes','mailbox','memory','savedchat','album','calendar','sparkvault','cabinets','dream','sigillo']],
+    ['life','花园日常','LITTLE THINGS',['coupon','wallet','sayday','love','wardrobe','quest','baby']],
+    ['play','梦中奇境','WONDERLAND',['duel_gomoku','duel_blackjack','duel_zhajinhua','duel_mahjong','explore','tavern','rewrite','hisphone','game','menu','cmdgame','htmlgame','roleplay','pr','flightchess','bisca_cards','bisca_daifugo','bisca_monopoly','captivity','divination','truthdare','eatapple']],
+    ['tools','羽翼之下','THE ATELIER',['mcphall','vps','theme','prompts']]
   ];
-  const hiddenFeatures=new Set(['workshop','branding','usage','diary','duty','cooking','ntfy']);
   let query='', category='all';
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   function palette(){ return {bg:'#faf8f3',card:'#fffdfa',accent:'#89775e',accent2:'#ded4c4',text:'#514b43',sub:'#847969',border:'#d9cfbf',bubble_me:'#eee7dc',bubble_them:'#fffdfa'}; }
@@ -19,7 +18,7 @@ const EdenTheme = (() => {
     const c=slot.crop;
     return `<span class="eden-icon ${size}" aria-hidden="true" data-eden-icon="${h(key)}" style="--eden-atlas:url('angel-atlas-${slot.sheet}.png');--ex:${c.x}%;--ey:${c.y}%;--ew:${c.w}%;--eh:${c.h}%;--ebw:${c.bw}%;--ebh:${c.bh}%"><span></span></span>`;
   }
-  function allFeatures(){ return FEAT_GROUPS.flatMap(group=>group.items).filter(f=>!hiddenFeatures.has(f.key)).map(f=>f.key==='mdiary'?{...f,label:'日记'}:f); }
+  function allFeatures(){ return FEAT_GROUPS.flatMap(group=>group.items).map(f=>f.key==='mdiary'?{...f,label:'日记'}:f); }
   function feature(key,label){
     const f=allFeatures().find(item=>item.key===key);
     if(!f)return '';

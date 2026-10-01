@@ -481,9 +481,9 @@ const DoodleShell = (() => {
   }
 
   /* ===== 游戏 / 工具：像 iOS 一样从入口放大打开 ===== */
-  const ICON_OF = {tavern:'candy',rewrite:'eye',hisphone:'chat',game:'paw',duel_gomoku:'star',duel_blackjack:'clover',duel_zhajinhua:'sparkle',duel_mahjong:'flower',cooking:'fish',menu:'edit',cmdgame:'key',htmlgame:'comet',workshop:'settings',mcphall:'magnet',baby:'bow',roleplay:'butterfly',calendar:'calendar',pr:'door',flightchess:'cloud',bisca_cards:'heart',bisca_daifugo:'gift',bisca_monopoly:'home',captivity:'lock',divination:'moon',truthdare:'tooth',eatapple:'cat',
-    body:'heart',trip:'sun',explore:'search',phone:'mic',vps:'key',ntfy:'bell',usage:'clock',music:'music',read:'bookmark',shufang:'edit',watch:'eye',theme:'sparkle',branding:'star',prompts:'comet',
-    sparkvault:'star',cabinets:'door',dream:'moon',diary:'edit',mdiary:'cat',notes:'send',mailbox:'mail',memory:'cloud',savedchat:'bookmark',album:'image',coupon:'gift',pilulier:'candy',wallet:'key',sayday:'check',love:'heart',wardrobe:'bow',duty:'clover',sigillo:'share',quest:'check','@moments':'camera'};
+  const ICON_OF = {tavern:'candy',rewrite:'eye',hisphone:'chat',game:'paw',duel_gomoku:'star',duel_blackjack:'clover',duel_zhajinhua:'sparkle',duel_mahjong:'flower',menu:'edit',cmdgame:'key',htmlgame:'comet',mcphall:'magnet',baby:'bow',roleplay:'butterfly',calendar:'calendar',pr:'door',flightchess:'cloud',bisca_cards:'heart',bisca_daifugo:'gift',bisca_monopoly:'home',captivity:'lock',divination:'moon',truthdare:'tooth',eatapple:'cat',
+    body:'heart',trip:'sun',explore:'search',phone:'mic',vps:'key',music:'music',read:'bookmark',shufang:'edit',watch:'eye',theme:'sparkle',prompts:'comet',
+    sparkvault:'star',cabinets:'door',dream:'moon',mdiary:'cat',notes:'send',mailbox:'mail',memory:'cloud',savedchat:'bookmark',album:'image',coupon:'gift',pilulier:'candy',wallet:'key',sayday:'check',love:'heart',wardrobe:'bow',sigillo:'share',quest:'check','@moments':'camera'};
   function appList(kind){
     const groups = typeof FEAT_GROUPS !== 'undefined' ? FEAT_GROUPS : [];
     const isGame = g => /游戏/.test(g.label);
