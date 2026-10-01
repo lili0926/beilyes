@@ -12,12 +12,12 @@ function setup(){
  for(const name of ['angel-icon-bounds.js','angel-icons.js','eden.js'])vm.runInContext(fs.readFileSync(path.join(front,'eden',name),'utf8'),context);
  return {context,state,calls,listeners,theme:vm.runInContext('EdenTheme',context)};
 }
-test('the requested seven entries are hidden while remaining real routes stay reachable',()=>{
+test('the seven removed apps are gone and every remaining route stays reachable',()=>{
  const {theme,context}=setup();const html=theme.results();const catalog=vm.runInContext('FEAT_GROUPS.flatMap(g=>g.items)',context);
- assert.equal(catalog.length,58);
- const hidden=new Set(['workshop','branding','usage','diary','duty','cooking','ntfy']);
- for(const f of catalog){assert.equal(html.includes('data-sub="'+f.key+'"'),!hidden.has(f.key),f.key);}
- assert.ok(html.includes('51 个入口'));assert.ok(html.includes('>日记</span>'));assert.ok(!html.includes('机日记'));
+ const removed=['workshop','branding','usage','diary','duty','cooking','ntfy'];
+ for(const k of removed) assert.ok(!catalog.some(f=>f.key===k),k);
+ for(const f of catalog) assert.ok(html.includes('data-sub="'+f.key+'"'),f.key);
+ assert.ok(html.includes(catalog.length+' 个入口'));assert.ok(html.includes('>日记</span>'));assert.ok(!html.includes('机日记'));
  for(const name of ['五子棋','21 点','炸金花','红中赖子麻将']) assert.ok(html.includes('>'+name+'</span>'));
  assert.ok(html.includes('data-sub="game"'), 'original puppy game remains available');
  assert.ok(!html.includes('data-feature='),'prototype routes must not enter the real app');

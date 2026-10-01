@@ -1,0 +1,183 @@
+/* 星光涂鸦壳 · App 原有页面（底栏 / 聊天 / 侧栏 / 设置）的外观
+   首页与全屏层在 Shadow DOM 里，样式见 doodle-shadow.css。这里只作用于 body.shell-doodle。 */
+body.shell-doodle{
+  --dd-font:"Gaegu","ZCOOL KuaiLe","PingFang SC",system-ui,sans-serif;--dd-font-ko:"Gaegu","ZCOOL KuaiLe",sans-serif;
+  --dd-glass:rgba(255,255,255,.74);--dd-wall:#F8F7FC;--dd-widget:#FFFFFF;--dd-line:#ECE7F3;
+  --dd-text:#3F3A52;--dd-text-2:#8C86A0;--dd-accent:#C58BE0;--dd-pink:#F2A7C3;--dd-blue:#8FBCEB;--dd-lilac:#CFA0E8;
+  --dd-shadow:0 6px 20px -12px rgba(90,70,130,.35);--dd-nav-h:64px;
+  background:#fff!important;
+}
+body.shell-doodle.dd-dark{--dd-glass:rgba(35,33,43,.78);--dd-wall:#17151D;--dd-widget:#23212B;--dd-line:#302D3A;--dd-text:#EDE9F6;--dd-text-2:#9D97B2;--dd-shadow:0 6px 20px -12px rgba(0,0,0,.6);background:#000!important}
+
+/* 三个隔离层的位置：与 #app 同宽居中 */
+.dd-layer{position:fixed;top:0;left:0;right:0;margin:0 auto;max-width:480px;height:var(--app-height,100dvh);pointer-events:none}
+.dd-layer[hidden]{display:none!important}
+#doodle-home{pointer-events:auto;padding-top:env(safe-area-inset-top,0px);height:calc(var(--app-height,100dvh) - var(--dd-nav-h,64px) - env(safe-area-inset-bottom,0px))}
+body.shell-doodle #app{background:transparent!important;background-image:none!important}
+body.shell-doodle #app{font-family:var(--dd-font)}
+body.shell-doodle #doodle-back,body.shell-doodle #doodle-home,body.shell-doodle #app{transition:transform .5s cubic-bezier(.2,.9,.25,1),filter .5s}
+body.shell-doodle.dd-opened #doodle-back,body.shell-doodle.dd-opened #doodle-home,body.shell-doodle.dd-opened #app{transform:scale(.94);filter:brightness(.92)}
+@media (prefers-reduced-motion:reduce){body.shell-doodle #doodle-back,body.shell-doodle #doodle-home,body.shell-doodle #app{transition:none}}
+
+/* 手绘抖线图标 */
+[data-doodle]{display:inline-block;width:1.5em;height:1.5em;vertical-align:middle;line-height:0}
+[data-doodle] svg{width:100%;height:100%;overflow:visible}
+[data-doodle] .dd-fr{will-change:opacity}
+[data-doodle] .dd-fr1,[data-doodle] .dd-fr2{opacity:0}
+[data-doodle][data-boil="on"] .dd-fr,[data-doodle][data-boil="hover"]:is(:hover,:focus-visible,.is-active) .dd-fr{animation:dd-boil .36s steps(1,end) infinite}
+[data-doodle] .dd-fr1{animation-delay:-.12s!important}[data-doodle] .dd-fr2{animation-delay:-.24s!important}
+@keyframes dd-boil{0%{opacity:1}33.33%{opacity:0}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){[data-doodle] .dd-fr{animation:none!important}[data-doodle] .dd-fr0{opacity:1}}
+body.dd-boil-off [data-doodle] .dd-fr{animation:none!important}
+
+/* 首页在隔离层里，#app 只留一块透明占位，把底栏推到最下面 */
+body.shell-doodle .dd-home-spacer{flex:1;min-height:0}
+
+/* ===== 底栏 ===== */
+body.shell-doodle .bottom-nav.dd-nav{position:relative;display:flex;height:calc(var(--dd-nav-h) + env(safe-area-inset-bottom,0px));padding:0 0 env(safe-area-inset-bottom,0px);border-top:1px solid var(--dd-line);background:var(--dd-glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:none;flex-shrink:0;z-index:100}
+body.shell-doodle .dd-nav button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0;border:0;background:none;color:var(--dd-text-2);font:400 14px/1.35 var(--dd-font)}
+body.shell-doodle .dd-nav button [data-doodle]{width:26px;height:26px}
+body.shell-doodle .dd-nav button.active{color:var(--dd-accent);font-weight:400}
+
+/* ===== 聊天 ===== */
+body.shell-doodle .chat-page.dd-chat{background:transparent;font-family:var(--dd-font);color:var(--dd-text)}
+body.shell-doodle .chat-header.dd-c-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px 4px;padding-top:calc(6px + env(safe-area-inset-top,0px));background:transparent;border:0;box-shadow:none}
+body.shell-doodle .dd-av-btn{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--dd-glass);border:1px solid var(--dd-line);padding:0;color:var(--dd-accent);flex-shrink:0}
+body.shell-doodle .dd-av-btn [data-doodle]{width:26px;height:26px;color:var(--dd-accent)}
+body.shell-doodle .dd-c-title{display:flex;flex-direction:column;align-items:center;min-width:0}
+body.shell-doodle img.dd-pxname{display:block;height:58px;width:auto;max-width:100%;image-rendering:pixelated;object-fit:contain}
+body.shell-doodle .dd-c-status{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--dd-text-2);margin-top:-2px}
+body.shell-doodle .dd-pdot{width:6px;height:6px;background:#9FD9A6;box-shadow:0 0 0 2px rgba(159,217,166,.3);animation:dd-pd 1.6s steps(2) infinite}
+@keyframes dd-pd{50%{opacity:.35}}
+body.shell-doodle .dd-chat .chat-messages{background:transparent;padding:10px 14px 14px;font-size:17px}
+body.shell-doodle .dd-chat .chat-empty{color:var(--dd-text-2)}
+/* 时间胶囊 */
+body.shell-doodle .dd-ctime{display:table;margin:10px auto 6px;font-size:13px;color:var(--dd-text-2);background:var(--dd-glass);border:1px solid var(--dd-line);padding:1px 12px;border-radius:999px}
+body.shell-doodle .dd-bgap{height:8px}
+body.shell-doodle .dd-sdate,body.shell-doodle .dd-swho,body.shell-doodle .dd-srule,body.shell-doodle .dd-stime{display:none}
+body.shell-doodle .dd-think{display:flex;justify-content:flex-start;margin:2px 0 0 42px}
+body.shell-doodle .dd-chat .msg-meta,body.shell-doodle .dd-chat .bubble-time{display:none}
+/* 气泡 */
+body.shell-doodle .dd-chat .bubble-row{display:flex;align-items:flex-end;gap:8px;max-width:100%;margin-bottom:3px}
+body.shell-doodle .dd-chat .bubble-row.me{flex-direction:row-reverse;justify-content:flex-start}
+body.shell-doodle .dd-bav,body.shell-doodle .dd-chat .bubble-avatar{flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--dd-glass) center/cover no-repeat;box-shadow:0 0 0 2px var(--dd-lilac);display:flex;align-items:center;justify-content:center;overflow:hidden}
+body.shell-doodle .bubble-row.me .dd-bav{box-shadow:0 0 0 2px var(--dd-blue)}
+body.shell-doodle .dd-bav [data-doodle]{width:22px;height:22px;color:var(--dd-lilac)}
+body.shell-doodle .bubble-row.me .dd-bav [data-doodle]{color:var(--dd-blue)}
+body.shell-doodle .dd-bav.ghost{visibility:hidden}
+body.shell-doodle .dd-chat .bubble{max-width:72%;padding:8px 13px;font-size:17px;line-height:1.35;border-radius:20px;box-shadow:none}
+body.shell-doodle .dd-chat .bubble.them{background:var(--dd-glass)!important;color:var(--dd-text)!important;border:1px solid rgba(197,139,224,.35)!important;border-bottom-left-radius:6px}
+body.shell-doodle .dd-chat .bubble.me{background:linear-gradient(135deg,#E6D3F6,#D5E6FA)!important;color:#3F3A52!important;border:0!important;border-bottom-right-radius:6px}
+body.shell-doodle .dd-chat .typing-dots span{width:6px;height:6px;border-radius:0;background:var(--dd-lilac);animation:dd-ty 1s steps(2) infinite}
+body.shell-doodle .dd-chat .typing-dots span:nth-child(2){animation-delay:.15s}
+body.shell-doodle .dd-chat .typing-dots span:nth-child(3){animation-delay:.3s}
+@keyframes dd-ty{50%{transform:translateY(-4px)}}
+body.shell-doodle .dd-chat .msg-bar{background:var(--dd-glass);border:1px solid var(--dd-line);border-radius:14px}
+/* 剧本模式：每段换人出名字和点线，左边一列时间 */
+body.shell-doodle .dd-chat.dd-script .chat-messages{padding:10px 22px 18px}
+body.shell-doodle .dd-script .dd-ctime,body.shell-doodle .dd-script .dd-bgap,body.shell-doodle .dd-script .dd-bav,body.shell-doodle .dd-script .bubble-avatar{display:none}
+body.shell-doodle .dd-script .dd-sdate{display:block;text-align:center;color:var(--dd-text-2);font-size:13px;margin:16px 0 0}
+body.shell-doodle .dd-script .dd-swho{display:flex;justify-content:center;align-items:center;gap:4px;margin:14px 0 0;font-size:20px;font-weight:700;letter-spacing:.3em;padding-left:.3em;color:var(--dd-accent)}
+body.shell-doodle .dd-script .dd-swho.me{color:#5E9BDB}
+body.shell-doodle .dd-script .dd-srule{display:block;height:2px;margin:4px 0 8px;background:radial-gradient(circle,var(--dd-lilac) 1.1px,transparent 1.5px) left center/7px 2px repeat-x}
+body.shell-doodle .dd-script .dd-srule.me{background-image:radial-gradient(circle,var(--dd-blue) 1.1px,transparent 1.5px)}
+body.shell-doodle .dd-script .bubble-row,body.shell-doodle .dd-script .bubble-row.me{display:grid;grid-template-columns:4.1em 1fr;flex-direction:row;align-items:start;gap:0;margin:0}
+body.shell-doodle .dd-script .dd-stime{display:block;color:var(--dd-text-2);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:17px;line-height:1.55}
+body.shell-doodle .dd-script .bubble-row>*:not(.dd-stime){grid-column:2}
+body.shell-doodle .dd-script .bubble,body.shell-doodle .dd-script .bubble.me,body.shell-doodle .dd-script .bubble.them{max-width:none;background:none!important;border:0!important;border-radius:0;padding:0;box-shadow:none;color:var(--dd-text)!important;font-size:17px;line-height:1.55}
+body.shell-doodle .dd-script .bubble-row.them:not([data-msg-idx]){display:flex}
+/* 输入栏：一条玻璃胶囊 */
+body.shell-doodle .dd-chat .chat-input-bar{background:transparent;border:0;padding:0 12px 10px}
+body.shell-doodle .dd-chat .chat-input-row{align-items:flex-end;gap:8px;padding:6px;background:var(--dd-glass);border:1px solid var(--dd-line);border-radius:24px;box-shadow:var(--dd-shadow)}
+body.shell-doodle .dd-chat .chat-input-bar textarea{flex:1;border:0;background:transparent;border-radius:0;font:inherit;font-size:17px;color:var(--dd-text);padding:8px 4px;max-height:120px;line-height:1.35}
+body.shell-doodle .dd-chat .chat-input-bar textarea::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dd-text-2)}
+body.shell-doodle .dd-chat .chat-more-btn{flex:0 0 38px;width:38px;height:38px;margin:0;background:none;color:var(--dd-blue)}
+body.shell-doodle .dd-chat .chat-more-btn [data-doodle]{width:24px;height:24px;color:var(--dd-blue)}
+body.shell-doodle .dd-chat .send-btn,body.shell-doodle .dd-chat .send-btn.active{flex:0 0 38px;width:38px;height:38px;background:linear-gradient(135deg,var(--dd-lilac),var(--dd-blue));cursor:pointer}
+body.shell-doodle .dd-chat .send-btn [data-doodle]{width:22px;height:22px;color:#fff}
+body.shell-doodle .dd-chat .send-btn:active{transform:scale(.9)}
+body.shell-doodle .dd-chat .chat-more-panel{background:var(--dd-glass);border:1px solid var(--dd-line);border-radius:20px}
+
+/* ===== 侧边栏顶部：名字 + 聊天模式 ===== */
+body.shell-doodle .chat-sidebar{background:var(--dd-wall);font-family:var(--dd-font)}
+body.shell-doodle .dd-side{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+body.shell-doodle .dd-side img.dd-pxname{height:52px;margin:0 auto 6px}
+body.shell-doodle .dd-side-sub{margin:8px 0 0;font-size:14px;color:var(--dd-text-2);letter-spacing:.15em}
+body.shell-doodle .dd-modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+body.shell-doodle .dd-mode{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;border-radius:18px;background:var(--dd-glass);border:1.5px solid var(--dd-line);font:700 16px var(--dd-font);color:var(--dd-text)}
+body.shell-doodle .dd-mode[aria-pressed="true"]{border-color:var(--dd-lilac);box-shadow:0 0 0 3px rgba(207,160,232,.2);color:var(--dd-accent)}
+body.shell-doodle .dd-mp{width:100%;height:74px;overflow:hidden;border-radius:12px;background:#F6F3FA;padding:8px;display:flex;flex-direction:column;gap:5px}
+body.shell-doodle.dd-dark .dd-mp{background:#17151D}
+body.shell-doodle .dd-mp i{display:block}
+body.shell-doodle .dd-mp-bubble i{height:10px;width:62%;border-radius:6px;background:rgba(207,160,232,.45)}
+body.shell-doodle .dd-mp-bubble i.r{align-self:flex-end;background:rgba(143,188,235,.5)}
+body.shell-doodle .dd-mp-bubble i.s{width:40%}
+body.shell-doodle .dd-mp-script{gap:3px}
+body.shell-doodle .dd-mp-script b{align-self:center;width:18px;height:5px;border-radius:3px;background:var(--dd-lilac)}
+body.shell-doodle .dd-mp-script i{height:4px;width:80%;border-radius:2px;background:rgba(140,134,160,.35)}
+body.shell-doodle .dd-mp-script i.s{width:55%;margin-left:18%}
+body.shell-doodle .dd-mp-script i.hr{width:100%;height:2px;background:radial-gradient(circle,var(--dd-lilac) 1px,transparent 1.3px) left/5px 2px repeat-x}
+body.shell-doodle .dd-side-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--dd-glass);border:1px solid var(--dd-line);font:16px var(--dd-font);color:var(--dd-text);text-align:left}
+body.shell-doodle .dd-side-item [data-doodle]{width:22px;height:22px;color:var(--dd-blue)}
+
+/* ===== 设置 ===== */
+body.shell-doodle .page.dd-setpage{padding:0;display:flex;flex-direction:column;font-family:var(--dd-font);color:var(--dd-text);background:transparent}
+body.shell-doodle .dd-s-head{display:flex;justify-content:center;padding:10px 0 2px;padding-top:calc(10px + env(safe-area-inset-top,0px))}
+body.shell-doodle .dd-s-scroll{padding:6px 16px 24px;display:flex;flex-direction:column;gap:14px}
+body.shell-doodle .dd-s-card,body.shell-doodle .dd-s-more .section-body{position:relative;background:var(--dd-glass);border:1px solid rgba(197,139,224,.28);border-radius:22px;box-shadow:var(--dd-shadow)}
+body.shell-doodle .dd-s-card{padding:12px 16px 6px}
+body.shell-doodle .dd-s-card::after{content:"";position:absolute;inset:5px;border-radius:17px;border:1px dashed rgba(143,188,235,.35);pointer-events:none}
+body.shell-doodle .dd-s-card h3{display:flex;align-items:center;gap:6px;margin:0 0 4px;font-size:16px;font-weight:400;color:var(--dd-text-2);letter-spacing:.12em}
+body.shell-doodle .dd-s-card h3 [data-doodle]{width:22px;height:22px;color:var(--dd-lilac)}
+body.shell-doodle .dd-s-row{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px dotted rgba(140,134,160,.3);font-size:17px}
+body.shell-doodle .dd-s-row>span{display:flex;flex-direction:column}
+body.shell-doodle .dd-s-row small{font-size:13px;color:var(--dd-text-2)}
+body.shell-doodle .dd-s-row.col{flex-direction:column;align-items:stretch;gap:6px}
+body.shell-doodle .dd-s-row input[type=text],body.shell-doodle .dd-s-row input[type=date],body.shell-doodle .dd-s-row textarea{font:inherit;font-size:16px;color:var(--dd-text);background:#F6F3FA;border:1px solid var(--dd-line);border-radius:12px;padding:6px 10px;outline:none;max-width:52%;width:auto}
+body.shell-doodle.dd-dark .dd-s-row input[type=text],body.shell-doodle.dd-dark .dd-s-row input[type=date],body.shell-doodle.dd-dark .dd-s-row textarea{background:#17151D}
+body.shell-doodle .dd-s-row textarea{max-width:none;resize:none;font-family:var(--dd-font-ko)}
+body.shell-doodle .dd-s-row input:focus,body.shell-doodle .dd-s-row textarea:focus{border-color:var(--dd-lilac)}
+body.shell-doodle .dd-s-row input[type=range]{width:46%;accent-color:var(--dd-lilac)}
+body.shell-doodle .dd-s-pair{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:18px;padding:8px 0 12px}
+body.shell-doodle .dd-s-av{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px;color:var(--dd-text-2);background:none;border:0;padding:0}
+body.shell-doodle .dd-s-avimg{width:62px;height:62px;border-radius:50%;background:#F6F3FA center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--dd-text-2)}
+body.shell-doodle .dd-s-av[data-dd-av="0"] .dd-s-avimg{box-shadow:0 0 0 2.5px var(--dd-blue)}
+body.shell-doodle .dd-s-av[data-dd-av="1"] .dd-s-avimg{box-shadow:0 0 0 2.5px var(--dd-lilac)}
+body.shell-doodle .dd-s-heart{width:26px;height:26px;color:var(--dd-pink)}
+body.shell-doodle .dd-seg{display:flex;background:#F6F3FA;border-radius:999px;padding:3px;border:1px solid var(--dd-line);flex-shrink:0}
+body.shell-doodle.dd-dark .dd-seg{background:#17151D}
+body.shell-doodle .dd-seg button{font:15px var(--dd-font);padding:4px 12px;border-radius:999px;color:var(--dd-text-2);background:none;border:0}
+body.shell-doodle .dd-seg button[aria-pressed="true"]{background:var(--dd-widget);color:var(--dd-accent);font-weight:700;box-shadow:0 1px 4px rgba(90,70,130,.18)}
+body.shell-doodle .dd-sw{flex:0 0 auto;width:52px;height:30px;border-radius:999px;background:var(--dd-line);position:relative;transition:background .25s;border:0;padding:0}
+body.shell-doodle .dd-sw i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(60,50,90,.3);transition:transform .3s cubic-bezier(.3,1.4,.5,1)}
+body.shell-doodle .dd-sw i::after{content:"";position:absolute;inset:6px;background:var(--dd-lilac);clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);opacity:0;transition:opacity .2s}
+body.shell-doodle .dd-sw[aria-checked="true"]{background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+body.shell-doodle .dd-sw[aria-checked="true"] i{transform:translateX(22px)}
+body.shell-doodle .dd-sw[aria-checked="true"] i::after{opacity:1}
+body.shell-doodle .dd-s-btn{font:15px var(--dd-font);padding:5px 16px;border-radius:999px;border:1px solid var(--dd-line);background:#F6F3FA;color:var(--dd-text);flex-shrink:0}
+body.shell-doodle.dd-dark .dd-s-btn{background:#17151D}
+body.shell-doodle .dd-s-foot{text-align:center;color:var(--dd-text-2);font-size:13px;margin:4px 0 0}
+body.shell-doodle .dd-s-foot [data-doodle]{width:30px;height:30px;color:#9FD9A6}
+/* 原有设置项接在下面，换成同一套卡片 */
+body.shell-doodle .dd-s-more>.page{padding:0;overflow:visible;flex:none}
+body.shell-doodle .dd-s-more>.page>.page-title{display:none}
+body.shell-doodle .dd-s-more .section{margin-bottom:14px}
+body.shell-doodle .dd-s-more .section-title{font:400 16px var(--dd-font);color:var(--dd-text-2);letter-spacing:.12em;margin:0 4px 6px}
+body.shell-doodle .dd-s-more .section-body{overflow:hidden}
+body.shell-doodle .dd-s-more .setting-row{border-bottom:1px dotted rgba(140,134,160,.3)}
+
+/* ===== 功能页顶部：不要整条顶栏，只留一颗浮着的返回钮 + 居中标题 ===== */
+body.shell-doodle #app>.page:has(>.sub-header:first-child),body.shell-doodle #app>.page:has(>.page-head:first-child){padding-top:0}
+body.shell-doodle .sub-header,body.shell-doodle .page-head{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:44px minmax(0,1fr) 44px;grid-auto-flow:column;align-items:center;gap:8px;
+  margin:0 -20px 10px;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 18px;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;
+  background:linear-gradient(rgba(255,255,255,.94) 0,rgba(255,255,255,.86) 62%,rgba(255,255,255,0) 100%)}
+body.shell-doodle.dd-dark .sub-header,body.shell-doodle.dd-dark .page-head{background:linear-gradient(rgba(0,0,0,.9) 0,rgba(0,0,0,.8) 62%,rgba(0,0,0,0) 100%)}
+body.shell-doodle .sub-header .back-btn,body.shell-doodle .page-head .back-btn{width:44px;height:44px;min-width:0;padding:0;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:var(--dd-glass);border:1px solid var(--dd-line);box-shadow:var(--dd-shadow);color:var(--dd-accent);font-size:0;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+body.shell-doodle .sub-header .back-btn [data-doodle],body.shell-doodle .page-head .back-btn [data-doodle]{width:26px;height:26px}
+body.shell-doodle .sub-header .back-btn:active,body.shell-doodle .page-head .back-btn:active{transform:scale(.9)}
+body.shell-doodle .sub-header .page-title,body.shell-doodle .sub-header .sub-title,body.shell-doodle .page-head .page-title{grid-column:2;justify-self:center;position:relative;display:flex;align-items:center;gap:6px;max-width:100%;margin:0;
+  font:700 22px/1.2 var(--dd-font);color:var(--dd-text);letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-bottom:6px;
+  background:radial-gradient(circle,var(--dd-lilac) 1.1px,transparent 1.5px) left bottom/7px 3px repeat-x}
+body.shell-doodle .sub-header .page-title svg,body.shell-doodle .sub-header .page-title i,body.shell-doodle .page-head .page-title svg{width:20px;height:20px;color:var(--dd-lilac);flex-shrink:0}
+body.shell-doodle .sub-header>*:nth-child(n+3){grid-column:auto;justify-self:end}
