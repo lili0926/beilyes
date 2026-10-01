@@ -36,7 +36,7 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8")
     # The Eden shell is packaged locally; no remote image host is required.
-    for shell in ("eden", "doodle"):
+    for shell in ("eden", "doodle", "pilulier"):
         src = ROOT / "frontend" / shell
         if src.is_dir():
             copytree(src, OUT.parent / shell, dirs_exist_ok=True)

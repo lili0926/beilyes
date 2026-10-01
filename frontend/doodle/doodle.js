@@ -373,6 +373,7 @@ const DoodleShell = (() => {
       <div class="panel p1"><div class="face front"><div class="paper-in"></div></div><div class="face back"></div></div>
       <div class="panel p2"><div class="face front"><div class="paper-in"></div></div></div>
       <div class="panel p3"><div class="face front"><div class="paper-in"></div></div><div class="face back"></div></div>
+      <div class="paper-scroll" id="paperScroll"><div class="paper-in"></div></div>
     </div>
     <button class="lt-fold" id="ltFold">折好放回去</button>
   </div>
@@ -1009,10 +1010,12 @@ const DoodleShell = (() => {
     const sr = sheet.getBoundingClientRect(), dx = (er.left+er.width/2)-(sr.left+sr.width/2), dy = (er.top+er.height/2)-(sr.top+sr.height/2);
     sheet.style.transition = 'none'; sheet.style.transform = 'translate('+dx+'px,'+dy+'px) scale(.26) rotate('+it.rot+'deg)'; it.el.style.visibility = 'hidden';
     requestAnimationFrame(() => requestAnimationFrame(() => { sw.classList.add('on'); sheet.style.transition = ''; sheet.style.transform = '';
+      // 展开完换成可上下翻的那一层：三折纸是定高的，长信超过三折就被裁掉、翻不动
       setTimeout(() => { sheet.classList.add('half'); rustle(.35,.22); }, 520); setTimeout(() => { sheet.classList.remove('folded','half'); rustle(.4,.26); }, 1100);
-      const n = sheet.querySelector('.p1 .paper-in').children.length;
-      for(let i=0;i<n;i++) setTimeout(() => { sheet.querySelectorAll('.paper-in').forEach(pi => { const c = pi.children[i]; if(c && c.classList.contains('ln')) c.classList.add('on'); }); if(ltOpen && i%2 === 0) rustle(.08,.06); }, 1700+i*260);
-      setTimeout(() => { $('ltFold').classList.add('on'); $('ltFold').focus(); }, 1700+n*260); }));
+      setTimeout(() => { if(ltOpen === it){ $('paperScroll').scrollTop = 0; sheet.classList.add('reading'); } }, 1700);
+      const n = sheet.querySelector('.p1 .paper-in').children.length, step = Math.min(260, Math.max(60, 4200/n));
+      for(let i=0;i<n;i++) setTimeout(() => { sheet.querySelectorAll('.paper-in').forEach(pi => { const c = pi.children[i]; if(c && c.classList.contains('ln')) c.classList.add('on'); }); if(ltOpen && i%2 === 0) rustle(.08,.06); }, 1700+i*step);
+      setTimeout(() => { $('ltFold').classList.add('on'); }, 1700+Math.min(n*step, 2600)); }));
     if(!isRead(l)) setP('ltRead', readSet().concat(l.id).slice(-300)); }
   function openLetters(fromEl){
     buildSky(); ltOpener = fromEl; LETTERS = letterData();
@@ -1033,7 +1036,7 @@ const DoodleShell = (() => {
       let pool = ltItems.filter(i => !isRead(i.l)); if(!pool.length) pool = ltItems;
       ltItems.forEach(i => { i.w += (Math.random()-.5)*.02; }); rustle(.2,.1); setTimeout(() => pickLetter(pool[Math.floor(Math.random()*pool.length)]), 500); });
     $('ltCount').addEventListener('click', () => { if(!ltOpen) goMailbox(); });
-    $('ltFold').addEventListener('click', () => { const it = ltOpen; if(!it) return; $('ltFold').classList.remove('on'); sheet.querySelectorAll('.ln').forEach(x => x.classList.remove('on'));
+    $('ltFold').addEventListener('click', () => { const it = ltOpen; if(!it) return; $('ltFold').classList.remove('on'); sheet.classList.remove('reading'); sheet.querySelectorAll('.ln').forEach(x => x.classList.remove('on'));
       setTimeout(() => { sheet.classList.add('folded'); rustle(.35,.22); }, 200);
       setTimeout(() => { const er = it.el.getBoundingClientRect(), sr = sheet.getBoundingClientRect();
         sheet.style.transform = 'translate('+((er.left+er.width/2)-(sr.left+sr.width/2))+'px,'+((er.top+er.height/2)-(sr.top+sr.height/2))+'px) scale(.26) rotate('+it.rot+'deg)'; sw.classList.remove('on'); chime(false); }, 900);
@@ -1225,5 +1228,5 @@ const DoodleShell = (() => {
     openNP(true);
   }
 
-  return {pixelName:(w,o)=>pixelNameURL(w,o||{}), palette, afterRender, renderHomeSpacer, renderNav, chatHeader, chatMeta, bubbleAv, sidebarTop, renderSettings, playLocal, onEnded, isOn:ON};
+  return {pixelName:(w,o)=>pixelNameURL(w,o||{}), palette, openLetters:el=>{ mount(); openLetters(el||document.body); }, afterRender, renderHomeSpacer, renderNav, chatHeader, chatMeta, bubbleAv, sidebarTop, renderSettings, playLocal, onEnded, isOn:ON};
 })();

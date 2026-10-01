@@ -535,3 +535,9 @@ img.pxname{object-fit:contain;max-width:60%}
 
 /* 外观里选了「奈の小猫」字体时，隔离层也跟着换 */
 :host([data-kitten]){--font:'NaiKitten','PingFang SC',sans-serif;--font-ko:'NaiKitten',sans-serif}
+/* 长信：展开完换到这一层读，能上下翻（三折纸本身是定高的） */
+.paper-scroll{position:absolute;inset:0;z-index:5;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;border-radius:6px;background:var(--paper,#FFFDF8);opacity:0;visibility:hidden;pointer-events:none;scrollbar-width:none}
+.paper-scroll::-webkit-scrollbar{display:none}
+.paper-scroll .paper-in{position:relative;top:0;height:auto;min-height:100%;padding-bottom:74px}
+.sheet.reading .paper-scroll{opacity:1;visibility:visible;pointer-events:auto}
+.sheet.reading .panel{visibility:hidden}

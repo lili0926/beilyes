@@ -3274,6 +3274,8 @@ const state = {
   // coupon 券夹
   coupons: LS.get("coupons", null),  // null=未初始化，ensureCoupons() 播种默认券
   pillSelectedIds: [],
+  pillFavs: LS.get("pillFavs", {}) || {},
+  pillRecent: LS.get("pillRecent", []) || [],
   pillPickerOpen: false,
   pillLastTaken: [],
   couponEditingId: null,             // 券夹页正在编辑的券 id，或 "new"
@@ -5321,7 +5323,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -15823,7 +15825,14 @@ function pillSelectedEnsure(){
 }
 /** 取出本轮要吃的药（发出即焚），返回拼好的块；并记入 pillLastTaken 供页脚展示 */
 function pillTakeForSend(){
-  const ids = (pillSelectedEnsure() || []).slice(0, PILULIER_MAX);
+  let ids = (pillSelectedEnsure() || []).slice(0, PILULIER_MAX);
+  if(typeof pilOn === "function" && pilOn()){
+    try{
+      Pilulier.setPending(PILL_NEXT, ids);
+      ids = Pilulier.takePending(PILL_NEXT);   // 取走 = 吃掉；组件自己记「最近吃过」
+      if(ids.length){ state.pillRecent = ids.concat((state.pillRecent||[]).filter(x=>!ids.includes(x))).slice(0, 12); persist("pillRecent"); const b = document.getElementById("pil-box"); if(b) b.recent = state.pillRecent; }
+    }catch(e){}
+  }
   state.pillSelectedIds = [];
   state.pillPickerOpen = false;
   const taken = [];
@@ -15853,8 +15862,108 @@ function pillInjectIntoApiMsgs(apiMsgs, consume){
   }catch(e){}
   return apiMsgs;
 }
+// ─── 药盒 · pilulier 官方组件 ────────────────────────────────────────────────
+// 她 2026-10-01 要「一比一复刻」github.com/ceshihaox-dotcom/pilulier（MIT，许可见 pilulier/LICENSE）。
+// 直接用它的 <pill-box> 组件（胶囊带 ⇄ 泡罩药板、详情聚光处方、药丸画法全是原版），
+// 这边只做桥：她挑的药挂在「下一句」(PILL_NEXT) 上，发出时取走 = 吃掉，跟原来的注入逻辑一样。
+// 组件没加载成功（离线首开之类）就退回老的选药条。
+const PILL_NEXT = "next";
+function pilOn(){
+  try{ return typeof Pilulier !== "undefined" && !!(window.customElements && customElements.get("pill-box")); }catch(e){ return false; }
+}
+function pilDark(){
+  const b = document.body;
+  return !!(b && (b.classList.contains("dd-dark") || b.classList.contains("wb-dark")));
+}
+function pilItems(){
+  const favs = state.pillFavs || {};
+  return (PILULIER_PILLS||[]).map(p=>Object.assign({ id:p.id, code:p.id, name:p.name, text:p.text }, favs[p.id]||{}));
+}
+function pilSync(){
+  try{ state.pillSelectedIds = Pilulier.pendingOf(PILL_NEXT).slice(0, PILULIER_MAX); }catch(e){}
+}
+function pilBox(){
+  if(!pilOn()) return null;
+  let box = document.getElementById("pil-box");
+  if(!box){
+    box = document.createElement("pill-box");
+    box.id = "pil-box";
+    box.setAttribute("theme", pilDark() ? "dark" : "light");
+    document.body.appendChild(box);
+    box.pills = pilItems();
+    box.recent = Array.isArray(state.pillRecent) ? state.pillRecent : [];
+    box.addEventListener("pill-pick", pilSync);
+    box.addEventListener("pill-unpick", pilSync);
+    // 收起后重绘一次：「+」上的颗数、输入框上方的待服用标签都跟着变
+    box.addEventListener("pill-close", ()=>{ pilSync(); try{ render(); }catch(e){} });
+    box.addEventListener("pill-favorite", e=>{
+      const d = (e && e.detail) || {};
+      if(!d.id) return;
+      state.pillFavs = Object.assign({}, state.pillFavs||{});
+      if(d.fav) state.pillFavs[d.id] = { fav:true, favStyle:d.favStyle||"lueur" };
+      else delete state.pillFavs[d.id];
+      persist("pillFavs");
+    });
+    document.addEventListener("pill-tag-click", e=>{
+      if(e && e.detail && e.detail.messageId === PILL_NEXT) pilOpen(e.target);
+    });
+  }
+  const th = pilDark() ? "dark" : "light";
+  if(box.getAttribute("theme") !== th) box.setAttribute("theme", th);
+  return box;
+}
+/** 打开药盒给「下一句」挑药。anchor = 挑好后药飞过去落的那个元素 */
+function pilOpen(anchor){
+  const box = pilBox();
+  if(!box){ state.pillPickerOpen = true; try{ render(); }catch(e){} return; }
+  state.chatMoreOpen = false;
+  try{ Pilulier.setPending(PILL_NEXT, pillSelectedEnsure().slice(0, PILULIER_MAX)); }catch(e){}
+  const a = anchor || document.querySelector(".chat-input-row") || document.querySelector(".chat-input-bar") || document.body;
+  box.open({ messageId: PILL_NEXT, anchor: a });
+}
+/** 药盒页：图鉴（atlas/index.html 的版式），点一颗看详情 */
+const PIL_ATLAS_POSE = {P001:[-37.8,1.1],P002:[-23.5,-1.5],P003:[-9.3,2.2],P004:[-30.1,-0.1],P005:[-15.9,-2.6],P006:[-36.7,1.3],P007:[-22.5,-1.3],P008:[-25.7,-1.8],P009:[-11.5,1.8],P010:[-26.8,-2.8],P011:[-6,-0.5],P012:[-20.3,2],P013:[-34.5,-1.6]};
+function renderPilulierAtlas(){
+  pilBox(); // 先定深浅色：药丸的画法跟着主题走
+  const dark = pilDark();
+  const sel = new Set(pillSelectedEnsure());
+  const rows = pilItems().map(p=>{
+    let svg = "";
+    try{ svg = Pilulier.renderPillSVG(Pilulier.lookOf(p)); }catch(e){}
+    const pose = PIL_ATLAS_POSE[p.id] || [-24, 0];
+    const sum = String(p.text||"").split("\n")[0].replace(/^适用场景[：:]\s*/,"").trim();
+    return `<li class="pil-row${sel.has(p.id)?" on":""}" data-pil-detail="${escAttr(p.id)}">
+      <div class="pil-pill"><div class="pil-pill-art" style="transform:translateY(${pose[1]}px) rotate(${pose[0]}deg)">${svg}</div></div>
+      <div class="pil-txt"><div class="pil-meta"><span class="pil-code">${esc(p.id)}</span><span class="pil-name">${esc(p.name)}</span>${sel.has(p.id)?`<span class="pil-hung">已挂</span>`:""}</div><div class="pil-sum">${esc(sum)}</div></div>
+    </li>`;
+  }).join("");
+  const n = sel.size;
+  return `<div class="page pil-page${dark?" pil-dark-page":""}" style="padding-top:0">
+    ${subHeader("药盒")}
+    <div class="pil-stage">
+      <div class="pil-wash"><i style="left:-60px;top:120px;width:260px;height:260px"></i><i style="right:-80px;top:520px;width:320px;height:320px"></i><i style="left:30%;bottom:-60px;width:300px;height:220px"></i></div>
+      <div class="pil-spot"></div>
+      <main class="pil-sheet">
+        <header class="pil-head">
+          <h1>Pilulier</h1>
+          <div class="pil-sub"><b>药丸图鉴</b><i>treize gélules</i></div>
+          <p>长按一句话挑一颗，只作用于下一次回复，用完即焚。</p>
+        </header>
+        <div class="pil-rule"></div>
+        <ul class="pil-list">${rows}</ul>
+        <div class="pil-rule"></div>
+        <footer class="pil-foot"><span>une gélule, une réponse</span><b>Pilulier</b></footer>
+      </main>
+      <div class="pil-dose">
+        ${n?`<pill-tag message-id="${PILL_NEXT}"></pill-tag>`:`<span class="pil-dose-empty">这一剂还空着</span>`}
+        <button type="button" class="pil-btn" data-pil-open="1">打开药盒</button>
+        <button type="button" class="pil-btn" data-pill-go-chat="1">去聊天</button>
+      </div>
+    </div>
+  </div>`;
+}
 function pillPickerHtml(){
-  if(!state.pillPickerOpen) return "";
+  if(!state.pillPickerOpen || pilOn()) return "";
   const sel = new Set(pillSelectedEnsure());
   const chips = (PILULIER_PILLS||[]).map(p=>{
     const on = sel.has(p.id);
@@ -15876,9 +15985,14 @@ function pillTakenFooterHtml(m){
   if(!list.length) return "";
   const names = list.map(x=>x.name||x.id).filter(Boolean);
   if(!names.length) return "";
+  if(typeof pilOn === "function" && pilOn()){
+    pilBox();
+    return `<div class="pill-taken-ft pil-taken-ft"><pill-taken ids="${escAttr(list.map(x=>x.id).filter(Boolean).join(","))}"></pill-taken></div>`;
+  }
   return `<div class="pill-taken-ft">pris · ${esc(names.join(" · "))}</div>`;
 }
 function renderPilulierPage(){
+  if(pilOn()) return renderPilulierAtlas();
   const sel = new Set(pillSelectedEnsure());
   const cards = (PILULIER_PILLS||[]).map(p=>{
     const on = sel.has(p.id);
@@ -23680,8 +23794,9 @@ function renderChat(){
       if(m.time && !showMeta && firstInRun){
         const tIcon = (!isMe && hasThinking(m))?` <button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>`:"";
         msgs+=`<div class="bubble-time${isMe?"":" them"}">${formatTime(m.time)}${tIcon}</div>`;
-        if(!isMe && typeof pillTakenFooterHtml==="function"){ const _pf=pillTakenFooterHtml(m); if(_pf) msgs+=_pf; }
       }
+      // 这一轮吃了哪几颗药：不管时间显示在哪，都挂在那条回复下面
+      if(!isMe && m.pillsTaken && typeof pillTakenFooterHtml==="function"){ const _pf=pillTakenFooterHtml(m); if(_pf) msgs+=_pf; }
     });
     state.pendingUser.forEach(m=>{
       // 待发的用户小纸条卡片（type=note）
@@ -23881,6 +23996,7 @@ function renderChat(){
         <button id="chat-send" class="send-btn${state.chatInput.trim()?" active":""}"><i data-lucide="send"></i></button>
       </div>
       ${typeof pillPickerHtml==="function"?pillPickerHtml():""}
+      ${(pilOn() && (state.pillSelectedIds||[]).length) ? `<div class="pil-tag-row"><pill-tag message-id="${PILL_NEXT}"></pill-tag><span>下一句服用</span></div>` : ""}
     </div>
     ${state.questPopup && typeof renderQuestPopup==="function" ? renderQuestPopup() : ""}
     ${state.flightChessOpen && typeof renderFlightChessPopup==="function" ? renderFlightChessPopup() : ""}${typeof renderPrPanel==="function"?renderPrPanel():""}${typeof renderPrFloat==="function"?renderPrFloat():""}
@@ -25851,6 +25967,25 @@ if(!window.__mpDelegated){
         if(typeof render==="function") render();
         return;
       }
+      if(raw.closest("[data-pil-detail]")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        const row = raw.closest("[data-pil-detail]");
+        const b = pilBox();
+        if(b) b.openDetail(row.getAttribute("data-pil-detail"), row.querySelector(".pil-pill-art") || row);
+        return;
+      }
+      if(raw.closest("[data-pil-open]")){
+        e.preventDefault(); e.stopImmediatePropagation();
+        pilOpen(raw.closest("[data-pil-open]"));
+        return;
+      }
+      if((id==="pill-box-btn" || raw.closest("#pill-box-btn")) && pilOn()){
+        e.preventDefault(); e.stopImmediatePropagation();
+        state.chatMoreOpen = false;
+        try{ render(); }catch(_){}
+        setTimeout(()=>pilOpen(), 30);
+        return;
+      }
       if(id==="pill-box-btn" || raw.closest("#pill-box-btn")){
         e.preventDefault(); e.stopImmediatePropagation();
         state.chatMoreOpen = false;
@@ -25862,8 +25997,9 @@ if(!window.__mpDelegated){
         e.preventDefault(); e.stopImmediatePropagation();
         state.subPage = null;
         state.tab = "chat";
-        state.pillPickerOpen = true;
+        state.pillPickerOpen = !pilOn();
         if(typeof render==="function") render();
+        if(pilOn()) setTimeout(()=>pilOpen(), 60);
         return;
       }
       if(raw.closest("[data-pill-toggle]")){
@@ -27249,6 +27385,7 @@ function bindEvents(){
         if(tm) clearTimeout(tm);
         tm = setTimeout(()=>{
           tm = null;
+          if(pilOn()){ pilOpen(el.classList.contains("bubble") ? el : (el.querySelector(".bubble") || el)); return; }
           state.pillPickerOpen = true;
           if(typeof render==="function") render();
           try{ if(typeof showToast==="function") showToast("选药，只影响下一句回复"); }catch(e){}

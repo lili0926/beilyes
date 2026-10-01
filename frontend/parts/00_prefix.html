@@ -4543,6 +4543,52 @@
     @keyframes ccardSpin{to{transform:rotate(360deg)}}
     /* 星光涂鸦壳：手写体 + 虚线描边 */
     body.shell-doodle .ccard,body.shell-doodle .ccard-pill,body.shell-doodle .ccard-banner{font-family:var(--dd-font,inherit);border:2px dashed var(--dd-line,var(--border));background:var(--dd-glass,var(--card));-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:var(--dd-line,var(--border))}
+    /* ─── 药盒 · pilulier 图鉴（照 pilulier/atlas/index.html，MIT）─── */
+    .pil-page{--pa-paper:#F4F5F8;--pa-ink:#2C2D34;--pa-ink2:#6A6C77;--pa-ink3:#A4A6B0;--pa-line:rgba(44,45,52,.09);--pa-wash1:#e7e9ef;--pa-wash2:#fbfbfd;--pa-blob:rgba(60,62,76,.10);
+      --pa-tint-top:rgba(249,250,254,.185);--pa-tint-mid:rgba(234,235,239,.42);--pa-tint-bot:rgba(213,214,218,.76);--pa-rim:rgba(255,255,255,.42);--pa-ring:rgba(255,255,255,.55);--pa-drop:0 30px 60px -30px rgba(20,20,30,.28);--pa-halo:transparent;
+      --pa-script:'Pinyon Script',cursive;--pa-serif:'Cormorant Garamond',Georgia,serif;--pa-cjk:'Noto Serif SC','Hiragino Mincho ProN','Songti SC',serif;
+      background:radial-gradient(90% 40% at 15% 0%,var(--pa-wash2),transparent 70%),radial-gradient(80% 50% at 100% 100%,var(--pa-wash1),transparent 70%),var(--pa-paper)!important;color:var(--pa-ink)}
+    .pil-page.pil-dark-page{--pa-paper:#141416;--pa-ink:#E4E4E8;--pa-ink2:#9C9DA8;--pa-ink3:#6C6D78;--pa-line:rgba(255,255,255,.08);--pa-wash1:#101013;--pa-wash2:#1a1a1f;--pa-blob:rgba(255,255,255,.05);
+      --pa-tint-top:rgba(29,30,34,.255);--pa-tint-mid:rgba(38,39,43,.48);--pa-tint-bot:rgba(50,51,55,.78);--pa-rim:rgba(255,255,255,.22);--pa-ring:rgba(255,255,255,.08);--pa-drop:0 30px 60px -30px rgba(0,0,0,.8);
+      --pa-halo:radial-gradient(closest-side,rgba(255,255,255,.34),rgba(255,255,255,.10) 55%,transparent 100%)}
+    .pil-page .sub-header{background:transparent!important;border:0!important;box-shadow:none!important;color:var(--pa-ink)}
+    .pil-stage{position:relative;padding:14px 14px 34px;overflow:hidden;font-family:var(--pa-cjk);font-weight:300;-webkit-font-smoothing:antialiased}
+    .pil-wash{position:absolute;inset:0;pointer-events:none}
+    .pil-wash i{position:absolute;border-radius:50%;background:var(--pa-blob);filter:blur(28px)}
+    .pil-spot{display:none}
+    .pil-dark-page .pil-spot{display:block;position:absolute;left:50%;top:-140px;width:640px;height:520px;margin-left:-320px;pointer-events:none;background:radial-gradient(closest-side,rgba(255,255,255,.11),transparent)}
+    .pil-sheet{position:relative;max-width:420px;margin:0 auto;border-radius:30px;overflow:hidden;-webkit-backdrop-filter:blur(4px) saturate(1.15);backdrop-filter:blur(4px) saturate(1.15);
+      background:linear-gradient(to bottom,var(--pa-tint-top) 0%,var(--pa-tint-top) 30%,var(--pa-tint-mid) 64%,var(--pa-tint-bot) 100%);box-shadow:inset 0 1px 0 var(--pa-rim),inset 0 0 0 1px var(--pa-ring),var(--pa-drop)}
+    .pil-sheet::before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.12),transparent 40px)}
+    .pil-head{position:relative;padding:32px 26px 16px}
+    .pil-head h1{font-family:var(--pa-script);font-weight:400;font-size:46px;line-height:1.05;color:var(--pa-ink);margin:0}
+    .pil-sub{margin-top:10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+    .pil-sub b{font-weight:400;font-size:12.5px;letter-spacing:.34em;color:var(--pa-ink2)}
+    .pil-sub i{font-family:var(--pa-serif);font-size:13px;color:var(--pa-ink3)}
+    .pil-head p{margin:8px 0 0;font-size:11px;letter-spacing:.08em;line-height:1.8;color:var(--pa-ink3)}
+    .pil-rule{height:0;border-top:.5px solid var(--pa-line);margin:0 26px}
+    .pil-list{list-style:none;margin:0;padding:4px 0 8px}
+    .pil-row{display:grid;grid-template-columns:78px minmax(0,1fr);gap:0 12px;align-items:center;padding:16px 26px 16px 18px;position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent}
+    .pil-row+.pil-row::before{content:"";position:absolute;left:26px;right:26px;top:0;border-top:.5px solid var(--pa-line)}
+    .pil-row:active{background:rgba(127,127,140,.06)}
+    .pil-pill{position:relative;width:78px;height:50px;display:flex;align-items:center;justify-content:center}
+    .pil-pill::before{content:"";position:absolute;inset:-8px -4px;background:var(--pa-halo);pointer-events:none}
+    .pil-pill-art{position:relative;width:66px;display:block;line-height:0}
+    .pil-pill-art svg{width:100%;height:auto;display:block}
+    .pil-txt{min-width:0}
+    .pil-meta{display:flex;align-items:baseline;gap:10px}
+    .pil-code{font-family:var(--pa-serif);font-style:italic;font-size:13px;color:var(--pa-ink3);letter-spacing:.04em;flex:none}
+    .pil-name{font-size:15.5px;font-weight:400;letter-spacing:.32em;color:var(--pa-ink)}
+    .pil-hung{margin-left:auto;font-family:var(--pa-serif);font-style:italic;font-size:12px;color:var(--pa-ink2);border:.5px solid var(--pa-line);border-radius:999px;padding:0 8px}
+    .pil-sum{margin-top:5px;font-size:11px;line-height:1.75;letter-spacing:.02em;color:var(--pa-ink2)}
+    .pil-foot{position:relative;display:flex;justify-content:space-between;align-items:baseline;padding:12px 26px 24px}
+    .pil-foot span{font-family:var(--pa-serif);font-style:italic;font-size:11.5px;color:var(--pa-ink3)}
+    .pil-foot b{font-family:var(--pa-script);font-weight:400;font-size:21px;color:var(--pa-ink3)}
+    .pil-dose{position:relative;max-width:420px;margin:18px auto 0;display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;font-family:var(--pa-cjk)}
+    .pil-dose-empty{font-family:var(--pa-serif);font-style:italic;font-size:12.5px;color:var(--pa-ink3)}
+    .pil-btn{font-family:var(--pa-cjk);font-size:13px;color:var(--pa-ink);background:none;border:1px solid var(--pa-line);border-color:color-mix(in srgb,var(--pa-ink) 22%,transparent);border-radius:999px;padding:6px 16px;cursor:pointer}
+    .pil-tag-row{display:flex;align-items:center;gap:8px;padding:2px 6px 6px;font-size:11px;color:var(--sub);font-family:'Cormorant Garamond','Noto Serif SC',serif;font-style:italic}
+    .pil-taken-ft{margin:2px 0 6px 52px}
 </style>
   <script src="emoji-rain.js"></script>
 </head>
@@ -7010,5 +7056,7 @@
 <script src="doodle/doodle.js"></script>
 <link rel="stylesheet" href="doodle/rp.css">
 <script src="doodle/rp.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;1,400&family=Noto+Serif+SC:wght@300;400&family=Pinyon+Script&display=swap">
+<script src="pilulier/pill-box.min.js"></script>
   <script src="backend-bridge.js"></script>
   <script>
