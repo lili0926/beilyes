@@ -1,0 +1,115 @@
+/* 星光涂鸦壳 · 一起读「书架」页（结构见 shelf.js）
+   卡片：白底 + 内圈虚线框；书架板：薰衣草圆角条；书脊糖果色带标签；进度条上骑一颗星。 */
+body.shell-doodle .ddsh{--sh-card:#fff;--sh-line:#E6DDF3;--sh-dash:#C9DCF2;--sh-plank:#E3D5F6;--sh-plank-b:#CDB8EE;--sh-sub:#9C95B4;--sh-pink:#E57FAA;
+  padding:0 14px calc(28px + env(safe-area-inset-bottom,0px));font-family:var(--dd-font);color:var(--dd-text);
+  background:linear-gradient(180deg,#F6F1FD 0%,#F9F6FE 40%,#FBFAFE 100%)!important;min-height:100%}
+body.shell-doodle.dd-dark .ddsh{--sh-card:#24212D;--sh-line:#3A3548;--sh-dash:#41506A;--sh-plank:#4A3F63;--sh-plank-b:#5D4F7C;--sh-sub:#9D97B2;
+  background:linear-gradient(180deg,#17151D,#1B1824)!important}
+
+/* 标题：薰衣草紫 + 浅蓝错位双色 */
+body.shell-doodle .ddsh .sub-header .page-title{font-family:"ZCOOL KuaiLe",var(--dd-font);font-size:26px;letter-spacing:.12em;color:#C08AE6;
+  text-shadow:3px 3px 0 #BFDAF5;-webkit-text-stroke:.4px #B57EDC}
+.ddsh-ko{margin:-4px 0 14px;text-align:center;font-family:var(--dd-font-ko);font-size:15px;letter-spacing:.06em;color:#B9AED6;opacity:.85}
+
+/* 卡片 */
+.ddsh-card{position:relative;display:block;width:100%;box-sizing:border-box;margin:0 0 16px;padding:16px 16px 18px;border-radius:28px;
+  background:var(--sh-card);border:2px solid var(--sh-line);box-shadow:0 14px 30px -22px rgba(120,90,180,.45);text-align:left;color:inherit;font:inherit}
+.ddsh-card::before{content:"";position:absolute;inset:7px;border:1.5px dashed var(--sh-dash);border-radius:22px;pointer-events:none}
+.ddsh-head{position:relative;display:flex;align-items:center;gap:12px;padding:2px 4px 0}
+.ddsh-ico{width:42px;height:42px;border-radius:14px;background:#EAF2FC;display:flex;align-items:flex-end;justify-content:center;gap:3px;padding-bottom:9px;box-sizing:border-box;flex:0 0 auto}
+.ddsh-ico i{display:block;width:6px;border-radius:2px;background:#8FB6E6}
+.ddsh-ico i:nth-child(1){height:20px}.ddsh-ico i:nth-child(2){height:24px;background:#CFA0E8}.ddsh-ico i:nth-child(3){height:17px;background:#B79AE0}
+.ddsh-label{font-size:22px;font-weight:700;letter-spacing:.06em}
+.ddsh-count{margin-left:auto;display:flex;align-items:center;gap:6px;border:0;background:none;padding:6px 2px;font:inherit;font-size:16px;color:var(--sh-sub);cursor:pointer}
+.ddsh-count [data-doodle]{width:20px;height:20px}
+.ddsh-x{margin-left:auto;border:0;background:none;font:inherit;font-size:15px;color:var(--sh-sub);cursor:pointer}
+.ddsh-dots{position:relative;height:0;margin:14px 2px 6px;border-top:3px dotted #D9CDEE}
+
+/* ── 书架 ── */
+.ddsh-wood{position:relative;padding:4px 2px 0}
+.ddsh-row{position:relative;display:flex;align-items:flex-end;height:168px;padding:0 4px;gap:0}
+.ddsh-plank{position:relative;height:14px;margin:0 -2px 18px;border-radius:10px;background:var(--sh-plank);box-shadow:inset 0 0 0 2px var(--sh-plank-b),0 6px 0 -2px rgba(181,150,226,.25)}
+.ddsh-plank:last-child{margin-bottom:2px}
+.ddsh-books{display:flex;align-items:flex-end;gap:2px;margin:0 2px}
+
+/* 书脊 */
+.ddsh-spine{position:relative;flex:0 0 auto;display:block;box-sizing:border-box;padding:0;border:0;border-radius:4px 4px 2px 2px;background:var(--bg);
+  box-shadow:inset -5px 0 0 rgba(255,255,255,.28),inset 3px 0 0 rgba(0,0,0,.05);cursor:pointer;transform-origin:50% 100%;
+  transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
+.ddsh-spine:active{transform:translateY(-8px) rotate(-2deg)}
+.ddsh-spine.ghost{cursor:default;opacity:.92}
+.ddsh-spine .ddsh-sd{position:absolute;left:18%;right:18%;top:14px;height:5px;border-radius:2px;background:#fff;opacity:.9;box-shadow:0 10px 0 #fff}
+.ddsh-spine.d1 .ddsh-sd{top:16px;left:26%;right:26%;height:14px;border-radius:2px;box-shadow:none}
+.ddsh-spine.d2 .ddsh-sd{top:12px;height:3px;box-shadow:0 7px 0 #fff,0 14px 0 #fff}
+.ddsh-spine em{position:absolute;left:0;right:0;top:42px;bottom:10px;display:flex;justify-content:center;writing-mode:vertical-rl;text-orientation:upright;
+  font-style:normal;font-size:12px;line-height:1;letter-spacing:.05em;color:var(--ink);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ddsh-spine.d1 em{top:38px}
+.ddsh-ribbon{position:absolute;right:6px;top:-6px;width:8px;height:26px;background:#F29CBE;clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%)}
+.ddsh-spine.on{box-shadow:inset -5px 0 0 rgba(255,255,255,.28),0 0 0 2px #fff,0 0 0 4px rgba(242,156,190,.55)}
+
+/* 平放的一摞 */
+.ddsh-stack{position:relative;display:flex;flex-direction:column;align-items:flex-start;margin-right:4px}
+.ddsh-slab{position:relative;display:block;height:27px;margin-top:2px;padding:0;border:0;border-radius:5px;background:var(--bg);cursor:pointer;
+  box-shadow:inset 0 -4px 0 rgba(255,255,255,.3),inset 0 3px 0 rgba(0,0,0,.04);text-align:left}
+.ddsh-slab:nth-child(3){margin-left:6px}.ddsh-slab:nth-child(4){margin-left:-2px}
+.ddsh-slab i{position:absolute;left:10px;top:11px;width:24px;height:4px;border-radius:2px;background:#fff;opacity:.85}
+.ddsh-slab em{position:absolute;left:40px;right:6px;top:6px;font-style:normal;font-size:11.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddsh-slab.ghost{cursor:default}
+.ddsh-bow{width:50px;height:30px;margin:0 0 -8px 28px;position:relative;z-index:2}
+
+/* 斜靠的那本 */
+.ddsh-lean{position:relative;flex:0 0 auto;width:28px;height:136px;margin:0 14px 0 4px;padding:0;border:0;border-radius:4px;background:#BBD6F3;
+  box-shadow:inset -5px 0 0 rgba(255,255,255,.35),inset 0 0 0 2px #8FB6E6;transform:rotate(18deg);transform-origin:0 100%;cursor:pointer}
+.ddsh-lean i{position:absolute;left:7px;top:22px;width:14px;height:14px;background:#fff;transform:rotate(-12deg);border-radius:2px}
+.ddsh-lean em{position:absolute;left:0;right:0;top:46px;bottom:10px;display:flex;justify-content:center;writing-mode:vertical-rl;text-orientation:upright;font-style:normal;font-size:12px;color:#4B79A8;overflow:hidden}
+.ddsh-lean.ghost{cursor:default}
+
+/* 装饰 */
+.ddsh-jar{width:72px;height:72px;flex:0 0 auto;margin-right:6px;margin-bottom:-1px}
+.ddsh-badge{width:78px;height:78px;margin-left:auto;margin-bottom:6px;flex:0 0 auto;filter:drop-shadow(0 6px 8px rgba(143,182,230,.35))}
+.ddsh-spk{position:absolute;width:20px;height:20px;animation:ddshTw 2.6s ease-in-out infinite}
+.ddsh-spk.s1{left:58%;top:6px}.ddsh-spk.s2{right:2px;top:40px;animation-delay:-1.1s}
+.ddsh-spk.s3{left:60%;top:2px;animation-delay:-.6s}.ddsh-spk.s4{right:0;top:-4px;animation-delay:-1.8s}
+.ddsh-spk.s5{right:22px;top:12px;width:18px;height:18px}
+@keyframes ddshTw{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.72);opacity:.55}}
+.ddsh-dash{position:absolute;left:64%;top:44px;width:30px;height:0;border-top:2px dashed #C9DCF2;transform:rotate(-28deg)}
+
+/* 小猫（可换成她自己的图） */
+.ddsh-cat{position:relative;margin-left:auto;margin-bottom:2px;width:76px;height:72px;flex:0 0 auto;padding:0;border:0;background:none;cursor:pointer;
+  animation:ddshBob 3.2s ease-in-out infinite;transform-origin:50% 100%}
+.ddsh-cat svg,.ddsh-cat img{width:100%;height:100%;display:block;object-fit:contain}
+@keyframes ddshBob{0%,100%{transform:rotate(0)}50%{transform:rotate(-3deg) translateY(-2px)}}
+
+/* ── 正在读 ── */
+.ddsh-now{display:flex;align-items:center;gap:16px;padding:20px 20px 22px;cursor:pointer}
+.ddsh-now.empty{cursor:default}
+.ddsh-cover{width:116px;height:116px;flex:0 0 auto;border-radius:22px;box-shadow:0 10px 18px -12px rgba(60,80,140,.6)}
+.ddsh-now-txt{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.ddsh-now-txt small{font-size:15px;color:#C08AE6;letter-spacing:.06em}
+.ddsh-now-txt b{font-size:24px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddsh-now-txt>span{font-size:15px;color:var(--sh-pink)}
+.ddsh-bar{position:relative;height:10px;margin-top:8px;border-radius:99px;background:#F1E9FB}
+.ddsh-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:linear-gradient(90deg,#CB8EDD,#B79AE0)}
+.ddsh-bar span{position:absolute;top:50%;width:30px;height:30px;transform:translate(-50%,-52%)}
+.ddsh-star{width:100%;height:100%;filter:drop-shadow(0 2px 3px rgba(143,182,230,.6))}
+
+/* ── 全部 ── */
+.ddsh-grid{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 10px;margin-top:14px}
+.ddsh-item{position:relative}
+.ddsh-item-main{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer}
+.ddsh-item .ddsh-cover{width:100%;height:auto;aspect-ratio:1;border-radius:16px}
+.ddsh-item b{max-width:100%;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddsh-item span{font-size:12px;color:var(--sh-sub)}
+.ddsh-del{position:absolute;right:-4px;top:-6px;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--sh-line);background:var(--sh-card);color:var(--sh-sub);font-size:14px;line-height:1;cursor:pointer}
+
+/* ── 底部 ── */
+.ddsh-foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:4px}
+.ddsh-pill{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:999px;border:1.5px solid var(--sh-line);background:var(--sh-card);
+  font:inherit;font-size:15px;color:var(--sh-sub);cursor:pointer}
+.ddsh-pill.main{border:0;color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue));box-shadow:0 8px 16px -10px rgba(120,90,180,.7)}
+.ddsh-pill.on{color:#C08AE6;border-color:#E3D0F6}
+.ddsh-pill [data-doodle]{width:18px;height:18px}
+
+/* 窄屏：装饰缩一点，书脊不挤 */
+@media (max-width:370px){.ddsh-jar{width:60px;height:60px}.ddsh-badge{width:64px;height:64px}.ddsh-cat{width:62px;height:60px}.ddsh-row{height:156px}.ddsh-spine em{font-size:11px}.ddsh-slab{max-width:68px}.ddsh-lean{margin:0 8px 0 2px}.ddsh-bow{margin-left:18px}.ddsh-card{padding-left:12px;padding-right:12px}}
+@media (prefers-reduced-motion:reduce){.ddsh-spk,.ddsh-cat{animation:none}}

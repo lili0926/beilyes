@@ -13407,6 +13407,8 @@ function shufangDelChar(name){
 
 function renderRead(){
   const tab = state.readTab || "shelf";
+  // 星光涂鸦壳：书架是画出来的那一页（doodle/shelf.js）；导入 / 在读两页照旧
+  if(tab === "shelf" && state.uiShell === "doodle" && typeof DoodleShelf !== "undefined") return DoodleShelf.page();
   const books = state.books || [];
   const feedOn = state.readFeedChat !== false;
   const now = state.readingNow;
