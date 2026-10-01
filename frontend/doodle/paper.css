@@ -109,42 +109,40 @@ body.shell-doodle.dd-dark .ddd-page{filter:brightness(.92)}
 .ddn-count{margin:0 0 12px;text-align:center;font-size:14px;color:var(--pp-sub)}
 .ddn-count b{font-size:17px;color:#C08AE6}
 .ddn-count em{font-style:normal;color:#E77FA6}
-.ddn-board{position:relative;padding:20px 14px 26px;border-radius:24px;min-height:360px;
+.ddn-board{position:relative;padding:22px 18px 26px;border-radius:24px;min-height:300px;
   background:
     radial-gradient(circle at 20% 30%,rgba(150,100,60,.18) 0 1.2px,transparent 1.6px) 0 0/13px 11px,
     radial-gradient(circle at 70% 60%,rgba(255,240,215,.5) 0 1px,transparent 1.4px) 0 0/9px 12px,
     radial-gradient(circle at 40% 80%,rgba(130,85,50,.14) 0 1.6px,transparent 2px) 0 0/17px 15px,
     linear-gradient(160deg,#E8C9A0,#DDB98C 60%,#D6AF82);
   box-shadow:inset 0 0 0 9px #F3E6F9,inset 0 0 0 11px #E1D2EF,inset 0 6px 14px rgba(120,80,40,.25),0 16px 30px -22px rgba(90,70,130,.6)}
-.ddn-cols{columns:2;column-gap:16px}
-.ddn-item{position:relative;display:inline-block;width:100%;margin:14px 0 10px;break-inside:avoid;transform:rotate(var(--r));cursor:pointer;
-  filter:drop-shadow(0 6px 5px rgba(90,55,30,.28));transition:transform .2s}
-.ddn-item:active{transform:rotate(var(--r)) scale(.97)}
-.ddn-paper{position:relative;padding:22px 12px 16px;min-height:96px;box-sizing:border-box}
-.ddn-paper p{margin:0;font-size:15.5px;line-height:26px;white-space:pre-wrap;word-break:break-word;color:#3F3A52}
-.ddn-paper footer{display:flex;justify-content:flex-end;gap:6px;margin-top:8px;font-size:11.5px;color:#9C95B4}
-/* TA 的：淡紫横线纸，底边毛边 */
-.ddn-item.ai .ddn-paper{padding-bottom:22px;background:repeating-linear-gradient(180deg,transparent 0,transparent 25px,rgba(160,130,220,.28) 25px,rgba(160,130,220,.28) 26px) 0 21px,
-  linear-gradient(180deg,#F7F1FF,#F1E8FD)}
-/* 我的：淡蓝便利贴，右下角微微翘 */
-.ddn-item.me .ddn-paper{background:linear-gradient(170deg,#E3F0FE,#D3E6FB);border-radius:2px 2px 14px 2px}
-.ddn-item.me .ddn-paper::after{content:"";position:absolute;right:0;bottom:0;width:22px;height:22px;background:linear-gradient(315deg,transparent 48%,#BCD6F4 50%,#E8F2FE 100%);border-radius:0 0 14px 0}
-.ddn-back-hint{display:block;margin-top:6px;font-style:normal;font-size:11.5px;color:#E77FA6}
+/* 板子：三列小纸条，看不见字，只有几道铅笔线 */
+.ddn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 14px;padding:8px 2px 4px}
+.ddn-item{position:relative;display:block;width:100%;aspect-ratio:1/1.02;border:0;padding:0;margin:0;background:none;font:inherit;cursor:pointer;
+  transform:translate(var(--dx,0),var(--dy,0)) rotate(var(--r));filter:drop-shadow(0 5px 4px rgba(90,55,30,.3));transition:transform .2s}
+.ddn-item:active{transform:translate(var(--dx,0),var(--dy,0)) rotate(var(--r)) scale(.94)}
+.ddn-paper{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:9px;padding:16px 11px 18px;box-sizing:border-box;text-align:left}
+.ddn-ln{display:block;height:3px;border-radius:3px;background:rgba(110,80,170,.28)}
+.ddn-item.me .ddn-ln{background:rgba(80,120,180,.3)}
+.ddn-paper time{position:absolute;right:8px;bottom:6px;font-size:10.5px;color:#A79FC0}
+.ddn-dot{position:absolute;left:7px;bottom:5px;min-width:16px;height:16px;border-radius:9px;background:#F29CBE;color:#fff;font-size:10px;line-height:16px;text-align:center;font-weight:700}
+.ddn-item.ai .ddn-paper{background:repeating-linear-gradient(180deg,transparent 0,transparent 11px,rgba(160,130,220,.18) 11px,rgba(160,130,220,.18) 12px),linear-gradient(180deg,#F7F1FF,#EFE5FD)}
+.ddn-item.me .ddn-paper{background:linear-gradient(170deg,#E3F0FE,#D1E5FB);border-radius:2px 2px 12px 2px}
+.ddn-item.me .ddn-paper::after{content:"";position:absolute;right:0;bottom:0;width:16px;height:16px;background:linear-gradient(315deg,transparent 48%,#BCD6F4 50%,#E8F2FE 100%);border-radius:0 0 12px 0}
 /* 钉子 / 胶带 / 磁铁 */
 .ddn-fix{position:absolute;left:50%;top:-8px;z-index:2;pointer-events:none}
 .ddn-fix.pin{width:16px;height:16px;margin-left:-8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0 2px,var(--fix) 3px 100%);box-shadow:0 3px 0 -1px rgba(0,0,0,.18),2px 6px 4px -2px rgba(60,30,10,.35)}
-.ddn-fix.tape{width:64px;height:20px;margin-left:-32px;top:-10px;transform:rotate(var(--tr));opacity:.88;
+.ddn-fix.tape{width:48px;height:16px;margin-left:-24px;top:-8px;transform:rotate(var(--tr));opacity:.88;
   background:repeating-linear-gradient(90deg,rgba(255,255,255,.45) 0 5px,transparent 5px 10px),var(--fix);
   clip-path:polygon(0 10%,4% 0,8% 12%,12% 0,88% 0,92% 10%,96% 0,100% 12%,100% 90%,96% 100%,92% 88%,88% 100%,12% 100%,8% 90%,4% 100%,0 88%)}
 .ddn-fix.magnet{width:30px;height:18px;margin-left:-15px;top:-9px;border-radius:9px;background:linear-gradient(180deg,#fff -40%,var(--fix) 60%);box-shadow:0 3px 0 rgba(0,0,0,.12),0 6px 6px -3px rgba(60,30,10,.35)}
 /* 折着的新纸条 */
-.ddn-fold{aspect-ratio:1;max-width:120px;margin:16px auto 10px;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;padding:0;font:inherit;
+.ddn-fold{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:78%;margin:auto;aspect-ratio:1;align-self:center;
   background:linear-gradient(135deg,#F1E8FD 0 49.5%,#E3D5F7 50% 100%);border-radius:4px;animation:ddnBob 2.6s ease-in-out infinite}
 .ddn-fold::before{content:"";position:absolute;inset:0;background:linear-gradient(45deg,transparent 49.4%,rgba(150,120,200,.35) 49.5% 50.5%,transparent 50.6%);border-radius:4px}
-.ddn-seal{position:relative;width:34px!important;height:34px!important;color:#fff;background:#E77FA6;border-radius:50%;padding:7px;box-sizing:border-box;box-shadow:0 0 0 3px #F6B8CE}
-.ddn-fold small{position:relative;font-size:12px;color:#7E5CB8}
-.ddn-fold em{position:relative;font-style:normal;font-size:11px;color:#E77FA6}
-@keyframes ddnBob{0%,100%{transform:rotate(var(--r)) translateY(0)}50%{transform:rotate(var(--r)) translateY(-4px)}}
+.ddn-seal{position:relative;width:30px!important;height:30px!important;color:#fff;background:#E77FA6;border-radius:50%;padding:6px;box-sizing:border-box;box-shadow:0 0 0 3px #F6B8CE}
+.ddn-fold em{position:relative;font-style:normal;font-size:11px;color:#E77FA6;font-weight:700}
+@keyframes ddnBob{0%,100%{transform:translate(var(--dx,0),var(--dy,0)) rotate(var(--r))}50%{transform:translate(var(--dx,0),calc(var(--dy,0px) - 4px)) rotate(var(--r))}}
 .ddn-item.unfolding{animation:ddnUnfold .6s cubic-bezier(.3,1.4,.5,1) both}
 @keyframes ddnUnfold{from{transform:rotate(var(--r)) scale(.4,.1);opacity:.3}60%{transform:rotate(var(--r)) scale(1.04,.96)}to{transform:rotate(var(--r));opacity:1}}
 .ddn-empty{margin:110px 0;text-align:center;font-size:16px;color:#7A5A3C;line-height:1.7}
@@ -195,3 +193,112 @@ body.shell-doodle.dd-dark .ddd-page{filter:brightness(.92)}
 .ddn-new-bar button{border:0;border-radius:999px;padding:9px 16px;font:inherit;font-size:14px;color:#8B6CC0;background:rgba(255,255,255,.75);cursor:pointer}
 .ddn-new-bar .go{color:#fff;font-weight:700;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
 @media (prefers-reduced-motion:reduce){.ddd-page,.ddn-fold,.ddd-tape.can,.ddn-item.unfolding,.ddn-big,.ddn-new{animation:none}}
+
+/* 旧纸条罐 */
+.ddn-jar{position:relative;display:block;margin:18px auto 0;width:150px;height:170px;border:0;padding:0;background:none;cursor:pointer;font:inherit}
+.ddn-jar-lid{position:absolute;left:34px;right:34px;top:0;height:22px;border-radius:7px 7px 4px 4px;background:repeating-linear-gradient(90deg,#D9B48A 0 6px,#CFA97E 6px 8px);box-shadow:inset 0 -3px 0 rgba(120,80,40,.25),0 2px 0 #B98F62}
+.ddn-jar-glass{position:absolute;left:14px;right:14px;top:20px;bottom:24px;border-radius:26px 26px 30px 30px;overflow:hidden;
+  background:linear-gradient(90deg,rgba(220,235,255,.55),rgba(255,255,255,.25) 40%,rgba(210,225,250,.5));box-shadow:inset 0 0 0 2.5px rgba(170,190,230,.75),inset 0 -8px 12px rgba(150,170,220,.25),0 10px 18px -12px rgba(80,60,140,.5)}
+.ddn-jar-glass i{position:absolute;width:15px;height:15px;margin:-7px;background:var(--c);transform:rotate(var(--r));
+  clip-path:polygon(50% 0,63% 33%,98% 36%,71% 58%,80% 93%,50% 74%,20% 93%,29% 58%,2% 36%,37% 33%);filter:drop-shadow(0 1px 0 rgba(0,0,0,.15))}
+.ddn-jar-shine{position:absolute;left:12px;top:12px;width:10px;height:60%;border-radius:8px;background:rgba(255,255,255,.65)}
+.ddn-jar-tag{position:absolute;left:50%;bottom:0;transform:translateX(-50%) rotate(-3deg);white-space:nowrap;padding:3px 12px;border-radius:8px;background:#FFFDF7;border:1.5px dashed #D9C9F0;font-size:13px;color:#8B6CC0}
+.ddn-jarsheet{width:min(100%,380px);max-height:76vh;overflow:auto;box-sizing:border-box;padding:18px 16px 14px;border-radius:26px;background:#FFFDF7;box-shadow:0 22px 40px -18px rgba(40,20,70,.6);animation:ddnLift .4s cubic-bezier(.2,1.3,.4,1) both}
+.ddn-jarsheet h4{margin:0 0 12px;font-size:18px;color:#6E4FA6}
+.ddn-jarsheet h4 small{font-size:12px;font-weight:400;color:#9C95B4;margin-left:6px}
+.ddn-jargrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
+.ddn-star{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;padding:4px 0;font:inherit;cursor:pointer}
+.ddn-star i{width:40px;height:40px;background:var(--c);transform:rotate(var(--r));clip-path:polygon(50% 0,63% 33%,98% 36%,71% 58%,80% 93%,50% 74%,20% 93%,29% 58%,2% 36%,37% 33%);filter:drop-shadow(0 2px 1px rgba(0,0,0,.18))}
+.ddn-star small{font-size:11px;color:#9C95B4}
+.ddn-star em{font-style:normal;font-size:10.5px;color:#C08AE6}
+.ddn-jarclose{display:block;margin:14px auto 0;border:0;border-radius:999px;padding:9px 20px;font:inherit;font-size:14px;color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+
+/* ═════════ 信箱 ═════════ */
+.ddm-tabs{display:flex;justify-content:center;gap:4px;margin:0 auto 10px;padding:4px;max-width:300px;border-radius:999px;background:var(--pp-card);border:1.5px solid var(--pp-line)}
+.ddm-tabs button{flex:1;border:0;background:none;border-radius:999px;padding:8px 0;font:inherit;font-size:14.5px;color:var(--pp-sub);cursor:pointer}
+.ddm-tabs button.on{background:linear-gradient(90deg,#E9D9FB,#D9E6FC);color:#7E5CB8;font-weight:700}
+.ddm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px 14px;padding:4px 2px}
+.ddm-env{position:relative;display:block;border:0;padding:0;background:none;font:inherit;cursor:pointer;transform:rotate(var(--r));transition:transform .2s}
+.ddm-env:active{transform:rotate(var(--r)) scale(.96)}
+.ddm-env img{display:block;width:100%;height:auto;filter:drop-shadow(0 8px 8px rgba(110,80,160,.22))}
+.ddm-env.pending img{filter:saturate(.55) brightness(.98) drop-shadow(0 6px 6px rgba(110,80,160,.15))}
+.ddm-env.wobble{animation:ddmWob .5s ease}
+@keyframes ddmWob{0%,100%{transform:rotate(var(--r))}25%{transform:rotate(calc(var(--r) - 4deg))}75%{transform:rotate(calc(var(--r) + 4deg))}}
+.ddm-cap{display:flex;justify-content:space-between;align-items:baseline;gap:4px;margin-top:6px;padding:0 4px}
+.ddm-cap b{font-size:13.5px;color:#7E5CB8}
+.ddm-cap small{font-size:11px;color:var(--pp-sub)}
+.ddm-seal{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#F7A9C6,#E06C98);
+  box-shadow:0 0 0 3px rgba(255,255,255,.7),0 4px 8px rgba(180,60,110,.4);display:flex;align-items:center;justify-content:center;animation:ddmPulse 1.8s ease-in-out infinite}
+.ddm-seal [data-doodle]{width:20px!important;height:20px!important;color:#fff}
+.ddm-seal b{position:absolute;right:-12px;top:-6px;font-size:10px;color:#fff;background:#8FC79A;border-radius:999px;padding:1px 5px}
+@keyframes ddmPulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.08)}}
+.ddm-postmark{position:absolute;right:8%;top:16%;width:62px;height:62px;border-radius:50%;border:2px dashed rgba(140,110,190,.65);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transform:rotate(-14deg);background:rgba(255,253,247,.7);color:#8B6CC0}
+.ddm-postmark b{font-size:12px}
+.ddm-postmark small{font-size:9.5px;line-height:1.2;text-align:center}
+.ddm-empty{margin:70px 0;text-align:center;font-size:16px;color:var(--pp-sub);line-height:1.7}
+.ddm-empty small{font-size:13px}
+.ddm-fab{position:fixed;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:40;width:96px;border:0;padding:0;background:none;cursor:pointer}
+.ddm-fab img{display:block;width:100%;filter:drop-shadow(0 10px 10px rgba(110,80,160,.4))}
+.ddm-fab b{position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:3px;white-space:nowrap;padding:3px 10px;border-radius:999px;font:13px var(--dd-font);color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+.ddm-fab b [data-doodle]{width:15px;height:15px;color:#fff}
+
+/* 拆信：信纸从信封里抽出来 */
+.ddm-mask{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(60,50,80,.4);animation:ddnFade .2s ease both}
+.ddm-read{position:relative;width:min(100%,380px,calc((100vh - 170px) / 1.248));filter:drop-shadow(0 18px 24px rgba(40,20,70,.45))}
+.ddm-paper{position:relative;width:100%;aspect-ratio:484/604;background:center/100% 100% no-repeat}
+.ddm-write .ddm-paper{filter:drop-shadow(0 18px 24px rgba(40,20,70,.45))}
+.ddm-text{position:absolute;left:17%;right:16%;top:14%;bottom:13%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;color:#4A4360;font-family:var(--dd-font)}
+.ddm-to{margin:0 0 4px;font-size:16px;color:#8B6CC0}
+.ddm-body{font-size:16.5px;line-height:30px;white-space:pre-wrap;word-break:break-word;
+  background:repeating-linear-gradient(180deg,transparent 0,transparent 29px,rgba(160,140,210,.25) 29px,rgba(160,140,210,.25) 30px);background-attachment:local}
+.ddm-sign{margin:10px 0 4px;text-align:right;font-size:15px;color:#8B6CC0;line-height:1.4}
+.ddm-sign small{font-size:12px;color:#B0A6C8}
+.ddm-replies{margin-top:10px;padding-top:8px;border-top:1.5px dashed rgba(200,160,210,.6)}
+.ddm-replies h5{margin:0 0 4px;font-size:13px;font-weight:400;color:#E07FA0;letter-spacing:.2em}
+.ddm-replies p{margin:0 0 6px;font-size:15px;line-height:26px;color:#E0566F;white-space:pre-wrap;word-break:break-word}
+.ddm-replies small{margin-left:6px;font-size:11px;color:#E98A9C}
+.ddm-read-env{position:absolute;left:4%;right:4%;width:92%;bottom:-6%;z-index:2;opacity:0;pointer-events:none}
+.ddm-read.opening .ddm-read-env{animation:ddmEnvOut 1.3s cubic-bezier(.4,0,.3,1) both}
+.ddm-read.opening .ddm-paper{animation:ddmPaperUp 1.3s cubic-bezier(.3,.9,.3,1) both}
+@keyframes ddmEnvOut{0%{opacity:1;transform:translateY(-40%) scale(1.02)}45%{opacity:1;transform:translateY(-40%)}100%{opacity:0;transform:translateY(40%) scale(.9)}}
+@keyframes ddmPaperUp{0%{transform:translateY(16%) scale(.86);clip-path:inset(0 0 72% 0);opacity:0}25%{opacity:1;transform:translateY(16%) scale(.86);clip-path:inset(0 0 72% 0)}70%{clip-path:inset(0 0 0 0);transform:translateY(-4%) scale(.96)}100%{clip-path:inset(0 0 0 0);transform:none}}
+.ddm-bar{display:flex;flex-direction:column;gap:8px;width:min(100%,380px)}
+.ddm-reply{display:flex;gap:6px}
+.ddm-reply input{flex:1;min-width:0;border:0;border-radius:999px;padding:10px 14px;font:inherit;font-size:15px;background:#FFFDF7;color:#E0566F;outline:none}
+.ddm-reply button{border:0;border-radius:999px;padding:0 16px;font:inherit;font-size:14px;color:#fff;background:#E77F98}
+.ddm-bar-r{display:flex;justify-content:space-between;gap:8px}
+.ddm-bar-r button{display:inline-flex;align-items:center;gap:5px;border:0;border-radius:999px;padding:9px 16px;font:inherit;font-size:15px;cursor:pointer}
+.ddm-del{color:#C9B9D9;background:#fff}
+.ddm-keep{color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+
+/* 写信 */
+.ddm-write{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;width:min(100%,380px);max-height:100%;overflow-y:auto}
+.ddm-picks{display:flex;gap:8px;justify-content:center}
+.ddm-picks button{display:flex;flex-direction:column;align-items:center;gap:2px;width:72px;border:2px solid transparent;border-radius:12px;background:rgba(255,255,255,.75);padding:4px;font:inherit;cursor:pointer}
+.ddm-picks button.on{border-color:#C9A7F0;background:#fff}
+.ddm-picks img{width:100%}
+.ddm-picks small{font-size:10.5px;color:#8B6CC0;white-space:nowrap}
+.ddm-write .ddm-paper{width:min(100%,calc((100vh - 300px) / 1.248));flex:0 0 auto}
+.ddm-write textarea{display:block;width:100%;height:calc(100% - 30px);box-sizing:border-box;border:0;outline:none;resize:none;padding:0;font:inherit;font-size:16.5px;line-height:30px;color:#4A4360;
+  background:repeating-linear-gradient(180deg,transparent 0,transparent 29px,rgba(160,140,210,.25) 29px,rgba(160,140,210,.25) 30px);background-attachment:local}
+.ddm-write-env{position:absolute;left:50%;top:40%;width:70%;transform:translate(-50%,0);opacity:0;pointer-events:none;z-index:3}
+.ddm-write.sending .ddm-paper{animation:ddmPaperIn 1.1s cubic-bezier(.5,0,.4,1) both}
+.ddm-write.sending .ddm-write-env{animation:ddmEnvAway 1.1s cubic-bezier(.5,0,.4,1) both}
+@keyframes ddmPaperIn{0%{transform:none}40%{transform:translateY(8%) scale(.6)}70%{transform:translateY(30%) scale(.5);opacity:1}100%{transform:translateY(30%) scale(.5);opacity:0}}
+@keyframes ddmEnvAway{0%,35%{opacity:0;transform:translate(-50%,10%) scale(.9)}55%{opacity:1;transform:translate(-50%,0) scale(1)}75%{opacity:1;transform:translate(-50%,0) rotate(-4deg)}100%{opacity:0;transform:translate(60%,-180%) rotate(-24deg) scale(.6)}}
+.ddm-when{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;font-size:13px;color:#fff}
+.ddm-when span{width:100%;text-align:center;opacity:.9}
+.ddm-when button{border:0;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;color:#7E5CB8;background:rgba(255,255,255,.8);cursor:pointer}
+.ddm-when button.on{background:#fff;box-shadow:0 0 0 2px #C9A7F0}
+.ddm-when input{border:0;border-radius:999px;padding:5px 10px;font:inherit;font-size:13px;color:#7E5CB8;background:rgba(255,255,255,.8)}
+.ddm-write-bar{display:flex;justify-content:space-between;gap:8px;width:100%}
+.ddm-write-bar button{border:0;border-radius:999px;padding:10px 18px;font:inherit;font-size:15px;color:#8B6CC0;background:rgba(255,255,255,.85);cursor:pointer}
+.ddm-write-bar .go{color:#fff;font-weight:700;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+
+/* 聊天里的来信卡片 */
+.ddm-chat{display:flex;align-items:center;gap:10px;max-width:250px;padding:8px 12px 8px 8px;border-radius:18px;background:#FFFDF7;border:1.5px solid #EDE4F7;cursor:pointer;box-shadow:0 8px 16px -12px rgba(110,80,160,.5)}
+.ddm-chat img{width:84px;height:auto;flex:0 0 auto;transform:rotate(-4deg);filter:drop-shadow(0 4px 4px rgba(110,80,160,.25))}
+.ddm-chat b{display:block;font-size:14px;color:#7E5CB8}
+.ddm-chat small{display:block;font-size:11.5px;color:#9C95B4;margin-top:2px}
+@media (prefers-reduced-motion:reduce){.ddm-seal,.ddm-read.opening .ddm-read-env,.ddm-read.opening .ddm-paper{animation:none}.ddm-read-env{display:none}}

@@ -21994,6 +21994,7 @@ function diaryNoticeCardHtml(m){
   </div>`;
 }
 function letterCardHtml(m){
+  if(state.uiShell==="doodle" && typeof DoodlePaper!=="undefined") return DoodlePaper.letterCard(m);
   const snap = m.snap || {};
   const body = snap.body || m.content || "";
   const at = snap.deliveredAt || m.time;
@@ -24442,6 +24443,7 @@ function renderMachineDiary(){
   return h;
 }
 function renderMailbox(){
+  if(state.uiShell==="doodle" && typeof DoodlePaper!=="undefined") return DoodlePaper.mailbox(); // 星光涂鸦：信封 + 信纸
   const all = state.mcLetters || [];
   const detail = (state.mcDetail && state.mcDetail.type === "letter") ? mcFindDetail("letter", state.mcDetail.id) : null;
   let h = `<div class="page">${subHeader('<i data-lucide="mailbox"></i> 信箱')}<div class="sub-page-body">`;

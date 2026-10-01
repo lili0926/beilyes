@@ -23,7 +23,7 @@ const DoodlePaper = (() => {
   const aiName = () => { try{ return (typeof momentAiName === 'function' && momentAiName()) || 'TA'; }catch(e){ return 'TA'; } };
   const restricted = d => typeof mcIsRestricted === 'function' ? mcIsRestricted('diary', d) : (d.visibility === 'private' || !!d.locked);
   const wasLocked = d => typeof mcIsUnlocked === 'function' && mcIsUnlocked(d.id);
-  const V = {open: false, opening: false, page: null, flip: '', cal: false, annOpen: false, ann: '', peeling: null, back: false, unfolding: null, tearing: false};
+  const V = {open: false, opening: false, page: null, flip: '', cal: false, annOpen: false, ann: '', peeling: null, back: false, unfolding: null, tearing: false, jar: false, mLast: null, mAt: 0, sending: false, pick: 0, wobble: null};
 
   /* ══════════════ 日记本 ══════════════ */
   const DECO = ['heart', 'star', 'flower', 'clover', 'sparkle', 'cloud', 'moon', 'butterfly'];
@@ -140,23 +140,54 @@ const DoodlePaper = (() => {
     for(let k = n; k >= 0; k--){ const x = k / n * 100, y = 100 - (k % 2 ? 2.5 + rnd(id, 't' + k) * 3.5 : rnd(id, 't' + k) * 2); pts.push(`${x.toFixed(1)}% ${y.toFixed(1)}%`); }
     return `polygon(${pts.join(',')})`;
   }
+  /** 板子上的一张：小小的，看不到字（只有几道铅笔线），点开才读 */
   function noteCard(n, seen){
     const id = String(n.id), ai = n.author === 'ai';
-    const rot = (rnd(id, 'r') * 9 - 4.5).toFixed(1), anns = (n.annotations || []).length;
+    const rot = (rnd(id, 'r') * 14 - 7).toFixed(1), anns = (n.annotations || []).length;
+    const dx = Math.round(rnd(id, 'x') * 10 - 5), dy = Math.round(rnd(id, 'y') * 10 - 5);
     if(ai && !seen.includes(id)){
-      return `<button type="button" class="ddn-item ddn-fold" data-ddn-unfold="${h(id)}" style="--r:${rot}deg" aria-label="${h(aiName())} 的新纸条，点开">
-        <span class="ddn-seal" data-doodle="heart"></span><small>新纸条</small><em>点开</em>
+      return `<button type="button" class="ddn-item ddn-fold" data-ddn-unfold="${h(id)}" style="--r:${rot}deg;--dx:${dx}px;--dy:${dy}px" aria-label="${h(aiName())} 的新纸条，点开">
+        <span class="ddn-seal" data-doodle="heart"></span><em>新</em>
       </button>`;
     }
     const fix = ai ? (rnd(id, 'f') < 0.55 ? 'pin' : 'tape') : (rnd(id, 'f') < 0.6 ? 'magnet' : 'tape');
     const hue = ['#F4A7C3', '#B9A3EC', '#9FD3C9', '#F6C77B'][hashS(id) % 4];
-    return `<div class="ddn-item ${ai ? 'ai' : 'me'}${V.unfolding === id ? ' unfolding' : ''}" style="--r:${rot}deg;--fix:${hue}" data-mc-open="note:${h(id)}">
-      <div class="ddn-paper" ${ai ? `style="clip-path:${torn(id)}"` : ''}>
-        <p>${h(n.content || '')}</p>
-        <footer><time>${fmtShort(n)}</time></footer>
-        ${anns ? `<i class="ddn-back-hint">背面有 ${anns} 句</i>` : ''}
-      </div>
+    const lines = Math.max(2, Math.min(4, Math.ceil(String(n.content || '').length / 14)));
+    return `<button type="button" class="ddn-item ${ai ? 'ai' : 'me'}" style="--r:${rot}deg;--dx:${dx}px;--dy:${dy}px;--fix:${hue}" data-mc-open="note:${h(id)}" aria-label="${ai ? 'TA' : '我'}的纸条 ${h(fmtShort(n))}，点开看">
+      <span class="ddn-paper" ${ai ? `style="clip-path:${torn(id)}"` : ''}>
+        ${Array.from({length: lines}, (_, k) => `<i class="ddn-ln" style="width:${55 + Math.round(rnd(id, 'l' + k) * 40)}%"></i>`).join('')}
+        <time>${h(fmtShort(n).split(' ')[0])}</time>
+        ${anns ? `<b class="ddn-dot" title="背面有字">${anns}</b>` : ''}
+      </span>
       <i class="ddn-fix ${fix}"${fix === 'tape' ? ` style="--tr:${(rnd(id, 'tr') * 20 - 10).toFixed(1)}deg"` : ''}></i>
+    </button>`;
+  }
+  /* 旧纸条罐：一颗颗折好的纸星星 */
+  const STARC = ['#F6C1D6', '#CDBCF3', '#BFD9F6', '#F9DFA6', '#BFE6D6', '#F4B6C2'];
+  function jar(old){
+    const n = old.length, shown = Math.min(n, 42);
+    let stars = '';
+    for(let k = 0; k < shown; k++){
+      const id = String(old[k].id), row = Math.floor(k / 7), col = k % 7;
+      const x = 10 + col * 12 + (row % 2 ? 6 : 0) + rnd(id, 'jx') * 4, y = 84 - row * 11 - rnd(id, 'jy') * 4;
+      stars += `<i style="left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;--c:${STARC[hashS(id) % STARC.length]};--r:${Math.round(rnd(id, 'jr') * 90)}deg"></i>`;
+    }
+    return `<button type="button" class="ddn-jar" data-ddn-jar aria-label="旧纸条罐，${n} 张">
+      <span class="ddn-jar-lid"></span><span class="ddn-jar-glass">${stars}<span class="ddn-jar-shine"></span></span>
+      <span class="ddn-jar-tag">旧纸条 · ${n} 张</span>
+    </button>`;
+  }
+  function jarSheet(old){
+    return `<div class="ddn-mask" data-ddn-jar-close>
+      <div class="ddn-jarsheet">
+        <h4>罐子里的纸条 <small>${old.length} 张 · 点一颗打开</small></h4>
+        <div class="ddn-jargrid">${old.map(n => {
+          const id = String(n.id);
+          return `<button type="button" class="ddn-star" data-mc-open="note:${h(id)}" style="--c:${STARC[hashS(id) % STARC.length]};--r:${Math.round(rnd(id, 'jr') * 40 - 20)}deg">
+            <i></i><small>${h(fmtShort(n).split(' ')[0])}</small><em>${n.author === 'ai' ? 'TA' : '我'}</em></button>`;
+        }).join('')}</div>
+        <button type="button" class="ddn-jarclose" data-ddn-jar-close>盖上罐子</button>
+      </div>
     </div>`;
   }
   function noteDetail(n){
@@ -197,23 +228,172 @@ const DoodlePaper = (() => {
     const seen = seenList();
     const det = state.mcDetail && state.mcDetail.type === 'note' && typeof mcFindDetail === 'function' ? mcFindDetail('note', state.mcDetail.id) : null;
     if(!det) V.back = false;
-    const fresh = list.filter(n => n.author === 'ai' && !seen.includes(String(n.id))).length;
+    /* 板子只放最新的 BOARD 张；还折着的新纸条一定上板（不会被挤进罐子） */
+    const BOARD = 9;
+    const unseen = list.filter(n => n.author === 'ai' && !seen.includes(String(n.id)));
+    const board = list.filter(n => unseen.includes(n)).concat(list.filter(n => !unseen.includes(n))).slice(0, Math.max(BOARD, unseen.length))
+      .sort((a, b) => tOf(b) - tOf(a));
+    const old = list.filter(n => !board.includes(n));
+    if(!old.length) V.jar = false;
+    const fresh = unseen.length;
     const html = `<div class="page ddp ddn" style="padding-top:0">
       ${subHeader('小纸条')}
       <p class="ddp-ko">작은 쪽지들</p>
-      <p class="ddn-count"><b>${list.length}</b> 张${fresh ? ` · <em>${fresh} 张新的还折着</em>` : ''}</p>
+      <p class="ddn-count">板子上是最新的 <b>${board.length}</b> 张${fresh ? ` · <em>${fresh} 张新的还折着</em>` : ''}</p>
       <div class="ddn-board">
-        ${list.length ? `<div class="ddn-cols">${list.map(n => noteCard(n, seen)).join('')}</div>`
+        ${list.length ? `<div class="ddn-grid">${board.map(n => noteCard(n, seen)).join('')}</div>`
           : `<p class="ddn-empty">板子上还空着<br><small>点右下角的便签本撕一张，或者等 ${h(aiName())} 写给你</small></p>`}
       </div>
+      ${old.length ? jar(old) : ''}
       <button type="button" class="ddn-pad${V.tearing ? ' tearing' : ''}" data-ddn-pad aria-label="撕一张纸条">
         <i class="s3"></i><i class="s2"></i><i class="s1"><span data-doodle="plus"></span>撕一张</i>
       </button>
+      ${V.jar ? jarSheet(old) : ''}
       ${state.mcSheet === 'note' ? composer() : ''}
       ${det ? noteDetail(det) : ''}
     </div>`;
     V.unfolding = null;
     return html;
+  }
+
+
+  /* ══════════════ 信箱 ══════════════
+   * 每封信配一套信封 + 信纸（同色）：她写信时挑的那套记在本地，其余按 id 定 —— 同一封信永远同一套。 */
+  const ENV = k => `doodle/mail/env${k + 1}.webp`, PAPER = k => `doodle/mail/paper${k + 1}.webp`;
+  const SUITE = ['紫 · 蝴蝶', '粉 · 天使', '粉 · 蝴蝶结', '蓝 · 月亮'];
+  const suiteOf = id => { const m = LSG('ddLetterSuite', {}); return m[String(id)] != null ? +m[String(id)] : hashS(id) % 4; };
+  const delivered = l => l.status === 'delivered';
+  function letterSeen(){
+    let s = LSG('ddLetterSeen', null);
+    if(!s){ const cut = Date.now() - 3 * 864e5; s = (state.mcLetters || []).filter(l => tOf(l) && tOf(l) < cut).map(l => String(l.id)); LSS('ddLetterSeen', s); }
+    return s;
+  }
+  const when = l => { const t = Date.parse(delivered(l) ? (l.deliveredAt || l.time) : (l.scheduledAt || '')); if(isNaN(t)) return l.date || ''; const d = new Date(t); return `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  function envelope(l, seen){
+    const id = String(l.id), k = suiteOf(id), ai = l.author === 'ai', ok = delivered(l);
+    const isNew = ok && ai && !seen.includes(id);
+    const rot = (rnd(id, 'er') * 5 - 2.5).toFixed(1);
+    return `<button type="button" class="ddm-env${ok ? '' : ' pending'}${V.wobble === id ? ' wobble' : ''}" style="--r:${rot}deg" ${ok ? `data-mc-open="letter:${h(id)}"` : `data-ddm="locked" data-id="${h(id)}"`}
+        aria-label="${ai ? 'TA 寄来的信' : '我寄出的信'}${ok ? '' : '，还没送达'}">
+      <img src="${ENV(k)}" alt="" draggable="false">
+      ${isNew ? `<span class="ddm-seal"><span data-doodle="heart"></span><b>新</b></span>` : ''}
+      ${ok ? '' : `<span class="ddm-postmark"><b>待投递</b><small>${h(when(l))}</small></span>`}
+      <span class="ddm-cap"><b>${ai ? 'TA 寄来的' : '我寄出的'}</b><small>${ok ? h(when(l)) + ' 送达' : '到点才能拆'}</small></span>
+    </button>`;
+  }
+  function letterRead(l){
+    const id = String(l.id), k = suiteOf(id), ai = l.author === 'ai', anns = l.annotations || [];
+    if(V.mLast !== id){ V.mLast = id; V.mAt = Date.now(); const s = letterSeen(); if(!s.includes(id)){ s.push(id); LSS('ddLetterSeen', s.slice(-2000)); } }
+    const anim = Date.now() - V.mAt < 1400 ? ' opening' : '';
+    return `<div class="ddm-mask" id="mc-detail-mask">
+      <div class="ddm-read${anim}">
+        <img class="ddm-read-env" src="${ENV(k)}" alt="">
+        <div class="ddm-paper" style="background-image:url(${PAPER(k)})">
+          <div class="ddm-text">
+            <p class="ddm-to">${ai ? '给你：' : `给 ${h(aiName())}：`}</p>
+            <div class="ddm-body">${h(l.content || l.body || '')}</div>
+            <p class="ddm-sign">—— ${ai ? h(aiName()) : '我'}<br><small>${h(when(l))}</small></p>
+            ${anns.length ? `<div class="ddm-replies"><h5>回信</h5>${anns.map(a => `<p>${h(a.content || '')}<small>${h(a.date || '')}</small></p>`).join('')}</div>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="ddm-bar">
+        <div class="ddm-reply"><input id="mc-ann-input" maxlength="300" placeholder="在信纸背面回一句…" value="${h(state.mcAnnDraft || '')}"><button type="button" id="mc-ann-send">回信</button></div>
+        <div class="ddm-bar-r">
+          <button type="button" class="ddm-del" data-mc-del="letter:${h(id)}" aria-label="删除这封信"><span data-doodle="trash"></span></button>
+          <button type="button" id="mc-detail-close" class="ddm-keep"><span data-doodle="check"></span>收好</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  const pad = n => String(n).padStart(2, '0');
+  const local = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  function presets(){
+    const now = new Date(), tn = new Date(now); tn.setHours(21, 0, 0, 0); if(tn <= now) tn.setDate(tn.getDate() + 1);
+    const mo = new Date(now); mo.setDate(mo.getDate() + 1); mo.setHours(8, 0, 0, 0);
+    const wk = new Date(now); wk.setDate(wk.getDate() + 7); wk.setHours(20, 0, 0, 0);
+    return [['now', '现在就送', ''], ['tn', tn.getDate() === now.getDate() ? '今晚 21:00' : '明晚 21:00', local(tn)], ['mo', '明早 8:00', local(mo)], ['wk', '一周后', local(wk)]];
+  }
+  function letterCompose(){
+    const k = V.pick, cur = state.mcLetterSched || '';
+    return `<div class="ddm-mask" id="mc-sheet-mask">
+      <div class="ddm-write${V.sending ? ' sending' : ''}">
+        <div class="ddm-picks">${[0, 1, 2, 3].map(i => `<button type="button" class="${i === k ? 'on' : ''}" data-ddm-paper="${i}" aria-label="${SUITE[i]}"><img src="${ENV(i)}" alt=""><small>${SUITE[i]}</small></button>`).join('')}</div>
+        <div class="ddm-paper" style="background-image:url(${PAPER(k)})">
+          <div class="ddm-text"><p class="ddm-to">给 ${h(aiName())}：</p>
+            <textarea id="mc-letter-body" placeholder="认真写的话放在这里…">${h(state.mcLetterBody || '')}</textarea></div>
+        </div>
+        <img class="ddm-write-env" src="${ENV(k)}" alt="">
+        <div class="ddm-when">
+          <span>什么时候送到</span>
+          ${presets().map(([key, label, val]) => `<button type="button" class="${(val || '') === cur ? 'on' : ''}" data-ddm-when="${val}">${label}</button>`).join('')}
+          <input id="mc-letter-sched" type="datetime-local" value="${h(cur)}" aria-label="自定送达时间">
+        </div>
+        <div class="ddm-write-bar">
+          <button type="button" id="mc-sheet-cancel">先不寄</button>
+          <button type="button" class="go" data-ddm="send">装进信封 · 寄出</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  function mailbox(){
+    const all = (state.mcLetters || []).slice().sort((a, b) => tOf(b) - tOf(a));
+    const tab = state.mboxTab || 'all';
+    const list = tab === 'pending' ? all.filter(l => !delivered(l)) : tab === 'delivered' ? all.filter(delivered) : all;
+    const det = state.mcDetail && state.mcDetail.type === 'letter' && typeof mcFindDetail === 'function' ? mcFindDetail('letter', state.mcDetail.id) : null;
+    if(!det) V.mLast = null;
+    const seen = letterSeen();
+    const fresh = all.filter(l => delivered(l) && l.author === 'ai' && !seen.includes(String(l.id))).length;
+    const html = `<div class="page ddp ddm" style="padding-top:0">
+      ${subHeader('信箱')}
+      <p class="ddp-ko">우리의 편지함</p>
+      <div class="ddm-tabs">
+        ${[['all', '全部'], ['delivered', '已送达'], ['pending', '在路上']].map(([k, t]) => `<button type="button" class="${tab === k ? 'on' : ''}" data-mbox-tab="${k}">${t}</button>`).join('')}
+      </div>
+      <p class="ddn-count">${all.length} 封${fresh ? ` · <em>${fresh} 封新信还没拆</em>` : ''}</p>
+      ${list.length ? `<div class="ddm-grid">${list.map(l => envelope(l, seen)).join('')}</div>`
+        : `<p class="ddm-empty">${tab === 'pending' ? '没有在路上的信' : '信箱空空的'}<br><small>点右下角写一封，或者等 ${h(aiName())} 的信</small></p>`}
+      <button type="button" class="ddm-fab" data-mc-fab="letter" aria-label="写一封信"><img src="${ENV(V.pick)}" alt=""><b><span data-doodle="edit"></span>写信</b></button>
+      ${state.mcSheet === 'letter' ? letterCompose() : ''}
+      ${det ? letterRead(det) : ''}
+    </div>`;
+    V.wobble = null;
+    return html;
+  }
+  /** 聊天里的来信卡片：一只小信封 */
+  function letterCard(m){
+    const id = String(m.refId || ''), snap = m.snap || {}, at = snap.deliveredAt || m.time;
+    const d = at ? new Date(at) : null;
+    return `<div class="ddm-chat" data-mc-open="letter:${h(id)}">
+      <img src="${ENV(suiteOf(id))}" alt="">
+      <span><b>${(snap.author || 'ai') === 'ai' ? 'TA 寄来一封信' : '我寄出的信'}</b><small>${d && !isNaN(d) ? `${d.getMonth() + 1}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} · ` : ''}点开拆信</small></span>
+    </div>`;
+  }
+  function mailClick(b){
+    const act = b.getAttribute('data-ddm');
+    if(b.hasAttribute('data-ddm-paper')){ V.pick = +b.getAttribute('data-ddm-paper') || 0; render(); return; }
+    if(b.hasAttribute('data-ddm-when')){ state.mcLetterSched = b.getAttribute('data-ddm-when') || ''; render(); return; }
+    if(act === 'locked'){
+      V.wobble = b.getAttribute('data-id'); render();
+      if(typeof showToast === 'function') showToast('这封信还在路上，到点才能拆 ✉️');
+      return;
+    }
+    if(act === 'send'){
+      const ta = document.getElementById('mc-letter-body');
+      if(ta) state.mcLetterBody = ta.value;
+      if(!(state.mcLetterBody || '').trim() || typeof mcSendLetter !== 'function'){ if(ta) ta.focus(); return; }
+      const before = new Set((state.mcLetters || []).map(l => String(l.id))), k = V.pick;
+      V.sending = true; render();
+      setTimeout(() => {
+        V.sending = false;
+        Promise.resolve(mcSendLetter()).then(() => {
+          /* 新寄出的那封记住她挑的那套信封信纸 */
+          const m = LSG('ddLetterSuite', {});
+          (state.mcLetters || []).forEach(l => { if(!before.has(String(l.id)) && l.author !== 'ai') m[String(l.id)] = k; });
+          LSS('ddLetterSuite', m); render();
+        });
+      }, 1100);
+    }
   }
 
   /* ══════════════ 手势 / 点击 ══════════════ */
@@ -228,14 +408,21 @@ const DoodlePaper = (() => {
   document.addEventListener('click', e => {
     if(!ON() || !e.target.closest) return;
     const t = e.target;
-    const b = t.closest('[data-ddp],[data-ddp-day],[data-ddn-unfold],[data-ddn-pad],[data-ddn-flip]');
+    const b = t.closest('[data-ddp],[data-ddp-day],[data-ddn-unfold],[data-ddn-pad],[data-ddn-flip],[data-ddn-jar],[data-ddn-jar-close],[data-ddm],[data-ddm-paper],[data-ddm-when]');
     if(!b) return;
+    /* 罐子遮罩：只有点到遮罩本身 / 盖上按钮才关，点里面的星星交给 data-mc-open */
+    if(b.hasAttribute('data-ddn-jar-close') && b !== t && !t.closest('.ddn-jarclose')) return;
     e.preventDefault(); e.stopPropagation();
+    if(b.hasAttribute('data-ddn-jar')){ V.jar = true; render(); return; }
+    if(b.hasAttribute('data-ddn-jar-close')){ V.jar = false; render(); return; }
+    if(b.hasAttribute('data-ddm') || b.hasAttribute('data-ddm-paper') || b.hasAttribute('data-ddm-when')){ mailClick(b); return; }
     if(b.hasAttribute('data-ddp-day')){ V.page = b.getAttribute('data-ddp-day'); V.cal = false; V.flip = 'next'; render(); return; }
     if(b.hasAttribute('data-ddn-unfold')){
       const id = b.getAttribute('data-ddn-unfold'), s = seenList();
       if(!s.includes(id)){ s.push(id); LSS('ddNoteSeen', s.slice(-2000)); }
-      V.unfolding = id; render(); return;
+      V.unfolding = id;
+      if(typeof mcOpenDetail === 'function') mcOpenDetail('note', id); else render();
+      return;
     }
     if(b.hasAttribute('data-ddn-pad')){
       V.tearing = true; render();
@@ -277,5 +464,5 @@ const DoodlePaper = (() => {
     if(Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) go(dx < 0 ? 1 : -1);
   }, {passive: true});
 
-  return {diary, notes, isOn: ON};
+  return {diary, notes, mailbox, letterCard, isOn: ON};
 })();
