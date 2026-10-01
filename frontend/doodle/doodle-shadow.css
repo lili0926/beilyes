@@ -388,7 +388,7 @@ p,h2,h3,ul{margin:0}
 .p2 .paper-in{top:calc(var(--ph)*-1)}.p3 .paper-in{top:calc(var(--ph)*-2)}
 .paper-in .ln{min-height:1.75em;opacity:0;transform:translateY(3px);filter:blur(2px);transition:opacity .45s,transform .45s,filter .45s;white-space:pre-wrap}
 .paper-in .ln.on{opacity:1;transform:none;filter:none}
-.paper-in .dt{text-align:right;color:#9D97B2;font-size:15px}
+.paper-in .dt{text-align:center;color:#9D97B2;font-size:15px}
 .paper-in .sig{text-align:right;color:var(--accent)}
 .paper-in .stamp{position:absolute;right:18px;bottom:18px;width:40px;height:40px;color:var(--dd-lilac);opacity:.9}
 .lt-fold{font-size:16px;color:var(--accent);background:rgba(255,255,255,.85);border:1px solid var(--widget-line);padding:8px 22px;border-radius:999px;opacity:0;transition:opacity .3s}
