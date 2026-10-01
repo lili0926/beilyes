@@ -24388,6 +24388,7 @@ function mcSheetMask(){
 }/* === 50_core_mid2.js === extracted from monolith; edit here then: python3 frontend/build.py */
 
 function renderNotes(){
+  if(state.uiShell==="doodle" && typeof DoodlePaper!=="undefined") return DoodlePaper.notes(); // 星光涂鸦：软木板
   const notes = state.mcNotes || [];
   const detail = (state.mcDetail && state.mcDetail.type === "note") ? mcFindDetail("note", state.mcDetail.id) : null;
   let h = `<div class="page">${subHeader('<i data-lucide="sticky-note"></i> 小纸条')}<div class="sub-page-body">`;
@@ -24413,6 +24414,7 @@ function renderNotes(){
   return h;
 }
 function renderMachineDiary(){
+  if(state.uiShell==="doodle" && typeof DoodlePaper!=="undefined") return DoodlePaper.diary(); // 星光涂鸦：一本真的本子
   const all = state.mcDiaries || [];
   const detail = (state.mcDetail && state.mcDetail.type === "diary") ? mcFindDetail("diary", state.mcDetail.id) : null;
   let h = `<div class="page">${subHeader('<i data-lucide="pen-tool"></i> '+(state.uiShell==="eden"?"日记":"机日记"))}<div class="sub-page-body">`;
