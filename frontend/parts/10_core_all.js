@@ -2870,7 +2870,8 @@ const state = {
   uiShell: ["korean","weibo"].includes(LS.get("uiShell", "classic")) ? "eden" : (LS.get("uiShell", "classic") || "classic"),
   edenPlaylists: LS.get("edenPlaylists", []),
   edenMotionPaused: LS.get("edenMotionPaused", false),
-  edenGardenPrefs: LS.get("edenGardenPrefs",{}), // classic | pixel | eldritch | claude | korean | blueprint
+  edenGardenPrefs: LS.get("edenGardenPrefs",{}),
+  doodlePrefs: LS.get("doodlePrefs",{}), // 星光涂鸦壳：主题/星光/抖线/聊天模式/播放模式等 // classic | pixel | eldritch | claude | korean | blueprint
   bpFloor: "f1", // 蓝晒壳当前楼层（不持久化：冷启动回一层，会话内切走再回来还在原楼层）
   bpDiazo: LS.get("bpDiazo", false), // 蓝晒壳晒印：false=蓝晒（蓝底白线）· true=白图（浅底蓝线）
   bpIdxOpen: false, // 蓝晒壳图纸目录展开着没有（不持久化，跟 bpFloor 一样只活一次会话）
@@ -3455,6 +3456,7 @@ if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
  *  （外观页里显示色卡/预览的地方读的是 THEMES[state.theme]，不受影响。） */
 function T(){
   if(state.uiShell==="eden") return EdenColorStudio.override(EdenTheme.palette());
+  if(state.uiShell==="doodle") return DoodleShell.palette();
   if((state.uiShell||"")==="blueprint") return bpTheme();
   if((state.uiShell||"")==="weibo") return wbTheme();
   return EdenColorStudio.override(THEMES[state.theme]||THEMES["桃气浅春"]);
@@ -4522,7 +4524,7 @@ function ensureCnFont(key){
 
 function applyThemeVars(){
   const t=T();
-  const isBp = (state.uiShell||"")==="blueprint" || state.uiShell==="eden";
+  const isBp = (state.uiShell||"")==="blueprint" || state.uiShell==="eden" || state.uiShell==="doodle";
   const r=document.documentElement;
   // 韩系壳：锁定浅灰黑白变量，避免主题色盘把桌面冲花
   if((state.uiShell||"")==="korean"){
@@ -4630,9 +4632,10 @@ function applyThemeVars(){
   else if(uf==="noto-kr") document.body.classList.add("font-noto-kr");
   else if(uf==="noto-sc") document.body.classList.add("font-noto-sc");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","shell-weibo","shell-eden","wb-dark","bp-diazo","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","shell-weibo","shell-eden","shell-doodle","wb-dark","bp-diazo","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "eden") document.body.classList.add("shell-eden");
+  else if(sh === "doodle") document.body.classList.add("shell-doodle");
   else if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
   else if(sh === "claude") document.body.classList.add("shell-claude");
@@ -5461,7 +5464,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", wsWsUrl:"wsWsUrl", wsPin:"wsPin", wsMessages:"wsMessages", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", diaryData:"diaryData", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", usageConfig:"usageConfig", usageToday:"usageToday", usageFeedChat:"usageFeedChat", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", dutyRecords:"dutyRecords", dutyRemindOn:"dutyRemindOn", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", cooking:"cooking", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", ntfyConfig:"ntfyConfig", ntfyLog:"ntfyLog", branding:"branding", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", dutyInjectRounds:"dutyInjectRounds", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -5804,7 +5807,7 @@ function render(){
   else if(state.tab==="home") html+=renderHomeSwipe();
   else if(state.tab==="chat") { const chatHtml=renderChat();html+=EdenMusic.roomActive()?EdenMusic.room(chatHtml):chatHtml; }
   else if(state.tab==="moments") html+=renderMoments();
-  else if(state.tab==="settings") html+=renderSettings();
+  else if(state.tab==="settings") html+=(state.uiShell==="doodle"?DoodleShell.renderSettings(renderSettings()):renderSettings());
   html+=renderBottomNav();
   try{ html+=(typeof renderMomentCardViewer==="function"?renderMomentCardViewer():""); }catch(e){}
   if(typeof renderProjectOverlays==="function") html+=renderProjectOverlays();
@@ -5869,6 +5872,7 @@ function render(){
   EdenIntegrations.afterRender();
   EdenGames.afterRender();
   EdenColorStudio.mount();
+  DoodleShell.afterRender();
   // 焦点归位：必须在 bindEvents 之后、且同步执行，异步回焦安卓不会重新弹键盘
   if(savedFocus){
     const fel = document.getElementById(savedFocus.id);
@@ -7155,6 +7159,8 @@ function renderMomentsFriends(){
 
 function renderBottomNav(){
   if(state.subPage) return "";
+  // 星光涂鸦壳：聊天页也留着底栏（首页 / 聊天 / 设置）
+  if(state.uiShell==="doodle") return DoodleShell.renderNav();
   if(state.tab==="chat") return "";
   if(state.uiShell==="eden") return EdenTheme.renderNav();
   // 微博壳：五格 —— 首页 / 功能 / [发布] / 消息 / 我的。
@@ -7231,6 +7237,7 @@ function updateHomeDots(){
 
 function renderHomeSwipe(){
   if(state.uiShell==="eden") return EdenTheme.renderHome();
+  if(state.uiShell==="doodle") return DoodleShell.renderHomeSpacer();
   if((state.uiShell || "") === "korean"){
     try{ if(typeof sbEnsureWeather==="function") sbEnsureWeather(false); }catch(e){}
     return renderHomeKorean();
@@ -11326,6 +11333,8 @@ async function musicPlaySong(song){
 /** 播放原语：解析地址→播放→设 now/歌词（含自动下一首的入队/出队由调用方控制） */
 async function musicResolveAndPlay(song){
   if(!song) return;
+  // 星光涂鸦壳导入的本地歌：不走网络解析，直接放本机文件
+  if(song.source === "local" && typeof DoodleShell !== "undefined") return DoodleShell.playLocal(song);
   state.musicError = "";
   try{
     await musicDetectBackend();
@@ -11412,6 +11421,8 @@ function musicPlayPrev(){
 
 /** 一首放完 → 自动下一首；防串歌（当前播放与队列项对不上时停下） */
 async function musicAutoNext(){
+  // 星光涂鸦壳：顺序循环 / 随机 / 单曲循环
+  if(typeof DoodleShell !== "undefined" && DoodleShell.onEnded()) return;
   const q = state.musicQueue || [];
   const idx = state.musicQueueIndex;
   if(!q.length || idx < 0 || idx >= q.length){ state.musicPlaying = false; render(); return; }
@@ -23773,6 +23784,7 @@ function renderChatSidebar(){
       </div>
       <div class="chat-sidebar-body">
         ${state.uiShell==="eden" ? EdenGarden.controls() : ""}
+        ${state.uiShell==="doodle" ? DoodleShell.sidebarTop() : ""}
         ${sbContactsCard()}
         <div class="sb-card">
           <div class="sb-card-label">时间</div>
@@ -24511,6 +24523,7 @@ function renderChat(){
   const target = state.chatTarget || "a1";
   const isGroup = target === "group";
   const activeAg = isGroup ? null : agentById(target);
+  const ddOn = state.uiShell === "doodle"; // 星光涂鸦壳：时间胶囊 / 段尾头像 / 剧本模式
 
   let msgs="";
   if(state.messages.length===0 && state.pendingUser.length===0){
@@ -24604,6 +24617,10 @@ function renderChat(){
         </div>`;
         }
       }
+      if(ddOn){
+        const ddThink = (!isMe && typeof hasThinking==="function" && hasThinking(m)) ? `<button type="button" class="think-peek-btn" data-think-modal="${escAttr(m.msgId||("t"+idx))}" data-msg-idx="${idx}" title="看思考链"><i data-lucide="brain"></i></button>` : "";
+        speakerMeta = DoodleShell.chatMeta(m, idx, isMe, firstInRun, ddThink);
+      }
       const isLastMsg = idx === ((state.messages||[]).length - 1);
       const imsgRead = (isImStyle && isMe && isLastMsg && !state.chatLoading)
         ? `<div class="imsg-read" title="已送达"><span class="imsg-read-dot"></span><span class="imsg-read-dot"></span></div>`
@@ -24658,7 +24675,7 @@ function renderChat(){
         }
       }
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
-        ${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
+        ${ddOn?DoodleShell.bubbleAv(m, idx, isMe):""}${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
       </div>
       ${isMe&&typeof tonePickHtml==="function"?tonePickHtml(idx):""}
       ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
@@ -24757,7 +24774,9 @@ function renderChat(){
   }catch(e){}
   const krStatus = (state.coupleInfo && state.coupleInfo.status) || (isGroup ? "群聊中" : "泪が止まらない");
   let headerHtml;
-  if(isKorean){
+  if(ddOn){
+    headerHtml = DoodleShell.chatHeader();
+  } else if(isKorean){
     headerHtml = `
     <div class="chat-header korean-header hy-glass">
       <button type="button" class="kr-back" id="chat-exit-home" title="返回"><i data-lucide="chevron-left"></i></button>
@@ -25919,6 +25938,7 @@ function renderTheme(){
         <button type="button" class="sw-chip${state.uiShell==="claude"?" on":""}" data-ui-shell="claude">Claude</button>
         <button type="button" class="sw-chip${state.uiShell==="blueprint"?" on":""}" data-ui-shell="blueprint">蓝晒</button>
         <button type="button" class="sw-chip${state.uiShell==="eden"?" on":""}" data-ui-shell="eden">伊甸天使</button>
+        <button type="button" class="sw-chip${state.uiShell==="doodle"?" on":""}" data-ui-shell="doodle">星光涂鸦</button>
       </div>
       ${state.uiShell==="blueprint"?`
       <div class="sw-chip-row" style="margin-top:8px">
