@@ -2926,7 +2926,8 @@ const state = {
   musicConfig: LS.get("musicConfig", {
     baseUrl: "http://43.142.110.120:9090",
     token: "",
-    source: "netease", // netease（Duetto）| spotify（嵌入播放器）
+    source: "netease", // netease（Duetto）| qq（自建 QQMusicApi）| spotify（嵌入播放器）
+    qqBase: "",        // QQ 音乐后端地址，如 http://你的VPS:3300
     // 网易云走 Duetto（/api/ncm/*，官方可扫码）；spotify = 官方嵌入播放器，不用登录
     duettoPin: "",   // Duetto 应用 PIN（与网易扫码无关）
   }),
@@ -10635,6 +10636,8 @@ function renderMusic(){
       </div>`}
       ${qrInner}
     </div>`;
+  } else if(src==="qq"){
+    authBlock = qqAuthBlock();
   } else {
     authBlock = `<div class="qr-box"><div class="qr-status">Spotify 用官方嵌入播放器，不用登录。贴歌曲链接就能加进歌单。</div></div>`;
   }
@@ -10743,6 +10746,7 @@ function renderMusic(){
   // 顶部只留浏览分区；音源/后端/登录收进齿轮，不再糊在脸上
   const navs = (src==="netease")
     ? [["search","搜索"],["playlists","歌单"],["recommend","推荐"],["fm","私人FM"],["toplist","排行榜"]]
+    : src==="qq" ? [["search","搜索"]]
     : [["spotify","Spotify 歌单"]];
   if(src==="spotify") contentHtml = renderSpotifyEmbed();
   const settingsOpen = !!state.musicSettingsOpen;
@@ -10759,6 +10763,7 @@ function renderMusic(){
     ${settingsOpen ? `<div class="nm-settings">
       <div class="nm-seg">
         <button type="button" class="${src==="netease"?"on":""}" data-music-src="netease">网易云</button>
+        <button type="button" class="${src==="qq"?"on":""}" data-music-src="qq">QQ 音乐</button>
         <button type="button" class="${src==="spotify"?"on":""}" data-music-src="spotify">Spotify</button>
       </div>
       ${authBlock}
@@ -10779,9 +10784,13 @@ async function musicSearch(){
   state.musicError = "";
   render();
   try{
-    const data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(q)}`);
-    const raw = data.songs || data.result || [];
-    state.musicResults = (Array.isArray(raw)?raw:[]).map(s=>normalizeSong(s,"netease")).filter(Boolean);
+    if((state.musicConfig.source || "netease") === "qq"){
+      state.musicResults = await qqSearch(q);
+    } else {
+      const data = await musicFetch(`/api/ncm/search?kw=${encodeURIComponent(q)}`);
+      const raw = data.songs || data.result || [];
+      state.musicResults = (Array.isArray(raw)?raw:[]).map(s=>normalizeSong(s,"netease")).filter(Boolean);
+    }
   }catch(e){
     state.musicError = e.message;
     state.musicResults = [];
@@ -10802,6 +10811,7 @@ async function musicResolveAndPlay(song){
   if(!song) return;
   // 星光涂鸦壳导入的本地歌：不走网络解析，直接放本机文件
   if(song.source === "local" && typeof DoodleShell !== "undefined") return DoodleShell.playLocal(song);
+  if(song.source === "qq") return qqResolveAndPlay(song);
   state.musicError = "";
   try{
     const data = await musicFetch(`/api/ncm/song-url?id=${encodeURIComponent(song.id)}`);
@@ -11096,6 +11106,111 @@ async function musicRefreshAuthStatus(){
     render();
   }catch{}
 }
+
+// ─── QQ 音乐 · 自建后端（开源 QQMusicApi，默认端口 3300）──────────────────────
+// 后端跑在自己 VPS 上，用你的 QQ 音乐 cookie 取播放地址；VIP 歌要账号本身有绿钻。
+// 接口按 QQMusicApi：/search?key= · /song/urls?id=songmid · /lyric?songmid= · POST /user/setCookie
+// 各版本返回格式略有出入，下面解析都写得宽一些。
+function qqBase(){ return String((state.musicConfig && state.musicConfig.qqBase) || "").trim().replace(/\/$/, ""); }
+async function qqFetch(path, opts){
+  const base = qqBase();
+  if(!base) throw new Error("先在一起听 → 齿轮里填 QQ 音乐后端地址");
+  const res = await fetch(base + path, opts);
+  const txt = await res.text();
+  let data; try{ data = JSON.parse(txt); }catch(e){ data = txt; }
+  if(!res.ok) throw new Error((data && (data.errMsg || data.message)) || ("QQ 音乐后端请求失败（" + res.status + "）"));
+  if(data && typeof data === "object" && data.result != null && data.result !== 100 && data.result !== 0) throw new Error(data.errMsg || ("QQ 音乐后端返回错误 " + data.result));
+  return data;
+}
+function qqNormalize(s){
+  if(!s || typeof s !== "object") return null;
+  const mid = s.songmid || s.mid || (s.songInfo && s.songInfo.mid);
+  if(!mid) return null;
+  const singers = s.singer || s.singers || [];
+  const albummid = s.albummid || (s.album && s.album.mid) || "";
+  return {
+    id: mid,
+    name: s.songname || s.title || s.name || "未知曲目",
+    artists: (Array.isArray(singers) ? singers : [singers]).map(x => typeof x === "string" ? x : (x && x.name) || "").filter(Boolean),
+    cover: albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : "",
+    source: "qq",
+    dur: s.interval || 0,
+  };
+}
+async function qqSearch(q){
+  const data = await qqFetch("/search?key=" + encodeURIComponent(q) + "&pageNo=1&pageSize=30");
+  const d = data && data.data || {};
+  const raw = d.list || (d.song && d.song.list) || [];
+  return (Array.isArray(raw) ? raw : []).map(qqNormalize).filter(Boolean);
+}
+function qqDecodeLyric(t){
+  t = String(t || "");
+  if(t && !/\[\d+:\d+/.test(t) && /^[A-Za-z0-9+/=\s]+$/.test(t)){
+    try{ t = decodeURIComponent(escape(atob(t.replace(/\s+/g, "")))); }catch(e){}
+  }
+  return t.replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n));
+}
+async function qqResolveAndPlay(song){
+  state.musicError = "";
+  try{
+    const data = await qqFetch("/song/urls?id=" + encodeURIComponent(song.id));
+    const d = data && data.data;
+    let url = (d && typeof d === "object") ? (d[song.id] || Object.values(d)[0] || "") : (typeof d === "string" ? d : "");
+    if(!url) throw new Error("没拿到播放地址（可能是 VIP 歌，或者后端 cookie 过期了）");
+    // QQ 的音频 CDN 支持 https；自建地址（IP / localhost）保持原样
+    url = String(url);
+    if(!/^http:\/\/(localhost|\d+\.\d+\.\d+\.\d+)(:|\/)/.test(url)) url = url.replace(/^http:/, "https:");
+    if(typeof spotifyPause === "function") spotifyPause();
+    const a = ensureAudio();
+    a.src = url;
+    await a.play();
+    state.musicNow = { ...song, source: "qq", url };
+    state.musicPlaying = true;
+    persist("musicNow");
+    try{
+      const ly = await qqFetch("/lyric?songmid=" + encodeURIComponent(song.id));
+      const l = ly && ly.data || {};
+      state.musicLyric = qqDecodeLyric(l.lyric || l.lrc || "");
+    }catch(e){ state.musicLyric = ""; }
+    render();
+  }catch(e){
+    state.musicError = e.message;
+    alert("播放失败：" + e.message);
+    render();
+  }
+}
+async function qqSaveCookie(){
+  const base = (document.getElementById("music-qq-base")?.value || "").trim();
+  if(base){ state.musicConfig.qqBase = base; persist("musicConfig"); }
+  const ck = (document.getElementById("music-qq-cookie")?.value || "").trim();
+  if(!ck){ alert("把 y.qq.com 登录后的 cookie 粘进来"); return; }
+  try{
+    await qqFetch("/user/setCookie", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ data: ck }) });
+    state.qqCookieOk = true;
+    if(typeof showToast === "function") showToast("QQ 音乐 cookie 已存到后端");
+  }catch(e){ state.qqCookieOk = false; alert("保存失败：" + e.message); }
+  render();
+}
+function qqAuthBlock(){
+  return `<div class="qr-box" style="text-align:left">
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;text-align:center">QQ 音乐 · 自建后端</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:6px">后端地址（QQMusicApi，默认端口 3300）</div>
+    <input id="music-qq-base" placeholder="http://你的VPS:3300" value="${escAttr((state.musicConfig && state.musicConfig.qqBase) || "")}" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:13px;background:var(--card);color:var(--text);margin-bottom:10px"/>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:6px">登录 cookie（电脑浏览器登录 y.qq.com 后复制；放 VIP 歌要账号有绿钻）</div>
+    <textarea id="music-qq-cookie" rows="3" placeholder="uin=...; qm_keyst=...; ..." style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;background:var(--card);color:var(--text)"></textarea>
+    <button type="button" class="btn-accent" data-qq-save style="width:100%;margin-top:8px;padding:9px">保存地址和 cookie</button>
+    ${state.qqCookieOk ? `<div class="qr-status" style="color:var(--accent);margin-top:6px;text-align:center">cookie 已存到后端 ✓</div>` : ""}
+  </div>`;
+}
+document.addEventListener("click", e=>{
+  const t = e.target.closest && e.target.closest("[data-qq-save]");
+  if(!t) return;
+  e.preventDefault(); e.stopPropagation();
+  qqSaveCookie();
+}, true);
+document.addEventListener("change", e=>{
+  if(e.target && e.target.id === "music-qq-base"){ state.musicConfig.qqBase = e.target.value.trim(); persist("musicConfig"); }
+});
 
 // ─── Spotify · 官方嵌入播放器（不用登录）──────────────────────────────────
 // 播放器是官方 iframe，放在 #app 外面一个固定的「坞」里：页面每次 render() 都会重建 #app，
