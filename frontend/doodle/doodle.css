@@ -14,7 +14,7 @@ body.shell-doodle.dd-dark{--dd-glass:rgba(35,33,43,.78);--dd-wall:#17151D;--dd-w
 .dd-layer[hidden]{display:none!important}
 #doodle-home{pointer-events:auto;padding-top:env(safe-area-inset-top,0px);height:calc(var(--app-height,100dvh) - var(--dd-nav-h,64px) - env(safe-area-inset-bottom,0px))}
 body.shell-doodle #app{background:transparent!important;background-image:none!important}
-body.shell-doodle:not([class*=" font-"]):not([class^="font-"]) #app{font-family:var(--dd-font)}
+body.shell-doodle #app{font-family:var(--dd-font)}
 body.shell-doodle #doodle-back,body.shell-doodle #doodle-home,body.shell-doodle #app{transition:transform .5s cubic-bezier(.2,.9,.25,1),filter .5s}
 body.shell-doodle.dd-opened #doodle-back,body.shell-doodle.dd-opened #doodle-home,body.shell-doodle.dd-opened #app{transform:scale(.94);filter:brightness(.92)}
 @media (prefers-reduced-motion:reduce){body.shell-doodle #doodle-back,body.shell-doodle #doodle-home,body.shell-doodle #app{transition:none}}

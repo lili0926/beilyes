@@ -7,40 +7,17 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%AC%3C/text%3E%3C/svg%3E" />
   <style>
 
-    /* ── 自定义字体 ── */
-    @font-face {
-      font-family: 'NaiKitten';
-      src: url('奈の小猫8.ttf') format('truetype');
-      font-weight: normal;
-      font-style: normal;
-      font-display: swap;
-    }
-    body.font-noto-kr, body.font-noto-kr * { font-family: "Noto Sans KR", "Noto Sans SC", -apple-system, sans-serif !important; }
-    body.font-noto-sc, body.font-noto-sc * { font-family: "Noto Sans SC", "Noto Sans KR", -apple-system, sans-serif !important; }
-    body.font-kitten { font-family: 'NaiKitten', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    
+    
+    
 
-    /* 三款日系血统的中文字体（都是 OFL 开源，日文名作的简体中文化）：
-         霞鹜文楷 Screen ← Klee One，屏幕加粗版（原版 Regular 在安卓上偏细）
-         小赖 ← 濑户字体，44246 字，三个里字最全
-         悠哉 ← Y.OzFont
-       字体表走 jsdelivr 的 cn-fontsource 包，**选中时才由 ensureCnFont() 插 link**——
-       每个包的 font.css 有几百条 @font-face，三个一起 @import 会拖慢每次冷启动，
-       而她同时只可能用一个。woff2 本身按 unicode-range 分片，用到哪个字才下哪片。
-       故意不写 `body.font-xxx *`：那样会连书房的批注手写体、蓝晒壳的等宽字一起盖掉。
-       只设 body 让子元素自己继承，自带字体的地方保持原样。 */
-    body.font-wenkai  { font-family: 'LXGW WenKai Screen', 'PingFang SC', 'Microsoft YaHei', serif; }
-    body.font-xiaolai { font-family: 'Xiaolai SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
-    body.font-yozai   { font-family: 'Yozai', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    
+    
+    
 
-    .font-switch-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-    .font-chip {
-      border: 1px solid var(--border); background: var(--card); color: var(--sub);
-      border-radius: 16px; padding: 6px 14px; font-size: 12px; cursor: pointer;
-      transition: all 0.15s;
-    }
-    .font-chip.active {
-      border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600;
-    }
+    
+    
+    
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -83,13 +60,10 @@
        全站几百个可点元素，之前只有 30 来个写了 :active，其余按下去毫无反应，
        在手机上就显得「按了没反应 / 迟钝」。这里给一个统一的兜底：
        按下轻微回弹 + 压暗一点。个别组件自己写了 :active 的仍然优先。 */
-    button, [role="button"], [data-sub], [data-tab], [data-tab-jump],
-    .chip, .feat-card, .card-btn, .theme-chip, .font-chip, .filter-chip, .game-btn {
+    button, [role="button"], [data-sub], [data-tab], [data-tab-jump], .chip, .feat-card, .card-btn, .theme-chip, .filter-chip, .game-btn {
       transition: transform .11s cubic-bezier(.2,.7,.3,1), opacity .11s ease;
     }
-    button:active, [role="button"]:active, [data-sub]:active, [data-tab]:active,
-    [data-tab-jump]:active, .feat-card:active, .theme-chip:active,
-    .font-chip:active, .filter-chip:active, .game-btn:active {
+    button:active, [role="button"]:active, [data-sub]:active, [data-tab]:active, [data-tab-jump]:active, .feat-card:active, .theme-chip:active, .filter-chip:active, .game-btn:active {
       transform: scale(.965);
       opacity: .82;
     }
@@ -97,7 +71,7 @@
       transform: none; opacity: .5;
     }
     /* 长按 UI 不要选中文字；消息正文仍然可选可复制 */
-    button, .bottom-nav, .sub-header, .chat-header, .theme-chip, .font-chip, .filter-chip {
+    button, .bottom-nav, .sub-header, .chat-header, .theme-chip, .filter-chip {
       -webkit-user-select: none; user-select: none;
     }
     /* 内层滚动到头时不要把整页一起拖动 */
@@ -117,9 +91,7 @@
         transition-duration: .01ms !important;
         scroll-behavior: auto !important;
       }
-      button:active, [role="button"]:active, [data-sub]:active, [data-tab]:active,
-      [data-tab-jump]:active, .feat-card:active, .theme-chip:active,
-      .font-chip:active, .filter-chip:active, .game-btn:active { transform: none; }
+      button:active, [role="button"]:active, [data-sub]:active, [data-tab]:active, [data-tab-jump]:active, .feat-card:active, .theme-chip:active, .filter-chip:active, .game-btn:active { transform: none; }
     }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
@@ -4275,12 +4247,7 @@
       font-weight: 700;
       letter-spacing: 0.02em;
     }
-    body.shell-pixel .btn-ghost,
-    body.shell-pixel button.btn-ghost,
-    body.shell-pixel .filter-chip,
-    body.shell-pixel .font-chip,
-    body.shell-pixel .theme-chip,
-    body.shell-pixel .feat-card {
+    body.shell-pixel .btn-ghost, body.shell-pixel button.btn-ghost, body.shell-pixel .filter-chip, body.shell-pixel .theme-chip, body.shell-pixel .feat-card {
       border-radius: 0 !important;
       border: 3px solid var(--px-border) !important;
       background: var(--px-paper) !important;
@@ -4329,9 +4296,7 @@
       letter-spacing: 0.04em;
       text-shadow: 1px 1px 0 #fff6dc;
     }
-    body.shell-pixel .font-chip.active,
-    body.shell-pixel .filter-chip.active,
-    body.shell-pixel .theme-chip.active {
+    body.shell-pixel .filter-chip.active, body.shell-pixel .theme-chip.active {
       background: var(--px-gold) !important;
       box-shadow:
         inset 2px 2px 0 #f5e6a8,
@@ -4979,7 +4944,6 @@
       border: 1px solid #6b8f71 !important;
       color: #e8f0e8 !important;
     }
-    body.shell-eldritch .font-chip.active,
     body.shell-eldritch .chat-view-switch button.active {
       background: #2f4536 !important;
       border-color: #6b8f71 !important;
@@ -5216,7 +5180,6 @@
       color: #F5F3EE !important;
       border-radius: 20px !important;
     }
-    body.shell-claude .font-chip.active,
     body.shell-claude .chat-view-switch button.active {
       background: #2B2620 !important;
       color: #F5F3EE !important;
@@ -5454,11 +5417,7 @@
       color: #FFF !important;
       border-radius: 12px !important;
     }
-    body.shell-korean .font-chip.active {
-      background: #1C1C1E !important;
-      color: #FFF !important;
-      border-color: #1C1C1E !important;
-    }
+    
     /* 右侧滑出侧栏 */
     body.shell-korean .chat-sidebar {
       left: auto !important;
@@ -6536,24 +6495,7 @@
       background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
     }
     /* 一律直角 + 发丝线：图纸上没有圆角 */
-    body.shell-blueprint .card,
-    body.shell-blueprint .feat-card,
-    body.shell-blueprint .feat-icon,
-    body.shell-blueprint .section-body,
-    body.shell-blueprint .btn-ghost,
-    body.shell-blueprint .btn-accent,
-    body.shell-blueprint .btn-accent2,
-    body.shell-blueprint .chip,
-    body.shell-blueprint .filter-chip,
-    body.shell-blueprint .theme-chip,
-    body.shell-blueprint .font-chip,
-    body.shell-blueprint .back-btn,
-    body.shell-blueprint .card-btn,
-    body.shell-blueprint .avatar-circle,
-    body.shell-blueprint .chat-input-bar textarea,
-    body.shell-blueprint input,
-    body.shell-blueprint textarea,
-    body.shell-blueprint select {
+    body.shell-blueprint .card, body.shell-blueprint .feat-card, body.shell-blueprint .feat-icon, body.shell-blueprint .section-body, body.shell-blueprint .btn-ghost, body.shell-blueprint .btn-accent, body.shell-blueprint .btn-accent2, body.shell-blueprint .chip, body.shell-blueprint .filter-chip, body.shell-blueprint .theme-chip, body.shell-blueprint .back-btn, body.shell-blueprint .card-btn, body.shell-blueprint .avatar-circle, body.shell-blueprint .chat-input-bar textarea, body.shell-blueprint input, body.shell-blueprint textarea, body.shell-blueprint select {
       border-radius: 0 !important;
       box-shadow: none !important;
     }

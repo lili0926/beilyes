@@ -2865,7 +2865,6 @@ const state = {
   bubbleOpacity: LS.get("bubbleOpacity", 0.72),
   bubbleMeColor: LS.get("bubbleMeColor", ""),   // 空=跟随主题 accent
   bubbleThemColor: LS.get("bubbleThemColor", ""), // 空=跟随主题 card/白
-  uiFont: ["nail","angel"].includes(LS.get("uiFont", "")) ? "" : LS.get("uiFont", ""), // "" | nail | angel | kitten
   uiShell: ["korean","weibo"].includes(LS.get("uiShell", "classic")) ? "eden" : (LS.get("uiShell", "classic") || "classic"),
   edenPlaylists: LS.get("edenPlaylists", []),
   edenMotionPaused: LS.get("edenMotionPaused", false),
@@ -4422,32 +4421,6 @@ function contrastFg(hex){
     return L > 0.62 ? "#3a2f2f" : "#ffffff";
   }catch(e){ return "#ffffff"; }
 }
-/** 三款日系血统的中文字体（OFL 开源，都是日文名作的简体中文化）。
- *  值是 [显示名, 字体表 URL]。字体表走 jsdelivr 的 cn-fontsource 包。 */
-const CN_FONT_CDN = {
-  wenkai:  ["霞鹜文楷 Screen", "https://cdn.jsdelivr.net/npm/cn-fontsource-lxgw-wen-kai-screen/font.css"],
-  xiaolai: ["小赖",           "https://cdn.jsdelivr.net/npm/cn-fontsource-xiaolai-sc-regular/font.css"],
-  yozai:   ["悠哉",           "https://cdn.jsdelivr.net/npm/cn-fontsource-yozai-regular/font.css"],
-};
-
-/** 选中才去拉字体表，拉过就不再拉（按 id 认）。
- *  三个包的 font.css 各有几百条 @font-face，全 @import 进来会拖慢每次冷启动，
- *  而同一时刻只会用一个。woff2 本身按 unicode-range 分片，用到哪个字才下哪片。
- *  没网时 link 加载失败，CSS 里的 fallback（PingFang/雅黑）照常兜住，不白屏。 */
-function ensureCnFont(key){
-  const it = CN_FONT_CDN[key];
-  if(!it) return;
-  const id = "cnfont-" + key;
-  try{
-    if(document.getElementById(id)) return;
-    const l = document.createElement("link");
-    l.id = id;
-    l.rel = "stylesheet";
-    l.href = it[1];
-    document.head.appendChild(l);
-  }catch(e){}
-}
-
 function applyThemeVars(){
   const t=T();
   const isBp = (state.uiShell||"")==="blueprint" || state.uiShell==="eden" || state.uiShell==="doodle";
@@ -4549,14 +4522,6 @@ function applyThemeVars(){
     }
   }
   document.body.style.background=t.bg;
-  // 自定义字体
-  document.body.classList.remove("font-nail","font-angel","font-kitten","font-noto-kr","font-noto-sc",
-    "font-wenkai","font-xiaolai","font-yozai");
-  const uf = state.uiFont || "";
-  if(uf==="kitten") document.body.classList.add("font-kitten");
-  else if(CN_FONT_CDN[uf]){ ensureCnFont(uf); document.body.classList.add("font-"+uf); }
-  else if(uf==="noto-kr") document.body.classList.add("font-noto-kr");
-  else if(uf==="noto-sc") document.body.classList.add("font-noto-sc");
   // UI 壳：经典 / 像素农场
   document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","shell-weibo","shell-eden","shell-doodle","wb-dark","bp-diazo","rpg-chat-on");
   const sh = (state.uiShell || "classic");
@@ -5374,7 +5339,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", musicSpotifyAuthed:"musicSpotifyAuthed", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -24400,19 +24365,6 @@ function renderTheme(){
         <button type="button" class="sw-chip${state.bpDiazo?" on":""}" data-bp-neg="1">白图</button>
       </div>`:""}
     </div>
-
-    <div class="sw-card">
-      <div class="sw-card-title">字体</div>
-      <div class="sw-chip-row">
-        <button type="button" class="sw-chip${!state.uiFont?" on":""}" data-ui-font="">默认</button>
-        <button type="button" class="sw-chip${state.uiFont==="kitten"?" on":""}" data-ui-font="kitten">奈の小猫</button>
-        <button type="button" class="sw-chip${state.uiFont==="noto-kr"?" on":""}" data-ui-font="noto-kr">Noto韩</button>
-        <button type="button" class="sw-chip${state.uiFont==="noto-sc"?" on":""}" data-ui-font="noto-sc">Noto中</button>
-        <button type="button" class="sw-chip${state.uiFont==="wenkai"?" on":""}" data-ui-font="wenkai" style="font-family:'LXGW WenKai Screen',serif">霞鹜文楷</button>
-        <button type="button" class="sw-chip${state.uiFont==="xiaolai"?" on":""}" data-ui-font="xiaolai" style="font-family:'Xiaolai SC',sans-serif">小赖</button>
-        <button type="button" class="sw-chip${state.uiFont==="yozai"?" on":""}" data-ui-font="yozai" style="font-family:'Yozai',sans-serif">悠哉</button>
-      </div>
-    </div>
   </div>`;
 }
 
@@ -27289,14 +27241,6 @@ function bindEvents(){
     btn.onclick = ()=>{
       state.bubbleStyle = btn.dataset.bubbleStyle || "solid";
       persist("bubbleStyle");
-      applyThemeVars();
-      render();
-    };
-  });
-  $$("[data-ui-font]").forEach(btn=>{
-    btn.onclick = ()=>{
-      state.uiFont = btn.dataset.uiFont || "";
-      persist("uiFont");
       applyThemeVars();
       render();
     };
