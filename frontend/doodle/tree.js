@@ -150,14 +150,99 @@ const DoodleTree = (() => {
   };
   function quadPt(s, t){ return [(1 - t) * (1 - t) * s.x + 2 * (1 - t) * t * s.cx + t * t * s.ex, (1 - t) * (1 - t) * s.y + 2 * (1 - t) * t * s.cy + t * t * s.ey]; }
 
-  function drawBranch(g, s, sp){
+
+  /* ── 彩铅 ──
+   * 一笔 = 一条微微弯的细线，两头轻、中间重（整笔淡淡一遍，中段再压一遍）；
+   * 一片颜色 = 在形状里顺着一个方向排满短笔触，行与行之间留缝 —— 纸的白从缝里透出来；
+   * 最后盖一层纸纹：铅芯擦过纸面留下的细碎白点。 */
+  function pencil(g, x0, y0, x1, y1, col, w, a, bow){
+    const mx = (x0 + x1) / 2 + (y1 - y0) * bow, my = (y0 + y1) / 2 - (x1 - x0) * bow;
+    g.strokeStyle = col; g.lineCap = 'round';
+    g.globalAlpha = a * 0.55; g.lineWidth = w;
+    g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(mx, my, x1, y1); g.stroke();
+    const P = t => [(1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * mx + t * t * x1, (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * my + t * t * y1];
+    const [ax, ay] = P(0.2), [cx, cy] = P(0.5), [bx, by] = P(0.8);
+    g.globalAlpha = a * 0.6; g.lineWidth = w * 0.75;
+    g.beginPath(); g.moveTo(ax, ay); g.quadraticCurveTo(2 * cx - (ax + bx) / 2, 2 * cy - (ay + by) / 2, bx, by); g.stroke();
+  }
+  /** 在已经 clip 好的区域里排线。box 外接框；ang 笔触方向；gap 行距；len [短, 长]；cols 几支笔轮着用；fade(x,y) 0–1：哪里压重哪里放轻 */
+  function hatch(g, R, box, o){
+    const [x0, y0, x1, y1] = box, ca = Math.cos(o.ang), sa = Math.sin(o.ang);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rad = Math.hypot(x1 - x0, y1 - y0) / 2;
+    for(let v = -rad; v < rad; v += o.gap * (0.7 + R() * 0.6)){
+      let u = -rad - R() * o.len[1];
+      while(u < rad){
+        const L = o.len[0] + R() * (o.len[1] - o.len[0]);
+        const px = cx + ca * u - sa * v, py = cy + sa * u + ca * v;
+        const mx = px + ca * L / 2, my = py + sa * L / 2;
+        if(mx > x0 - 20 && mx < x1 + 20 && my > y0 - 20 && my < y1 + 20){
+          const f = o.fade ? o.fade(mx, my) : 1;
+          if(f > 0.03){
+            const a2 = o.ang + (R() - 0.5) * (o.jit == null ? 0.12 : o.jit);
+            pencil(g, px, py, px + Math.cos(a2) * L, py + Math.sin(a2) * L, o.cols[Math.floor(R() * o.cols.length)], o.w * (0.75 + R() * 0.5), o.a * f * (0.6 + R() * 0.6), (R() - 0.5) * 0.08);
+          }
+        }
+        u += L + o.gap * (0.2 + R() * 1.4);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+  /** 手描的边：同一条线描两三遍，每遍抖一点 */
+  function sketch(g, R, pts, col, w, a, passes){
+    g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = col;
+    for(let p = 0; p < passes; p++){
+      g.lineWidth = w * (0.7 + R() * 0.5); g.globalAlpha = a * (0.55 + R() * 0.45);
+      const j = w * (p ? 1.6 : 0.8);
+      g.beginPath();
+      pts.forEach((q, k) => { const x = q[0] + (R() - 0.5) * j, y = q[1] + (R() - 0.5) * j; k ? g.lineTo(x, y) : g.moveTo(x, y); });
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+  /** 三次贝塞尔折成点：start + [[c1x,c1y,c2x,c2y,ex,ey], …] */
+  function cubicPts(st, cs, n){
+    const out = [st.slice()]; let p0 = st;
+    cs.forEach(c => {
+      for(let k = 1; k <= n; k++){
+        const t = k / n, u = 1 - t;
+        out.push([u*u*u*p0[0] + 3*u*u*t*c[0] + 3*u*t*t*c[2] + t*t*t*c[4], u*u*u*p0[1] + 3*u*u*t*c[1] + 3*u*t*t*c[3] + t*t*t*c[5]]);
+      }
+      p0 = [c[4], c[5]];
+    });
+    return out;
+  }
+  /* 纸纹：一块 192² 的噪点，铺满整张 */
+  let grainCv = null;
+  function grain(){
+    if(grainCv) return grainCv;
+    const c = document.createElement('canvas'); c.width = c.height = 192;
+    const x = c.getContext('2d'), d = x.createImageData(192, 192), R = rng(4242);
+    for(let k = 0; k < d.data.length; k += 4){
+      const v = R();
+      if(v < 0.15){ d.data[k] = d.data[k + 1] = d.data[k + 2] = 255; d.data[k + 3] = 50 + R() * 130; }
+      else if(v > 0.986){ d.data[k] = 96; d.data[k + 1] = 84; d.data[k + 2] = 118; d.data[k + 3] = 18 + R() * 30; }
+    }
+    x.putImageData(d, 0, 0);
+    /* 纸的纤维：几道极淡的斜白线 */
+    x.strokeStyle = '#fff'; x.lineWidth = 0.6;
+    for(let k = 0; k < 60; k++){ x.globalAlpha = 0.25 + R() * 0.3; const px = R() * 192, py = R() * 192, l = 3 + R() * 7; x.beginPath(); x.moveTo(px, py); x.lineTo(px + l, py - l * 0.3); x.stroke(); }
+    grainCv = c; return c;
+  }
+  function paperGrain(g, cv, a){
+    const k = Math.max(1, cv.width / 640);
+    g.setTransform(k, 0, 0, k, 0, 0);
+    g.globalAlpha = a; g.fillStyle = g.createPattern(grain(), 'repeat'); g.fillRect(0, 0, cv.width / k + 1, cv.height / k + 1);
+    g.globalAlpha = 1;
+  }
+
+  function drawBranch(g, s, sp, fine){
     const [b0, b1, b2] = sp.bark;
     if(s.w0 < 2.4){
       g.strokeStyle = s.d > 6 ? b1 : b0; g.lineWidth = Math.max(0.8, (s.w0 + s.w1) / 2); g.lineCap = 'round';
       g.beginPath(); g.moveTo(s.x, s.y); g.quadraticCurveTo(s.cx, s.cy, s.ex, s.ey); g.stroke(); return;
     }
     /* 两边各算一条贝塞尔，宽度从 w0 收到 w1 */
-    const N = 8, L = [], Rr = [];
+    const N = s.w0 > 12 ? 16 : 8, L = [], Rr = [];
     for(let k = 0; k <= N; k++){
       const t = k / N, [px, py] = quadPt(s, t);
       const dx = 2 * (1 - t) * (s.cx - s.x) + 2 * t * (s.ex - s.cx), dy = 2 * (1 - t) * (s.cy - s.y) + 2 * t * (s.ey - s.cy);
@@ -200,6 +285,68 @@ const DoodleTree = (() => {
       g.stroke();
       g.restore(); g.globalAlpha = 1;
     }
+    if(fine && s.w0 >= 4.5) pencilBark(g, s, sp, L, Rr);
+  }
+
+  /** 枝干的彩铅：顺着枝条走的长笔触（背光那侧用深色压重，向光那侧用浅色带过），
+   *  背光侧再加一层斜的短排线，最后用深色把两条边描两遍 */
+  function pencilBark(g, s, sp, L, Rr){
+    const [b0, b1, b2] = sp.bark, R = rng(Math.round(s.x * 13 + s.y * 7 + s.w0 * 101));
+    const frame = (t, off) => {
+      const [px, py] = quadPt(s, t);
+      const dx = 2 * (1 - t) * (s.cx - s.x) + 2 * t * (s.ex - s.cx), dy = 2 * (1 - t) * (s.cy - s.y) + 2 * t * (s.ey - s.cy);
+      const l = Math.hypot(dx, dy) || 1, w = s.w0 + (s.w1 - s.w0) * t;
+      return [px - dy / l * off * w, py + dx / l * off * w];
+    };
+    g.save();
+    g.beginPath(); g.moveTo(L[0][0], L[0][1]); L.forEach(q => g.lineTo(q[0], q[1])); for(let k = Rr.length - 1; k >= 0; k--) g.lineTo(Rr[k][0], Rr[k][1]); g.closePath();
+    g.clip();
+    const rows = Math.max(3, Math.round(s.w0 / 2.4)), pw = Math.max(0.7, Math.min(1.8, s.w0 * 0.07));
+    for(let q = 0; q < rows; q++){
+      const off = (q + 0.5) / rows - 0.5 + (R() - 0.5) * 0.04;     // + 向光（左），− 背光（右）
+      const col = off < -0.18 ? b2 : off > 0.12 ? (R() < 0.45 ? '#FFFFFF' : b1) : (R() < 0.5 ? b0 : b2);
+      const a = off < -0.18 ? 0.55 : off > 0.12 ? 0.4 : 0.3;
+      let t = -R() * 0.15;
+      while(t < 1){
+        const t1 = Math.min(1.02, t + 0.12 + R() * 0.3);
+        if(R() > 0.12){
+          const ta = Math.max(0, t), wob = (R() - 0.5) * 0.05;
+          const [ax, ay] = frame(ta, off), [bx, by] = frame(Math.min(1, t1), off);
+          pencil(g, ax, ay, bx, by, col, pw * (0.8 + R() * 0.5), a * (0.6 + R() * 0.6), wob);
+        }
+        t = t1 + R() * 0.06;
+      }
+    }
+    /* 背光侧的斜排线 */
+    if(s.w0 >= 9){
+      const n = Math.round(s.len / 3.2);
+      for(let k = 0; k < n; k++){
+        const t = k / n + R() * 0.01, o0 = -0.52, o1 = -0.08 - R() * 0.18;
+        const [ax, ay] = frame(t, o0), [bx, by] = frame(Math.min(1, t + 0.035 + R() * 0.02), o1);
+        pencil(g, ax, ay, bx, by, b2, pw * 0.8, 0.32 + R() * 0.2, 0);
+      }
+    }
+    /* 粗枝上的树皮小记号：短弧、眼睛形的小疤 */
+    if(s.w0 >= 16){
+      const n = Math.round(s.len / 14);
+      for(let k = 0; k < n; k++){
+        const t = R(), off = (R() - 0.5) * 0.7, [x, y] = frame(t, off), ww = (s.w0 + (s.w1 - s.w0) * t);
+        const a = Math.atan2(2 * (1 - t) * (s.cy - s.y) + 2 * t * (s.ey - s.cy), 2 * (1 - t) * (s.cx - s.x) + 2 * t * (s.ex - s.cx));
+        g.save(); g.translate(x, y); g.rotate(a);
+        g.strokeStyle = R() < 0.7 ? b2 : '#FFFFFF'; g.globalAlpha = 0.35 + R() * 0.25; g.lineWidth = 0.9 + R() * 0.6; g.lineCap = 'round';
+        const l = ww * (0.08 + R() * 0.12), hgt = ww * (0.03 + R() * 0.04);
+        g.beginPath();
+        if(R() < 0.6){ g.moveTo(-l, 0); g.quadraticCurveTo(0, (R() < 0.5 ? -1 : 1) * hgt * 2, l, 0); }
+        else { g.ellipse(0, 0, l, hgt, 0, 0, TAU); }
+        g.stroke(); g.restore();
+      }
+      g.globalAlpha = 1;
+    }
+    g.restore();
+    /* 描边 */
+    const ow = Math.max(0.9, Math.min(2.4, s.w0 * 0.055));
+    sketch(g, R, L, b2, ow, 0.6, 2);
+    sketch(g, R, Rr, b2, ow * 1.2, 0.75, 2);
   }
 
   /* 叶形：都画在「叶柄在原点、叶尖朝 +x」的坐标里，长度 = 1 */
@@ -289,6 +436,7 @@ const DoodleTree = (() => {
     return {col, size, kind, pinned: !!m.pinned};
   }
 
+  const bgCache = new Map();
   /** 把一棵树画进 ctx。px = 这张画布的像素宽；leaves = 这棵树的记忆；opt.thumb 小图省掉细节 */
   function paint(cv, i, mems, opt){
     opt = opt || {};
@@ -297,39 +445,95 @@ const DoodleTree = (() => {
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
     g.setTransform(sc, 0, 0, sc, 0, 0);
     const fill = mems.length / capOf(i);
-    /* 天空 */
-    const sky = g.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#F3ECFD'); sky.addColorStop(0.55, '#FBF6FF'); sky.addColorStop(1, '#FFF8F3');
-    g.fillStyle = sky; g.fillRect(0, 0, W, H);
-    const glow = g.createRadialGradient(500, 430, 40, 500, 430, 520);
-    glow.addColorStop(0, sp.glow); glow.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = glow; g.globalAlpha = 0.85; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
-    if(!opt.thumb){
-      /* 远山 */
-      g.fillStyle = '#E7DDF6';
-      g.beginPath(); g.moveTo(0, 900); g.bezierCurveTo(180, 820, 300, 880, 420, 860); g.bezierCurveTo(560, 830, 700, 900, 820, 850); g.bezierCurveTo(900, 830, 960, 860, 1000, 850); g.lineTo(1000, 1150); g.lineTo(0, 1150); g.fill();
-      g.fillStyle = '#EFE8F9';
-      g.beginPath(); g.moveTo(0, 950); g.bezierCurveTo(200, 900, 330, 960, 520, 930); g.bezierCurveTo(700, 905, 860, 960, 1000, 925); g.lineTo(1000, 1150); g.lineTo(0, 1150); g.fill();
-      /* 星点 */
-      const R = rng(hashN(i + 99));
-      for(let k = 0; k < 22; k++){ g.globalAlpha = 0.35 + R() * 0.5; sparkle(g, R() * W, R() * 380 + 20, 3 + R() * 6); }
-      g.globalAlpha = 1;
+    const PR = rng(hashN(i * 31 + 555)), fine = !opt.thumb;
+    const gTop = x => GROUND + 20 - 34.5 * (1 - ((x - 500) / 500) ** 2);
+    const shade = (x, y) => Math.max(0, 1 - ((x - 500) / 290) ** 2 - ((y - GROUND - 8) / 34) ** 2);
+    /* 背景（天、山、草地、纸纹）只跟树的序号和画布大小有关：画一次存起来 */
+    const bgKey = i + ':' + cv.width + ':' + (fine ? 'f' : 't'), bgHit = bgCache.get(bgKey);
+    if(bgHit){ g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bgHit, 0, 0); g.setTransform(sc, 0, 0, sc, 0, 0); }
+    else {
+      /* 天空 */
+      const sky = g.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, '#F3ECFD'); sky.addColorStop(0.55, '#FBF6FF'); sky.addColorStop(1, '#FFF8F3');
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      const glow = g.createRadialGradient(500, 430, 40, 500, 430, 520);
+      glow.addColorStop(0, sp.glow); glow.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = glow; g.globalAlpha = 0.85; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
+      /* 天空上的彩铅：很淡的斜排线，越往地平线越浓 */
+      if(fine){
+        hatch(g, PR, [0, 0, W, GROUND], {ang: -0.62, gap: 6.5, len: [26, 60], cols: ['#E2D3F7', '#EBDDF8', '#F6DCE8'], w: 2.4, a: 0.32,
+          fade: (x, y) => 0.25 + 0.75 * Math.min(1, y / 900) - 0.35 * Math.max(0, 1 - Math.hypot(x - 500, y - 430) / 330)});
+      }
+      if(fine){
+        /* 远山：两层，各自排线 + 手描山脊 */
+        const hills = [
+          {st: [0, 900], cs: [[180, 820, 300, 880, 420, 860], [560, 830, 700, 900, 820, 850], [900, 830, 960, 860, 1000, 850]], fill: '#E9E0F7', cols: ['#D8C9F0', '#CFBFEB', '#E0D3F4'], line: '#BBA8DF', ang: -0.12},
+          {st: [0, 950], cs: [[200, 900, 330, 960, 520, 930], [700, 905, 860, 960, 1000, 925]], fill: '#F1EBFA', cols: ['#E2D8F5', '#DDD1F2', '#EADFF0'], line: '#C9B9E6', ang: 0.1},
+        ];
+        hills.forEach(hl => {
+          const pts = cubicPts(hl.st, hl.cs, 18);
+          const path = () => { g.beginPath(); pts.forEach((q, k) => k ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); };
+          g.fillStyle = hl.fill; path(); g.fill();
+          g.save(); path(); g.clip();
+          hatch(g, PR, [0, 800, W, GROUND + 40], {ang: hl.ang, gap: 4.6, len: [18, 46], cols: hl.cols, w: 2.2, a: 0.6,
+            fade: (x, y) => { let top = 2000; for(let k = 1; k < pts.length; k++) if(pts[k][0] >= x){ top = pts[k][1]; break; } return Math.max(0.25, 1 - (y - top) / 90); }});
+          g.restore();
+          sketch(g, PR, pts, hl.line, 1.6, 0.55, 2);
+        });
+        /* 星点 */
+        const R = rng(hashN(i + 99));
+        for(let k = 0; k < 22; k++){ g.globalAlpha = 0.35 + R() * 0.5; sparkle(g, R() * W, R() * 380 + 20, 3 + R() * 6); }
+        g.globalAlpha = 1;
+      }
+      /* 地面：一层很淡的底色，再用几支绿彩铅横着略斜排线；树下、近处压得重 */
+      const groundPath = () => { g.beginPath(); g.moveTo(0, GROUND + 20); g.bezierCurveTo(250, GROUND - 26, 750, GROUND - 26, 1000, GROUND + 20); g.lineTo(1000, H); g.lineTo(0, H); g.closePath(); };
+      const gd = g.createLinearGradient(0, GROUND - 30, 0, H);
+      gd.addColorStop(0, fine ? '#E2F3E9' : '#CDEBDD'); gd.addColorStop(1, fine ? '#CFEADB' : '#B3DCC8');
+      g.fillStyle = gd; groundPath(); g.fill();
+      if(fine){
+        g.save(); groundPath(); g.clip();
+        const box = [0, GROUND - 40, W, H];
+        hatch(g, PR, box, {ang: -0.16, gap: 3.6, len: [16, 44], cols: ['#A6D8BC', '#93CFAF', '#BCE4CC', '#C9E9C4'], w: 2.3, a: 0.62,
+          fade: (x, y) => 0.55 + 0.45 * Math.min(1, (y - gTop(x)) / 110)});
+        hatch(g, PR, box, {ang: 0.52, gap: 5.2, len: [10, 26], cols: ['#7EC09D', '#6FB592', '#88C6A0'], w: 1.9, a: 0.5,
+          fade: (x, y) => Math.min(1, Math.max(0, (y - GROUND - 60) / 120) * 0.7 + Math.max(0, 1 - (y - gTop(x)) / 14) * 0.6)});
+        /* 树影：先一层很淡的晕，再顺着地面的方向密密压几层深绿 */
+        const sh = g.createRadialGradient(500, GROUND + 8, 10, 500, GROUND + 8, 290);
+        sh.addColorStop(0, 'rgba(80,120,100,.22)'); sh.addColorStop(1, 'rgba(80,120,100,0)');
+        g.fillStyle = sh; g.save(); g.translate(500, GROUND + 8); g.scale(1, 0.13); g.translate(-500, -(GROUND + 8)); g.beginPath(); g.arc(500, GROUND + 8, 290, 0, TAU); g.fill(); g.restore();
+        hatch(g, PR, [180, GROUND - 30, 820, GROUND + 50], {ang: -0.08, gap: 2.6, len: [14, 34], cols: ['#6FAE8C', '#5E9F80', '#7A9E95'], w: 1.8, a: 0.55, jit: 0.08, fade: (x, y) => shade(x, y) ** 0.7});
+        /* 一点暖色：草地里零星几笔黄绿 */
+        hatch(g, PR, box, {ang: -0.3, gap: 14, len: [10, 22], cols: ['#DDEBA8', '#F2E6B0'], w: 2, a: 0.45, fade: (x, y) => (Math.sin(x * 0.013) * 0.5 + 0.5) * (Math.cos(y * 0.05 + x * 0.004) * 0.5 + 0.5)});
+        g.restore();
+        const edge = []; for(let k = 0; k <= 40; k++){ const x = k * 25; edge.push([x, gTop(x)]); }
+        sketch(g, PR, edge, '#79B996', 1.7, 0.7, 3);
+        paperGrain(g, cv, 0.55);
+        g.setTransform(sc, 0, 0, sc, 0, 0);
+      } else {
+        const sh = g.createRadialGradient(500, GROUND + 6, 10, 500, GROUND + 6, 300);
+        sh.addColorStop(0, 'rgba(70,90,80,.32)'); sh.addColorStop(1, 'rgba(70,90,80,0)');
+        g.fillStyle = sh; g.save(); g.translate(500, GROUND + 6); g.scale(1, 0.16); g.translate(-500, -(GROUND + 6)); g.beginPath(); g.arc(500, GROUND + 6, 300, 0, TAU); g.fill(); g.restore();
+      }
+      const keep = document.createElement('canvas'); keep.width = cv.width; keep.height = cv.height;
+      keep.getContext('2d').drawImage(cv, 0, 0); bgCache.set(bgKey, keep);
+      if(bgCache.size > 8) bgCache.delete(bgCache.keys().next().value);
     }
-    /* 地面 */
-    const gd = g.createLinearGradient(0, GROUND - 30, 0, H);
-    gd.addColorStop(0, '#CDEBDD'); gd.addColorStop(1, '#B3DCC8');
-    g.fillStyle = gd;
-    g.beginPath(); g.moveTo(0, GROUND + 20); g.bezierCurveTo(250, GROUND - 26, 750, GROUND - 26, 1000, GROUND + 20); g.lineTo(1000, H); g.lineTo(0, H); g.fill();
-    /* 树影 */
-    const sh = g.createRadialGradient(500, GROUND + 6, 10, 500, GROUND + 6, 300);
-    sh.addColorStop(0, 'rgba(70,90,80,.32)'); sh.addColorStop(1, 'rgba(70,90,80,0)');
-    g.fillStyle = sh; g.save(); g.translate(500, GROUND + 6); g.scale(1, 0.16); g.translate(-500, -(GROUND + 6)); g.beginPath(); g.arc(500, GROUND + 6, 300, 0, TAU); g.fill(); g.restore();
+    const RR = rng(hashN(i * 43 + 9));
     /* 根 */
     sk.roots.forEach(rt => {
       g.strokeStyle = sp.bark[0]; g.lineCap = 'round';
       for(let k = 0; k < 3; k++){
         g.lineWidth = rt.w * (1 - k * 0.3);
         g.beginPath(); g.moveTo(rt.x, rt.y - 26); g.quadraticCurveTo(rt.x + rt.dx * 0.35, rt.y - 4, rt.x + rt.dx * (0.6 + k * 0.2), rt.y + rt.dy * (0.6 + k * 0.2)); g.stroke();
+      }
+      if(fine){   /* 根上也走几笔彩铅，再描一道下沿 */
+        const ex = rt.x + rt.dx * 0.8, ey = rt.y + rt.dy * 0.8;
+        for(let k = 0; k < 4; k++){
+          const o = (k / 3 - 0.5) * rt.w * 0.7;
+          pencil(g, rt.x + o * 0.3, rt.y - 24 + o, ex + o * 0.2, ey + o * 0.3, k > 1 ? sp.bark[2] : sp.bark[1], 1.2, 0.5, (RR() - 0.5) * 0.1);
+        }
+        const pts = []; for(let k = 0; k <= 8; k++){ const t = k / 8, u = 1 - t; pts.push([u * u * rt.x + 2 * u * t * (rt.x + rt.dx * 0.35) + t * t * ex, u * u * (rt.y - 26 + rt.w * 0.5) + 2 * u * t * (rt.y - 4 + rt.w * 0.4) + t * t * (ey + 2)]); }
+        sketch(g, RR, pts, sp.bark[2], 1.3, 0.6, 2);
       }
     });
     /* 树冠里面那团若有若无的影子：叶子越多越浓，看着有体积 */
@@ -340,7 +544,7 @@ const DoodleTree = (() => {
       g.globalAlpha = 0.18 * Math.min(1, fill * 1.4); g.fillStyle = cg; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
     }
     /* 枝干：粗的先画 */
-    sk.segs.slice().sort((a, b) => b.w0 - a.w0).forEach(s => drawBranch(g, s, sp));
+    sk.segs.slice().sort((a, b) => b.w0 - a.w0).forEach(s => drawBranch(g, s, sp, !opt.thumb));
     /* 树结 */
     if(!opt.thumb){
       const t0 = sk.segs[0];
@@ -380,19 +584,45 @@ const DoodleTree = (() => {
     });
     /* 草和小花（盖在树根前面） */
     if(!opt.thumb){
-      sk.grass.forEach(gs => {
-        g.strokeStyle = gs.c < 0.5 ? '#86C7A6' : '#A5D8BD'; g.lineWidth = 2.2; g.lineCap = 'round';
-        const y0 = GROUND + 10 + (Math.abs(gs.x - 500) / 500) * 14;
-        g.beginPath(); g.moveTo(gs.x, y0); g.quadraticCurveTo(gs.x + gs.b * 10, y0 - gs.h * 0.6, gs.x + gs.b * 18, y0 - gs.h); g.stroke();
+      /* 草：一簇一簇的彩铅草叶，越近越大；每片叶先画一道浅色宽笔，再贴一道深色细笔当背光边 */
+      const GR = rng(hashN(i * 17 + 3)), tufts = [];
+      for(let k = 0; k < 110; k++){
+        const x = 15 + GR() * 970, y = gTop(x) + 4 + Math.pow(GR(), 0.9) * (H - gTop(x) - 14);
+        tufts.push({x, y, n: 4 + Math.floor(GR() * 6), s: 0.55 + (y - GROUND) / 140 * 0.75, c: GR()});
+      }
+      /* 树根旁边多长几簇，把根脚盖住一点 */
+      for(let k = 0; k < 14; k++){ const x = 500 + (GR() - 0.5) * 230; tufts.push({x, y: GROUND + 2 + GR() * 16, n: 5 + Math.floor(GR() * 5), s: 0.75 + GR() * 0.3, c: GR()}); }
+      tufts.sort((a, b) => a.y - b.y);
+      const GC = [['#8FCBA8', '#5E9F80'], ['#A7D9B8', '#6FAE8C'], ['#B9E2C2', '#7DB894'], ['#9CCFAE', '#4F8F70'], ['#C4E3A6', '#86AE6A'], ['#9FD3C9', '#5C9E93']];
+      tufts.forEach(t => {
+        for(let k = 0; k < t.n; k++){
+          const [lc, dc] = GC[Math.floor(GR() * GC.length)];
+          const bx = t.x + (GR() - 0.5) * 16 * t.s, hgt = (12 + GR() * 20) * t.s, lean = ((k / (t.n - 1 || 1)) - 0.5) * 1.2 + (GR() - 0.5) * 0.4;
+          const tx = bx + lean * hgt * 0.7, ty = t.y - hgt, cx = bx + lean * hgt * 0.15, cy = t.y - hgt * 0.6;
+          g.strokeStyle = lc; g.lineCap = 'round'; g.globalAlpha = 0.8; g.lineWidth = 2.5 * t.s;
+          g.beginPath(); g.moveTo(bx, t.y); g.quadraticCurveTo(cx, cy, tx, ty); g.stroke();
+          g.strokeStyle = dc; g.globalAlpha = 0.6; g.lineWidth = 1.1 * t.s;
+          g.beginPath(); g.moveTo(bx + 1.2 * t.s, t.y); g.quadraticCurveTo(cx + 1.4 * t.s, cy, tx, ty); g.stroke();
+        }
+        /* 草根处一小笔阴影 */
+        pencil(g, t.x - 10 * t.s, t.y + 1, t.x + 10 * t.s, t.y + 1.5, '#5E9F80', 1.6 * t.s, 0.35, 0.02);
       });
+      g.globalAlpha = 1;
+      /* 零散的短笔触：草地上一下一下点出来的质感 */
+      for(let k = 0; k < 260; k++){
+        const x = GR() * W, y = gTop(x) + 6 + GR() * (H - gTop(x) - 10), l = 4 + GR() * 7;
+        pencil(g, x, y, x + (GR() - 0.5) * 4, y - l, GR() < 0.5 ? '#7DB894' : '#A7D9B8', 1.3, 0.5, 0);
+      }
       sk.flowers.forEach(f => {
         g.save(); g.translate(f.x, f.y); g.scale(f.s, f.s);
         g.fillStyle = f.c < 0.5 ? '#FFFFFF' : (f.c < 0.8 ? '#F7C6D8' : '#D9CCF5');
-        for(let k = 0; k < 5; k++){ const a = k * TAU / 5; g.beginPath(); g.ellipse(Math.cos(a) * 5, Math.sin(a) * 5, 4.4, 3, a, 0, TAU); g.fill(); }
+        g.strokeStyle = f.c < 0.5 ? '#C9B9D9' : (f.c < 0.8 ? '#E59AB8' : '#A994D8'); g.lineWidth = 0.9;
+        for(let k = 0; k < 5; k++){ const a = k * TAU / 5; g.beginPath(); g.ellipse(Math.cos(a) * 5, Math.sin(a) * 5, 4.4, 3, a, 0, TAU); g.fill(); g.globalAlpha = 0.7; g.stroke(); g.globalAlpha = 1; }
         g.fillStyle = '#F6C453'; g.beginPath(); g.arc(0, 0, 2.6, 0, TAU); g.fill();
         g.restore();
       });
     }
+    if(fine) paperGrain(g, cv, 0.2);   /* 整张再轻轻压一层纸纹，叶子也带一点铅笔颗粒 */
     g.setTransform(1, 0, 0, 1, 0, 0);
     return placed;
   }
