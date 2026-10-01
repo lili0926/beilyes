@@ -141,22 +141,29 @@ const DoodlePaper = (() => {
     return `polygon(${pts.join(',')})`;
   }
   /** 板子上的一张：小小的，看不到字（只有几道铅笔线），点开才读 */
-  function noteCard(n, seen){
+  /* 毛毡板上随手一贴：三列 × 若干行的格子里各自乱放（偏移 / 角度都按 id 定，每次一样） */
+  function spot(id, i, total){
+    const rows = Math.max(4, Math.ceil(total / 3)), c = i % 3, r = Math.floor(i / 3);
+    const cw = 76 / 3, rh = 80 / rows;
+    const x = 12 + c * cw + cw / 2 + (rnd(id, 'x') - 0.5) * cw * 0.55 + (r % 2 ? cw * 0.12 : -cw * 0.08);
+    const y = 9 + r * rh + rh / 2 + (rnd(id, 'y') - 0.5) * rh * 0.5;
+    return `left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;z-index:${10 + total - i}`;
+  }
+  function noteCard(n, seen, i, total){
     const id = String(n.id), ai = n.author === 'ai';
-    const rot = (rnd(id, 'r') * 14 - 7).toFixed(1), anns = (n.annotations || []).length;
-    const dx = Math.round(rnd(id, 'x') * 10 - 5), dy = Math.round(rnd(id, 'y') * 10 - 5);
+    const rot = (rnd(id, 'r') * 36 - 18).toFixed(1), anns = (n.annotations || []).length;
+    const dx = 0, dy = 0, pos = spot(id, i, total);
     if(ai && !seen.includes(id)){
-      return `<button type="button" class="ddn-item ddn-fold" data-ddn-unfold="${h(id)}" style="--r:${rot}deg;--dx:${dx}px;--dy:${dy}px" aria-label="${h(aiName())} 的新纸条，点开">
+      return `<button type="button" class="ddn-item ddn-fold" data-ddn-unfold="${h(id)}" style="${pos};--r:${rot}deg;--dx:${dx}px;--dy:${dy}px" aria-label="${h(aiName())} 的新纸条，点开">
         <span class="ddn-seal" data-doodle="heart"></span><em>新</em>
       </button>`;
     }
     const fix = ai ? (rnd(id, 'f') < 0.55 ? 'pin' : 'tape') : (rnd(id, 'f') < 0.6 ? 'magnet' : 'tape');
     const hue = ['#F4A7C3', '#B9A3EC', '#9FD3C9', '#F6C77B'][hashS(id) % 4];
-    const lines = Math.max(2, Math.min(4, Math.ceil(String(n.content || '').length / 14)));
-    return `<button type="button" class="ddn-item ${ai ? 'ai' : 'me'}" style="--r:${rot}deg;--dx:${dx}px;--dy:${dy}px;--fix:${hue}" data-mc-open="note:${h(id)}" aria-label="${ai ? 'TA' : '我'}的纸条 ${h(fmtShort(n))}，点开看">
+    const lines = Math.max(2, Math.min(3, Math.ceil(String(n.content || '').length / 14)));
+    return `<button type="button" class="ddn-item ${ai ? 'ai' : 'me'}" style="${pos};--r:${rot}deg;--dx:${dx}px;--dy:${dy}px;--fix:${hue}" data-mc-open="note:${h(id)}" aria-label="${ai ? 'TA' : '我'}的纸条 ${h(fmtShort(n))}，点开看">
       <span class="ddn-paper" ${ai ? `style="clip-path:${torn(id)}"` : ''}>
         ${Array.from({length: lines}, (_, k) => `<i class="ddn-ln" style="width:${55 + Math.round(rnd(id, 'l' + k) * 40)}%"></i>`).join('')}
-        <time>${h(fmtShort(n).split(' ')[0])}</time>
         ${anns ? `<b class="ddn-dot" title="背面有字">${anns}</b>` : ''}
       </span>
       <i class="ddn-fix ${fix}"${fix === 'tape' ? ` style="--tr:${(rnd(id, 'tr') * 20 - 10).toFixed(1)}deg"` : ''}></i>
@@ -229,7 +236,7 @@ const DoodlePaper = (() => {
     const det = state.mcDetail && state.mcDetail.type === 'note' && typeof mcFindDetail === 'function' ? mcFindDetail('note', state.mcDetail.id) : null;
     if(!det) V.back = false;
     /* 板子只放最新的 BOARD 张；还折着的新纸条一定上板（不会被挤进罐子） */
-    const BOARD = 9;
+    const BOARD = 12;
     const unseen = list.filter(n => n.author === 'ai' && !seen.includes(String(n.id)));
     const board = list.filter(n => unseen.includes(n)).concat(list.filter(n => !unseen.includes(n))).slice(0, Math.max(BOARD, unseen.length))
       .sort((a, b) => tOf(b) - tOf(a));
@@ -241,7 +248,7 @@ const DoodlePaper = (() => {
       <p class="ddp-ko">작은 쪽지들</p>
       <p class="ddn-count">板子上是最新的 <b>${board.length}</b> 张${fresh ? ` · <em>${fresh} 张新的还折着</em>` : ''}</p>
       <div class="ddn-board">
-        ${list.length ? `<div class="ddn-grid">${board.map(n => noteCard(n, seen)).join('')}</div>`
+        ${list.length ? `<div class="ddn-grid">${board.map((n, i) => noteCard(n, seen, i, board.length)).join('')}</div>`
           : `<p class="ddn-empty">板子上还空着<br><small>点右下角的便签本撕一张，或者等 ${h(aiName())} 写给你</small></p>`}
       </div>
       ${old.length ? jar(old) : ''}
@@ -464,5 +471,5 @@ const DoodlePaper = (() => {
     if(Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) go(dx < 0 ? 1 : -1);
   }, {passive: true});
 
-  return {diary, notes, mailbox, letterCard, isOn: ON};
+  return {diary, notes, mailbox, letterCard, suiteOf, isOn: ON};
 })();

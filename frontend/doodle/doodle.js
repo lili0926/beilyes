@@ -953,7 +953,9 @@ const DoodleShell = (() => {
     return all.slice(0, 12).map((l,i) => { const k = Math.abs(String(l.id).split('').reduce((a,c) => a*31+c.charCodeAt(0) | 0, 7))%7;
       const body = String(l.content || l.body || '').split(/\r?\n/);
       const from = l.author === 'user' || l.author === 'me' ? ((typeof myDisplayName === 'function' && myDisplayName()) || '我') : taName();
-      return {id:String(l.id), shape:SHAPES[k], paper:PAPERS[k], deco:DECOS[k], t:letterTime(l), body, from}; });
+      /* 信封 / 信纸用信箱页那四套素材（同一封信两边是同一套，见 paper.js 的 suiteOf） */
+      const suite = typeof DoodlePaper !== 'undefined' && DoodlePaper.suiteOf ? DoodlePaper.suiteOf(l.id) : k % 4;
+      return {id:String(l.id), shape:SHAPES[k], paper:PAPERS[k], deco:DECOS[k], suite, t:letterTime(l), body, from}; });
   }
   function readSet(){
     let r = P().ltRead;
@@ -986,7 +988,7 @@ const DoodleShell = (() => {
     order.forEach((li,k) => { const l = LETTERS[li], x = W*.1+W*.8*(k+.5)/n+(Math.random()-.5)*W/n*.35, unread = !isRead(l);
       const L = unread ? H*(.48+Math.random()*.16) : H*((k%3===0?.08:k%3===1?.24:.38)+Math.random()*.1);
       const wrap = document.createElement('div'); wrap.className = 'hang'; wrap.style.left = x+'px';
-      wrap.innerHTML = '<i class="string"></i><button class="ltr2'+(unread?' unread':'')+'" aria-label="'+(unread?'未读的信，':'读过的信，')+new Date(l.t).toLocaleDateString('zh-CN')+'"><span class="bead"></span><svg viewBox="0 0 92 100">'+shapeSVG(l,li)+'</svg>'+(unread?'<svg class="star" viewBox="0 0 9 9">'+pixSpark(4,'#F2A7C3').h+'</svg>':'')+'</button>';
+      wrap.innerHTML = '<i class="string"></i><button class="ltr2'+(unread?' unread':'')+'" aria-label="'+(unread?'未读的信，':'读过的信，')+new Date(l.t).toLocaleDateString('zh-CN')+'"><span class="bead"></span><img class="env" src="doodle/mail/env'+(l.suite+1)+'.webp" alt="" draggable="false">'+(unread?'<svg class="star" viewBox="0 0 9 9">'+pixSpark(4,'#F2A7C3').h+'</svg>':'')+'</button>';
       wrap.style.zIndex = unread ? 50+k : 10+k; scene.appendChild(wrap);
       ltItems.push({l, wrap, el:wrap.querySelector('.ltr2'), L:-160, Lt:L, Lh:L, vL:0, th:(Math.random()-.5)*.08, w:0, ph:Math.random()*6.28, rot:0, delay:k*90}); }); }
   function hangStep(now){ hangRaf = 0; if(LT.hidden) return; const dt = Math.min(40, now-(hangLast||now))/16.7; hangLast = now;
@@ -1005,14 +1007,14 @@ const DoodleShell = (() => {
     const ins = sheet.querySelectorAll('.paper-in'); let lines = '<div class="ln dt">'+new Date(l.t).toLocaleDateString('zh-CN',{month:'long',day:'numeric'})+'</div>';
     l.body.forEach(s => { lines += '<div class="ln">'+(s ? h(s) : '&nbsp;')+'</div>'; });
     lines += '<div class="ln">&nbsp;</div><div class="ln sig">From. '+h(l.from)+'</div><span class="stamp" data-doodle="'+l.deco+'" data-boil="on"></span>';
-    ins.forEach(el => { el.innerHTML = lines; }); drawIcons(sheet); sheet.style.setProperty('--paper', l.paper);
+    ins.forEach(el => { el.innerHTML = lines; }); drawIcons(sheet); sheet.style.setProperty('--paper', '#FBF6EF'); sheet.style.setProperty('--paperimg', 'url("'+new URL('doodle/mail/paper'+(l.suite+1)+'.webp', document.baseURI).href+'")');   // 变量里的 url 会按 shadow 样式表的位置解析，所以给绝对地址
     const er = it.el.getBoundingClientRect(); sw.hidden = false; sheet.classList.add('folded'); sheet.classList.remove('half');
     const sr = sheet.getBoundingClientRect(), dx = (er.left+er.width/2)-(sr.left+sr.width/2), dy = (er.top+er.height/2)-(sr.top+sr.height/2);
     sheet.style.transition = 'none'; sheet.style.transform = 'translate('+dx+'px,'+dy+'px) scale(.26) rotate('+it.rot+'deg)'; it.el.style.visibility = 'hidden';
     requestAnimationFrame(() => requestAnimationFrame(() => { sw.classList.add('on'); sheet.style.transition = ''; sheet.style.transform = '';
       // 展开完换成可上下翻的那一层：三折纸是定高的，长信超过三折就被裁掉、翻不动
       setTimeout(() => { sheet.classList.add('half'); rustle(.35,.22); }, 520); setTimeout(() => { sheet.classList.remove('folded','half'); rustle(.4,.26); }, 1100);
-      setTimeout(() => { if(ltOpen === it){ $('paperScroll').scrollTop = 0; sheet.classList.add('reading'); } }, 1700);
+      setTimeout(() => { if(ltOpen === it){ $('paperScroll').scrollTop = 0; const pin = $('paperScroll').querySelector('.paper-in'); if(pin) pin.scrollTop = 0; sheet.classList.add('reading'); } }, 1700);
       const n = sheet.querySelector('.p1 .paper-in').children.length, step = Math.min(260, Math.max(60, 4200/n));
       for(let i=0;i<n;i++) setTimeout(() => { sheet.querySelectorAll('.paper-in').forEach(pi => { const c = pi.children[i]; if(c && c.classList.contains('ln')) c.classList.add('on'); }); if(ltOpen && i%2 === 0) rustle(.08,.06); }, 1700+i*step);
       setTimeout(() => { $('ltFold').classList.add('on'); }, 1700+Math.min(n*step, 2600)); }));
