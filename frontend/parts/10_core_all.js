@@ -2695,6 +2695,7 @@ function auxConfigured(){ return !!auxEndpoint(state.apiConfig); }
 async function callAuxChatAPI(apiConfig, messages, systemPrompt, opts) {
   const ep = auxEndpoint(apiConfig);
   if(!ep) throw new Error("辅助 API 尚未配置；后台任务会保留，等辅助 API 可用后再试");
+  if(opts && opts.model) ep.model = String(opts.model).trim();   // 电话设置里填的模型名优先
   const convo = (messages||[]).map(m=>({role:m.role==="assistant"?"assistant":"user",
     content:m.image?__chatContentForChannel(ep.channel,m):String(m.content||"")}));
   const system = typeof systemPrompt === "object" && systemPrompt
@@ -18152,7 +18153,7 @@ function elevenModelFor(kind){
     const m = String(cfg.elevenMsgModel == null ? "eleven_v4" : cfg.elevenMsgModel).trim();
     if(m) return m;
   }
-  return String(cfg.elevenModel || "").trim();
+  return String(cfg.elevenModelCustom || cfg.elevenModel || "").trim();
 }
 function elevenTagsOn(kind){
   const cfg = state.callConfig || {};
@@ -18877,7 +18878,7 @@ function aicallHandleMessage(raw){
     const s = ensureCallSession();
     if(data.in_call === true || data.phase === "active"){
       if(s.phase !== "active"){
-        s.phase = "active";
+        s.phase = "active"; s.auxFellBack = false;
         s.startAt = s.startAt || Date.now();
         s.reason = data.reason || s.reason || "AIcall 通话";
       }
@@ -19269,7 +19270,18 @@ function renderPhone(){
             ).join("")}</div>`:""}
           </div>`;
         }).join("") : `<div class="empty-state">还没有通话记录</div>`}
-        <details class="call-settings"><summary>声音与通话设置</summary><div class="feat-section-label">语音合成（TTS）</div>
+        <details class="call-settings" ${state.callSettingsOpen?"open":""} ontoggle="state.callSettingsOpen=this.open"><summary>声音与通话设置</summary>
+        <div class="feat-section-label">电话里 TA 用哪个模型说话</div>
+        <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
+          <div class="sw-chip-row" style="margin:0 0 6px">
+            <button type="button" class="sw-chip${cfg.callLlm!=="main"?" on":""}" data-call-llm="aux">辅助 API</button>
+            <button type="button" class="sw-chip${cfg.callLlm==="main"?" on":""}" data-call-llm="main">聊天角色的 API</button>
+          </div>
+          <span class="setting-label">模型名（可选，填了就用这个）</span>
+          <input id="call-llm-model" value="${escAttr(cfg.callLlmModel||"")}" placeholder="${cfg.callLlm==="main"?"留空 = 跟聊天角色一样":"留空 = 辅助 API 里设的那个"}"/>
+          <div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:6px">这是写台词的大模型，和下面念台词的 TTS 是两回事。辅助 API 报错（比如余额不足）时，这通电话会自动改用聊天角色的 API。</div>
+        </div>
+        <div class="feat-section-label">语音合成（TTS）</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span class="setting-label">通话时播放 TA 的声音</span>
@@ -19302,6 +19314,8 @@ function renderPhone(){
               `<option value="${v}" ${(cfg.elevenModel||"")===v?"selected":""}>${t}</option>`
             ).join("")}
           </select>
+          <span class="setting-label" style="margin-top:8px">或者直接填模型 ID（填了就用这个，覆盖上面的选择）</span>
+          <input id="call-eleven-model-custom" value="${escAttr(cfg.elevenModelCustom||"")}" placeholder="如 eleven_flash_v2_5"/>
           <span class="setting-label" style="margin-top:8px">语音条用的模型（不赶时间，可以用最好的）</span>
           <select id="call-eleven-msg-model" style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:var(--bg);color:var(--text);font-size:13px">
             ${ELEVEN_MODELS.map(([v,t])=>
@@ -19413,7 +19427,7 @@ async function callStartOutgoing(){
   const s = ensureCallSession();
   if(s.phase==="active") return;
   callUnlockAudio(); // 必须在这一下手势里解锁，等模型回完就来不及了
-  s.phase = "active";
+  s.phase = "active"; s.auxFellBack = false;
   s.reason = "你拨出的电话";
   state.callCardMin = false;
   state.chatMoreOpen = false;
@@ -19453,7 +19467,7 @@ function callAccept(){
   callUnlockAudio(); // 同上：接听这一下是手势，TTS 播放时已经不是了
   callAnswerApi("accept", "");
   callClearInviteTimer();
-  s.phase = "active";
+  s.phase = "active"; s.auxFellBack = false;
   s.startAt = Date.now();
   s.caps = [];
   s.ctxSent = false;
@@ -19544,8 +19558,13 @@ async function callAiTurn(userText){
   }
   render();
   const ag = agentById(state.chatTarget==="group"?"a1":state.chatTarget) || (state.agents||[])[0];
-  if(!ag || !auxConfigured()){
-    s.caps.push({ who:"them", text:"（辅助 API 暂时不可用，我在这里等它恢复。）" });
+  // 电话里用哪个大模型回话：默认辅助 API；也可以在「声音与通话设置」里改成聊天角色自己的 API。
+  // 辅助 API 没配 / 这通电话里已经报过错（余额不足之类）→ 直接走聊天角色的 API，电话不断。
+  const _cc = state.callConfig || {};
+  const llmMain = _cc.callLlm === "main" || !auxConfigured() || !!s.auxFellBack;
+  const llmModel = String(_cc.callLlmModel || "").trim();
+  if(!ag){
+    s.caps.push({ who:"them", text:"（还没有可用的角色，电话接不通。）" });
     s.loading = false; render(); return;
   }
   const meta = s.lastVoiceMeta || {};
@@ -19678,7 +19697,23 @@ async function callAiTurn(userText){
         sp.flush().forEach(sent=> callTtsPush(sent));
       }
     } else {
-      text = await callAuxChatAPI(state.apiConfig, [{role:"user",content:prompt}], sys, ccOpts);
+      const msgs = [{role:"user",content:prompt}];
+      const viaMain = (override)=>{
+        const a2 = override && llmModel ? Object.assign({}, ag, { openaiModel:llmModel, claudeModel:llmModel, geminiModel:llmModel }) : ag;
+        return callChatAPI(agentToApiConfig(a2), msgs, sys, Object.assign({ timeoutMs:60000 }, ccOpts||{}));
+      };
+      if(llmMain){
+        text = await viaMain(_cc.callLlm === "main");
+      } else {
+        try{
+          text = await callAuxChatAPI(state.apiConfig, msgs, sys, Object.assign({}, ccOpts||{}, llmModel ? { model:llmModel } : {}));
+        }catch(auxErr){
+          // 辅助 API 挂了（402 余额不足、401 Key 失效……）：这通电话剩下的都改走聊天角色的 API
+          s.auxFellBack = true;
+          if(typeof showToast==="function") showToast("辅助 API 出错（"+String(auxErr.message||"").replace(/^辅助 API /,"").slice(0,40)+"），这通电话改用聊天角色的 API");
+          text = await viaMain(false);
+        }
+      }
       callLatMark("first");   // CC 通道没有流式，整段回来的那一刻就是「首字」
       if(typeof parseThinking==="function") text = parseThinking(text).body || text;
       text = String(text||"").trim().slice(0,300) || "……我在听。";
@@ -30020,6 +30055,15 @@ const sttUrl = document.getElementById("call-stt-url");
   bindCallCfg("call-tts-proxy", "ttsProxy");
   bindCallCfg("call-eleven-voice", "elevenVoice");
   bindCallCfg("call-eleven-model", "elevenModel");
+  bindCallCfg("call-eleven-model-custom", "elevenModelCustom");
+  bindCallCfg("call-llm-model", "callLlmModel");
+  $$("[data-call-llm]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.callConfig = state.callConfig || {};
+      state.callConfig.callLlm = btn.getAttribute("data-call-llm") === "main" ? "main" : "aux";
+      persist("callConfig"); render();
+    };
+  });
   bindCallCfg("call-eleven-msg-model", "elevenMsgModel");
   $$("[data-eleven-stab]").forEach(btn=>{
     btn.onclick = ()=>{
