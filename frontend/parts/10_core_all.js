@@ -14746,7 +14746,7 @@ function renderWardrobe(){
       const cur = o[field];
       return `<div class="body-feel-card" style="margin-bottom:10px">
         <div class="body-feel-head">
-          <span class="body-feel-title">${cat.emoji} ${cat.label}</span>
+          <span class="body-feel-title"><i data-lucide="${cat.icon}"></i> ${cat.label}</span>
           ${cur?`<button type="button" class="status-edit-btn" data-outfit-clear="${field}">清除</button>`:""}
         </div>
         ${pool.length===0
