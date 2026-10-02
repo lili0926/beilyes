@@ -61,12 +61,21 @@ const DoodleAlbum = (() => {
     whiskers: {w: 4.5, paths: ['M2 41 Q8 42 13 45', 'M1 51 L13 51', 'M2 61 Q8 59 13 57', 'M98 41 Q92 42 87 45', 'M99 51 L87 51', 'M98 61 Q92 59 87 57',
       'M18 64 a6 3.4 0 1 0 0.1 0Z', 'M70 64 a6 3.4 0 1 0 0.1 0Z'], pink: [], blush: [6, 7]},
     bang: {w: 5, paths: ['M43 30 Q44 42 45 52', 'M58 28 Q57 40 56 50', 'M45.2 63 a4 4 0 1 0 0.1 0Z', 'M56.2 61 a4 4 0 1 0 0.1 0Z'], pink: [], dot: [2, 3]},
+    lstar: {w: 5, paths: ['M50 16 Q53 33 58 38 Q66 40 82 41 Q70 50 65 56 Q68 68 71 80 Q58 72 50 67 Q42 72 29 80 Q32 68 35 56 Q30 50 18 41 Q34 40 42 38 Q47 33 50 16Z'], pink: []},
+    lcloud: {w: 5, paths: ['M26 66 Q13 66 14 56 Q15 46 26 47 Q27 33 41 32 Q51 31 55 41 Q61 33 71 36 Q81 40 79 51 Q89 52 88 60 Q87 66 77 66 Z', 'M36 56 a2.6 2.6 0 1 0 0.1 0Z M60 56 a2.6 2.6 0 1 0 0.1 0Z', 'M44 59 Q48 63 52 59'], pink: [], dot: [1]},
+    lhouse: {w: 5, paths: ['M20 50 L50 24 L80 50', 'M29 43 L29 78 L71 78 L71 43', 'M44 78 L44 63 Q50 58 56 63 L56 78', 'M64 37 L64 26 L71 26 L71 43',
+      'M50 51 C46 48 43.5 46 45.5 43.5 C47.5 41.5 49.5 43 50 44.5 C50.5 43 52.5 41.5 54.5 43.5 C56.5 46 54 48 50 51Z'], pink: [4]},
+    lheart: {w: 5, paths: ['M50 78 C24 61 15 44 26 33 C35 25 46 30 50 39 C54 30 65 25 74 33 C85 44 76 61 50 78Z', 'M32 40 Q34 35 39 34'], pink: []},
+    lmoon: {w: 5, paths: ['M60 18 A32 32 0 1 0 84 62 A25 25 0 1 1 60 18Z', 'M74 26 l0 8 M70 30 l8 0'], pink: []},
+    lspark: {w: 4.5, paths: ['M38 18 Q40 37 57 40 Q40 43 38 62 Q36 43 19 40 Q36 37 38 18Z', 'M70 54 Q71 65 81 66 Q71 67 70 78 Q69 67 59 66 Q69 65 70 54Z'], pink: []},
+    lflower: {w: 4.5, paths: ['M50 44 Q40 24 50 20 Q60 24 50 44 Z M56 47 Q74 36 79 45 Q78 55 56 53 Z M53 56 Q66 72 59 79 Q49 80 47 57 Z M44 54 Q34 75 25 69 Q21 59 44 50 Z M44 47 Q23 42 25 32 Q32 25 47 44 Z', 'M50 50 m-5 0 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0Z'], pink: [1]},
+    lnote: {w: 5, paths: ['M44 70 L44 30 L72 23 L72 63', 'M44 30 L72 23', 'M37 71 a8 6.5 -18 1 0 0.1 0Z', 'M65 64 a8 6.5 -18 1 0 0.1 0Z'], pink: [], dot: [2, 3]},
   };
   /* 耳朵的内耳：最后一条用另一种颜色填 */
   const INNER = {catears: '#FFD1E1', dogears: 'rgba(255,255,255,.4)'};
   /* 最后一条是「线」（茎 / 触角 / 底边）的形状：画成描边，不填色 */
   const LINE_LAST = {clover: 1, butterfly: 1, cherry: 1, crown: 1};
-  const SHAPE_NAMES = {lineears: '线条猫耳', whiskers: '猫猫腮毛', bang: '惊叹号', catears: '猫耳朵', dogears: '狗耳朵', heart: '爱心', star: '星星', sparkle: '闪光', moon: '月亮', cloud: '云朵', bow: '蝴蝶结', flower: '小花', clover: '四叶草', paw: '猫爪', butterfly: '蝴蝶', cherry: '樱桃', crown: '皇冠'};
+  const SHAPE_NAMES = {lstar: '线条星星', lcloud: '线条云朵', lhouse: '小房子', lheart: '线条爱心', lmoon: '线条月亮', lspark: '线条闪光', lflower: '线条小花', lnote: '音符', lineears: '线条猫耳', whiskers: '猫猫腮毛', bang: '惊叹号', catears: '猫耳朵', dogears: '狗耳朵', heart: '爱心', star: '星星', sparkle: '闪光', moon: '月亮', cloud: '云朵', bow: '蝴蝶结', flower: '小花', clover: '四叶草', paw: '猫爪', butterfly: '蝴蝶', cherry: '樱桃', crown: '皇冠'};
   const COLORS = ['#F4A7C3', '#E77FA6', '#B9A3EC', '#9CC2EC', '#9FD3C9', '#F6D277', '#F28C7D', '#FFFFFF', '#B98A66', '#4A4458'];
   const PENS = ['#3E3A52', '#E0566F', '#F4A7C3', '#B9A3EC', '#7FA9E0', '#7FC7A2', '#F6C453', '#FFFFFF'];
   const TAPES = [['stripe', '#F4A7C3'], ['dot', '#B9A3EC'], ['check', '#9CC2EC'], ['stripe', '#9FD3C9'], ['dot', '#F6D277'], ['plain', '#F7C6D8']];
@@ -404,7 +413,11 @@ const DoodleAlbum = (() => {
     const at = spec.indexOf(':'), kind = spec.slice(0, at), v = spec.slice(at + 1);
     const jit = () => (Math.random() - .5) * 120;
     let L = null;
-    if(kind === 'st' && LINEART[v]) L = {t: 'st', k: v, c: '#FFFFFF', x: v === 'bang' ? 290 : 500, y: v === 'lineears' ? 270 : v === 'bang' ? 300 : 500, s: v === 'bang' ? 1.1 : 2.6, r: v === 'bang' ? -10 : 0};
+    if(kind === 'st' && LINEART[v]){
+      const face = v === 'lineears' || v === 'whiskers' || v === 'bang';
+      L = face ? {t: 'st', k: v, c: '#FFFFFF', x: v === 'bang' ? 290 : 500, y: v === 'lineears' ? 270 : v === 'bang' ? 300 : 500, s: v === 'bang' ? 1.1 : 2.6, r: v === 'bang' ? -10 : 0}
+        : {t: 'st', k: v, c: '#FFFFFF', x: 500 + jit(), y: 450 + jit(), s: 1.5, r: (Math.random() - .5) * 20};
+    }
     else if(kind === 'st') L = {t: 'st', k: v, c: E.color, x: 500 + jit(), y: 470 + jit(), s: 1.8, r: (Math.random() - .5) * 30};
     else if(kind === 'tape'){ const [k, c] = TAPES[+v] || TAPES[0]; L = {t: 'tape', k, c, x: 500 + jit() * .6, y: 70, s: 1.4, r: (Math.random() - .5) * 16}; }
     else if(kind === 'stamp') L = {t: 'stamp', text: v, x: 740, y: 900, s: 1, r: 0};
