@@ -181,3 +181,22 @@ body.shell-doodle .sub-header .page-title,body.shell-doodle .sub-header .sub-tit
   background:radial-gradient(circle,var(--dd-lilac) 1.1px,transparent 1.5px) left bottom/7px 3px repeat-x}
 body.shell-doodle .sub-header .page-title svg,body.shell-doodle .sub-header .page-title i,body.shell-doodle .page-head .page-title svg{width:20px;height:20px;color:var(--dd-lilac);flex-shrink:0}
 body.shell-doodle .sub-header>*:nth-child(n+3){grid-column:auto;justify-self:end}
+
+/* 设置入口（2026-10-02） */
+body.shell-doodle .dd-s-entries,body.shell-doodle .dd-s-more .set-list{display:flex;flex-direction:column;margin:0 0 14px;background:var(--dd-glass);border:1px solid rgba(197,139,224,.28);border-radius:22px;box-shadow:var(--dd-shadow);overflow:hidden}
+body.shell-doodle .dd-s-entry,body.shell-doodle .dd-s-more .set-item{display:flex;align-items:center;gap:12px;width:100%;padding:13px 16px;border:0;border-bottom:1px dotted rgba(140,134,160,.3);background:none;font:16px var(--dd-font);color:var(--dd-text);text-align:left;cursor:pointer}
+body.shell-doodle .dd-s-entry:last-child,body.shell-doodle .dd-s-more .set-item:last-child{border-bottom:0}
+body.shell-doodle .dd-s-eic{width:34px;height:34px;flex:0 0 auto;padding:6px;box-sizing:border-box;border-radius:12px;color:#B57EDC;background:rgba(201,160,240,.16)}
+body.shell-doodle .dd-s-more .set-ic{border-radius:12px;color:#B57EDC;background:rgba(201,160,240,.16)}
+body.shell-doodle .dd-s-etx,body.shell-doodle .dd-s-more .set-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+body.shell-doodle .dd-s-etx b,body.shell-doodle .dd-s-more .set-tx b{font-weight:700;font-size:16px}
+body.shell-doodle .dd-s-etx small,body.shell-doodle .dd-s-more .set-tx small{font-size:12.5px;color:var(--dd-text-2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+body.shell-doodle .dd-s-ego{width:18px;height:18px;flex:0 0 auto;color:#C9B9D9}
+body.shell-doodle .dd-s-more .set-go{color:#C9B9D9}
+body.shell-doodle .dd-s-more .settings-footer{display:none}
+body.shell-doodle .dd-s-sub,body.shell-doodle .dd-s-more .set-head{display:flex;flex-direction:row;align-items:center;gap:10px;margin:0 2px 12px}
+body.shell-doodle .dd-s-sub b{font:400 20px var(--dd-font);color:var(--dd-text);letter-spacing:.08em}
+body.shell-doodle .dd-s-back,body.shell-doodle .dd-s-more .set-back{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(197,139,224,.35);border-radius:999px;padding:6px 14px 6px 10px;background:var(--dd-glass);color:#B57EDC;font:15px var(--dd-font);cursor:pointer}
+body.shell-doodle .dd-s-back [data-doodle]{width:18px;height:18px}
+body.shell-doodle .dd-s-more .set-head .page-title{display:block;margin:0;font:400 20px var(--dd-font);color:var(--dd-text);letter-spacing:.08em}
+body.shell-doodle .dd-s-more .set-head .page-title svg{display:none}

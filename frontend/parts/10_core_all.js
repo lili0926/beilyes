@@ -25921,7 +25921,82 @@ function backupRemindInit(){
   }catch(e){}
 }
 
+// ─── 设置：分类入口 ─────────────────────────────────────────────────────────
+// 她 2026-10-02 要的：设置别一长条往下拉，先是一排入口（API / 辅助 API / 记忆 / 数据 …），点进去才是那一类。
+// 各段的内容和 id 一个字没动（renderSettingsAll 照旧整页拼），这里只按标题把段落分进各个入口，
+// 所以 bindEvents 里那几百行绑定不用改 —— 不在当前页的那些 getElementById 拿到 null，本来就判过空。
+const SETTING_CATS = [
+  { key:"api",    icon:"bot",      title:"聊天 API",       desc:"每个角色的渠道、Key、模型",            match:t=>/^Aries\s*·/.test(t) },
+  { key:"aux",    icon:"brain",    title:"辅助 API",       desc:"聊天页以外的后台任务用的那把",          match:t=>t.includes("辅助 API") },
+  { key:"reply",  icon:"zap",      title:"回复与功能开关", desc:"流式输出、推特 / 浏览器注入、相机、写卡", match:t=>t.includes("回复输出") },
+  { key:"couple", icon:"heart",    title:"情侣信息",       desc:"名字、在一起的日子",                    match:t=>t.includes("情侣信息") },
+  { key:"mem",    icon:"library",  title:"上下文与记忆",   desc:"每轮带多少条聊天、记忆检索",            match:t=>t.includes("上下文") },
+  { key:"server", icon:"server",   title:"服务端",         desc:"VPS / 网关配置",                        match:t=>t.includes("服务端") },
+  { key:"pet",    icon:"cat",      title:"桌宠",           desc:"浮窗像素宠物",                          match:t=>t.includes("桌宠") },
+  { key:"cache",  icon:"gauge",    title:"缓存记账",       desc:"看 Claude 通道的缓存有没有命中",        match:t=>t.includes("缓存") },
+  { key:"data",   icon:"save",     title:"数据与备份",     desc:"导出 / 导入、安卓后台生成",             match:t=>t.includes("数据") },
+];
+/* 不在设置页里、但她会来设置里找的：直接跳过去 */
+const SETTING_LINKS = [
+  { key:"phone", icon:"phone",   title:"电话与声音", desc:"TTS、ElevenLabs、水声盒、语音识别" },
+  { key:"theme", icon:"palette", title:"外观",       desc:"主题、气泡、界面壳" },
+];
 function renderSettings(){
+  const full = renderSettingsAll();
+  const tpl = document.createElement("template");
+  tpl.innerHTML = full.trim();
+  const page = tpl.content.firstElementChild;
+  const groups = {};
+  if(page) [...page.children].forEach(el=>{
+    if(!el.classList || !el.classList.contains("section")) return;
+    const t = ((el.querySelector(".section-title")||{}).textContent || "").trim();
+    const c = SETTING_CATS.find(x=>x.match(t));
+    const k = c ? c.key : "other";
+    (groups[k] = groups[k] || []).push(el.outerHTML);
+  });
+  const cats = SETTING_CATS.filter(c=>groups[c.key]).concat(groups.other ? [{ key:"other", icon:"more-horizontal", title:"其他", desc:"" }] : []);
+  const cur = state.setCat && groups[state.setCat] ? cats.find(c=>c.key===state.setCat) : null;
+  if(!cur){
+    const item = (c, attr)=>`<button type="button" class="set-item" ${attr}="${c.key}">
+        <span class="set-ic"><i data-lucide="${c.icon}"></i></span>
+        <span class="set-tx"><b>${esc(c.title)}</b>${c.desc?`<small>${esc(c.desc)}</small>`:""}</span>
+        <i data-lucide="chevron-right" class="set-go"></i></button>`;
+    return `<div class="page set-menu">
+      <h2 class="page-title"><i data-lucide="settings"></i> 设置</h2>
+      <div class="set-list">${cats.map(c=>item(c, "data-set-cat")).join("")}</div>
+      <div class="set-list">${SETTING_LINKS.map(c=>item(c, "data-set-go")).join("")}</div>
+      <div class="settings-footer">baileys · Built with love 🌙</div>
+    </div>`;
+  }
+  return `<div class="page set-page">
+    <div class="set-head"><button type="button" class="set-back" data-set-cat="" aria-label="回到设置"><i data-lucide="chevron-left"></i>设置</button>
+      <h2 class="page-title"><i data-lucide="${cur.icon}"></i> ${esc(cur.title)}</h2></div>
+    ${groups[cur.key].join("")}
+  </div>`;
+}
+document.addEventListener("click", function(e){
+  try{
+    const t = e.target; if(!t || !t.closest) return;
+    if(t.closest("[data-tab]") && !t.closest("[data-tab='settings']")) state.setCat = null;   // 切走再回来，从入口开始
+    const c = t.closest("[data-set-cat]");
+    if(c){
+      e.preventDefault(); e.stopImmediatePropagation();
+      state.setCat = c.getAttribute("data-set-cat") || null;
+      render();
+      setTimeout(()=>{ try{ window.scrollTo(0, 0); document.querySelectorAll("#app .page, #app .dd-s-scroll").forEach(x=>{ x.scrollTop = 0; }); }catch(_){} }, 0);
+      return;
+    }
+    const g = t.closest("[data-set-go]");
+    if(g){
+      e.preventDefault(); e.stopImmediatePropagation();
+      const k = g.getAttribute("data-set-go");
+      if(k === "phone"){ state.callSettingsOpen = true; }
+      state.tab = "home"; state.subPage = k; render();
+      return;
+    }
+  }catch(err){}
+}, true);
+function renderSettingsAll(){
   const a=state.apiConfig, c=state.coupleInfo;
   const p=state.pocketConfig||{};
   const agents = state.agents || [];

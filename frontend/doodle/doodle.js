@@ -1112,36 +1112,50 @@ const DoodleShell = (() => {
     const sw = (k, on) => '<button type="button" class="dd-sw" role="switch" data-dd-sw="'+k+'" aria-checked="'+!!on+'"><i></i></button>';
     const seg = (k, opts) => '<div class="dd-seg" data-dd-seg="'+k+'">'+opts.map(([v,l]) => '<button type="button" data-v="'+v+'" aria-pressed="'+(p[k] === v)+'">'+l+'</button>').join('')+'</div>';
     const av = (i, src, label) => '<button type="button" class="dd-s-av" data-dd-av="'+i+'"><span class="dd-s-avimg"'+(src ? ' style="background-image:'+h(cssUrl(src))+'"' : '')+'>'+(src ? '' : '+')+'</span><small>'+label+'</small></button>';
-    return '<div class="page dd-setpage">'+
-      '<header class="dd-s-head"><img class="dd-pxname" alt="Settings" src="'+h(pixelNameURL('Settings', {}))+'"></header>'+
-      '<div class="dd-s-scroll">'+
-      '<div class="dd-s-card"><h3><span data-doodle="user" data-boil="off"></span>我们</h3>'+
+    /* 设置也分入口（2026-10-02）：涂鸦壳自己这几张卡各是一个入口，下面接 App 原生那一排入口 */
+    const cards = {
+      'dd-us': ['user', '我们', '头像、名字、在一起的日子、首页文案',
+        '<div class="dd-s-card"><h3><span data-doodle="user" data-boil="off"></span>我们</h3>'+
         '<div class="dd-s-pair">'+av(0, myAvatar(), '我的头像')+'<span class="dd-s-heart" data-doodle="heart" data-boil="on"></span>'+av(1, taAvatar(), 'ta 的头像')+'</div>'+
         (ag ? '<label class="dd-s-row"><span>ta 的名字<small>聊天顶栏会变成像素字</small></span><input type="text" id="dd-s-name" maxlength="24" autocomplete="off" value="'+h(ag.name || '')+'"></label>' : '')+
         '<label class="dd-s-row"><span>在一起的日子</span><input type="date" id="dd-s-start" value="'+h(c.startDate || '')+'"></label>'+
         '<label class="dd-s-row col"><span>首页文案</span><textarea id="dd-s-quote" rows="2" maxlength="500">'+h(c.statusMsg || '')+'</textarea></label>'+
-      '</div>'+
-      '<div class="dd-s-card"><h3><span data-doodle="sparkle" data-boil="off"></span>外观</h3>'+
+        '</div>'],
+      'dd-look': ['sparkle', '涂鸦外观', '主题、像素星光、线条抖动、壁纸',
+        '<div class="dd-s-card"><h3><span data-doodle="sparkle" data-boil="off"></span>外观</h3>'+
         '<div class="dd-s-row"><span>主题</span>'+seg('theme', [['light','浅色'],['system','自动'],['dark','深色']])+'</div>'+
         '<div class="dd-s-row"><span>像素星光<small>壁纸上一闪一闪的星星</small></span>'+sw('twinkle', p.twinkle)+'</div>'+
         '<div class="dd-s-row"><span>线条抖动<small>关掉后图标都静止</small></span>'+sw('boil', p.boil)+'</div>'+
         '<label class="dd-s-row"><span>壁纸线稿</span><input type="range" id="dd-s-wall" min="0" max="100" step="5" value="'+(+p.wall)+'"></label>'+
         '<div class="dd-s-row"><span>界面壳<small>换回其它壳在「外观」里</small></span><button type="button" class="dd-s-btn" data-dd-go="theme">去外观</button></div>'+
-      '</div>'+
-      '<div class="dd-s-card"><h3><span data-doodle="chat" data-boil="off"></span>聊天</h3>'+
+        '</div>'],
+      'dd-chat': ['chat', '聊天手感', '气泡 / 剧本、回车发送、音效、音乐省电',
+        '<div class="dd-s-card"><h3><span data-doodle="chat" data-boil="off"></span>聊天</h3>'+
         '<div class="dd-s-row"><span>聊天模式</span>'+seg('chatMode', [['bubble','气泡'],['script','剧本']])+'</div>'+
         '<div class="dd-s-row"><span>回车发送<small>关掉后回车换行</small></span>'+sw('enterSend', p.enterSend)+'</div>'+
         '<div class="dd-s-row"><span>音效<small>滑动、发消息时的小声音</small></span>'+sw('sound', p.sound)+'</div>'+
-      '</div>'+
-      '<div class="dd-s-card"><h3><span data-doodle="music" data-boil="off"></span>音乐</h3>'+
+        '</div>'+
+        '<div class="dd-s-card"><h3><span data-doodle="music" data-boil="off"></span>音乐</h3>'+
         '<div class="dd-s-row"><span>省电模式<small>关掉像素频谱动画</small></span>'+sw('saver', p.saver)+'</div>'+
-      '</div>'+
-      '<div class="dd-s-card"><h3><span data-doodle="lock" data-boil="off"></span>数据</h3>'+
-        '<div class="dd-s-row"><span>恢复默认设置<small>只重置这一页的外观选项，聊天记录和头像不动</small></span><button type="button" class="dd-s-btn" data-dd-reset>恢复</button></div>'+
-      '</div>'+
-      '<div class="dd-s-more">'+nativeHtml+'</div>'+
-      '<p class="dd-s-foot"><span data-doodle="clover" data-boil="on"></span><br>今天也会很幸运</p>'+
-      '</div><input type="file" accept="image/*" id="dd-s-file" hidden></div>';
+        '</div>'+
+        '<div class="dd-s-card"><h3><span data-doodle="lock" data-boil="off"></span>恢复默认</h3>'+
+        '<div class="dd-s-row"><span>恢复默认设置<small>只重置涂鸦壳的外观选项，聊天记录和头像不动</small></span><button type="button" class="dd-s-btn" data-dd-reset>恢复</button></div>'+
+        '</div>'],
+    };
+    const cat = state.setCat, own = cat && cards[cat];
+    const head = '<header class="dd-s-head"><img class="dd-pxname" alt="Settings" src="'+h(pixelNameURL('Settings', {}))+'"></header>';
+    let body;
+    if(own){
+      body = '<div class="dd-s-sub"><button type="button" class="dd-s-back" data-set-cat=""><span data-doodle="back" data-boil="off"></span>设置</button><b>'+own[1]+'</b></div>'+own[3];
+    } else if(cat){
+      body = '<div class="dd-s-more">'+nativeHtml+'</div>';
+    } else {
+      body = '<div class="dd-s-entries">'+Object.keys(cards).map(k =>
+        '<button type="button" class="dd-s-entry" data-set-cat="'+k+'"><span class="dd-s-eic" data-doodle="'+cards[k][0]+'" data-boil="off"></span><span class="dd-s-etx"><b>'+cards[k][1]+'</b><small>'+cards[k][2]+'</small></span><span class="dd-s-ego" data-doodle="forward" data-boil="off"></span></button>').join('')+'</div>'+
+        '<div class="dd-s-more">'+nativeHtml+'</div>'+
+        '<p class="dd-s-foot"><span data-doodle="clover" data-boil="on"></span><br>今天也会很幸运</p>';
+    }
+    return '<div class="page dd-setpage">'+head+'<div class="dd-s-scroll">'+body+'</div><input type="file" accept="image/*" id="dd-s-file" hidden></div>';
   }
   function drawNames(){ document.querySelectorAll('#app img.dd-pxname[data-dd-name]').forEach(img => setName(img, img.dataset.ddName, {outline:true})); }
 
