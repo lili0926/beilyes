@@ -528,9 +528,9 @@ const DoodleShell = (() => {
   }
   /* 最近用过：每排记最近 4 个，排到最前面（她 2026-10-02：找券夹要滑二十多下） */
   const RECENT_N = 4;
-  function recentOf(k){ try{ const r = JSON.parse(localStorage.getItem('ddRecentApps') || '{}'); return Array.isArray(r[k]) ? r[k] : []; }catch(e){ return []; } }
+  function recentOf(k){ const r = P().recentApps || {}; return Array.isArray(r[k]) ? r[k] : []; }
   function noteRecent(k, key){
-    try{ const r = JSON.parse(localStorage.getItem('ddRecentApps') || '{}'); const a = (Array.isArray(r[k]) ? r[k] : []).filter(x => x !== key); a.unshift(key); r[k] = a.slice(0, RECENT_N); localStorage.setItem('ddRecentApps', JSON.stringify(r)); }catch(e){}
+    const r = Object.assign({}, P().recentApps || {}); const a = recentOf(k).filter(x => x !== key); a.unshift(key); r[k] = a.slice(0, RECENT_N); setP('recentApps', r);
   }
   function appListSorted(k){
     const base = appList(k), rec = recentOf(k).filter(key => base.some(a => a.key === key));
