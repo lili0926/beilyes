@@ -62,7 +62,7 @@
 .dda-nav:disabled{opacity:.35;cursor:default}
 
 /* 拍立得 */
-.dda-pol{position:absolute;inset:6% 7% 5%;display:flex;flex-direction:column;padding:7% 7% 0;border:0;border-radius:2px;background:#FFFEFA;cursor:pointer;font:inherit;
+.dda-pol{position:absolute;left:7%;top:4.5%;width:86%;aspect-ratio:.8;box-sizing:border-box;display:flex;flex-direction:column;padding:6% 6% 0;border:0;border-radius:2px;background:#FFFEFA;cursor:pointer;font:inherit;
   transform:rotate(var(--r));box-shadow:0 1px 0 rgba(0,0,0,.05),0 6px 10px -4px rgba(60,60,90,.35)}
 .dda-pol:active{transform:rotate(var(--r)) scale(.97)}
 .dda-photo{position:relative;display:block;width:100%;aspect-ratio:1;overflow:hidden;background:#2B2630}
@@ -88,7 +88,7 @@
 .dda-card{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.3,1.2,.5,1)}
 .dda-card.back{transform:rotateY(180deg)}
 .dda-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
-.dda-face .dda-pol,.dda-compose .dda-pol{inset:0;padding:6% 6% 0;transform:none;box-shadow:0 22px 40px -18px rgba(30,30,60,.6)}
+.dda-face .dda-pol,.dda-compose .dda-pol{left:0;top:0;width:100%;padding:6% 6% 0;transform:none;box-shadow:0 22px 40px -18px rgba(30,30,60,.6)}
 .dda-face .dda-cap{font-size:16px;padding-bottom:16px}
 .dda-face .dda-date{font-size:13px}
 .dda-face.rear{transform:rotateY(180deg);box-sizing:border-box;padding:22px 20px 16px;border-radius:3px;background:#FFFEF6;overflow:auto;display:flex;flex-direction:column;
@@ -118,3 +118,44 @@
   background-image:linear-gradient(#E3EAF8,#E3EAF8);background-size:84% 62%;background-position:50% 18%;background-repeat:no-repeat}
 .dda-fab [data-doodle]{width:22px!important;height:22px!important;color:#8B6CC0}
 @media (prefers-reduced-motion:reduce){.dda-sheet,.dda-pol.developing .dda-photo img,.dda-big{animation:none}}
+
+/* 装饰层：和拍立得一样大（1000 × 1250），不挡点击 */
+.dda-deco{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;overflow:visible}
+.dda-pol .dda-date{z-index:2}
+
+/* 装饰编辑器：整屏 */
+.dda-edit{position:fixed;inset:0;z-index:320;display:flex;flex-direction:column;background:linear-gradient(180deg,#EFE8FB,#F6F2FD 40%,#EEF3FC);animation:ddnFade .2s ease both;
+  padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+.dda-ed-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+.dda-ed-head b{font-family:"ZCOOL KuaiLe",var(--dd-font);font-weight:400;font-size:20px;color:#8B6CC0;letter-spacing:.08em}
+.dda-ed-head button{border:0;border-radius:999px;padding:8px 16px;font:15px var(--dd-font);color:#8B6CC0;background:#fff;box-shadow:0 6px 12px -8px rgba(60,40,100,.5)}
+.dda-ed-head .go{color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+.dda-ed-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px 16px}
+.dda-pol.ed{position:relative;left:auto;top:auto;width:min(86vw,calc((100vh - 330px) * .8),400px);transform:none;cursor:default;box-shadow:0 22px 40px -20px rgba(30,30,60,.55)}
+.dda-pol.ed .dda-cap{font-size:16px;padding-bottom:16px}
+.dda-pol.ed .dda-date{font-size:13px}
+.dda-deco.ed{pointer-events:auto;touch-action:none;cursor:crosshair}
+.dda-ed-tabs{display:flex;gap:4px;padding:6px 10px;overflow-x:auto;scrollbar-width:none}
+.dda-ed-tabs button{flex:0 0 auto;border:0;border-radius:999px;padding:7px 13px;font:14px var(--dd-font);color:#8C84A8;background:rgba(255,255,255,.7)}
+.dda-ed-tabs button.on{color:#fff;background:linear-gradient(90deg,var(--dd-lilac),var(--dd-blue))}
+.dda-ed-head span{display:flex;gap:8px}
+.dda-ed-head .undo{font-size:18px;padding:5px 13px}
+.dda-ed-head .undo:disabled{opacity:.35}
+.dda-ed-tabs{justify-content:center}
+.dda-ed-panel{height:150px;overflow-y:auto;margin:0 10px 10px;padding:10px;border-radius:20px;background:rgba(255,255,255,.85);box-shadow:0 10px 20px -16px rgba(60,40,100,.5)}
+.dda-ed-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+.dda-sw{width:28px;height:28px;border-radius:50%;border:3px solid #fff;background:var(--c);box-shadow:0 0 0 1.5px #E2DAF0;padding:0}
+.dda-sw.on{box-shadow:0 0 0 2.5px #8B6CC0}
+.dda-chip{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:999px;padding:6px 14px;font:14px var(--dd-font);color:#8B6CC0;background:#F3EEFA;cursor:pointer}
+.dda-chip.on{color:#fff;background:#B99BE6}
+.dda-chip.big{padding:12px 18px;margin:8px auto;display:flex;width:max-content}
+.dda-ed-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.dda-ed-grid.tapes{grid-template-columns:repeat(3,1fr)}
+.dda-ed-grid.stamps{grid-template-columns:repeat(2,1fr)}
+.dda-ed-st,.dda-ed-tape,.dda-ed-stamp{border:0;border-radius:12px;background:#FAF7FE;padding:4px;cursor:pointer;aspect-ratio:1}
+.dda-ed-st svg,.dda-ed-st img{width:100%;height:100%;object-fit:contain;display:block}
+.dda-ed-tape{aspect-ratio:3.2}
+.dda-ed-tape svg{width:100%;height:100%;display:block}
+.dda-ed-stamp{aspect-ratio:auto;padding:12px 6px;font:700 20px ui-monospace,Menlo,monospace;color:#FF9A3D;text-shadow:0 0 5px rgba(255,140,40,.6);display:flex;flex-direction:column;align-items:center;gap:4px}
+.dda-ed-stamp small{font:12px var(--dd-font);color:#9C95B4;text-shadow:none}
+.dda-ed-tip{margin:6px 4px 0;font-size:12px;color:#9C95B4;text-align:center}
