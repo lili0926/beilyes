@@ -26820,7 +26820,7 @@ if(!window.__mpDelegated){
     try{
       if(state && state.tab==="chat" && e.target && e.target.closest){
         const el = e.target.closest("[data-msg-idx],[data-pend-idx]");
-        if(el){ e.preventDefault(); chatOpenBarFor(el); }
+        if(el && !e.target.closest("textarea,input,select,[contenteditable],.sg-card")){ e.preventDefault(); chatOpenBarFor(el); }
       }
     }catch(err){}
   });
@@ -28362,7 +28362,7 @@ function bindEvents(){
     let lpTimer=null, lpEl=null, lpX=0, lpY=0;
     chatMsgsBox.addEventListener("touchstart", e=>{
       const el=e.target.closest?e.target.closest("[data-msg-idx],[data-pend-idx]"):null;
-      if(!el || (e.target.closest && e.target.closest(".avatar-link,.dd-bav,.bubble-avatar"))) return;
+      if(!el || (e.target.closest && e.target.closest(".avatar-link,.dd-bav,.bubble-avatar,textarea,input,select,[contenteditable],.sg-card,.cb-chat"))) return;
       lpEl=el; lpX=e.touches[0].clientX; lpY=e.touches[0].clientY;
       lpTimer=setTimeout(()=>{ if(lpEl){ chatOpenBarFor(lpEl); } lpEl=null; }, 480);
     }, {passive:true});
@@ -28398,7 +28398,8 @@ function bindEvents(){
         const row = t.closest && t.closest("[data-msg-idx]");
         if(row){
           // 可交互内容（按钮/链接/图片/贴纸/思考按钮）不触发操作条
-          if(t.closest("button,a,[data-action-send],[data-song-play],img")) return;
+          // 回执单 / 券 / 信这类卡片里有输入框和自己的按钮：点进去写字时开操作条会整页重绘、把键盘收掉
+          if(t.closest("button,a,[data-action-send],[data-song-play],img,textarea,input,select,label,[contenteditable],.sg-card,.cb-chat,[data-mc-open]")) return;
           const idx = +row.dataset.msgIdx;
           state.msgBarIdx = state.msgBarIdx===idx ? null : idx;
           render();
