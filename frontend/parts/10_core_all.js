@@ -5190,7 +5190,7 @@ ${replyFormatRules()}`;
 - 感想 ≤30 字，温柔自然，是配给照片的话。
 - 暗号会被系统识别并擦除，用户只看到它悄悄存进相册。
 - 这一轮没有收到照片时不要用。` + voiceMsgPromptBlock(); // 语音条协议挂在这块：常驻、只随开关变，不破缓存
-  const couponBlock = __featHot("券","优惠券","用券","奖励券","送券") ? couponStatusPromptBlock() : ""; // 券夹：⟪使用券:券名⟫
+  const couponBlock = __featHot("券","优惠券","用券","奖励券","送券","撕","许你","答应你","欠你") ? couponStatusPromptBlock() : ""; // 券夹：⟪使用券:券名⟫
   // 钱包：余额/货架/[pay:][buy:] 暗号。聊到钱或想要东西时才注入，省 token
   const walletBlock = __featHot("钱","钱包","余额","转账","零花","买","兑换","攒","打赏","小鱼干") ? walletPromptBlock() : "";
   // Project 文件协议：聊到写代码/网页/文件时注入，让产出落进项目区而不是贴进气泡。
@@ -16163,6 +16163,7 @@ function ensureCoupons(){
   if(!Array.isArray(state.coupons)) state.coupons = DEFAULT_COUPONS();
 }
 function couponStatusPromptBlock(){
+  if(typeof CouponBook!=="undefined") return CouponBook.promptBlock();
   ensureCoupons();
   const kept = (state.coupons||[]).filter(c=>c.status==="kept");
   if(!kept.length) return "";
@@ -16502,6 +16503,7 @@ function handleWalletMarkers(body){
 }
 
 function handleCouponMarkers(body){
+  if(typeof CouponBook!=="undefined") return CouponBook.handleMarkers(body); // ⟪使用券⟫ ⟪写券⟫
   const text = String(body||"");
   const RE = /[⟪《【\[]\s*使用券\s*[:：]\s*([^⟫》】\]]+)[⟫》】\]]/;
   const m = text.match(RE);
@@ -16519,6 +16521,7 @@ function handleCouponMarkers(body){
   return { text: cleaned, couponId };
 }
 function renderCoupons(){
+  if(typeof CouponBook!=="undefined") return CouponBook.page(); // 两本能撕的券本（doodle/coupon.js）
   ensureCoupons();
   const list = state.coupons||[];
   const kept = list.filter(c=>c.status==="kept");
@@ -22830,6 +22833,7 @@ function chatCardRow(m, speakerMeta){
   if(m.type==="note") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${noteCardHtml(m)}</div>`;
   if(m.type==="diary_notice") return `${speakerMeta||""}<div class="bubble-row them">${diaryNoticeCardHtml(m)}</div>`;
   if(m.type==="letter") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${letterCardHtml(m)}</div>`;
+  if(m.type==="coupon" && typeof CouponBook!=="undefined") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${CouponBook.chatCard(m, (state.coupons||[]).find(x=>x.id===m.couponId))}</div>`;
   return "";
 }
 
@@ -22844,7 +22848,7 @@ function __stripMarkersForLive(t){
     .replace(/⟪\s*回执(?:单|复盘)\s*[:：][^⟫]*(?:⟫|$)/g,"")
     .replace(/⟪\s*(?:缠|进入)\s*[:：]?[^⟫]*(?:⟫|$)/g,"")
     .replace(/⟪\s*(?:固定|松开)\s*⟫/g,"")
-    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
+    .replace(/[⟪《【]\s*(?:推送|收藏|写纸条|写日记|写信|使用券|写券|点歌|歌单|动态|备注|浏览器开|浏览器关|浏览器截图|浏览器读页|浏览器看|浏览器滑|浏览器刷)\s*[:：][^⟫》】]*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*日记解锁\s*(?:[:：][^⟫》】]*)?[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:飞行棋|下棋|掷骰子?|拨号|挂断|勿扰开|勿扰关|弹飞)\s*[⟫》】]/g,"")
     .replace(/[⟪《【]\s*(?:真心话|大冒险|混合|抽卡|抽张|翻牌|机抽|我抽|机来抽)\s*[⟫》】]/g,"")
@@ -24339,8 +24343,8 @@ function renderChat(){
       // 券夹卡片：AI 送出的券面
       if(m.couponId){
         const cc=(state.coupons||[]).find(x=>x.id===m.couponId);
-        if(!cc) return; // 券已被删除：不显示
-        msgs+=`${speakerMeta}<div class="bubble-row them">${couponCardHtml(cc)}</div>`;
+        if(!cc && !m.couponSnap) return; // 券已被删除：不显示
+        msgs+=`${speakerMeta}<div class="bubble-row ${m.role==="user"?"me":"them"}">${typeof CouponBook!=="undefined" ? CouponBook.chatCard(m, cc) : couponCardHtml(cc)}</div>`;
         return;
       }
       // Project 信封文件卡
@@ -36629,7 +36633,11 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     }
   }catch(e){}
   // 券夹：送出的券面，作为一条独立卡片气泡跟在文字后面
-  if(couponRes.couponId){
+  if(couponRes.couponMsgs && couponRes.couponMsgs.length){
+    couponRes.couponMsgs.forEach((cm, ci)=>{
+      state.messages.push(Object.assign({ role:"assistant", time: now, msgId: msgId+"_coupon"+(ci||""), speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color }, cm));
+    });
+  } else if(couponRes.couponId){
     state.messages.push({
       role:"assistant",
       couponId: couponRes.couponId,
