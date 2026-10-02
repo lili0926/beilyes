@@ -530,7 +530,16 @@ const DoodleShell = (() => {
     setTimeout(() => { av.hidden = true; av.classList.remove('closing'); if(opener) opener.focus({preventScroll:true}); }, 520);
   }
   /* 进入真功能：用首页里藏着的原生 data-sub 按钮，特殊入口（牌室、囚禁模拟器…）也照原处理器走 */
+  /* 从功能页「返回」时回到原来那一排卡片、停在刚才那张，而不是掉回首页再点一遍 */
+  let ret = null;
+  function reopenView(r){
+    const btn = home.root.querySelector('[data-open="'+r.kind+'"]');
+    kind = r.kind; opener = btn; build(r.kind); fullVars(av); av.classList.remove('closing'); av.hidden = false; av.classList.add('show'); setOpened(true);
+    const c = car.children[Math.min(r.i, car.children.length-1)];
+    requestAnimationFrame(() => { if(c){ car.scrollLeft = c.offsetLeft - (car.clientWidth - c.offsetWidth)/2; } cardsUpdate(); });
+  }
   function goFeature(key){
+    ret = (key !== '@moments' && cur >= 0) ? {kind, i: cur} : null;
     av.hidden = true; av.classList.remove('show','closing'); setOpened(false);
     if(key === '@moments'){ state.tab = 'moments'; state.subPage = null; render(); return; }
     const btn = document.querySelector('#dd-subs [data-sub="'+(window.CSS && CSS.escape ? CSS.escape(key) : key)+'"]');
@@ -1189,6 +1198,8 @@ const DoodleShell = (() => {
       if(!LT.hidden && !ltOpen) closeLetters(true);
       if(av.hidden && LT.hidden) setOpened(!NP.hidden);
     }
+    if(state.tab !== 'home') ret = null;
+    if(atHome && ret){ const r = ret; ret = null; try{ reopenView(r); }catch(e){} }
     if(atHome){ paintQuote(); paintAvatars(); renderDays(); if(wasHidden){ lastHM = ''; tick(); requestAnimationFrame(fit); } }
     syncSound(); paint();
     const app = document.getElementById('app');
