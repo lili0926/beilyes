@@ -11589,6 +11589,7 @@ ${parts.join("\n")}
 }
 
 function renderDream(){
+  if(typeof DreamBook !== "undefined") return DreamBook.page();   // 他的梦簿（doodle/dream.js）
   return `<div class="page">
     ${subHeader('<i data-lucide="moon"></i> 梦境')}
     <div class="feat-section-label">夜间做梦 · REM</div>
@@ -12403,9 +12404,33 @@ ${bits.join("\n") || "- （几乎空白的一夜）"}`;
   persist("memories");
   st.lastRunDate = today;
   st.lastDream = { title, dream, trace, at: new Date().toISOString(), materialIds };
+  // 梦簿：每场都留着（以前只留最近一场，她也读不到全文）；做梦用的碎片抄一份短的，记忆以后改了也还在
+  try{
+    st.history = Array.isArray(st.history) ? st.history : [];
+    const entry = { id: "dr" + Date.now().toString(36), title, dream, trace, at: st.lastDream.at,
+      mats: mat.residue.map(m=>String(m.content||"").slice(0,48)), knot: mat.knot ? String(mat.knot.content||"").slice(0,48) : "", fav:false, seen:false };
+    st.history.push(entry);
+    if(st.history.length > 150) st.history = st.history.slice(-150);
+    st.lastDream.id = entry.id;
+    dreamToChat(entry);
+  }catch(e){}
   st.pendingTrace = { text: trace || title, expireAt: Date.now()+86400000, consumed: false };
   persist("dreamState");
   return { dreamed:true, title, dream, trace };
+}
+/** 他夜里做了梦：聊天里放一张模糊小卡（不推通知；他自己知道做过梦，所以算他那边的一条） */
+function dreamToChat(e){
+  const t = state.chatTarget === "group" ? "a1" : (state.chatTarget || "a1");
+  const ag = (typeof agentById === "function" ? agentById(t) : null) || (state.agents||[])[0] || {};
+  const msg = { role:"assistant", type:"dream", dreamId:e.id, snap:{ title:e.title }, content:"（昨晚做了个梦，梦的名字叫《" + (e.title||"无题") + "》）",
+    time:new Date().toISOString(), msgId:"dream_" + e.id, speakerId:ag.id, speakerName:ag.name, speakerColor:ag.color };
+  if(typeof saveActiveThread === "function") saveActiveThread();
+  state.chatThreads = state.chatThreads || {};
+  const th = state.chatThreads[t] || (state.chatThreads[t] = { messages:[], pendingUser:[] });
+  th.messages = th.messages || [];
+  th.messages.push(msg);
+  if((state.chatTarget || "a1") === t) state.messages = th.messages; else th.unread = (th.unread||0) + 1;
+  try{ LS.set("chatThreads", state.chatThreads); }catch(err){}
 }
 async function dreamTryNight(){
   try{
@@ -22834,6 +22859,7 @@ function chatCardRow(m, speakerMeta){
   if(m.type==="note") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${noteCardHtml(m)}</div>`;
   if(m.type==="diary_notice") return `${speakerMeta||""}<div class="bubble-row them">${diaryNoticeCardHtml(m)}</div>`;
   if(m.type==="letter") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${letterCardHtml(m)}</div>`;
+  if(m.type==="dream" && typeof DreamBook!=="undefined") return `${speakerMeta||""}<div class="bubble-row them">${DreamBook.chatCard(m)}</div>`;
   if(m.type==="coupon" && typeof CouponBook!=="undefined") return `${speakerMeta||""}<div class="bubble-row ${m.role==="user"?"me":"them"}">${CouponBook.chatCard(m, (state.coupons||[]).find(x=>x.id===m.couponId))}</div>`;
   return "";
 }
@@ -26315,8 +26341,9 @@ if(!window.__mpDelegated){
       const sgOpenBtn = raw.closest && raw.closest("[data-sg-open]");
       if(sgOpenBtn){
         e.preventDefault(); e.stopImmediatePropagation();
-        try{ sgDraft(sgOpenBtn.getAttribute("data-sg-open")).open = true; persist("sigilloDraft"); }catch(err){}
-        if(typeof render==="function") render();
+        const go = ()=>{ try{ sgDraft(sgOpenBtn.getAttribute("data-sg-open")).open = true; persist("sigilloDraft"); }catch(err){}
+          if(typeof render==="function") render(); };
+        if(typeof SigilloFx !== "undefined") SigilloFx.openAnim(sgOpenBtn, go); else go();
         return;
       }
       const sgViewBtn = raw.closest && raw.closest("[data-sg-view]");
@@ -26331,7 +26358,7 @@ if(!window.__mpDelegated){
       const sgSealBtn = raw.closest && raw.closest("[data-sg-seal]");
       if(sgSealBtn){
         e.preventDefault(); e.stopImmediatePropagation();
-        if(!sgSealBtn.disabled) sgOnSeal(sgSealBtn.getAttribute("data-sg-seal"));
+        if(!sgSealBtn.disabled && !(typeof SigilloFx !== "undefined" && SigilloFx.onSealClick(sgSealBtn))) sgOnSeal(sgSealBtn.getAttribute("data-sg-seal"));
         return;
       }
       // 蓝晒壳：换楼层 / 平面上点房间 / 中庭进聊天。
@@ -29942,6 +29969,7 @@ reader.readAsArrayBuffer(f);
     dreamForce.disabled = true; dreamForce.textContent = "入梦中…";
     try{
       const r = await dreamRunOnce(true);
+      if(r.dreamed && typeof DreamBook !== "undefined"){ dreamForce.disabled = false; DreamBook.openLatest(); return; }
       if(r.dreamed) alert("梦成：【"+(r.title||"")+"】\n"+String(r.trace||"").slice(0,80));
       else alert("未成梦："+(r.reason||"")+(r.error?(" "+r.error):""));
     }catch(e){ alert("失败："+e.message); }
@@ -35641,6 +35669,9 @@ function sigilloCardHtml(id, clickable){
       <b class="sg-face__note">${esc(note || fallback)}</b>
       <div class="sg-face__hint"><i class="sg-face__sep" aria-hidden="true">✦</i><span class="sg-face__act">${esc(hint)}</span></div>
     </button>`;
+  if(!open && typeof SigilloFx !== "undefined"){
+    return `<div class="sg-card sgx" data-sg-card="${escAttr(id)}">${done ? SigilloFx.folded(r, act) : SigilloFx.envelope(id, r.env_note, act)}</div>`;
+  }
   if(!open){
     return `<div class="sg-card" data-sg-card="${escAttr(id)}">${done
       ? face(r.sealed_note, "已回执。", "已封存 · 轻点查看回执", "sg-face--sealed", ` data-sg-view="${escAttr(id)}"`)
@@ -35652,8 +35683,11 @@ function sigilloCardHtml(id, clickable){
         stars: (r.items||[]).map(it=>typeof it.star === "number" ? it.star : 0),
         notes: (r.items||[]).map(it=>it.note||""), suggest: r.note||"" }
     : d;
-  let h = `<div class="sg-card" data-sg-card="${escAttr(id)}"><div class="sg-sheet${locked?" sg-sheet--ro":""} sg-fadein"><div class="sg-scroller"><div class="sg-inner">`;
-  h += `<div class="sg-head"><b class="sg-head__cap">FEEDBACK</b>${sgOrn()}</div>`;
+  const fx = typeof SigilloFx !== "undefined";
+  let h = `<div class="sg-card${fx?" sgx sgx-open":""}" data-sg-card="${escAttr(id)}"><div class="sg-sheet${locked?" sg-sheet--ro":""} sg-fadein">${fx && !locked ? SigilloFx.stampLayer() : ""}<div class="sg-scroller"><div class="sg-inner">`;
+  h += fx
+    ? `<div class="sg-head sgx-head"><b class="sg-head__cap">SIGILLO</b><span class="sgx-no">回执联 · No. ${esc(String(r.id||"").slice(-6).toUpperCase())}</span>${sgOrn()}</div>`
+    : `<div class="sg-head"><b class="sg-head__cap">FEEDBACK</b>${sgOrn()}</div>`;
   const dl = sgDateLine(r.created_at);
   if(dl) h += `<div class="sg-date">${esc(dl)}</div>`;
   if(r.context) h += `<div class="sg-ctx">${esc(r.context)}</div>`;
@@ -35672,7 +35706,7 @@ function sigilloCardHtml(id, clickable){
     h += `<div class="sg-suggest"><div class="sg-q"><span class="sg-q__mark" aria-hidden="true">✦</span><p class="sg-q__text">改进与建议</p></div>`
       + `<div class="sg-box"><textarea class="sg-box__ta" rows="2" data-sg-note="${escAttr(id)}|s" aria-label="改进与建议">${esc(st.suggest||"")}</textarea></div></div>`;
     const g = sgGateText(d);
-    h += sgOrn("sg-orn--bottom") + `<div class="sg-footbar"><button type="button" class="sg-sealbtn" data-sg-seal="${escAttr(id)}"${g.ok?"":" disabled"}><span class="sg-wax" aria-hidden="true"></span>封 缄 回 执</button><div class="sg-footnote">${esc(g.text)}</div></div>`;
+    h += sgOrn("sg-orn--bottom") + `<div class="sg-footbar"><button type="button" class="sg-sealbtn" data-sg-seal="${escAttr(id)}"${g.ok?"":" disabled"}>${typeof SigilloFx !== "undefined" ? SigilloFx.ringHtml() : ""}<span class="sg-wax" aria-hidden="true"></span>${typeof SigilloFx !== "undefined" ? "按 住 封 缄" : "封 缄 回 执"}</button><div class="sg-footnote">${esc(g.text)}</div></div>`;
   }else{
     const t = String(st.suggest||"").trim();
     if(t) h += `<div class="sg-suggest"><div class="sg-q"><span class="sg-q__mark" aria-hidden="true">✦</span><p class="sg-q__text">改进与建议</p></div><div class="sg-roline">${esc(t)}</div></div>`;

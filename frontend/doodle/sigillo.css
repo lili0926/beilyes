@@ -1,0 +1,89 @@
+/* 回执 · 火漆封缄信 */
+.sg-card.sgx{--wax:#8E1A2B;--wax-hi:#C2394B;--ink:#3B302C;--ink2:#8A7A70;--paper:#FBF7EE;--paper2:#F3EBDD;--red-ink:#B23447;
+  border:0!important;background:none!important;box-shadow:none!important;padding:0!important;width:min(300px,72vw);max-width:340px}
+.page > .sg-card.sgx{width:min(340px,100%)}
+.sgx .sg-face{all:unset;box-sizing:border-box;display:block;position:relative;width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sgx .sg-face:disabled{cursor:default}
+
+/* —— 信封 —— */
+.sgx-env{aspect-ratio:1.58;perspective:700px;filter:drop-shadow(0 10px 14px rgba(80,50,30,.22))}
+.sgx-env__back{position:absolute;inset:0;border-radius:8px;background:linear-gradient(160deg,#FFFBF3,#F1E7D6);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .42 0 0 0 0 .32 0 0 0 .12 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E"),linear-gradient(160deg,#FFFBF3,#F1E7D6)}
+.sgx-env__back::after{content:"";position:absolute;inset:0;border-radius:8px;
+  background:linear-gradient(to top right,transparent 49.6%,rgba(120,90,60,.12) 50%,transparent 50.6%),linear-gradient(to top left,transparent 49.6%,rgba(120,90,60,.12) 50%,transparent 50.6%)}
+.sgx-env__flap{position:absolute;left:0;right:0;top:0;height:48%;transform-origin:50% 0;transition:transform .55s cubic-bezier(.4,.1,.3,1) .18s;z-index:2;
+  background:linear-gradient(180deg,#F4EADA,#E9DCC6);clip-path:polygon(0 0,100% 0,50% 100%);border-radius:8px 8px 0 0}
+.sgx-env__flap::after{content:"";position:absolute;inset:0;clip-path:polygon(0 0,100% 0,50% 100%);background:linear-gradient(180deg,transparent 60%,rgba(90,60,30,.12))}
+.sgx-env__body{position:absolute;left:10%;right:10%;bottom:6%;top:61%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;z-index:1;text-align:center}
+.sgx-env__to{font:italic 400 13px/1 'Pinyon Script','Great Vibes',cursive;color:var(--ink2)}
+.sgx-env__note{font:400 16px/1.35 'Ma Shan Zheng','ZCOOL KuaiLe','Noto Serif SC',serif;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sgx-env__hint{font:600 9px/1 Georgia,serif;letter-spacing:.32em;color:var(--wax);opacity:.75;margin-top:2px}
+.sgx-env__seal{position:absolute;left:50%;top:46%;width:52px;height:52px;margin:-26px 0 0 -26px;z-index:3;filter:drop-shadow(0 3px 3px rgba(60,10,20,.35))}
+.sgx-half{position:absolute;inset:0;display:block}
+.sgx-half svg{width:100%;height:100%}
+.sgx-half{transition:transform .5s cubic-bezier(.5,0,.8,.4),opacity .5s}
+.sgx-half.l{clip-path:polygon(0 0,54% 0,44% 30%,56% 52%,42% 76%,52% 100%,0 100%)}
+.sgx-half.r{clip-path:polygon(54% 0,100% 0,100% 100%,52% 100%,42% 76%,56% 52%,44% 30%)}
+.sgx-env:not(:disabled):active .sgx-env__seal{transform:scale(.96)}
+.sgx-env.opening .sgx-half.l{transform:translate(-26px,46px) rotate(-38deg);opacity:0}
+.sgx-env.opening .sgx-half.r{transform:translate(24px,52px) rotate(32deg);opacity:0}
+.sgx-env.opening .sgx-env__flap{transform:rotateX(178deg)}
+.sgx-env.opening .sgx-env__body{animation:sgxLift .5s ease .45s forwards}
+@keyframes sgxLift{to{transform:translateY(-12px);opacity:0}}
+
+/* —— 回执单（展开）—— */
+.sgx-open .sg-sheet{position:relative;background:var(--paper)!important;border:0!important;border-radius:4px!important;color:var(--ink);
+  box-shadow:0 1px 0 #E8DFCF,0 14px 26px -16px rgba(80,50,30,.45)!important;overflow:visible!important;animation:sgxSlide .55s cubic-bezier(.2,.9,.3,1) both;
+  -webkit-mask:radial-gradient(circle 5px at 50% 0,#0000 96%,#000) top/14px 100% repeat-x;mask:radial-gradient(circle 5px at 50% 0,#0000 96%,#000) top/14px 100% repeat-x}
+@keyframes sgxSlide{from{transform:translateY(34px) scale(.97);opacity:0}}
+.sgx-open .sg-scroller{max-height:560px}
+.sgx-open .sg-inner{padding:18px 16px 14px;background-image:repeating-linear-gradient(180deg,transparent 0 27px,rgba(140,110,80,.09) 27px 28px);background-position:0 8px}
+.sgx-open{--sigillo-accent:var(--wax);--sigillo-dim:var(--ink2);--sigillo-fg:var(--ink);--sigillo-line:rgba(140,110,80,.25)}
+.sgx-head .sg-head__cap{font:600 13px/1 Georgia,'Noto Serif SC',serif!important;letter-spacing:.5em!important;color:var(--wax)!important}
+.sgx-no{font:italic 10.5px/1 Georgia,serif;color:var(--ink2);letter-spacing:.08em}
+.sgx-open .sg-date{font-family:Georgia,serif}
+.sgx-open .sg-ctx{font-family:'Noto Serif SC',serif;font-style:italic}
+.sgx-open .sg-dim__k{font-family:Georgia,'Noto Serif SC',serif;letter-spacing:.14em}
+.sgx-open .sg-q__text{font-family:'Noto Serif SC',serif}
+/* 打星 → 按火漆点 */
+.sgx-open .sg-star{clip-path:none!important;width:15px!important;height:15px!important;border-radius:50%;background:transparent!important;box-shadow:inset 0 0 0 1.4px rgba(142,26,43,.32);
+  transition:transform .18s cubic-bezier(.3,1.6,.5,1),background .18s,box-shadow .18s}
+.sgx-open .sg-star::after{border-radius:15px 0 0 15px;background:radial-gradient(circle at 70% 35%,var(--wax-hi),var(--wax) 60%,#5A0D19)!important}
+.sgx-open .sg-starcell.is-on .sg-star{background:radial-gradient(circle at 35% 30%,var(--wax-hi),var(--wax) 60%,#5A0D19)!important;box-shadow:0 1px 1.5px rgba(60,10,20,.45),inset 0 0 0 2.5px rgba(255,255,255,.12);transform:scale(1.08)}
+.sgx-open .sg-starcell--sm .sg-star{width:13px!important;height:13px!important}
+/* 备注：红墨水，写在横线上 */
+.sgx-open .sg-box__ta{background:transparent!important;border:0!important;border-bottom:1px dashed rgba(178,52,71,.35)!important;border-radius:0!important;padding:4px 2px!important;
+  color:var(--red-ink)!important;font:400 15px/1.75 'NaiKitten','ZCOOL KuaiLe','Noto Serif SC',sans-serif!important;background-image:repeating-linear-gradient(180deg,transparent 0 25px,rgba(140,110,80,.16) 25px 26px)!important}
+.sgx-open .sg-box__ta::placeholder{color:rgba(178,52,71,.35)}
+.sgx-open .sg-roline{color:var(--red-ink);font:400 14px/1.7 'NaiKitten','ZCOOL KuaiLe',sans-serif;border-left-color:rgba(178,52,71,.4)}
+/* 按住封缄 */
+.sgx-open .sg-sealbtn{position:relative;padding:11px 22px 11px 18px!important;border:0!important;color:#fff!important;letter-spacing:.2em!important;
+  background:radial-gradient(circle at 30% 30%,var(--wax-hi),var(--wax) 60%,#5A0D19)!important;box-shadow:0 4px 10px -4px rgba(90,13,25,.7),inset 0 1px 0 rgba(255,255,255,.25);touch-action:none;user-select:none;-webkit-user-select:none}
+.sgx-open .sg-sealbtn:disabled{opacity:.4}
+.sgx-open .sg-sealbtn .sg-wax{background:#F6C7C3}
+.sgx-ring{position:absolute;left:-7px;top:50%;width:36px;height:36px;margin-top:-18px;pointer-events:none}
+.sgx-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.sgx-ring circle{fill:none;stroke:#E9B44C;stroke-width:3;stroke-linecap:round;stroke-dasharray:98;stroke-dashoffset:98}
+.sg-sealbtn.holding .sgx-ring circle{transition:stroke-dashoffset .95s linear;stroke-dashoffset:0}
+.sg-sealbtn.holding{transform:scale(.97)}
+.sg-sealbtn.nudge{animation:sgxNudge .45s ease}
+@keyframes sgxNudge{25%{transform:translateX(-4px)}50%{transform:translateX(4px)}75%{transform:translateX(-2px)}}
+/* 火漆滴下来、盖上、折起来 */
+.sgx-stamp-drop{position:absolute;left:50%;top:44%;width:96px;height:96px;margin:-48px 0 0 -48px;z-index:5;opacity:0;pointer-events:none;filter:drop-shadow(0 4px 4px rgba(60,10,20,.4))}
+.sgx-stamping .sgx-stamp-drop{animation:sgxDrop .6s cubic-bezier(.3,1.5,.5,1) forwards}
+@keyframes sgxDrop{0%{opacity:0;transform:translateY(-120px) scale(.4)}55%{opacity:1;transform:scale(1.18,.86)}80%{transform:scale(.95,1.05)}100%{opacity:1;transform:none}}
+.sgx-stamping .sg-sheet{animation:sgxFold .5s ease-in .62s forwards}
+@keyframes sgxFold{to{transform:scaleY(.34);opacity:.6}}
+
+/* —— 封好的信 —— */
+.sgx-fold{min-height:150px;padding:20px 18px 16px!important;filter:drop-shadow(0 10px 14px rgba(80,50,30,.2))}
+.sgx-fold__paper{position:absolute;inset:0;border-radius:4px;background:linear-gradient(180deg,var(--paper),var(--paper2))}
+.sgx-fold__paper i{position:absolute;left:0;right:0;height:10px}
+.sgx-fold__paper i:first-child{top:33%;background:linear-gradient(180deg,rgba(120,90,60,.12),transparent)}
+.sgx-fold__paper i:last-child{top:66%;background:linear-gradient(0deg,rgba(255,255,255,.7),rgba(120,90,60,.1))}
+.sgx-fold__note{position:relative;display:block;text-align:center;font:400 17px/1.4 'Ma Shan Zheng','ZCOOL KuaiLe','Noto Serif SC',serif;color:var(--ink);margin-bottom:8px}
+.sgx-fold__seal{position:relative;display:block;width:64px;height:64px;margin:0 auto;filter:drop-shadow(0 3px 3px rgba(60,10,20,.35))}
+.sgx-fold__meta{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;font-size:10.5px;color:var(--ink2)}
+.sgx-fold__meta b{font:600 13px/1 Georgia,serif;color:var(--wax);letter-spacing:.06em}
+.sgx-fold__meta span:last-child{font:600 9px/1 Georgia,serif;letter-spacing:.3em;opacity:.7}
+@media (prefers-reduced-motion:reduce){.sgx-half,.sgx-env__flap,.sgx-open .sg-sheet,.sgx-stamp-drop{transition:none!important;animation:none!important}}
