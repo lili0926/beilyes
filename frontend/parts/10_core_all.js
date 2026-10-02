@@ -16541,6 +16541,7 @@ function renderCoupons(){
 
 // ─── 相册 ────────────────────────────────────────────────────────────────────
 function renderAlbum(){
+  if(state.uiShell==="doodle" && typeof DoodleAlbum!=="undefined") return DoodleAlbum.page(); // 星光涂鸦：拍立得活页册
   const list = state.albumData || [];
   if(!list.length){
     return `<div class="page">${subHeader('<i data-lucide="image"></i> 相册')}
@@ -35521,6 +35522,8 @@ function slpTailBlock(){
 function chatTailBlock(){
   const bits = [];
   bits.push(`【此刻】${formatTimeFull(new Date().toISOString())}`);
+  // 相册：她刚贴了照片 / 在背面写了字 —— 只挂这一轮
+  try{ const ab = (typeof DoodleAlbum!=="undefined") ? DoodleAlbum.tellBlock() : ""; if(ab) bits.push(ab); }catch(e){}
   if(state.desireDriveOn){
     const sixLine = (typeof sixAxisWords === "function") ? sixAxisWords() : "";
     const feel = (state.bodyFeel||"").trim();
@@ -36196,6 +36199,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
   const __vm = handleVoiceMsgMarkers(cleanBody); // 语音条：⟪语音:话⟫ → 合成成可播的语音气泡
   cleanBody = __vm.text;
   cleanBody = handleAlbumMarkers(cleanBody);   // 相册收藏：⟪收藏:感想⟫ / ⟪收藏第N张:感想⟫
+  if(typeof DoodleAlbum!=="undefined") cleanBody = DoodleAlbum.handleBack(cleanBody); // 相册背面：⟪相册背面:一句⟫
   cleanBody = handleWalletMarkers(cleanBody);  // 钱包：[buy:东西] 立即扣款，[pay:金额|理由] 留给她点
   const couponRes = handleCouponMarkers(cleanBody); // 券夹：⟪使用券:券名⟫
   cleanBody = couponRes.text;
