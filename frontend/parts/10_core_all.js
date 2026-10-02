@@ -14830,6 +14830,7 @@ function renderWardrobe(){
 }
 
 function renderBody(){
+  if(typeof BodyPage !== "undefined") return BodyPage.page();   // 看得见的他（doodle/body.js）
   const v = state.bodyVitals;
   const want = state.bodyWant || { text:"…", action:"", power:0 };
   const driveOn = state.desireDriveOn;
@@ -35077,8 +35078,21 @@ function snStep(opts){
   const va = snArousalReal();
   s.venom = s.venom + ((va > 0.6 ? va : 0.05) - s.venom) * (1 - Math.exp(-0.5 * dt));
   snReproTick(now);
+  try{ snDayLog(s); }catch(e){}
   snSave();
   return s;
+}
+/** 体检单用：每轮把读数累加进当天那一格（按天存平均，不存逐条，留 400 天） */
+function snDayLog(s){
+  const k = pdKey(new Date());
+  s.days = s.days || {};
+  const d = s.days[k] || (s.days[k] = { n:0, cort:0, dop:0, oxy:0, adr:0, aro:0, tmp:0, ven:0, hr:0, tc:0 });
+  const c = s.chem;
+  d.n++; d.cort += c.cortisol; d.dop += c.dopamine; d.oxy += c.oxytocin; d.adr += c.adrenaline;
+  d.aro += snArousalReal(); d.tmp += s.temp; d.ven += s.venom; d.hr += snHeartRate(); d.tc += snTempC();
+  const cy = snCycles(Date.now()); if(cy.rut) d.rut = 1; if(cy.her) d.her = 1; if(cy.shedding) d.shed = 1;
+  const keys = Object.keys(s.days);
+  if(keys.length > 400){ keys.sort().slice(0, keys.length - 400).forEach(x=>{ delete s.days[x]; }); }
 }
 
 /** 状态机自己会走的那部分：到期、超时、松开、恢复期结束 */
@@ -35112,6 +35126,15 @@ function snReproTick(now){
 }
 function snSetRepro(st, now){
   const s = snEnsure(), r = s.repro;
+  // 体检单的「频率」：每一次进入记一条，固定 / 结束时补上
+  try{
+    s.log = s.log || [];
+    const L = s.log[s.log.length - 1], t = now || Date.now();
+    if(st === "inserted"){ const cy = snCycles(t); s.log.push({ at:t, side:s.side, rut:!!cy.rut, her:!!cy.her }); }
+    else if(st === "fixed"){ if(L && !L.end) L.fixed = true; }
+    else if(st === "recovery" || st === "idle"){ if(L && !L.end && ["inserted","fixed","releasing"].indexOf(r.st) >= 0) L.end = t; }
+    if(s.log.length > 400) s.log = s.log.slice(-400);
+  }catch(e){}
   r.st = st; r.since = now || Date.now();
   if(st === "inserted"){ r.hard = Math.max(r.hard, 0.9); r.spines = 0.15; r.plug = 0; }
   else if(st === "fixed"){ r.hard = 1; r.spines = 1; }
@@ -35137,7 +35160,9 @@ function handleSnakeMarkers(text){
   s = s.replace(/⟪\s*缠\s*[:：]?\s*([^⟫]*)⟫/g, (m, raw)=>{
     const w = String(raw||"").trim();
     const lv = /紧|勒|收/.test(w) ? 3 : /圈|绕/.test(w) ? 2 : /松|放/.test(w) ? 1 : 2;
-    const sn = snEnsure(); sn.coil = lv; snSave();
+    const sn = snEnsure(); sn.coil = lv;
+    if(lv >= 3){ try{ const k = pdKey(new Date()); sn.days = sn.days || {}; const d = sn.days[k] || (sn.days[k] = { n:0, cort:0, dop:0, oxy:0, adr:0, aro:0, tmp:0, ven:0, hr:0, tc:0 }); d.coil3 = (d.coil3 || 0) + 1; }catch(e){} }
+    snSave();
     return "";
   });
   s = s.replace(/⟪\s*进入\s*[:：]?\s*([^⟫]*)⟫/g, (m, raw)=>{
@@ -35761,6 +35786,7 @@ function renderSigilloPage(){
   const benched = sgBenched();
   return `<div class="page">
     ${subHeader('<i data-lucide="stamp"></i> 回执')}
+    ${typeof BodyPage !== "undefined" ? BodyPage.checkupSection() : ""}
     <div class="section">
       <div class="section-body">
         <div class="setting-row"><span class="setting-label" style="line-height:1.6">共 ${all.length} 张 · 已封缄 ${done} 张${benched.length ? " · 冷却中：" + esc(benched.map(b=>b.dim + "·" + b.tag).join("、")) : ""}</span></div>
@@ -35824,6 +35850,7 @@ function chatTailBlock(){
   bits.push(`【此刻】${formatTimeFull(new Date().toISOString())}`);
   // 相册：她刚贴了照片 / 在背面写了字 —— 只挂这一轮
   try{ const ab = (typeof DoodleAlbum!=="undefined") ? DoodleAlbum.tellBlock() : ""; if(ab) bits.push(ab); }catch(e){}
+  try{ const bb = (typeof BodyPage!=="undefined") ? BodyPage.tellBlock() : ""; if(bb) bits.push(bb); }catch(e){}
   if(state.desireDriveOn){
     const sixLine = (typeof sixAxisWords === "function") ? sixAxisWords() : "";
     const feel = (state.bodyFeel||"").trim();

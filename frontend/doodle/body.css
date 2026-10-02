@@ -1,0 +1,142 @@
+/* 身体状况 · 看得见的他 */
+.bp-page{--bp-ink:#4E4466;--bp-sub:#8A7FA0;padding-bottom:40px}
+.bp-card,.bp-hero,.bp-checkup{position:relative;margin:12px 0;padding:14px 14px 12px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.88),rgba(250,246,255,.82));
+  box-shadow:inset 0 0 0 1px rgba(110,90,150,.1),0 10px 24px -18px rgba(70,50,110,.5);color:var(--bp-ink)}
+.bp-card-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.bp-card-hd b{font-size:14px;letter-spacing:.04em}
+.bp-card-hd small{font-size:11px;color:var(--bp-sub);text-align:right}
+.bp-off{text-align:center;font-size:13px;color:var(--bp-sub);padding:26px 14px}
+
+/* —— 主角 —— */
+.bp-hero{padding:12px 12px 14px;background:radial-gradient(120% 80% at 50% 30%,#FFFFFF 0,#F6F1EC 55%,#EDE5F3 100%)}
+.bp-hero.rut{background:radial-gradient(120% 80% at 50% 30%,#FFFDFB 0,#FBEDE6 55%,#F3E3EC 100%)}
+.bp-hero-top{display:flex;flex-wrap:wrap;gap:6px}
+.bp-pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#4E4466;color:#fff;font-size:11.5px;letter-spacing:.06em}
+.bp-pill.soft{background:rgba(78,68,102,.08);color:var(--bp-ink)}
+.bp-stage{position:relative;width:min(100%,330px);aspect-ratio:1;margin:2px auto 0;touch-action:pan-y;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bp-glow{position:absolute;inset:12% 8% 4%;border-radius:50%;background:radial-gradient(closest-side,rgba(242,179,94,.32),transparent);opacity:0}
+.bp-hero.rut .bp-glow{opacity:1;animation:bpGlow 3.2s ease-in-out infinite}
+@keyframes bpGlow{50%{transform:scale(1.06);opacity:.6}}
+.bp-body{position:absolute;inset:0;transform-origin:50% 88%;animation:bpBreath var(--breath,3.6s) ease-in-out infinite}
+@keyframes bpBreath{50%{transform:scale(1.012,1.026)}}
+.bp-stage.tight .bp-body{animation:bpBreath var(--breath,3.6s) ease-in-out infinite,bpSqueeze 2.4s ease-in-out infinite}
+@keyframes bpSqueeze{50%{transform:scale(.985,1.01)}}
+.bp-body img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none;filter:drop-shadow(0 12px 14px rgba(70,55,60,.16))}
+.bp-tint{position:absolute;inset:0;pointer-events:none;-webkit-mask:url(body/snake.webp) center/contain no-repeat;mask:url(body/snake.webp) center/contain no-repeat;mix-blend-mode:multiply}
+.bp-tint.warm{background:linear-gradient(160deg,#FFC9C2,#F7A9B9);opacity:calc(var(--warm,0) * .55)}
+.bp-tint.cold{background:linear-gradient(160deg,#C9D3EE,#D7CFEA);opacity:calc(var(--cold,0) * .35)}
+.bp-ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.bp-pupil{transition:rx .6s}
+.bp-tongue{transform-origin:0 0;transform:scaleX(0);animation:bpTongue var(--tg,4s) ease-in-out infinite}
+@keyframes bpTongue{0%,72%,100%{transform:scaleX(0)}76%,88%{transform:scaleX(1)}82%{transform:scaleX(.75)}}
+.bp-flake{animation:bpFlake 3s ease-in-out infinite;transform-box:fill-box}
+@keyframes bpFlake{50%{opacity:.75}}
+.bp-heart{opacity:0;transform-box:fill-box;transform-origin:center}
+/* 点一下：抬头看你 + 吐信子 */
+.bp-stage.look .bp-body{animation:bpLook 1.4s ease-in-out}
+@keyframes bpLook{0%,100%{transform:none}25%{transform:rotate(-2.2deg) translateY(-6px)}60%{transform:rotate(1deg) translateY(-3px)}}
+.bp-stage.look .bp-tongue{animation:bpTongue .9s ease-in-out 2}
+/* 顺着摸：冒小爱心，身子舒服地一软 */
+.bp-stage.pet .bp-heart{animation:bpHeart 1.2s ease-out}
+.bp-stage.pet .bp-body{animation:bpPet 1.2s ease-in-out}
+@keyframes bpHeart{0%{opacity:0;transform:scale(.4)}30%{opacity:1;transform:scale(1.2)}100%{opacity:0;transform:translateY(-70px) scale(1)}}
+@keyframes bpPet{30%{transform:scale(1.02,.97)}60%{transform:scale(.99,1.02)}}
+/* 轻拍两下：缩一下 */
+.bp-stage.pat .bp-body{animation:bpPat .7s ease}
+@keyframes bpPat{20%,60%{transform:scale(.97,.95)}40%,80%{transform:none}}
+.bp-vitals{display:flex;gap:10px;margin-top:6px}
+.bp-vital{flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:14px;background:rgba(255,255,255,.7);box-shadow:inset 0 0 0 1px rgba(110,90,150,.08)}
+.bp-vital b{font:600 20px/1 Georgia,'Noto Serif SC',serif;color:var(--bp-ink)}
+.bp-vital small{font-size:10.5px;color:var(--bp-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bp-ecg{width:46px;height:18px;flex:none}
+.bp-ecg path{stroke-dasharray:90;stroke-dashoffset:90;animation:bpEcg var(--beat,1.3s) linear infinite}
+@keyframes bpEcg{to{stroke-dashoffset:-90}}
+.bp-thermo{position:relative;width:8px;height:24px;flex:none;border-radius:4px;background:#EEE7F3;box-shadow:inset 0 0 0 1px rgba(110,90,150,.2);overflow:hidden}
+.bp-thermo i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,#F0787F,#F7B0A0)}
+.bp-desc{margin:10px 2px 0;font-size:12px;line-height:1.75;color:var(--bp-sub)}
+.bp-hint{margin:6px 0 0;text-align:center;font-size:10.5px;color:var(--bp-sub);opacity:.75;letter-spacing:.04em}
+
+/* —— 药瓶 —— */
+.bp-vials{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.bp-vial{display:flex;flex-direction:column;align-items:center}
+.bp-vial svg{width:100%;max-width:44px;height:auto;overflow:visible}
+.bp-vial span{font-size:10.5px;margin-top:2px;white-space:nowrap}
+.bp-vial em{font:italic 600 11px/1 Georgia,serif;color:var(--bp-sub);margin-top:2px}
+.bp-liq{animation:bpWave 3s linear infinite}
+@keyframes bpWave{to{transform:translateX(-16px)}}
+.bp-vial .bub{opacity:0}
+.bp-vial.boil .bub{animation:bpBub 1.6s ease-in infinite}
+.bp-vial.boil .bub.b2{animation-delay:.7s}
+@keyframes bpBub{0%{opacity:0;transform:translateY(0)}20%{opacity:.8}100%{opacity:0;transform:translateY(-40px)}}
+
+/* —— 星图 —— */
+.bp-sky{background:radial-gradient(120% 90% at 50% 20%,#4B3F78 0,#2E2850 70%,#241F40 100%);color:#EDE6FA}
+.bp-sky .bp-card-hd small{color:#B9AED6}
+.bp-starmap{display:block;width:100%;max-width:300px;margin:0 auto}
+.bp-sky.off .bp-starmap{opacity:.45}
+
+/* —— 周期转盘 —— */
+.bp-dial-row{display:flex;align-items:center;gap:8px}
+.bp-dial{width:52%;max-width:200px;flex:none}
+.bp-legend{list-style:none;margin:0;padding:0;flex:1;min-width:0}
+.bp-legend li{display:grid;grid-template-columns:12px auto;column-gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed rgba(110,90,150,.15)}
+.bp-legend li:last-child{border:0}
+.bp-legend i{width:10px;height:10px;border-radius:50%;grid-row:span 2}
+.bp-legend b{font-size:12.5px}
+.bp-legend span{font-size:11px;color:var(--bp-sub)}
+
+/* —— 经期：热水袋 —— */
+.bp-period{position:relative;margin:12px 0}
+.bp-hwb{position:absolute;right:12px;top:-10px;width:62px;height:62px;z-index:2;filter:drop-shadow(0 4px 6px rgba(200,120,140,.25));transform:rotate(8deg)}
+.bp-steam{animation:bpSteam 2.4s ease-in-out infinite;opacity:.7}
+@keyframes bpSteam{50%{transform:translateY(-3px);opacity:.3}}
+.bp-period .body-feel-card{margin:0;border-radius:20px;background:linear-gradient(180deg,#FFF7F5,#FDEDEF);box-shadow:inset 0 0 0 1px rgba(200,120,140,.16),0 10px 24px -18px rgba(150,60,90,.45)}
+.bp-period .body-feel-head{padding-right:64px}
+
+/* —— 体检单入口 / 开关 —— */
+.bp-report-btn{display:flex;align-items:center;gap:12px;width:100%;margin:12px 0;padding:12px 14px;border:0;border-radius:18px;cursor:pointer;text-align:left;font:inherit;color:var(--bp-ink);
+  background:linear-gradient(135deg,#FFFFFF,#F1F6FB);box-shadow:inset 0 0 0 1px rgba(90,120,160,.15),0 8px 18px -14px rgba(50,80,120,.5)}
+.bp-report-btn b{display:block;font-size:14px}.bp-report-btn small{display:block;font-size:11px;color:var(--bp-sub);margin-top:2px}
+.bp-report-btn .bp-go{margin-left:auto;font-size:22px;opacity:.4}
+.bp-clip{width:30px;height:38px;flex:none;border-radius:4px;background:#fff;box-shadow:inset 0 0 0 1.5px #9FB3CF;position:relative;
+  background-image:repeating-linear-gradient(180deg,transparent 0 9px,#D6E0EC 9px 10px);background-position:0 12px}
+.bp-clip::before{content:"";position:absolute;left:8px;right:8px;top:-4px;height:8px;border-radius:3px;background:#B9C7DA}
+.bp-switches{padding:6px 12px}
+.bp-switches .body-switch-row{margin:6px 0}
+.bp-acts{margin-top:4px}
+.bp-credit{font-size:10px;color:var(--bp-sub);opacity:.7;text-align:center;margin:10px 0 0}
+
+/* ══ 体检单（在回执页） ══ */
+.bp-checkup{--bp-ink:#3E4A5E;--bp-sub:#7D889A;margin:10px 0 16px}
+.bp-tabs{display:flex;gap:6px;margin:4px 0 10px}
+.bp-tabs button{flex:1;padding:7px 0;border:0;border-radius:10px;background:rgba(62,74,94,.06);font:600 12px/1 inherit;color:var(--bp-ink);cursor:pointer}
+.bp-tabs button.on{background:#3E4A5E;color:#fff}
+.bp-sheet{position:relative;padding:16px 16px 14px;border-radius:6px;background:#FFFFFF;color:#2F3A4C;
+  background-image:linear-gradient(90deg,transparent 0 22px,rgba(220,90,100,.18) 22px 23px,transparent 23px),repeating-linear-gradient(180deg,transparent 0 23px,rgba(120,150,190,.12) 23px 24px);
+  box-shadow:0 1px 0 #E5E9F0,0 2px 0 #FFF,0 3px 0 #E5E9F0,0 14px 24px -16px rgba(40,60,90,.45);font-family:'Noto Serif SC',serif}
+.bp-sh-hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2F3A4C;padding-bottom:8px}
+.bp-sh-hd b{display:block;font-size:18px;letter-spacing:.2em}
+.bp-sh-hd small{display:block;font:600 9.5px/1.4 Georgia,serif;letter-spacing:.3em;color:#7D889A}
+.bp-sh-no{font:italic 11px/1 Georgia,serif;color:#7D889A;margin-top:4px}
+.bp-sh-meta{display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 2px;font-size:11.5px;color:#55617A}
+.bp-sheet h4{margin:10px 0 6px;font-size:14px;letter-spacing:.12em}
+.bp-tab{width:100%;border-collapse:collapse;font-size:12.5px}
+.bp-tab th{font-weight:600;font-size:11px;color:#7D889A;text-align:left;padding:4px 4px;border-bottom:1px solid #C9D2DE}
+.bp-tab td{padding:5px 4px;border-bottom:1px dashed #DDE3EA}
+.bp-tab td.v{font:600 14px/1 Georgia,serif}
+.bp-tab td.v small{font:400 10px/1 system-ui,sans-serif;color:#7D889A}
+.bp-tab td.ref{color:#8C96A8;font-size:11.5px}
+.bp-tab td.fl{width:20px;font:700 12px/1 Georgia,serif;text-align:center}
+.bp-tab td.fl.H{color:#D0405A}.bp-tab td.fl.L{color:#3E7CC9}
+.bp-tab i.up{color:#D0405A;font-style:normal;margin-left:3px;font-size:11px}
+.bp-tab i.dn{color:#3E7CC9;font-style:normal;margin-left:3px;font-size:11px}
+.bp-freq{display:flex;flex-wrap:wrap;gap:4px 12px;margin:12px 0 4px;padding:8px 10px;border-radius:6px;background:#F4F7FB;font-size:12px}
+.bp-freq b{width:100%;font-size:12px;letter-spacing:.2em;color:#55617A}
+.bp-freq em{font:italic 700 15px/1 Georgia,serif;color:#2F3A4C}
+.bp-orders{margin-top:12px}
+.bp-orders b{font-size:12px;letter-spacing:.2em;color:#55617A}
+.bp-orders ol{margin:6px 0 0;padding-left:20px;color:#C23A50;font:400 15px/1.7 'Ma Shan Zheng','ZCOOL KuaiLe','Noto Serif SC',cursive}
+.bp-sign{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:#55617A}
+.bp-sign i{font:italic 400 17px/1 'Pinyon Script','Great Vibes',cursive;color:#2F3A4C}
+.bp-stamp{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;border:2.5px solid #D0405A;color:#D0405A;font:700 14px/1 'Noto Serif SC',serif;letter-spacing:.1em;transform:rotate(-14deg);opacity:.85;box-shadow:inset 0 0 0 3px #fff,inset 0 0 0 4.5px #D0405A}
+@media (prefers-reduced-motion:reduce){.bp-body,.bp-tongue,.bp-liq,.bp-ecg path,.bp-glow,.bp-steam,.bp-flake{animation:none!important}}
