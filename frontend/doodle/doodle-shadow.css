@@ -587,8 +587,20 @@ img.pxname{object-fit:contain;max-width:60%}
 .mb-disc{border-radius:50%;background:repeating-conic-gradient(from 0deg,#FBE3EC 0 15deg,#F4CDDC 15deg 30deg);box-shadow:inset 0 0 0 5px #EBC97F,inset 0 0 0 7px #FFF3D6,inset 0 0 0 9px #D9B06A}
 .mb-ring{background:linear-gradient(180deg,#F6DFA9,#C99A4C);backface-visibility:visible}
 /* 小 Clawd */
-.mb-clawd{animation:mbBob .5s ease-in-out infinite alternate;animation-play-state:paused}
-.npv.playing .mb-clawd{animation-play-state:running}
+.cl-bob{animation:mbBob .5s ease-in-out infinite alternate;animation-play-state:paused}
+.npv.playing .cl-bob{animation-play-state:running}
+/* 一蹦：先蹲（压扁）→ 弹起（拉长）→ 落地再压一下 */
+.mb-clawd.hop .cl-move{animation:clHop .7s cubic-bezier(.3,.7,.4,1)}
+.mb-clawd.hop2 .cl-move{animation:clHop .65s cubic-bezier(.3,.7,.4,1) 2}
+@keyframes clHop{0%{transform:none}18%{transform:scale(1.14,.78)}45%{transform:translateY(-30px) scale(.92,1.1)}62%{transform:translateY(-34px) scale(1,1)}82%{transform:scale(1.12,.84)}100%{transform:none}}
+/* 招手：右钳子抬起来左右摆，身子跟着歪一点 */
+.mb-clawd.wave .cl-arm.r{animation:clWave 1.5s ease-in-out}
+.mb-clawd.wave .cl-torso{animation:clTilt 1.5s ease-in-out}
+.mb-clawd.hop2 .cl-arm{animation:clFlap .65s ease-in-out 2}
+@keyframes clWave{0%,100%{transform:none}15%{transform:rotateZ(-115deg)}30%{transform:rotateZ(-80deg)}45%{transform:rotateZ(-125deg)}60%{transform:rotateZ(-80deg)}75%{transform:rotateZ(-115deg)}}
+@keyframes clTilt{0%,100%{transform:none}20%,80%{transform:rotateZ(-6deg)}}
+@keyframes clFlap{0%,100%{transform:none}45%{transform:rotateZ(var(--flap,-50deg))}}
+.cl-arm.l{--flap:50deg}
 @keyframes mbBob{from{transform:translateY(0)}to{transform:translateY(-4px)}}
 .cl .mbf{background:#D97757}
 .cl .tp{background:#E8896A}
@@ -611,4 +623,4 @@ img.pxname{object-fit:contain;max-width:60%}
 .mb-notes i:nth-child(3){margin-left:-20px;animation-delay:1.6s!important;color:#8FB5E8}.mb-notes i:nth-child(4){margin-left:64px;animation-delay:2.4s!important}
 @keyframes mbNote{0%{opacity:0;transform:translateY(20px) rotate(-10deg) scale(.7)}20%{opacity:1}100%{opacity:0;transform:translateY(-70px) rotate(14deg) scale(1.1)}}
 .mb-shadow{position:absolute;left:18%;right:18%;bottom:8%;height:10%;border-radius:50%;background:radial-gradient(closest-side,rgba(70,50,110,.32),transparent);z-index:-1}
-@media (prefers-reduced-motion:reduce){.mb-sway,.mb-spin,.mb-clawd,.mb-keyturn,.mb-notes i{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.mb-sway,.mb-spin,.cl-bob,.cl-move,.cl-arm,.cl-torso,.mb-keyturn,.mb-notes i{animation:none!important}}

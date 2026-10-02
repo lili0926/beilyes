@@ -104,7 +104,7 @@
   splash.addEventListener("click", dismissSplash);
   splash.addEventListener("touchend", function(e){ e.preventDefault(); dismissSplash(); });
   // 青苹果一口口吃到只剩核之后自动关闭（点一下随时跳过）
-  setTimeout(dismissSplash, 4200);
+  setTimeout(dismissSplash, 4000);
 
   // PIN 输入框 Enter 键触发登录
   document.getElementById("login-pin").addEventListener("keydown", function(e){

@@ -4646,76 +4646,38 @@
 
   <!-- ═══════════════ 开屏层 ═══════════════ -->
   <div id="splash-screen" class="apple-splash" style="position:fixed;inset:0;z-index:99999;overflow:hidden;transition:opacity .6s,transform .6s">
-    <div class="ap-stage" aria-hidden="true">
-      <div class="ap-shadow"></div>
-      <svg class="ap-svg" viewBox="0 0 200 220">
-        <defs>
-          <radialGradient id="apRed" cx="38%" cy="34%" r="75%"><stop offset="0" stop-color="#FF8A8C"/><stop offset=".45" stop-color="#E5474F"/><stop offset="1" stop-color="#A9283A"/></radialGradient>
-          <radialGradient id="apGreen" cx="38%" cy="34%" r="75%"><stop offset="0" stop-color="#E4F7A6"/><stop offset=".5" stop-color="#9FD35A"/><stop offset="1" stop-color="#5E9B32"/></radialGradient>
-          <linearGradient id="apFlesh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF8E4"/><stop offset="1" stop-color="#F6E3B4"/></linearGradient>
-          <linearGradient id="apLeaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B6E07A"/><stop offset="1" stop-color="#5E9B32"/></linearGradient>
-          <mask id="apSkinM" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="220"><rect width="200" height="220" fill="#fff"/><g fill="#000"><g class="ap-b b1"><circle cx="171" cy="86" r="26"/><circle cx="177" cy="109" r="27"/><circle cx="170" cy="132" r="25"/></g><g class="ap-b b2"><circle cx="29" cy="86" r="26"/><circle cx="23" cy="109" r="27"/><circle cx="30" cy="132" r="25"/></g><g class="ap-b b3"><circle cx="158" cy="162" r="25"/><circle cx="143" cy="182" r="24"/><circle cx="168" cy="146" r="21"/></g></g></mask>
-          <mask id="apFleshM" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="220"><rect width="200" height="220" fill="#fff"/><g fill="#000"><g class="ap-b b1"><circle cx="171" cy="86" r="20"/><circle cx="177" cy="109" r="21"/><circle cx="170" cy="132" r="19"/></g><g class="ap-b b2"><circle cx="29" cy="86" r="20"/><circle cx="23" cy="109" r="21"/><circle cx="30" cy="132" r="19"/></g><g class="ap-b b3"><circle cx="158" cy="162" r="19"/><circle cx="143" cy="182" r="18"/><circle cx="168" cy="146" r="15"/></g></g></mask>
-        </defs>
-        <g class="ap-red">
-          <path d="M100 60 C84 46 50 44 37 72 C22 104 31 150 57 180 C71 196 87 200 100 191 C113 200 129 196 143 180 C169 150 178 104 163 72 C150 44 116 46 100 60 Z" fill="url(#apFlesh)" mask="url(#apFleshM)"/>
-          <g mask="url(#apSkinM)">
-            <path d="M100 60 C84 46 50 44 37 72 C22 104 31 150 57 180 C71 196 87 200 100 191 C113 200 129 196 143 180 C169 150 178 104 163 72 C150 44 116 46 100 60 Z" fill="url(#apGreen)"/>
-            <ellipse cx="70" cy="92" rx="13" ry="22" fill="#fff" opacity=".35" transform="rotate(24 70 92)"/>
-            <ellipse cx="80" cy="74" rx="4" ry="6" fill="#fff" opacity=".55" transform="rotate(30 80 74)"/>
-          </g>
-          <g class="ap-crumbs" fill="#F6E3B4"><g class="ap-cr b1"><circle cx="182" cy="98" r="2.6" style="--dx:26px;--dy:-18px"/><circle cx="186" cy="116" r="2" style="--dx:30px;--dy:6px"/><circle cx="178" cy="126" r="1.6" style="--dx:20px;--dy:20px"/></g><g class="ap-cr b2"><circle cx="18" cy="100" r="2.6" style="--dx:-26px;--dy:-16px"/><circle cx="14" cy="118" r="2" style="--dx:-30px;--dy:8px"/><circle cx="22" cy="130" r="1.6" style="--dx:-18px;--dy:20px"/></g><g class="ap-cr b3"><circle cx="168" cy="166" r="2.4" style="--dx:24px;--dy:14px"/><circle cx="156" cy="182" r="1.8" style="--dx:12px;--dy:24px"/></g></g>
-        </g>
-        <g class="ap-core">
-          <path d="M80 74 C93 80 107 80 120 74 C110 102 109 142 122 176 C107 184 93 184 78 176 C91 142 90 102 80 74 Z" fill="url(#apFlesh)" stroke="#E8CF97" stroke-width="1.5"/>
-          <path d="M74 68 C88 57 112 57 126 68 C117 79 83 79 74 68 Z" fill="url(#apGreen)"/>
-          <path d="M72 177 C88 187 112 187 128 177 C121 194 79 194 72 177 Z" fill="url(#apGreen)"/>
-          <ellipse cx="96" cy="120" rx="3.4" ry="6" fill="#5B3A29" transform="rotate(-18 96 120)"/>
-          <ellipse cx="105" cy="132" rx="3.4" ry="6" fill="#5B3A29" transform="rotate(16 105 132)"/>
-        </g>
-        <path class="ap-stem" d="M100 62 C99 48 102 38 109 29" fill="none" stroke="#6B4A33" stroke-width="5" stroke-linecap="round"/>
-        <path class="ap-leaf" d="M107 41 C119 25 141 22 152 29 C141 44 121 48 107 41 Z" fill="url(#apLeaf)"/>
-      </svg>
-    </div>
+    <div class="ap-stage" aria-hidden="true"><div class="ap-shadow"></div><div class="ap-stack"><img class="ap-f f1" src="splash/ap1.webp" alt="" draggable="false"><img class="ap-f f2" src="splash/ap2.webp" alt="" draggable="false"><img class="ap-f f3" src="splash/ap3.webp" alt="" draggable="false"><img class="ap-f f4" src="splash/ap4.webp" alt="" draggable="false"><img class="ap-f f5" src="splash/ap5.webp" alt="" draggable="false"></div><i class="ap-c c1" style="left:78%;top:38%;width:5px;height:5px;--dx:30px;--dy:-20px"></i><i class="ap-c c1" style="left:82%;top:52%;width:4px;height:4px;--dx:36px;--dy:6px"></i><i class="ap-c c1" style="left:76%;top:62%;width:3px;height:3px;--dx:24px;--dy:22px"></i><i class="ap-c c2" style="left:22%;top:58%;width:5px;height:5px;--dx:-30px;--dy:-14px"></i><i class="ap-c c2" style="left:18%;top:70%;width:4px;height:4px;--dx:-34px;--dy:10px"></i><i class="ap-c c2" style="left:80%;top:70%;width:4px;height:4px;--dx:28px;--dy:16px"></i><i class="ap-c c3" style="left:20%;top:46%;width:5px;height:5px;--dx:-32px;--dy:-18px"></i><i class="ap-c c3" style="left:84%;top:46%;width:5px;height:5px;--dx:32px;--dy:-16px"></i><i class="ap-c c3" style="left:50%;top:78%;width:3px;height:3px;--dx:0px;--dy:26px"></i><i class="ap-c c4" style="left:30%;top:40%;width:4px;height:4px;--dx:-26px;--dy:-20px"></i><i class="ap-c c4" style="left:70%;top:40%;width:4px;height:4px;--dx:26px;--dy:-20px"></i><i class="ap-c c4" style="left:28%;top:72%;width:3px;height:3px;--dx:-20px;--dy:20px"></i><i class="ap-c c4" style="left:72%;top:72%;width:3px;height:3px;--dx:20px;--dy:20px"></i></div>
     <div class="ap-text"><h1 id="splash-brand-title">Jasmine</h1><p id="splash-brand-sub">欢迎回家</p><button id="splash-brand-tag" style="border:0;background:none;padding:12px;cursor:pointer"></button></div>
   </div>
   <style>
     .apple-splash{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 42%,#FFFBF4 0,#FBF3E7 45%,#F3E6D6 100%)}
-    .ap-stage{position:relative;width:min(56vw,240px);aspect-ratio:200/220;animation:apIn .45s cubic-bezier(.3,1.4,.5,1) both}
-    .ap-svg{position:relative;width:100%;height:100%;overflow:visible}
-    .ap-shadow{position:absolute;left:18%;right:18%;bottom:-2%;height:9%;border-radius:50%;background:radial-gradient(closest-side,rgba(120,70,40,.28),transparent);animation:apShadow 3.2s ease both}
-    .ap-b{transform-box:fill-box;transform-origin:center;transform:scale(0)}
-    .ap-b.b1{animation:apBite .16s cubic-bezier(.3,1.6,.6,1) .95s forwards}
-    .ap-b.b2{animation:apBite .16s cubic-bezier(.3,1.6,.6,1) 1.38s forwards}
-    .ap-b.b3{animation:apBite .16s cubic-bezier(.3,1.6,.6,1) 1.81s forwards}
-    .ap-cr{opacity:0}
-    .ap-cr circle{transform-box:fill-box;transform-origin:center}
-    .ap-cr.b1 circle{animation:apCrumb .5s ease-out .97s both}
-    .ap-cr.b2 circle{animation:apCrumb .5s ease-out 1.4s both}
-    .ap-cr.b3 circle{animation:apCrumb .5s ease-out 1.83s both}
-    .ap-cr{animation:apShow 0s linear .95s forwards}
-    .ap-red{transform-box:fill-box;transform-origin:50% 80%;animation:apChomp .43s ease .95s 3,apToCore .32s ease-in 2.3s forwards}
-    .ap-core{opacity:0;transform-box:fill-box;transform-origin:50% 100%;animation:apCoreIn .3s ease-out 2.4s forwards}
-    .ap-leaf{transform-box:fill-box;transform-origin:0 100%;animation:apLeaf 1s ease 2.6s}
-    .ap-text{margin-top:22px;text-align:center;opacity:0;animation:apText .6s ease 2.8s forwards}
-    #splash-screen.apple-splash #splash-brand-title{margin:0!important;font:400 46px/1.1 'Great Vibes','Pinyon Script',cursive!important;color:#5E7F3A!important;letter-spacing:.02em!important;animation:none!important}
+    .ap-stage{position:relative;width:min(54vw,230px);aspect-ratio:300/406;animation:apIn .5s cubic-bezier(.3,1.4,.5,1) both}
+    .ap-stack{position:absolute;inset:0;transform-origin:50% 85%;animation:apChomp .45s ease .9s 4}
+    .ap-f{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;user-select:none;-webkit-user-drag:none;filter:drop-shadow(0 14px 16px rgba(80,110,30,.18))}
+    .ap-f.f1{opacity:1;animation:apOff .07s linear .9s forwards}
+    .ap-f.f2{animation:apOn .07s linear 0.9s forwards,apOff .07s linear 1.35s forwards}
+    .ap-f.f3{animation:apOn .07s linear 1.35s forwards,apOff .07s linear 1.8s forwards}
+    .ap-f.f4{animation:apOn .07s linear 1.8s forwards,apOff .07s linear 2.25s forwards}
+    .ap-f.f5{animation:apOn .07s linear 2.25s forwards}
+    .ap-c{position:absolute;border-radius:45% 55% 50% 50%;background:#F4F0D8;box-shadow:inset -1px -1px 0 rgba(150,170,80,.35);opacity:0}
+    .ap-c.c1{animation:apCrumb .55s ease-out 0.92s forwards}
+    .ap-c.c2{animation:apCrumb .55s ease-out 1.37s forwards}
+    .ap-c.c3{animation:apCrumb .55s ease-out 1.82s forwards}
+    .ap-c.c4{animation:apCrumb .55s ease-out 2.27s forwards}
+    .ap-shadow{position:absolute;left:20%;right:20%;bottom:-3%;height:8%;border-radius:50%;background:radial-gradient(closest-side,rgba(90,80,40,.28),transparent);animation:apShadow 2.6s ease both}
+    .ap-text{margin-top:20px;text-align:center;opacity:0;animation:apText .6s ease 2.65s forwards}
+    #splash-screen.apple-splash #splash-brand-title{margin:0!important;font:400 46px/1.1 'Great Vibes','Pinyon Script',cursive!important;color:#5E8A2E!important;letter-spacing:.02em!important;animation:none!important}
     #splash-screen.apple-splash #splash-brand-sub{margin:6px 0 0!important;font-size:12px!important;letter-spacing:.32em!important;color:#9A8A78!important}
     .apple-splash #splash-brand-tag{font-size:11px;letter-spacing:.25em;color:#B3A390}
     .apple-splash #splash-brand-tag:empty{display:none}
-    @keyframes apIn{from{transform:scale(.6);opacity:0}}
-    @keyframes apBite{to{transform:scale(1)}}
-    @keyframes apShow{to{opacity:1}}
-    @keyframes apCrumb{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--dx),calc(var(--dy) + 26px)) scale(.4);opacity:0}}
-    @keyframes apChomp{0%{transform:none}25%{transform:rotate(-3deg) scale(.97,1.02)}55%{transform:rotate(2deg)}100%{transform:none}}
-    @keyframes apToCore{to{transform:scaleX(.45);opacity:0}}
-    @keyframes apCoreIn{from{opacity:0;transform:scaleX(1.6)}to{opacity:1;transform:none}}
-    @keyframes apCoreOut{to{opacity:0;transform:translateY(30px) rotate(24deg) scale(.6)}}
-    @keyframes apPop{0%{opacity:0;transform:scale(.2) translateY(-30px)}60%{opacity:1}100%{opacity:1;transform:none}}
-    @keyframes apLeaf{0%,100%{transform:none}30%{transform:rotate(-14deg)}60%{transform:rotate(8deg)}}
-    @keyframes apSpark{0%{opacity:0;transform:scale(0)}40%{opacity:1;transform:scale(1.1) rotate(20deg)}100%{opacity:0;transform:scale(.6) rotate(45deg)}}
-    @keyframes apShadow{0%,22%{transform:scaleX(1)}55%,100%{transform:scaleX(.42)}}
+    @keyframes apIn{from{transform:scale(.7) translateY(10px);opacity:0}}
+    @keyframes apOn{to{opacity:1}}
+    @keyframes apOff{from{opacity:1}to{opacity:0}}
+    @keyframes apChomp{0%{transform:none}22%{transform:rotate(-3deg) scale(.97,1.03)}55%{transform:rotate(2deg) scale(1.01,.99)}100%{transform:none}}
+    @keyframes apCrumb{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--dx),calc(var(--dy) + 34px)) rotate(160deg) scale(.5)}}
+    @keyframes apShadow{0%,34%{transform:scaleX(1)}100%{transform:scaleX(.55)}}
     @keyframes apText{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-    @media (prefers-reduced-motion:reduce){.apple-splash *{animation-duration:.01s!important;animation-delay:0s!important}.ap-red,.ap-core{display:none}}
+    @media (prefers-reduced-motion:reduce){.apple-splash *{animation-duration:.01s!important;animation-delay:0s!important}}
   </style>
 
   <!-- ═══════════════ 登录层 ═══════════════ -->

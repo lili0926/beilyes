@@ -282,15 +282,16 @@ const DoodleShell = (() => {
     /* 转台：圆盘 + 一圈侧边，上面站着小 Clawd，一起绕竖轴转 */
     const R = 50, T = 10, py = top - 8 - T/2;
     let ring = ''; for(let i = 0; i < 20; i++) ring += '<i class="mb-ring" style="transform:rotateY('+(i*18)+'deg) translateZ('+R+'px)"></i>';
-    const u = 4.2, by = py - T/2;                            // 体素一格 5px；by = 转台顶面
-    let cl = '';
-    cl += cub('cl', 12*u, 7*u, 6*u, 0, by - 3*u - 3.5*u, 0, {fr: '<span class="cl-eye l"></span><span class="cl-eye r"></span>'});
-    cl += cub('cl', 2*u, 2*u, 3*u, -7*u, by - 3*u - 4*u, 0) + cub('cl', 2*u, 2*u, 3*u, 7*u, by - 3*u - 4*u, 0);   // 两只小钳子
-    [-4.5, -1.5, 1.5, 4.5].forEach(x => { cl += cub('cl', 1.6*u, 3*u, 1.6*u, x*u, by - 1.5*u, 0); });              // 四条小腿
+    const u = 4.2, by = py - T/2;                            // 体素一格；by = 转台顶面（小 Clawd 的脚底）
+    /* 小 Clawd：坐标从脚底算起，好让蹦跳时以脚为支点压扁、拉长；两只钳子各挂在肩膀的转轴上，招手就转那根轴 */
+    const arm = side => '<b class="mbc cl-sh" style="transform:translate3d('+(side*6*u)+'px,'+(-8*u)+'px,0)"><b class="mbc cl-arm '+(side > 0 ? 'r' : 'l')+'">'+cub('cl', 3.2*u, 1.8*u, 2.4*u, side*1.6*u, 0, 0)+'</b></b>';
+    let legs = ''; [-4.5, -1.5, 1.5, 4.5].forEach(x => { legs += cub('cl', 1.6*u, 3*u, 1.6*u, x*u, -1.5*u, 0); });
+    const cl = '<b class="mbc cl-bob"><b class="mbc cl-move">' + legs
+      + '<b class="mbc cl-torso">' + cub('cl', 12*u, 7*u, 6*u, 0, -6.5*u, 0, {fr: '<span class="cl-eye l"></span><span class="cl-eye r"></span>'}) + arm(-1) + arm(1) + '</b></b></b>';
     h += '<b class="mbc mb-spin" style="transform:translate3d(0,0,0)"><b class="mbc mb-plat" style="transform:translate3d(0,'+py+'px,0)">'
       + '<i class="mb-disc" style="width:'+2*R+'px;height:'+2*R+'px;margin:'+(-R)+'px 0 0 '+(-R)+'px;transform:translateY('+(-T/2)+'px) rotateX(90deg)"></i>'
       + ring.replace(/class="mb-ring" style="/g, 'class="mb-ring" style="width:'+(2*Math.PI*R/20+1).toFixed(1)+'px;height:'+T+'px;margin:'+(-T/2)+'px 0 0 '+(-(Math.PI*R/20+.5)).toFixed(1)+'px;') + '</b>'
-      + '<b class="mbc mb-clawd">'+cl+'</b></b>';
+      + '<b class="mbc mb-clawd" id="mbClawd" style="transform:translate3d(0,'+by+'px,0)">'+cl+'</b></b>';
     /* 发条钥匙：从右侧面伸出来，播放时一圈圈转 */
     h += '<b class="mbc mb-key" style="transform:translate3d('+(W/2)+'px,4px,0)">'+cub('mb-gold', 26, 6, 6, 13, 0, 0)
       + '<b class="mbc mb-keyturn" style="transform:translate3d(28px,0,0)"><i class="mb-wing" style="transform:rotateY(90deg)"></i></b></b>';
@@ -828,6 +829,17 @@ const DoodleShell = (() => {
   }
   /* 八音盒：按播放页大小缩放；手指左右拖能转着看，松手慢慢回正 */
   function mbFit(){ const w = $('npArtWrap'), f = $('mbFit'); if(w && f && w.clientWidth) f.style.setProperty('--mbs', (w.clientWidth / 300).toFixed(3)); }
+  /* 小 Clawd 的小动作：招手 / 一蹦一跳 / 蹦完再招手，轮着来；点一下八音盒也会做一个 */
+  let clawdN = 0, clawdBusy = 0;
+  function clawdAct(kind){
+    const c = $('mbClawd'); if(!c || Date.now() < clawdBusy) return;
+    const acts = ['hop', 'wave', 'hop2', 'wave'];
+    kind = kind || acts[clawdN++ % acts.length];
+    const dur = {hop: 700, hop2: 1300, wave: 1500}[kind] || 900;
+    c.classList.remove('hop', 'hop2', 'wave'); void c.offsetWidth; c.classList.add(kind);
+    clawdBusy = Date.now() + dur;
+    setTimeout(() => c.classList.remove(kind), dur);
+  }
   function bindMbox(){
     const sc = $('mbScene'), rot = $('mbRot'); if(!sc || !rot) return;
     let ry = -30, rx = -20, d = null, back = 0;
@@ -838,7 +850,11 @@ const DoodleShell = (() => {
     const up = () => { if(!d) return; d = null;
       const home = () => { ry += (-30 - ry) * .06; rx += (-20 - rx) * .08; put(); if(Math.abs(ry + 30) > .3 || Math.abs(rx + 20) > .3) back = requestAnimationFrame(home); };
       setTimeout(() => { back = requestAnimationFrame(home); }, 1200); };
-    sc.addEventListener('pointerup', up); sc.addEventListener('pointercancel', up);
+    sc.addEventListener('pointerup', e => { const tap = d && Math.abs(e.clientX - d.x) < 6 && Math.abs(e.clientY - d.y) < 6; up(); if(tap) clawdAct(); });
+    sc.addEventListener('pointercancel', up);
+    setInterval(() => { if(!ON() || !NP || NP.hidden || document.hidden) return;
+      const playing = NP.classList.contains('playing');
+      if(playing || Math.random() < .45) clawdAct(); }, 4200);
     addEventListener('resize', mbFit);
   }
   function bindMusic(){
