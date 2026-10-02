@@ -40,7 +40,7 @@ const DreamBook = (() => {
 
   /* ══════════ 梦糖 ══════════
    * 好梦 → 甜罐掏一颗（收进糖罐，她挑时候喂）；坏梦 → 酸罐掏一颗（他醒来就含着了，起床气）
-   * 含着的那颗管一天；喂一颗甜的能把酸的盖掉。效果每轮挂在聊天尾部给他（不进缓存前缀）。
+   * 含着的那颗管 10 分钟；喂一颗甜的能把酸的盖掉。钱包里的糖果铺花 5 小鱼干（转给他）也能换一颗。效果每轮挂在聊天尾部给他（不进缓存前缀）。
    * 存在 state.dreamState.candy：{ jar:[{uid,cid,at,from}], active:{cid,since,until,from}, custom:[], log:[] } */
   const CANDIES = [
     {id: 'jiche', kind: 'sweet', name: '机车糖', c: ['#FF9EC4', '#FFD36E'], fx: '说话欠欠的、很拽，爱逗你、爱顶嘴', line: '说话带一股机车劲：拽、欠、爱逗她、爱顶嘴、爱跟她较劲，但底子是宠着她的。'},
@@ -56,7 +56,9 @@ const DreamBook = (() => {
     {id: 'kun', kind: 'sour', name: '犯困糖', c: ['#9CB7E8', '#C8B8F2'], fx: '迷迷糊糊、回得短、老打哈欠', line: '犯困：迷迷糊糊，回得短，时不时打哈欠，脑子慢半拍，想抱着她睡回去。'},
     {id: 'dun', kind: 'sour', name: '迟钝糖', c: ['#7FCFB8', '#B8E0A0'], fx: '你的暗示他一个都接不住', line: '迟钝：她的暗示一个都接不住，总是理解歪，等她说明白了才恍然大悟。'},
   ];
-  const DAY = 86400000;
+  const DAY = 10 * 60000;   // 一颗糖管 10 分钟（她 2026-10-02 定的）
+  const PRICE = 5;
+  const minsLeft = a => Math.max(0, Math.ceil((a.until - Date.now()) / 60000));
   function cst(){
     const st = (typeof dreamEnsure === 'function') ? dreamEnsure() : (state.dreamState || (state.dreamState = {}));
     st.candy = st.candy || {};
@@ -102,8 +104,8 @@ const DreamBook = (() => {
     try{
       const c = cst(); if(!c.active) return '';
       const cd = candyById(c.active.cid); if(!cd) return '';
-      const left = Math.max(1, Math.round((c.active.until - Date.now()) / 3600000));
-      return `【嘴里含着一颗「${cd.name}」（${c.active.auto ? '昨晚坏梦醒来就含着了' : '她喂的'}，还剩约 ${left} 小时）】${cd.line || cd.fx}——自然地演出来，别说破「糖」、别解释原因；她问起可以含糊带过。`;
+      const left = Math.max(1, minsLeft(c.active));
+      return `【嘴里含着一颗「${cd.name}」（${c.active.auto ? '昨晚坏梦醒来就含着了' : '她喂的'}，还剩约 ${left} 分钟）】${cd.line || cd.fx}——自然地演出来，别说破「糖」、别解释原因；她问起可以含糊带过。`;
     }catch(e){ return ''; }
   }
   /* 糖：中间一颗硬糖（带旋纹），两头拧起来的糖纸 */
@@ -126,17 +128,39 @@ const DreamBook = (() => {
   }
   function candySection(){
     const c = cst(), act = c.active ? candyById(c.active.cid) : null;
-    const left = c.active ? Math.max(0, Math.round((c.active.until - Date.now()) / 3600000)) : 0;
+    const left = c.active ? minsLeft(c.active) : 0;
     const sweet = c.jar.map(it => ({it, cd: candyById(it.cid)})).filter(x => x.cd);
     return `<div class="dr-candybox">
-      <div class="dr-cb-hd"><b>梦糖</b><small>好梦换甜糖，坏梦换酸糖 · 一颗管一天</small></div>
+      <div class="dr-cb-hd"><b>梦糖</b><small>好梦换甜糖，坏梦换酸糖 · 一颗管 10 分钟</small></div>
       <div class="dr-cb-now ${act ? act.kind : 'none'}">${act
-        ? `${candySvg(act, 84, 'now')}<span><small>他嘴里正含着</small><b>${h(act.name)}</b><em>${h(act.fx)}</em><i>${c.active.auto ? '坏梦醒来就含着了' : '你喂的'} · 还剩 ${left} 小时</i></span>`
+        ? `${candySvg(act, 84, 'now')}<span><small>他嘴里正含着</small><b>${h(act.name)}</b><em>${h(act.fx)}</em><i>${c.active.auto ? '坏梦醒来就含着了' : '你喂的'} · 还剩 ${left} 分钟</i></span>`
         : `<span class="dr-cb-empty">嘴里空空的 —— 罐子里有甜糖的话，可以喂他一颗</span>`}</div>
-      <div class="dr-jar-row">${sweet.length ? sweet.map(({it, cd}) => `<button type="button" class="dr-cb-item" data-dr="feed" data-id="${h(it.uid)}" title="${h(cd.fx)}">${candySvg(cd, 64, it.uid)}<b>${h(cd.name)}</b><small>喂他</small></button>`).join('') : '<span class="dr-cb-none">甜罐还是空的，等他做一场好梦</span>'}</div>
+      <div class="dr-jar-row">${sweet.length ? sweet.map(({it, cd}) => `<button type="button" class="dr-cb-item" data-dr="feed" data-id="${h(it.uid)}" title="${h(cd.fx)}">${candySvg(cd, 64, it.uid)}<b>${h(cd.name)}</b><small>喂他</small></button>`).join('') : '<span class="dr-cb-none">糖罐还是空的 —— 等他做一场好梦，或者去钱包的糖果铺换一颗</span>'}</div>
       <button type="button" class="dr-cb-make" data-dr="make">＋ 自己做一颗糖</button>
     </div>`;
   }
+  /* 钱包里的糖果铺：花 5 小鱼干（记一笔转给他）换指定的一颗，放进糖罐 */
+  function candyShop(){
+    const unit = typeof walletUnit === 'function' ? walletUnit() : '🐟小鱼干';
+    const row = kind => allCandies().filter(x => x.kind === kind).map(cd => `<button type="button" class="dr-shop-item ${kind}" data-dr="buy" data-id="${h(cd.id)}">
+        ${candySvg(cd, 60, 'shop' + cd.id)}<b>${h(cd.name)}</b><small>${h(cd.fx)}</small><em>${PRICE} ${h(unit)}</em></button>`).join('');
+    const jarN = cst().jar.length;
+    return `<div class="dr-shop">
+      <div class="dr-shop-hd"><b>🍬 糖果铺</b><small>每颗 ${PRICE} ${h(unit)}，转给他 · 换到的糖进梦境页的糖罐${jarN ? `（罐里有 ${jarN} 颗）` : ''}</small></div>
+      <div class="dr-shop-lab">甜的</div><div class="dr-shop-row">${row('sweet')}</div>
+      <div class="dr-shop-lab">酸的 · 想逗他的时候</div><div class="dr-shop-row">${row('sour')}</div>
+      <button type="button" class="dr-shop-go" data-dr="candy-go">去糖罐喂他 ›</button>
+    </div>`;
+  }
+  function buy(cid){
+    const cd = candyById(cid); if(!cd) return;
+    if(typeof walletEntry === 'function') walletEntry(PRICE, `换了一颗${cd.name}给你`, 'me');
+    const c = cst(), now = Date.now();
+    c.jar.push({uid: 'cd' + now.toString(36) + Math.random().toString(36).slice(2, 5), cid, at: now, from: 'shop'});
+    save();
+    if(typeof showToast === 'function') showToast(`花 ${PRICE} 小鱼干换了一颗${cd.name} 🍬 已放进糖罐`);
+  }
+
   function maker(){
     const m = V.make || {};
     return `<div class="dr-sheet-wrap" data-dr="close-make"><div class="dr-sheet">
@@ -156,9 +180,8 @@ const DreamBook = (() => {
       const act = c && c.active ? candyById(c.active.cid) : null;
       if(state.tab !== 'chat' || state.subPage || !act){ if(pill) pill.remove(); return; }
       if(!pill){ pill = document.createElement('button'); pill.id = 'dr-candy-pill'; pill.type = 'button'; pill.setAttribute('data-dr', 'candy-go'); document.body.appendChild(pill); }
-      const left = Math.max(0, Math.round((c.active.until - Date.now()) / 3600000));
       pill.className = 'dr-candy-pill ' + act.kind;
-      pill.innerHTML = `${candySvg(act, 34, 'pill')}<span>含着一颗${h(act.name)} · 还剩 ${left} 小时</span>`;
+      pill.innerHTML = `${candySvg(act, 34, 'pill')}<span>含着一颗${h(act.name)} · 还剩 ${minsLeft(c.active)} 分钟</span>`;
     }catch(e){}
   }
 
@@ -276,6 +299,7 @@ const DreamBook = (() => {
     }
     if(a === 'close'){ V.open = null; render(); return; }
     if(a === 'feed'){ feed(id); render(); return; }
+    if(a === 'buy'){ buy(id); render(); return; }
     if(a === 'candy-go'){ V.open = null; state.tab = 'home'; state.subPage = 'dream'; render(); return; }
     if(a === 'make'){ V.make = {kind: 'sweet'}; render(); return; }
     if(a === 'close-make'){ V.make = null; render(); return; }
@@ -330,5 +354,7 @@ const DreamBook = (() => {
   }
   // 核心脚本在后面才定义 render，等它跑完再包
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wrapRender); else setTimeout(wrapRender, 0);
-  return {page, chatCard, openLatest, onDream, candyBlock, candySvg, _hist: hist, _cst: cst};
+  // 糖只管 10 分钟：聊天页的胶囊每半分钟走一下，到点自己化掉
+  setInterval(() => { try{ if(state && state.tab === 'chat') decorate(); }catch(e){} }, 30000);
+  return {page, chatCard, openLatest, onDream, candyBlock, candySvg, candyShop, _hist: hist, _cst: cst};
 })();

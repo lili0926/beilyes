@@ -143,3 +143,17 @@
 .dr-candy-pill.sour{color:#3E6E4A;background:rgba(241,250,236,.94);box-shadow:0 4px 12px -6px rgba(60,120,80,.5),inset 0 0 0 1px rgba(120,190,110,.25)}
 .dr-candy-pill .dr-candy{animation:drCandy 2.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.dr-candy{animation:none!important}}
+/* 钱包 · 糖果铺 */
+.dr-shop{margin:16px 0 4px;padding:12px 12px 10px;border-radius:18px;background:linear-gradient(180deg,#FFF8FB,#FDF1F7);box-shadow:inset 0 0 0 1px rgba(200,120,170,.14);color:#4E3A4A}
+.dr-shop-hd b{display:block;font-size:14px;letter-spacing:.06em}
+.dr-shop-hd small{display:block;font-size:11px;color:#9C8296;margin-top:2px}
+.dr-shop-lab{margin:10px 2px 4px;font-size:11.5px;font-weight:600;color:#9C8296}
+.dr-shop-row{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:none}
+.dr-shop-row::-webkit-scrollbar{display:none}
+.dr-shop-item{flex:none;width:112px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 6px;border:0;border-radius:14px;background:#fff;cursor:pointer;font:inherit;color:#4E3A4A;box-shadow:inset 0 0 0 1px rgba(200,120,170,.12)}
+.dr-shop-item.sour{background:linear-gradient(180deg,#F8FCF2,#fff)}
+.dr-shop-item b{font-size:12.5px}
+.dr-shop-item small{font-size:10px;line-height:1.35;color:#8E7486;text-align:center;min-height:27px}
+.dr-shop-item em{font-style:normal;font-size:11px;font-weight:700;color:#D1608F;margin-top:2px}
+.dr-shop-item:active{transform:scale(.96)}
+.dr-shop-go{display:block;margin:6px 0 0 auto;padding:5px 10px;border:0;background:none;font:inherit;font-size:12px;color:#B5578A;cursor:pointer}

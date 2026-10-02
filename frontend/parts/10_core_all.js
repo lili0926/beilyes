@@ -21689,6 +21689,8 @@ function renderWallet(){
       
     </div>
 
+    ${typeof DreamBook !== "undefined" ? DreamBook.candyShop() : ""}
+
     <div class="feat-section-label" style="margin-top:18px">兑换处（${(w.shop||[]).length}）</div>
     <div class="wal-shop">${shopCards}</div>
     ${d ? `<div class="wal-item wal-item-new">
