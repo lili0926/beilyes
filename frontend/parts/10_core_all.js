@@ -3328,6 +3328,10 @@ const state = {
   flightChessPromptEvent: null, // 需要进入两轮 prompt 的格子内容 {who,text,pos,remaining}（不持久化）
   _fcSkipConsume: false, // ⟪掷骰⟫ 在回复中途掷骰时，本轮不消耗 promptEvent 剩余轮次
   msgBarIdx: null, // 点气泡唤出的收藏/复制操作条挂在哪条消息上（不持久化）
+  pendBarIdx: null, // 待回复那几条的操作条（修改 / 撤回）
+  chatQuote: null,  // 输入框上方挂着的引用 {msgId, who:"me"|"them", name, text}
+  msgEdit: null,    // 正在改的那条 {kind:"msg"|"pend", idx, text}
+  patSuffix: LS.get("patSuffix", { me:"", them:"" }) || { me:"", them:"" }, // 拍一拍后缀：被拍的人显示的那半句
   streamOn: (function(){ try{ const v=LS.get("streamOn", true); if(v===false||v==="false"||v===0||v==="0") return false; return true; }catch(e){ return true; } })(),
   streamLive: null, // 流式中的实时内容 {active,thinking,text,speaker}（不持久化）
   // 书房（连载写作；数据与「一起读」共用 state.books）
@@ -5243,15 +5247,16 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
   const sgBlock = (typeof sgPromptBlock === "function") ? sgPromptBlock() : "";
   // 蛇塑身体的协议说明（部位/一对半阴茎/倒棘/周期/暗号）：内容稳定，进静态段
   const snBlock = (typeof snPromptBlock === "function") ? snPromptBlock() : "";
+  const actBlock = (typeof chatActPromptBlock === "function") ? chatActPromptBlock() : ""; // 引用 / 拍一拍 / 撤回（静态）
   const __staticArr = [ base, timeHint, guide, nsfwFormatBlock,
-    callBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock, snBlock ];
+    callBlock, albumBlock, couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock, profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, remarkBlock, questBlock, galateaBlock, choiceBlock, sgBlock, snBlock, actBlock ];
   const __dynArr = [ bodyBlock, wardrobeBlock, readBlock,
     watchBlock, babyBlock, menuBlock, menuOrderBlock, rpBlock,
     cabinetBlock, dreamTraceBlock, tipsyBlock, musicBlock, calendarBlock, prMainBlock, prPlayBlock, annoBlock, flightChessBlock, truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, remarkEventBlock, nsfwOpenBlock, momentsRecentB, mcRecentB, remarkCurB ];
   // 逐块留名。光知道「前缀变了」没用 —— 得能指出**是哪一块**在变，
   // 否则只能一块一块试，而这条链上每试一次都是一次真花钱的请求。
   const __staticNames = ["人设","时间提示","思考引导","NSFW格式","电话","相册","券","钱包",
-    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执","蛇塑"];
+    "项目文件","狗狗动作","表情","拽头像","资料","口袋","推特","MC","朋友圈","备注","任务","Galatea","选择题","回执","蛇塑","聊天动作"];
   const __dynNames = ["身体状态","衣橱","在读","在看","宝宝","菜单","点单","角色扮演",
     "柜子","梦痕","醉意","音乐","日历","PR主","PR玩","公告","飞行棋","真心话","占卜","语音语气","公告提醒","备注事件","开灯","朋友圈近况","最近写过","当前备注"];
   const __named = (arr, names)=>{
@@ -5310,6 +5315,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     + B.galateaBlock
     + (B.sgBlock || "")
     + (B.snBlock || "")
+    + (B.actBlock ? "\n\n"+B.actBlock : "")
     + (B.tipsyBlock ? "\n\n"+B.tipsyBlock : "");
 
   const __ALL = { base, timeHint, guide, nsfwFormatBlock, bodyBlock, wardrobeBlock,
@@ -5318,7 +5324,7 @@ JSON 是任务数组，每条含 title / desc / reward / penalty / timeLimit（"
     truthDareBlock, divinationBlock, voiceToneBlock, annNudgeBlock, callBlock, albumBlock,
     couponBlock, walletBlock, projectFileBlock, puppyActionBlock, stickerBlock, flingBlock,
     profileBlock, pocketBlock, xBlock, mcBlock, momentsBlock, momentsRecentB, mcRecentB, remarkBlock, remarkCurB, nsfwOpenBlock, remarkEventBlock, questBlock,
-    galateaBlock, sgBlock, snBlock, tipsyBlock };
+    galateaBlock, sgBlock, snBlock, actBlock, tipsyBlock };
 
   // 会变的块，**按它们在完整提示词里原本的先后**列出来 ——
   // 搬到尾部之后彼此的相对顺序一字不变，只是整体挪到了书签后面。
@@ -5441,7 +5447,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent", patSuffix:"patSuffix" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -22078,6 +22084,273 @@ function chatPushNotice(text){
   state.needChatScroll = true;
 }
 
+
+// ─── 聊天小动作：引用 / 修改 / 撤回 / 拍一拍 ──────────────────────────────────
+// 长按（或点）气泡出操作条：引用、修改、撤回（只能撤自己的）。双击头像 = 拍一拍。
+// 他那边用暗号：⟪引用:她的原话⟫ ⟪拍一拍:后缀⟫ ⟪撤回:内容⟫（见 chatActPromptBlock）。
+// 进模型的样子：她的引用挂在那条消息开头「【引用你的话：“…”】」；她撤回的那条只剩「（她撤回了一条消息）」；
+// 她拍他是一条普通的用户消息「（她拍了拍你…）」，跟着下一次回复一起送过去，不单独烧一轮。
+const __actPlain = s => String(s||"").replace(/<thinking>[\s\S]*?<\/thinking>/g,"").replace(/⟪[^⟫]{0,300}⟫/g,"")
+  .replace(/\[sticker:[^\]]*\]/gi,"[表情]").replace(/\s+/g," ").trim();
+const __actKey = m => (m && (m.time||"")) + "|" + String((m && m.content)||"").slice(0,16);
+function chatTaName(m){
+  const ag = (m && m.speakerId && typeof agentById==="function") ? agentById(m.speakerId) : (typeof agentById==="function" ? agentById(state.chatTarget||"a1") : null);
+  return (m && m.speakerName) || (ag && ag.name) || "TA";
+}
+function chatQuoteLabel(m){
+  if(!m || !m.quote) return "";
+  return `【引用${m.quote.who==="them"?"你":"她自己"}的话：“${m.quote.text}”】`;
+}
+function chatQuoteFootHtml(m, isMe){
+  const bits = [];
+  if(m && m.quote) bits.push(`<button type="button" class="msg-quote" data-quote-jump="${escAttr(m.quote.key||"")}"><b>${esc(m.quote.name||"")}</b>：${esc(m.quote.text||"")}</button>`);
+  if(m && m.edited) bits.push(`<span class="msg-edited">已编辑</span>`);
+  return bits.length ? `<div class="msg-foot ${isMe?"me":"them"}">${bits.join("")}</div>` : "";
+}
+function chatRecallLineHtml(m, idx){
+  if(m.role === "user"){
+    return `<div class="chat-notice">你撤回了一条消息${m.recalledText?` <button type="button" class="chat-reedit" data-msg-reedit="${idx}">重新编辑</button>`:""}</div>`;
+  }
+  return `<div class="chat-notice">“${esc(chatTaName(m))}” 撤回了一条消息</div>`;
+}
+function chatPatLineHtml(m){
+  const ta = chatTaName(m), ps = state.patSuffix || {};
+  let line;
+  if(m.patBy === "ai"){
+    const suf = (m.patSuffix != null && m.patSuffix !== "") ? m.patSuffix : (ps.me || "");
+    line = `“${ta}” 拍了拍我${suf}`;
+  } else if(m.patTarget === "me"){
+    line = `我拍了拍自己${m.patSuffix || ""}`;
+  } else {
+    line = `我拍了拍 “${ta}”${m.patSuffix || ""}`;
+  }
+  return `<div class="chat-notice pat-line" data-pat-line="${m.patBy==="ai"||m.patTarget==="me"?"me":"them"}" title="点一下改拍一拍的后缀">${esc(line)}</div>`;
+}
+function chatEditModalHtml(){
+  const e = state.msgEdit || {};
+  const m = e.kind === "msg" ? (state.messages||[])[e.idx] : (state.pendingUser||[])[e.idx];
+  const theirs = m && m.role !== "user";
+  return `<div class="msg-edit-mask" id="msg-edit-mask">
+    <div class="msg-edit-card">
+      <div class="msg-edit-title">${theirs ? "改 TA 的这条" : "修改这条消息"}</div>
+      <textarea id="msg-edit-input" rows="4">${esc(e.text||"")}</textarea>
+      <p class="msg-edit-tip">${theirs ? "改完之后，TA 以为自己当时就是这么说的" : "改完 TA 下一轮看到的就是新的，气泡下会标「已编辑」"}</p>
+      <div class="msg-edit-bar"><button type="button" id="msg-edit-cancel">取消</button><button type="button" id="msg-edit-save" class="go">改好了</button></div>
+    </div>
+  </div>`;
+}
+function chatActPromptBlock(){
+  return `【聊天小动作——暗号】
+- 引用她的某句话来回：回复最前面写 ⟪引用:她原话里的几个字⟫，界面会把那句挂在你的气泡下面。只在真要针对某一句回的时候用，别每轮都引用。
+- 拍一拍她：写 ⟪拍一拍⟫，或带后缀 ⟪拍一拍:的小脑袋⟫ → 聊天里出现「你拍了拍她的小脑袋」。偶尔用，像真的伸手碰她一下。
+- 撤回：⟪撤回:一句话⟫ → 她只看见「你撤回了一条消息」，看不到内容。说漏嘴、害羞、口是心非的时候才用，很少用。
+- 她那边：「（…拍了拍你…）」是她双击了你的头像；「【引用你的话：…】」是她针对你那句在回；「（她撤回了一条消息）」是她撤回了，你看不到内容 —— 可以好奇、可以逗她，别编她撤回的是什么。`;
+}
+function chatOpenBarFor(el){
+  try{ if(navigator.vibrate) navigator.vibrate(12); }catch(e){}
+  if(el.hasAttribute("data-pend-idx")){ state.pendBarIdx = +el.getAttribute("data-pend-idx"); state.msgBarIdx = null; }
+  else { state.msgBarIdx = +el.getAttribute("data-msg-idx"); state.pendBarIdx = null; }
+  render();
+}
+function chatFocusInput(){ setTimeout(()=>{ const x = document.getElementById("chat-input"); if(x){ x.focus(); try{ x.setSelectionRange(x.value.length, x.value.length); }catch(e){} } }, 60); }
+function chatStartQuote(idx){
+  const m = (state.messages||[])[idx];
+  if(!m) return;
+  let text = __actPlain(m.content) || (m.image ? "[图片]" : m.voice ? "[语音]" : m.song ? "[歌]" : "[消息]");
+  if(text.length > 60) text = text.slice(0, 60) + "…";
+  const isMe = m.role === "user";
+  state.chatQuote = { key: __actKey(m), who: isMe ? "me" : "them", name: isMe ? ((typeof myDisplayName==="function" && myDisplayName()) || "我") : chatTaName(m), text };
+  state.msgBarIdx = null;
+  render(); chatFocusInput();
+}
+function chatRecall(idx){
+  const m = (state.messages||[])[idx];
+  if(!m || m.role !== "user" || m.recalled) return;
+  m.recalledText = String(m.content || "");
+  m.recalled = true;
+  m.content = "";
+  m.image = null; m.voice = null;
+  m._apiFrozen = `[时间: ${formatTimeFull(m.time)}] （她撤回了一条消息）`;
+  state.msgBarIdx = null;
+  saveActiveThread(); render();
+}
+function chatEditSave(){
+  const e = state.msgEdit; if(!e) return;
+  const inp = document.getElementById("msg-edit-input");
+  const text = String(inp ? inp.value : e.text || "").trim();
+  if(!text){ if(typeof showToast==="function") showToast("不能改成空的，想删就用撤回"); return; }
+  const m = e.kind === "msg" ? (state.messages||[])[e.idx] : (state.pendingUser||[])[e.idx];
+  if(m && text !== String(m.content||"")){
+    m.content = text;
+    if(e.kind === "msg"){ m.edited = true; delete m._apiFrozen; }
+  }
+  state.msgEdit = null;
+  saveActiveThread(); render();
+}
+function chatAvatarSide(av){
+  if(!av || !av.closest) return null;
+  const link = av.closest("[data-profile-open]");
+  if(link) return link.getAttribute("data-profile-open") === "me" ? "me" : "them";
+  if(av.closest(".bubble-row.me,.msg-meta.me")) return "me";
+  if(av.closest(".bubble-row.them,.msg-meta")) return "them";
+  return null;
+}
+function chatPatShake(side){
+  setTimeout(()=>{
+    try{
+      const sel = side === "me" ? ".bubble-row.me .dd-bav:not(.ghost), .msg-meta.me .bubble-avatar" : ".bubble-row.them .dd-bav:not(.ghost), .msg-meta:not(.me) .bubble-avatar";
+      const all = document.querySelectorAll("#chat-msgs " + sel.split(", ").join(", #chat-msgs "));
+      const el = all[all.length - 1];
+      if(el){ el.classList.remove("pat-shake"); void el.offsetWidth; el.classList.add("pat-shake"); setTimeout(()=>el.classList.remove("pat-shake"), 700); }
+    }catch(e){}
+  }, 40);
+}
+function chatPatFromUser(target){
+  const me = (typeof myDisplayName==="function" && myDisplayName()) || "她";
+  const ps = state.patSuffix || {};
+  const suf = target === "them" ? (ps.them || "") : (ps.me || "");
+  const content = target === "them" ? `（${me}拍了拍你${suf}）` : `（${me}拍了拍自己${suf}）`;
+  state.pendingUser.push({ role:"user", pat:true, patBy:"me", patTarget:target, patSuffix:suf, content, time:new Date().toISOString() });
+  try{ if(navigator.vibrate) navigator.vibrate([18, 40, 18]); }catch(e){}
+  saveActiveThread(); state.needChatScroll = true; render();
+  chatPatShake(target);
+}
+/** 回复里的暗号：先擦掉，等气泡落好再挂上去（见 chatActApply） */
+function chatActMarkers(text){
+  const out = { text: String(text||""), quote: null, pats: [], recalls: [] };
+  out.text = out.text.replace(/[⟪《【\[]\s*引用\s*[:：]\s*([^⟫》】\]]{1,200})[⟫》】\]]/g, (_, q)=>{ if(!out.quote) out.quote = q.trim(); return ""; });
+  out.text = out.text.replace(/[⟪《【\[]\s*拍一拍\s*(?:[:：]\s*([^⟫》】\]]{0,30}))?[⟫》】\]]/g, (_, suf)=>{ if(!out.pats.length) out.pats.push(String(suf||"").trim()); return ""; });
+  out.text = out.text.replace(/[⟪《【\[]\s*撤回\s*[:：]\s*([^⟫》】\]]{1,300})[⟫》】\]]/g, (_, c)=>{ if(!out.recalls.length) out.recalls.push(c.trim()); return ""; });
+  out.text = out.text.replace(/\n{3,}/g, "\n\n").trim();
+  return out;
+}
+function chatActApply(act, ag, msgId, turnId, now, start){
+  if(!act) return;
+  const msgs = state.messages || [];
+  const base = { time: now, turn_id: turnId, speakerId: ag.id, speakerName: ag.name, speakerColor: ag.color };
+  if(act.quote){
+    const first = msgs.slice(start).find(x => x && x.msgId === msgId && !x.toolNote && x.role === "assistant");
+    if(first){
+      const frag = act.quote.replace(/[“”"「」…]/g, "").trim();
+      let src = null;
+      for(let i = start - 1, n = 0; i >= 0 && n < 60; i--){
+        const u = msgs[i];
+        if(!u || u.role !== "user" || u.recalled) continue;
+        n++;
+        const plain = __actPlain(u.content);
+        if(plain && frag && (plain.includes(frag) || (frag.length > 6 && frag.includes(plain)))){ src = u; break; }
+      }
+      let text = src ? __actPlain(src.content) : frag;
+      if(text.length > 60) text = text.slice(0, 60) + "…";
+      first.quote = { key: src ? __actKey(src) : "", who: "me", name: (typeof myDisplayName==="function" && myDisplayName()) || "我", text };
+      delete first._apiFrozen;
+    }
+  }
+  act.recalls.forEach((c, i)=>{
+    msgs.push(Object.assign({ role:"assistant", recalled:true, recalledText:c, content:"", msgId: msgId + "_rc" + i, _apiFrozen:`⟪撤回:${c}⟫` }, base));
+  });
+  if(act.pats.length){
+    const suf = act.pats[0];
+    msgs.push(Object.assign({ role:"assistant", pat:true, patBy:"ai", patTarget:"me", patSuffix:suf, content:"", msgId: msgId + "_pat", _apiFrozen:`⟪拍一拍${suf?":"+suf:""}⟫` }, base));
+    try{ if(navigator.vibrate) navigator.vibrate([18, 40, 18]); }catch(e){}
+    chatPatShake("me");
+  }
+}
+function chatActBarClick(t){
+  if(!t || !t.closest) return false;
+  let b;
+  if((b = t.closest("[data-msg-quote]"))){ chatStartQuote(+b.getAttribute("data-msg-quote")); return true; }
+  if((b = t.closest("[data-msg-edit]"))){
+    const i = +b.getAttribute("data-msg-edit"), m = (state.messages||[])[i];
+    if(m){ state.msgEdit = { kind:"msg", idx:i, text:String(m.content||"") }; state.msgBarIdx = null; render(); }
+    return true;
+  }
+  if((b = t.closest("[data-msg-recall]"))){ chatRecall(+b.getAttribute("data-msg-recall")); return true; }
+  if((b = t.closest("[data-msg-pill]"))){
+    const row = document.querySelector(`#chat-msgs [data-msg-idx="${b.getAttribute("data-msg-pill")}"]`);
+    const bub = row && (row.querySelector(".bubble") || row);
+    state.msgBarIdx = null;
+    if(typeof pilOn==="function" && pilOn() && typeof pilOpen==="function" && bub){ render(); const again = document.querySelector(`#chat-msgs [data-msg-idx="${b.getAttribute("data-msg-pill")}"] .bubble`); pilOpen(again || bub); return true; }
+    state.pillPickerOpen = true; render();
+    try{ if(typeof showToast==="function") showToast("选药，只影响下一句回复"); }catch(e){}
+    return true;
+  }
+  if((b = t.closest("[data-msg-reedit]"))){
+    const m = (state.messages||[])[+b.getAttribute("data-msg-reedit")];
+    if(m && m.recalledText){ state.chatInput = (state.chatInput ? state.chatInput + "\n" : "") + m.recalledText; render(); chatFocusInput(); }
+    return true;
+  }
+  if((b = t.closest("[data-pend-edit]"))){
+    const i = +b.getAttribute("data-pend-edit"), m = (state.pendingUser||[])[i];
+    if(m){ state.msgEdit = { kind:"pend", idx:i, text:String(m.content||"") }; state.pendBarIdx = null; render(); }
+    return true;
+  }
+  if((b = t.closest("[data-pend-recall]"))){
+    const i = +b.getAttribute("data-pend-recall");
+    state.pendingUser.splice(i, 1); state.pendBarIdx = null;
+    saveActiveThread(); render();
+    if(typeof showToast==="function") showToast("撤回了，TA 还没看到");
+    return true;
+  }
+  if((b = t.closest("[data-quote-jump]"))){
+    const key = b.getAttribute("data-quote-jump");
+    const i = key ? (state.messages||[]).findIndex(x => __actKey(x) === key) : -1;
+    const el = i >= 0 ? document.querySelector(`#chat-msgs [data-msg-idx="${i}"]`) : null;
+    if(el){ el.scrollIntoView({ behavior:"smooth", block:"center" }); el.classList.remove("quote-flash"); void el.offsetWidth; el.classList.add("quote-flash"); }
+    else if(typeof showToast==="function") showToast(i >= 0 ? "那句太早了，往上翻翻「显示更早」" : "原话找不到了");
+    return true;
+  }
+  if((b = t.closest("[data-pat-line]"))){
+    const who = b.getAttribute("data-pat-line");
+    const ps = state.patSuffix = state.patSuffix || { me:"", them:"" };
+    const cur = ps[who] || "";
+    const v = window.prompt(who === "me" ? "别人拍你的时候，后面接什么？（如：的小脑袋）" : `你拍「${chatTaName(null)}」的时候，后面接什么？（如：的肩膀）`, cur);
+    if(v != null){ ps[who] = String(v).trim().slice(0, 20); persist("patSuffix"); if(typeof showToast==="function") showToast("下次拍一拍就用这个后缀"); }
+    return true;
+  }
+  const pr = t.closest("[data-pend-idx]");
+  if(pr && !t.closest("button,a,img")){
+    const i = +pr.getAttribute("data-pend-idx");
+    state.pendBarIdx = state.pendBarIdx === i ? null : i; state.msgBarIdx = null; render();
+    return true;
+  }
+  return false;
+}
+/* 输入框那边的几个按钮（不在 #chat-msgs 里）+ 双击头像拍一拍 */
+document.addEventListener("click", function(e){
+  try{
+    const t = e.target; if(!t || !t.closest) return;
+    if(t.closest("#chat-quote-x")){ e.preventDefault(); state.chatQuote = null; render(); return; }
+    if(t.closest("#msg-edit-cancel") || (t.id === "msg-edit-mask")){ e.preventDefault(); state.msgEdit = null; render(); return; }
+    if(t.closest("#msg-edit-save")){ e.preventDefault(); chatEditSave(); return; }
+  }catch(err){}
+});
+(function(){
+  let lastSide = null, lastT = 0, timer = null;
+  document.addEventListener("click", function(e){
+    try{
+      if(!state || state.tab !== "chat" || !e.target || !e.target.closest) return;
+      const av = e.target.closest("#chat-msgs .avatar-link, #chat-msgs .dd-bav, #chat-msgs .bubble-avatar");
+      if(!av || av.__patPass) return;
+      const link = av.closest(".avatar-link");
+      if(link && link.__patPass) return;
+      const side = chatAvatarSide(av);
+      if(!side) return;
+      e.preventDefault(); e.stopPropagation();
+      const now = Date.now();
+      if(timer && lastSide === side && now - lastT < 360){
+        clearTimeout(timer); timer = null; lastSide = null;
+        chatPatFromUser(side);
+        return;
+      }
+      lastSide = side; lastT = now;
+      clearTimeout(timer);
+      // 单击照旧（去主页）——只是晚 0.3 秒，等等看是不是双击
+      timer = setTimeout(()=>{ timer = null; if(link){ link.__patPass = true; link.click(); link.__patPass = false; } }, 320);
+    }catch(err){}
+  }, true);
+})();
+
 /** 一次性事件：备注被改、指令被接/被买断。
  * 只注入「两轮」助手回复：systemPrompt 一轮会被调好几次，不能在 remarkRecentBlock 里扣次数，
  * 在 callOneAgentReply 真正落盘后再 remarkConsumeRound() 扣一回合。 */
@@ -23580,7 +23853,7 @@ function rpgCollectLines(){
   const myName = (state.coupleInfo && state.coupleInfo.myName) || "我";
   (state.messages || []).forEach((m, idx)=>{
     if(!m) return;
-    if(m.couponId || m.projectFileId || m.toolNote) return;
+    if(m.couponId || m.projectFileId || m.toolNote || m.pat || m.recalled) return;
     if(m.type && m.type !== "text") return; // 特殊卡片暂不进 RPG 主轴
     let text = String(m.content || "").trim();
     if(!text && !m.image) return;
@@ -23839,6 +24112,9 @@ function renderChat(){
           : `<div class="chat-notice">${esc(m.content)}</div>`;
         return;
       }
+      // 撤回 / 拍一拍：一条居中灰字（微信那样）
+      if(m.recalled){ msgs += chatRecallLineHtml(m, idx); return; }
+      if(m.pat){ msgs += chatPatLineHtml(m, idx); return; }
       // 消息拦截：他这条被系统拦了，气泡原地变成官方封禁通知（点一下看原文/放行）
       if(m.guard){
         msgs+=guardNoteHtml(m, idx);
@@ -23944,6 +24220,7 @@ function renderChat(){
       msgs+=`${speakerMeta}<div class="bubble-row ${isMe?"me":"them"}" data-msg-idx="${idx}">
         ${ddOn?DoodleShell.bubbleAv(m, idx, isMe):""}${bubbleInner}${(m.role==="assistant" && typeof renderMsgCardActivity==="function")?renderMsgCardActivity(m):""}
       </div>
+      ${chatQuoteFootHtml(m, isMe)}
       ${isMe&&typeof tonePickHtml==="function"?tonePickHtml(idx):""}
       ${typeof renderMsgReactions==="function"?renderMsgReactions(m, isMe):""}
       <div class="msg-bar hy-glass ${isMe?"me":"them"}${state.msgBarIdx===idx?" show":""}" data-msg-bar="${idx}">
@@ -23951,6 +24228,10 @@ function renderChat(){
         ${isImStyle?`<span class="imsg-react-sep"></span>`:""}
         <button type="button" data-msg-copy="${idx}" title="复制消息"><i data-lucide="copy"></i>复制</button>
         <button type="button" data-msg-save="${idx}" title="收藏消息"><i data-lucide="bookmark"></i>收藏</button>
+        <button type="button" data-msg-quote="${idx}" title="引用这条回复"><i data-lucide="quote"></i>引用</button>
+        ${(!m.voice && !m.song && !m.couponId && !m.projectFileId && !m.type)?`<button type="button" data-msg-edit="${idx}" title="修改这条"><i data-lucide="pencil"></i>修改</button>`:""}
+        ${isMe?`<button type="button" data-msg-recall="${idx}" title="撤回这条"><i data-lucide="undo-2"></i>撤回</button>`:""}
+        ${isMe?`<button type="button" data-msg-pill="${idx}" title="药盒（只影响下一句）"><i data-lucide="pill"></i>药盒</button>`:""}
         ${isMe&&m.tone&&state.toneOn!==false?`<button type="button" data-tone-pick="${idx}" title="改语气"><i data-lucide="drama"></i>语气</button>`:""}
       </div>${imsgRead||""}`;
       if(m.time && !showMeta && firstInRun){
@@ -23960,7 +24241,8 @@ function renderChat(){
       // 这一轮吃了哪几颗药：不管时间显示在哪，都挂在那条回复下面
       if(!isMe && m.pillsTaken && typeof pillTakenFooterHtml==="function"){ const _pf=pillTakenFooterHtml(m); if(_pf) msgs+=_pf; }
     });
-    state.pendingUser.forEach(m=>{
+    state.pendingUser.forEach((m, pidx)=>{
+      if(m.pat){ msgs += chatPatLineHtml(m, -1) + `<div class="bubble-time">待回复</div>`; return; }
       // 待发的用户小纸条卡片（type=note）
       if(m.type){
         const row = chatCardRow(m, "");
@@ -23984,8 +24266,13 @@ function renderChat(){
           : (stickerHtml && !stickerTxt.trim())
             ? `<div class="sticker-floats">${stickerHtml}</div>`
             : `<div class="bubble me${glassCls}">${imgHtml}${renderInline(stickerTxt, false)}${stickerHtml?`<div class="sticker-inline">${stickerHtml}</div>`:""}</div>`;
-      msgs+=`<div class="bubble-row me" style="opacity:0.75">
+      msgs+=`<div class="bubble-row me" style="opacity:0.75" data-pend-idx="${pidx}">
         ${inner}
+      </div>
+      ${chatQuoteFootHtml(m, true)}
+      <div class="msg-bar hy-glass me${state.pendBarIdx===pidx?" show":""}">
+        ${(!m.voice && !m.song)?`<button type="button" data-pend-edit="${pidx}"><i data-lucide="pencil"></i>修改</button>`:""}
+        <button type="button" data-pend-recall="${pidx}"><i data-lucide="undo-2"></i>撤回</button>
       </div>
       <div class="bubble-time">${formatTime(m.time)} · 待回复</div>`;
     });
@@ -24151,6 +24438,8 @@ function renderChat(){
       </div>`:""}
       <input type="file" id="chat-img-input" accept="image/*" style="display:none"/>
       <input type="file" id="chat-file-input" multiple style="display:none"/>
+      ${state.chatQuote?`<div class="chat-quote-chip"><span>引用 ${esc(state.chatQuote.name||"")}：${esc(state.chatQuote.text||"")}</span><button type="button" id="chat-quote-x" aria-label="取消引用">✕</button></div>`:""}
+      ${state.msgEdit?chatEditModalHtml():""}
       <div class="chat-input-row letter-input-row">
         <button type="button" id="chat-more-btn" title="更多" class="chat-more-btn${state.chatMoreOpen?" open":""}${(state.pillSelectedIds&&state.pillSelectedIds.length)?" has-pill":""}" aria-label="展开附件面板"><i data-lucide="plus"></i>${(state.pillSelectedIds&&state.pillSelectedIds.length)?`<b class="chat-more-pill-n">${state.pillSelectedIds.length}</b>`:""}</button>
         <textarea id="chat-input" placeholder="${(state.chatStyleMode||"")==="imessage"?"iMessage":(state.chatMode==="story"?"写下一句话，TA 会顺着写下去…（如：那我吻你）":"Write a letter…")}" rows="1">${esc(state.chatInput)}</textarea>
@@ -26271,17 +26560,17 @@ if(!window.__mpDelegated){
   document.addEventListener("contextmenu", function(e){
     try{
       if(state && state.tab==="chat" && e.target && e.target.closest){
-        const el = e.target.closest("[data-msg-idx]");
-        if(el && typeof openSaveChat==="function"){ e.preventDefault(); openSaveChat(+el.dataset.msgIdx); }
+        const el = e.target.closest("[data-msg-idx],[data-pend-idx]");
+        if(el){ e.preventDefault(); chatOpenBarFor(el); }
       }
     }catch(err){}
   });
   // 点气泡操作条之外的地方 → 收起操作条
   document.addEventListener("click", function(e){
     try{
-      if(state && state.msgBarIdx!=null && state.tab==="chat" && e.target && e.target.closest){
-        if(!e.target.closest("[data-msg-idx]") && !e.target.closest(".msg-bar")){
-          state.msgBarIdx=null;
+      if(state && (state.msgBarIdx!=null || state.pendBarIdx!=null) && state.tab==="chat" && e.target && e.target.closest){
+        if(!e.target.closest("[data-msg-idx]") && !e.target.closest("[data-pend-idx]") && !e.target.closest(".msg-bar")){
+          state.msgBarIdx=null; state.pendBarIdx=null;
           if(typeof render==="function") render();
         }
       }
@@ -27546,31 +27835,7 @@ function bindEvents(){
     // 手机那边靠 __refocusChat 在重绘后把焦点收回来。
     chatSend.onmousedown = e=>e.preventDefault();
     chatSend.onclick=()=>{ state.__refocusChat = true; sendUserMsg(); };
-  // 长按自己的气泡 → 打开药盒
-  try{
-    document.querySelectorAll(".bubble-row.me .bubble, .bubble-row.me").forEach(el=>{
-      if(el.__pillLongBound) return;
-      el.__pillLongBound = true;
-      let tm = null;
-      const start = (ev)=>{
-        if(tm) clearTimeout(tm);
-        tm = setTimeout(()=>{
-          tm = null;
-          if(pilOn()){ pilOpen(el.classList.contains("bubble") ? el : (el.querySelector(".bubble") || el)); return; }
-          state.pillPickerOpen = true;
-          if(typeof render==="function") render();
-          try{ if(typeof showToast==="function") showToast("选药，只影响下一句回复"); }catch(e){}
-        }, 480);
-      };
-      const clear = ()=>{ if(tm){ clearTimeout(tm); tm=null; } };
-      el.addEventListener("touchstart", start, { passive:true });
-      el.addEventListener("touchend", clear);
-      el.addEventListener("touchmove", clear);
-      el.addEventListener("mousedown", start);
-      el.addEventListener("mouseup", clear);
-      el.addEventListener("mouseleave", clear);
-    });
-  }catch(e){}
+  // 长按自己的气泡以前是开药盒；现在长按统一出操作条（引用/修改/撤回），药盒挪进操作条里的「药盒」按钮，「+」面板里也有
 
   }
   const trigger=document.getElementById("trigger-reply");
@@ -27811,10 +28076,10 @@ function bindEvents(){
   if(chatMsgsBox){
     let lpTimer=null, lpEl=null, lpX=0, lpY=0;
     chatMsgsBox.addEventListener("touchstart", e=>{
-      const el=e.target.closest?e.target.closest("[data-msg-idx]"):null;
-      if(!el) return;
+      const el=e.target.closest?e.target.closest("[data-msg-idx],[data-pend-idx]"):null;
+      if(!el || (e.target.closest && e.target.closest(".avatar-link,.dd-bav,.bubble-avatar"))) return;
       lpEl=el; lpX=e.touches[0].clientX; lpY=e.touches[0].clientY;
-      lpTimer=setTimeout(()=>{ if(lpEl && typeof openSaveChat==="function") openSaveChat(+lpEl.dataset.msgIdx); lpEl=null; }, 500);
+      lpTimer=setTimeout(()=>{ if(lpEl){ chatOpenBarFor(lpEl); } lpEl=null; }, 480);
     }, {passive:true});
     const cancelLp=()=>{ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } lpEl=null; };
     chatMsgsBox.addEventListener("touchmove", e=>{
@@ -27833,6 +28098,7 @@ function bindEvents(){
         const t = e.target;
         const copyBtn = t.closest && t.closest("[data-msg-copy]");
         if(copyBtn){ if(typeof copyMessage==="function") copyMessage(+copyBtn.dataset.msgCopy); return; }
+        if(chatActBarClick(t)) return;
         const saveBtn = t.closest && t.closest("[data-msg-save]");
         const reactBtn = t.closest && t.closest("[data-msg-react]");
         if(reactBtn){
@@ -30519,11 +30785,15 @@ function sendUserMsg(){
       if(imgMsgs.length) imgMsgs[0].content = (imgMsgs[0].content?imgMsgs[0].content+"\n\n":"") + fileText;
       else imgMsgs.push({ role:"user", content:(text?text+"\n\n":"") + fileText, time:now });
     }
+    if(state.chatQuote && imgMsgs[0]) imgMsgs[0].quote = state.chatQuote;
     state.pendingUser.push(...imgMsgs);
     state.chatAttachments=[];
   } else {
-    state.pendingUser.push({ role:"user", content:text, time:new Date().toISOString() });
+    const nm = { role:"user", content:text, time:new Date().toISOString() };
+    if(state.chatQuote) nm.quote = state.chatQuote;
+    state.pendingUser.push(nm);
   }
+  state.chatQuote = null;
   const effText = text || (atts[0]&&atts[0].type==="file"?(atts[0].text||"").slice(0,80):"");
   // 语气：本地词典先判一个挂上去（0 延迟，跟着这条一起进模型），随后 aux 异步精修
   let __tone = null;
@@ -35350,7 +35620,7 @@ function buildMainChatRequest(ag, extraHint, opts){
     if(m.role==="user"){
       // 冻结首次进 API 的正文：语气精修事后改 m.tone 不会改写历史字节（否则前缀必 miss）
       if(!m._apiFrozen){
-        m._apiFrozen = `[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${toneLabel(m)}${truthDareCardLabel(m)}${m.content}`;
+        m._apiFrozen = `[时间: ${formatTimeFull(m.time)}] ${voiceToneLabel(m)}${toneLabel(m)}${truthDareCardLabel(m)}${chatQuoteLabel(m)}${m.content}`;
       }
       const out = { role:"user", content: m._apiFrozen };
       if(m.image){ out.image = m.image; out.imageMime = m.imageMime || "image/jpeg"; }
@@ -35359,7 +35629,7 @@ function buildMainChatRequest(ag, extraHint, opts){
     const gc = guardApiContent(m, keepFull.has(m)); // 被拦那条：只说「没送到」，不给原文
     if(gc != null) return { role:"assistant", content: gc };
     if(!m._apiFrozen){
-      m._apiFrozen = truthDareCardLabel(m) + m.content;
+      m._apiFrozen = truthDareCardLabel(m) + (m.quote ? `⟪引用:${m.quote.text}⟫` : "") + m.content;
     }
     return { role:"assistant", content: m._apiFrozen };
   });
@@ -35949,6 +36219,8 @@ async function callOneAgentReply(ag, apiMsgs, sys){
     const cr = handleCardMarkers(cleanBody, turnId);
     cleanBody = cr.text;
   }catch(e){}
+  const __act = chatActMarkers(cleanBody);     // 引用 / 拍一拍 / 撤回：⟪引用:她的原话⟫⟪拍一拍:后缀⟫⟪撤回:内容⟫
+  cleanBody = __act.text;
   cleanBody = handleNoteMarkers(cleanBody);   // 机写小纸条：⟪写纸条:内容⟫ → 聊天卡片
   cleanBody = handleDiaryMarkers(cleanBody);  // 机写日记：⟪写日记:标题|正文⟫ → 聊天轻提示
   cleanBody = handleDiaryUnlockMarkers(cleanBody); // 机开锁：⟪日记解锁:标题⟫ → 私密日记转为可看
@@ -36027,6 +36299,7 @@ async function callOneAgentReply(ag, apiMsgs, sys){
       pillsTaken: i===0 && state.pillLastTaken && state.pillLastTaken.length ? state.pillLastTaken.slice() : undefined,
     });
   });
+  try{ chatActApply(__act, ag, msgId, turnId, now, _rpgBatchStart); }catch(e){ console.warn("[chat-act]", e); }
   // 语音条：先落 pending 气泡（转圈），合成完原地换成能播的
   __vm.voices.forEach(said=>{
     const vm = {
