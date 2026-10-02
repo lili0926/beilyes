@@ -54,9 +54,13 @@ const DoodleAlbum = (() => {
   };
   /* 画笔线条款（像相机 App 里那种手画的白线）：只描边，pink 那几条填粉，dot 那几条用同色填 */
   const LINEART = {
-    lineears: {paths: ['M10 66 Q12 40 22 20 Q34 34 44 52', 'M90 66 Q88 40 78 20 Q66 34 56 52', 'M19 54 L23 37 L33 51Z', 'M81 54 L77 37 L67 51Z'], pink: [2, 3]},
-    whiskers: {paths: ['M6 36 L26 42', 'M4 51 L26 51', 'M6 66 L26 60', 'M94 36 L74 42', 'M96 51 L74 51', 'M94 66 L74 60'], pink: []},
-    bang: {paths: ['M38 14 L41 58', 'M60 12 L58 56', 'M41.5 74 a5.5 5.5 0 1 0 0.1 0Z', 'M57.5 72 a5.5 5.5 0 1 0 0.1 0Z'], pink: [], dot: [2, 3]},
+    /* 两只小耳朵分在两边，尖是圆的，内耳一小片粉 */
+    lineears: {w: 5, paths: ['M4 62 Q5 47 12 36 Q14 34 16 36 Q21 43 25 52', 'M96 62 Q95 47 88 36 Q86 34 84 36 Q79 43 75 52',
+      'M10 55 Q12 47 14 43 Q17 47 19 52 Q14 52 10 55Z', 'M90 55 Q88 47 86 43 Q83 47 81 52 Q86 52 90 55Z'], pink: [2, 3]},
+    /* 两边各三根短腮毛，下面一点点腮红 */
+    whiskers: {w: 4.5, paths: ['M2 41 Q8 42 13 45', 'M1 51 L13 51', 'M2 61 Q8 59 13 57', 'M98 41 Q92 42 87 45', 'M99 51 L87 51', 'M98 61 Q92 59 87 57',
+      'M18 64 a6 3.4 0 1 0 0.1 0Z', 'M70 64 a6 3.4 0 1 0 0.1 0Z'], pink: [], blush: [6, 7]},
+    bang: {w: 5, paths: ['M43 30 Q44 42 45 52', 'M58 28 Q57 40 56 50', 'M45.2 63 a4 4 0 1 0 0.1 0Z', 'M56.2 61 a4 4 0 1 0 0.1 0Z'], pink: [], dot: [2, 3]},
   };
   /* 耳朵的内耳：最后一条用另一种颜色填 */
   const INNER = {catears: '#FFD1E1', dogears: 'rgba(255,255,255,.4)'};
@@ -86,9 +90,10 @@ const DoodleAlbum = (() => {
     if(L.t === 'st' && LINEART[L.k]){
       const A = LINEART[L.k];
       return `<g transform="${tf}"><g transform="translate(-50 -50)"${bare ? '' : ` filter="url(#rf${u})"`}>`
-        + A.paths.map((d, k) => A.pink.includes(k) ? `<path d="${d}" fill="#F7A3C2" stroke="#F7A3C2" stroke-width="2" stroke-linejoin="round"/>`
+        + A.paths.map((d, k) => A.pink.includes(k) ? `<path d="${d}" fill="#F7A3C2" stroke="#F7A3C2" stroke-width="1.5" stroke-linejoin="round"/>`
+          : (A.blush || []).includes(k) ? `<path d="${d}" fill="#F9A8C6" opacity=".55"/>`
           : (A.dot || []).includes(k) ? `<path d="${d}" fill="${h(L.c)}"/>`
-          : `<path d="${d}" fill="none" stroke="${h(L.c)}" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>`).join('')
+          : `<path d="${d}" fill="none" stroke="${h(L.c)}" stroke-width="${A.w || 5}" stroke-linecap="round" stroke-linejoin="round"/>`).join('')
         + `</g></g>`;
     }
     if(L.t === 'st'){
@@ -351,6 +356,11 @@ const DoodleAlbum = (() => {
           <svg class="dda-deco ed" id="dda-ed-svg" viewBox="0 0 1000 1250" preserveAspectRatio="none"></svg>
         </div>
       </div>
+      <div class="dda-ed-size" id="dda-ed-size">
+        <button type="button" data-dde="smaller" aria-label="缩小">－</button>
+        <span>大小</span><input type="range" id="dda-ed-range" min="0.3" max="6" step="0.05" value="1" aria-label="贴纸大小">
+        <button type="button" data-dde="bigger" aria-label="放大">＋</button>
+      </div>
       <nav class="dda-ed-tabs">${tabs.map(([k, t]) => `<button type="button" class="${E.tab === k ? 'on' : ''}" data-dde-tab="${k}">${t}</button>`).join('')}</nav>
       <div class="dda-ed-panel">${edPanel()}</div>
     </div>`;
@@ -371,6 +381,9 @@ const DoodleAlbum = (() => {
       </g>`;
     }
     svg.innerHTML = decoInner(E.layers, 'ed') + sel;
+    /* 大小条：选中一张贴纸才出来 */
+    const bar = document.getElementById('dda-ed-size'), rg = document.getElementById('dda-ed-range');
+    if(bar){ const on = !!(L && L.t !== 'pen'); bar.classList.toggle('on', on); if(on && rg && document.activeElement !== rg) rg.value = L.s || 1; }
     const und = document.querySelector('[data-dde="undo"]'); if(und) und.disabled = !E.hist.length;
   }
   function snap(){ const E = V.ed; E.hist.push(JSON.stringify(E.layers)); if(E.hist.length > 40) E.hist.shift(); }
@@ -391,7 +404,7 @@ const DoodleAlbum = (() => {
     const at = spec.indexOf(':'), kind = spec.slice(0, at), v = spec.slice(at + 1);
     const jit = () => (Math.random() - .5) * 120;
     let L = null;
-    if(kind === 'st' && LINEART[v]) L = {t: 'st', k: v, c: '#FFFFFF', x: v === 'bang' ? 300 : 500, y: v === 'lineears' ? 260 : v === 'bang' ? 300 : 500, s: v === 'bang' ? 1.4 : 3, r: v === 'bang' ? -12 : 0};
+    if(kind === 'st' && LINEART[v]) L = {t: 'st', k: v, c: '#FFFFFF', x: v === 'bang' ? 290 : 500, y: v === 'lineears' ? 270 : v === 'bang' ? 300 : 500, s: v === 'bang' ? 1.1 : 2.6, r: v === 'bang' ? -10 : 0};
     else if(kind === 'st') L = {t: 'st', k: v, c: E.color, x: 500 + jit(), y: 470 + jit(), s: 1.8, r: (Math.random() - .5) * 30};
     else if(kind === 'tape'){ const [k, c] = TAPES[+v] || TAPES[0]; L = {t: 'tape', k, c, x: 500 + jit() * .6, y: 70, s: 1.4, r: (Math.random() - .5) * 16}; }
     else if(kind === 'stamp') L = {t: 'stamp', text: v, x: 740, y: 900, s: 1, r: 0};
@@ -588,6 +601,10 @@ const DoodleAlbum = (() => {
       const act = ed.getAttribute('data-dde');
       if(act === 'glow'){ E.glow = !E.glow; E.erase = false; render(); }
       else if(act === 'erase'){ E.erase = !E.erase; render(); }
+      else if(act === 'smaller' || act === 'bigger'){
+        const L = E.sel != null ? E.layers[E.sel] : null;
+        if(L && L.t !== 'pen'){ snap(); L.s = Math.max(.3, Math.min(6, (L.s || 1) * (act === 'bigger' ? 1.15 : 1 / 1.15))); edDraw(); }
+      }
       else if(act === 'undo'){ if(E.hist.length){ E.layers = JSON.parse(E.hist.pop()); E.sel = null; edDraw(); } }
       else if(act === 'cancel'){ V.ed = null; render(); }
       else if(act === 'done'){
@@ -675,7 +692,14 @@ const DoodleAlbum = (() => {
     shrink(f).then(img => { V.compose = {image: img}; render(); setTimeout(() => { const x = document.getElementById('dda-cap-in'); if(x) x.focus(); }, 80); })
       .catch(() => { if(typeof showToast === 'function') showToast('这张图读不出来，换一张试试'); });
   }, true);
-  document.addEventListener('input', e => { if(e.target && e.target.id === 'dda-note') V.note = e.target.value; }, true);
+  document.addEventListener('input', e => {
+    if(e.target && e.target.id === 'dda-note') V.note = e.target.value;
+    if(e.target && e.target.id === 'dda-ed-range' && V.ed){
+      const E = V.ed, L = E.sel != null ? E.layers[E.sel] : null;
+      if(L && L.t !== 'pen'){ if(!E._rangeSnap){ snap(); E._rangeSnap = true; } L.s = +e.target.value; edDraw(); }
+    }
+  }, true);
+  document.addEventListener('change', e => { if(e.target && e.target.id === 'dda-ed-range' && V.ed) V.ed._rangeSnap = false; }, true);
   let sx = null, sy = 0;
   document.addEventListener('touchstart', e => { if(!ON() || !e.target.closest || !e.target.closest('[data-dda-swipe]')) return; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, {passive: true});
   document.addEventListener('touchend', e => {

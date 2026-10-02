@@ -176,3 +176,7 @@
 .dda-ed-tip{margin:6px 4px 0;font-size:12px;color:#9C95B4;text-align:center}
 
 .dda-ed-st.line{background:#4A4458}
+.dda-ed-size{display:flex;align-items:center;gap:8px;margin:0 14px 2px;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.85);visibility:hidden;font-size:13px;color:#8B6CC0}
+.dda-ed-size.on{visibility:visible}
+.dda-ed-size input{flex:1;accent-color:#B99BE6}
+.dda-ed-size button{width:30px;height:30px;border:0;border-radius:50%;background:#F3EEFA;color:#8B6CC0;font-size:16px;line-height:1}
