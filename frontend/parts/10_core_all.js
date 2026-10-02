@@ -3332,6 +3332,7 @@ const state = {
   chatQuote: null,  // 输入框上方挂着的引用 {msgId, who:"me"|"them", name, text}
   msgEdit: null,    // 正在改的那条 {kind:"msg"|"pend", idx, text}
   patSuffix: LS.get("patSuffix", { me:"", them:"" }) || { me:"", them:"" }, // 拍一拍后缀：被拍的人显示的那半句
+  sfxMeta: LS.get("sfxMeta", []) || [], // 水声盒清单 [{id,name,kind:"wet"|"slick",dur}]（音频本体在 IndexedDB）
   streamOn: (function(){ try{ const v=LS.get("streamOn", true); if(v===false||v==="false"||v===0||v==="0") return false; return true; }catch(e){ return true; } })(),
   streamLive: null, // 流式中的实时内容 {active,thinking,text,speaker}（不持久化）
   // 书房（连载写作；数据与「一起读」共用 state.books）
@@ -5447,7 +5448,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent", patSuffix:"patSuffix" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent", patSuffix:"patSuffix", sfxMeta:"sfxMeta" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -18171,9 +18172,162 @@ function stripVoiceTags(t){
   return String(t||"").replace(/\[[A-Za-z][A-Za-z ,'\-]{0,48}\]/g, "").replace(/[ \t]{2,}/g, " ").replace(/\s*\n\s*/g, "\n").trim();
 }
 function voiceDisplayText(t){ return stripVoiceTags(t); }
-const VOICE_TAG_RULE = `- 声口变了的时候，可以在那句话前写一个轻的英文声口标签，例如 [low, close]、[soft]、[quiet laugh]、[whispering]、[unhurried]。
-  一轮最多两三个，其余的话沿用上一个声口；往轻里写，别用 intense / heavy / growl 这类猛词，一猛就像在演。
-  喘和停顿靠「……」和话说到一半断开，不要写 [heavy breathing]；亲吻、水声这类响动不要写成字。`;
+// ─── 水声盒：真录音垫在声音底下 ───────────────────────────────────────────────
+// 照 sanqianzilanyue/ai-voice-breath-kiss-water 那篇的结论：水声不让嗓子演、也不用 AI 生成，
+// 用真实录音（CC0、没有人声）垫在人声下面。她自己从 freesound 挑好导进来（我们这边下不到素材）。
+//   · 他在声口标签里多写一个词表示「这几句底下要水声」：wet = 湿声，slick = 更黏的咕叽声，
+//     例如 [low, close, wet]。这个词送去念之前摘掉（嗓子看不到就不会去演），下一个标签里不写就退掉。
+//   · 叠法：从素材里随机切两个窗、挑响动多的那个；水声的峰 = 这一句人声的峰 − 12 dB；
+//     0.5 秒淡入，话说完再留 1 秒，最后 1.4 秒淡出（不留尾巴会「结束得有点突兀」）。
+// 素材本体放 IndexedDB（几百 KB 一段，localStorage 放不下），清单放 state.sfxMeta 好渲染。
+const SFX_DB = "beilyes_sfx", SFX_WORDS = { wet:"wet", slick:"slick", sticky:"slick" };
+function sfxDb(){
+  return new Promise((res, rej)=>{
+    try{
+      const r = indexedDB.open(SFX_DB, 1);
+      r.onupgradeneeded = ()=>{ try{ r.result.createObjectStore("clips", { keyPath:"id" }); }catch(e){} };
+      r.onsuccess = ()=>res(r.result);
+      r.onerror = ()=>rej(r.error);
+    }catch(e){ rej(e); }
+  });
+}
+async function sfxGet(id){
+  const db = await sfxDb();
+  return new Promise((res, rej)=>{ const q = db.transaction("clips").objectStore("clips").get(id); q.onsuccess = ()=>res(q.result || null); q.onerror = ()=>rej(q.error); });
+}
+async function sfxPut(rec){
+  const db = await sfxDb();
+  return new Promise((res, rej)=>{ const tx = db.transaction("clips", "readwrite"); tx.objectStore("clips").put(rec); tx.oncomplete = ()=>res(); tx.onerror = ()=>rej(tx.error); });
+}
+async function sfxDelete(id){
+  const db = await sfxDb();
+  return new Promise((res, rej)=>{ const tx = db.transaction("clips", "readwrite"); tx.objectStore("clips").delete(id); tx.oncomplete = ()=>res(); tx.onerror = ()=>rej(tx.error); });
+}
+function sfxHas(){ return (state.sfxMeta || []).length > 0 && (state.callConfig || {}).sfxOn !== false; }
+/** 一段文字里的声口标签：摘掉 wet/slick，返回 {text, mode}。
+ *  mode 跟着「这段里最后一个标签」走：带 wet 就开、不带就关；这段没有标签就沿用 prev。 */
+function sfxWetScan(text, prev){
+  let mode = prev || null;
+  const out = String(text||"").replace(/\[([A-Za-z][A-Za-z ,'\-]{0,60})\]/g, (all, inner)=>{
+    const words = inner.split(/\s*,\s*|\s+/).filter(Boolean);
+    let hit = null;
+    const keep = words.filter(w => { const k = SFX_WORDS[w.toLowerCase()]; if(k){ hit = k; return false; } return true; });
+    mode = hit;   // 这个标签里写了就开，没写就退掉
+    // 原来的分隔留着：逗号分隔的标签还是逗号分隔
+    const sep = inner.includes(",") ? ", " : " ";
+    return keep.length ? "[" + keep.join(sep) + "]" : "";
+  }).replace(/[ \t]{2,}/g, " ").trim();
+  return { text: out, mode };
+}
+const __sfxBuf = new Map();
+async function sfxBuffer(ctx, id){
+  if(__sfxBuf.has(id)) return __sfxBuf.get(id);
+  const rec = await sfxGet(id);
+  if(!rec || !rec.blob) return null;
+  const buf = await ctx.decodeAudioData(await rec.blob.arrayBuffer());
+  __sfxBuf.set(id, buf);
+  return buf;
+}
+function __peak(buf, from, to){
+  let p = 0;
+  for(let c = 0; c < buf.numberOfChannels; c++){
+    const d = buf.getChannelData(c), a = Math.max(0, Math.floor(from * buf.sampleRate)), b = Math.min(d.length, Math.floor(to * buf.sampleRate));
+    for(let i = a; i < b; i += 4){ const v = Math.abs(d[i]); if(v > p) p = v; }
+  }
+  return p;
+}
+/** 在 at 时刻、voiceBuf 底下垫一段水声。返回那个 source（好让外面停得掉） */
+async function sfxUnder(ctx, dest, voiceBuf, at, kind){
+  const list = (state.sfxMeta || []).filter(x => x.kind === kind);
+  const pool = list.length ? list : (state.sfxMeta || []);
+  if(!pool.length) return null;
+  const meta = pool[Math.floor(Math.random() * pool.length)];
+  const wb = await sfxBuffer(ctx, meta.id);
+  if(!wb) return null;
+  const dur = voiceBuf.duration + 1;
+  // 随机两个窗，挑响动多的那个（真录素材中间常有大片安静）
+  let off = 0, wp = __peak(wb, 0, Math.min(wb.duration, dur));
+  if(wb.duration > dur + 0.2){
+    for(let k = 0; k < 2; k++){
+      const o = Math.random() * (wb.duration - dur), p = __peak(wb, o, o + dur);
+      if(k === 0 || p > wp){ off = o; wp = p; }
+    }
+  }
+  const vp = __peak(voiceBuf, 0, voiceBuf.duration) || 0.3;
+  const gain = Math.min(6, (vp * Math.pow(10, -12 / 20)) / Math.max(wp, 1e-4));
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = wb;
+  if(wb.duration < dur){ src.loop = true; }
+  const t0 = Math.max(at, ctx.currentTime + 0.01), late = t0 - at, len = Math.max(0.3, dur - late);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + Math.min(0.5, len / 3));
+  g.gain.setValueAtTime(gain, Math.max(t0 + 0.5, t0 + len - 1.4));
+  g.gain.linearRampToValueAtTime(0, t0 + len);
+  src.connect(g); g.connect(dest);
+  src.start(t0, src.loop ? 0 : off + late, src.loop ? undefined : len);
+  if(src.loop) src.stop(t0 + len);
+  return src;
+}
+/** 水声提示词：只在开着 NSFW、而且盒子里有素材的时候给他 */
+function sfxPromptRule(){
+  if(!state.nsfwOn || !sfxHas()) return "";
+  const kinds = new Set((state.sfxMeta || []).map(x => x.kind));
+  return `\n- 亲密的时候想让底下有水声：在那个声口标签里多写一个 ${kinds.has("wet") ? "wet" : ""}${kinds.has("wet") && kinds.has("slick") ? "（更黏的写 slick）" : kinds.has("slick") ? "slick" : ""}，例如 [low, close, ${kinds.has("wet") ? "wet" : "slick"}]；下一个标签里不写，水声就退掉。水声是真录音垫在底下的 —— 千万别把水声写成字、也别写成拟声词。`;
+}
+async function sfxImport(file){
+  if(!file) return;
+  if(file.size > 6 * 1024 * 1024){ showToast("这段太大了（超过 6MB），剪短一点再导"); return; }
+  const id = "sfx" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  let dur = 0;
+  try{ const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC(); const b = await ctx.decodeAudioData(await file.arrayBuffer()); dur = b.duration; try{ ctx.close(); }catch(e){} }
+  catch(e){ showToast("这段音频读不出来，换个 mp3 / wav 试试"); return; }
+  const name = String(file.name || "水声").replace(/\.[a-z0-9]+$/i, "").slice(0, 24);
+  const kind = /lotion|lube|slick|squish|gel|黏|咕叽/i.test(name) ? "slick" : "wet";
+  await sfxPut({ id, blob: file, name });
+  state.sfxMeta = [...(state.sfxMeta || []), { id, name, kind, dur: Math.round(dur * 10) / 10 }];
+  persist("sfxMeta"); render();
+  showToast("放进水声盒了 · " + (kind === "slick" ? "黏" : "湿"));
+}
+let __sfxPreview = null;
+async function sfxPreview(id){
+  try{
+    if(__sfxPreview){ try{ __sfxPreview.pause(); }catch(e){} __sfxPreview = null; }
+    const rec = await sfxGet(id); if(!rec) return;
+    const u = URL.createObjectURL(rec.blob), a = new Audio(u);
+    __sfxPreview = a; a.onended = ()=>URL.revokeObjectURL(u);
+    a.play().catch(()=>{});
+    setTimeout(()=>{ if(__sfxPreview === a){ a.pause(); } }, 6000);
+  }catch(e){}
+}
+function sfxSettingsHtml(){
+  const list = state.sfxMeta || [], cfg = state.callConfig || {};
+  return `<div class="feat-section-label"><i data-lucide="droplets"></i> 水声盒（垫在声音底下的真录音）</div>
+    <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span class="setting-label">亲密的时候垫水声</span>
+        <div class="toggle-switch" id="sfx-on-toggle" style="background:${cfg.sfxOn!==false?"var(--accent)":"var(--border)"}"><div class="toggle-knob" style="left:${cfg.sfxOn!==false?"18px":"2px"}"></div></div>
+      </div>
+      ${list.length ? list.map(x=>`<div class="sfx-row">
+          <button type="button" class="sfx-play" data-sfx-play="${escAttr(x.id)}" aria-label="试听">▶</button>
+          <span class="sfx-name">${esc(x.name)}<small>${x.dur ? x.dur + " 秒" : ""}</small></span>
+          <button type="button" class="sw-chip${x.kind==="wet"?" on":""}" data-sfx-kind="${escAttr(x.id)}:wet">湿</button>
+          <button type="button" class="sw-chip${x.kind==="slick"?" on":""}" data-sfx-kind="${escAttr(x.id)}:slick">黏</button>
+          <button type="button" class="sfx-del" data-sfx-del="${escAttr(x.id)}" aria-label="删掉">✕</button>
+        </div>`).join("") : `<div style="font-size:12px;color:var(--sub);margin:2px 0 8px">盒子还是空的</div>`}
+      <label class="btn-ghost" style="align-self:flex-start;margin-top:6px;cursor:pointer">＋ 导入一段水声<input type="file" id="sfx-import" accept="audio/*" style="display:none"></label>
+      <div style="font-size:11px;color:var(--sub);line-height:1.6;margin-top:8px">
+        去 freesound.org 搜 CC0（公有领域）、<b>没有人声</b>的素材：一段慢慢的湿声（标「湿」）、一段乳液那种咕叽声（标「黏」），各二三十秒就够。<br>
+        他在声口标签里写 wet / slick，那几句底下就会垫上：音量自动压在他声音下面 12 dB，淡入、留 1 秒尾巴再淡出。只在开着 NSFW、并且用 ElevenLabs v3 / v4 时他才会用。</div>
+    </div>`;
+}
+
+const VOICE_TAG_RULE_BASE = `- 声口变了的时候，才在那句话前写一个轻的英文声口标签，例如 [low, close]、[soft]、[quiet]、[unhurried]、[quiet laugh under the breath]。
+  一轮最多两三个，其余的话沿用上一个声口；往轻里写，别用 intense / heavy / growl / strained / rough 这类猛词，一猛就像在演。
+- 喘在标点里，不在标签里：句首句尾多留「……」，一句话中间断一下。一轮两三处喘就够，每一处换一种 ——
+  鼻子里出的一口气、话说到一半断掉、屏住再慢慢放、笑着带出来的、咽回去半声；同一种连用两次就假了。不要写 [heavy breathing]。
+- 亲吻、水声这类响动不要写成字，也不要写拟声词。`;
+/* 水声那一条要看开关和素材，所以每次现拼（VOICE_TAG_RULE 还是那个名字，用的地方一行不用改） */
+const VOICE_TAG_RULE = { toString(){ return VOICE_TAG_RULE_BASE + (typeof sfxPromptRule === "function" ? sfxPromptRule() : ""); } };
 
 async function elevenSynthesize(text, opts){
   opts = opts || {};
@@ -18443,6 +18597,8 @@ function callPlayCtx(){
 }
 
 function callTtsStopSources(){
+  (__callTts.wsrcs || []).forEach(s=>{ try{ s.onended = null; s.stop(); }catch(e){} });
+  __callTts.wsrcs = [];
   (__callTts.srcs || []).forEach(s=>{
     try{ s.onended = null; s.stop(); }catch(e){}
   });
@@ -18481,8 +18637,13 @@ function callTtsPush(text){
   const gen = __callTts.gen;
   const idx = __callTts.items.length;
   const prevText = idx > 0 && __callTts.items[idx-1] ? __callTts.items[idx-1].text : "";
-  __callTts.items.push({ status:"pending", url:null, external:false, text:t });
-  ttsSynthesize(t, { kind:"call", previous_text: prevText }).then(result=>{
+  // 水声：标签里的 wet / slick 摘掉再念，记在这一块上，播的时候垫
+  const ws = sfxWetScan(t, idx > 0 ? __callTts.wetMode : null);
+  __callTts.wetMode = ws.mode;
+  const said = ws.text;
+  if(!stripVoiceTags(said)) return;
+  __callTts.items.push({ status:"pending", url:null, external:false, text:said, wet: sfxHas() ? ws.mode : null });
+  ttsSynthesize(said, { kind:"call", previous_text: prevText }).then(result=>{
     if(gen !== __callTts.gen) return;            // 这通电话已经过去了
     const it = __callTts.items[idx];
     if(!it) return;
@@ -18541,6 +18702,9 @@ async function callTtsPumpCtx(ctx){
       src.connect(g); g.connect(ctx.destination);
       const at = Math.max(ctx.currentTime + 0.02, __callTts.playhead || 0);
       src.start(at);
+      if(it.wet){
+        sfxUnder(ctx, g, buf, at, it.wet).then(ws=>{ if(ws){ __callTts.wsrcs = (__callTts.wsrcs || []).concat(ws); ws.onended = ()=>{ __callTts.wsrcs = (__callTts.wsrcs || []).filter(x=>x !== ws); }; } }).catch(e=>console.warn("[sfx]", e));
+      }
       __callTts.playhead = at + buf.duration;
       __callTts.srcs.push(src);
       if(!__callTts.playing){ __callTts.playing = true; callLatMark("audio"); }
@@ -19071,11 +19235,15 @@ async function voiceMsgSynthesize(msg){
     try{ if(callInChatView()) render(); }catch(e){}
   };
   try{
-    const r = await ttsSynthesize(text, { kind:"msg" });
+    // 整条一口气念（切开念喘会断）；标签里的 wet / slick 摘掉，播的时候垫水声
+    const ws = sfxWetScan(text, null);
+    let wet = null;
+    String(text).replace(/\[([A-Za-z][A-Za-z ,'\-]{0,60})\]/g, (all, inner)=>{ inner.split(/\s*,\s*|\s+/).forEach(w=>{ const k = SFX_WORDS[w.toLowerCase()]; if(k) wet = k; }); return all; });
+    const r = await ttsSynthesize(ws.text, { kind:"msg" });
     if(!r) throw new Error("TTS 没开");
     const src = r.type === "url" ? r.value : await __blobToDataUrl(r.value);
     const dur = await __audioDuration(src);
-    msg.voice = { dataUrl: src, duration: dur || Math.max(1, Math.round(text.length / 4)), text, fromAi: true };
+    msg.voice = { dataUrl: src, duration: dur || Math.max(1, Math.round(text.length / 4)), text: ws.text, fromAi: true, wet: sfxHas() ? wet : null };
   }catch(e){
     console.warn("语音条合成失败:", e);
     delete msg.voice;   // 退回文字气泡
@@ -19366,6 +19534,7 @@ function renderPhone(){
           <button type="button" class="btn-ghost" id="call-tts-test" style="margin-top:10px;align-self:flex-start">试听一句</button>
           ${cfg._ttsTestMsg?`<p style="font-size:11px;color:var(--sub);margin-top:6px">${esc(cfg._ttsTestMsg)}</p>`:""}
         </div>
+        ${sfxSettingsHtml()}
         <div class="feat-section-label"><i data-lucide="timer"></i> 生成超时</div>
         <div class="setting-row" style="border:1px solid var(--border);border-radius:12px;background:var(--card)">
           <span class="setting-label">多少秒不回就放弃（留空 = 240）</span>
@@ -24034,7 +24203,7 @@ function __chatVoiceBarRaw(m, isMe, glassCls, bubbleColor){
   }
   return `<div class="bubble ${isMe?"me":"them"}${glassCls} voice-bubble" ${bubbleColor||""}>
     <div class="voice-bar">
-      <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}" aria-label="播放语音"><i data-lucide="play"></i></button>
+      <button type="button" class="voice-play" data-src="${escAttr(src)}" data-dur="${dur}"${v.wet?` data-wet="${escAttr(v.wet)}"`:""} aria-label="播放语音"><i data-lucide="play"></i></button>
       ${bars}
       <span class="voice-dur">${fmtDur(dur)}</span>
       ${emo?`<span class="voice-emo" title="${escAttr(v.hint||emo)}">${VOICE_EMOJI[emo]||"🎤"}</span>`:""}
@@ -27781,7 +27950,8 @@ function bindEvents(){
       if(prevBar) prevBar.querySelectorAll(".voice-wave span").forEach(s=>s.classList.remove("on"));
       __chatVoice=null;
     }
-    const audio=new Audio(src);
+    const wetKind=btn.getAttribute("data-wet");
+    const audio=(wetKind && typeof sfxHas==="function" && sfxHas()) ? __wetVoicePlayer(src, wetKind) : new Audio(src);
     __chatVoice={ audio, btn, spans, raf:null };
     setIcon(true);
     const tick=()=>{
@@ -27794,6 +27964,31 @@ function bindEvents(){
     audio.play().then(()=>{ __chatVoice.raf=requestAnimationFrame(tick); }).catch(()=>reset());
     audio.addEventListener("ended",reset);
     audio.addEventListener("error",reset);
+  }
+
+  /* 带水声的语音条：人声和水声在同一个 AudioContext 里排好；对外装成一个 <audio>，上面那套进度条照用 */
+  function __wetVoicePlayer(src, kind){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC(), handlers = { ended:[], error:[] }, fire = t => handlers[t].forEach(f=>{ try{ f(); }catch(e){} });
+    let t0 = 0, dur = 0, vs = null, ws = null, done = false;
+    const end = ()=>{ if(done) return; done = true; try{ ws && ws.stop(); }catch(e){} setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 1600); fire("ended"); };
+    return {
+      get currentTime(){ return t0 ? Math.max(0, Math.min(dur, ctx.currentTime - t0)) : 0; },
+      get duration(){ return dur; },
+      addEventListener(t, f){ (handlers[t] = handlers[t] || []).push(f); },
+      pause(){ done = true; try{ vs && vs.stop(); }catch(e){} try{ ws && ws.stop(); }catch(e){} try{ ctx.close(); }catch(e){} },
+      play(){
+        return (async ()=>{
+          try{ await ctx.resume(); }catch(e){}
+          const ab = await (await fetch(src)).arrayBuffer();
+          const buf = await ctx.decodeAudioData(ab);
+          dur = buf.duration; vs = ctx.createBufferSource(); vs.buffer = buf; vs.connect(ctx.destination);
+          t0 = ctx.currentTime + 0.05; vs.start(t0);
+          vs.onended = ()=>{ setTimeout(end, 1000); };   // 水声的尾巴再响一秒
+          ws = await sfxUnder(ctx, ctx.destination, buf, t0, kind).catch(()=>null);
+        })().catch(e=>{ fire("error"); throw e; });
+      },
+    };
   }
 
   function __chatVoiceTextToggle(btn){
@@ -30299,6 +30494,23 @@ const sttUrl = document.getElementById("call-stt-url");
 
 
   // MiniMax TTS 配置
+  // 水声盒
+  const sfxOnT = document.getElementById("sfx-on-toggle");
+  if(sfxOnT) sfxOnT.onclick = ()=>{ state.callConfig = state.callConfig || {}; state.callConfig.sfxOn = state.callConfig.sfxOn === false; persist("callConfig"); render(); };
+  const sfxImp = document.getElementById("sfx-import");
+  if(sfxImp) sfxImp.onchange = ()=>{ const f = sfxImp.files && sfxImp.files[0]; sfxImp.value = ""; if(f) sfxImport(f); };
+  $$("[data-sfx-play]").forEach(b=>{ b.onclick = ()=> sfxPreview(b.getAttribute("data-sfx-play")); });
+  $$("[data-sfx-kind]").forEach(b=>{ b.onclick = ()=>{
+    const [id, kind] = String(b.getAttribute("data-sfx-kind")).split(":");
+    state.sfxMeta = (state.sfxMeta || []).map(x => x.id === id ? Object.assign({}, x, { kind }) : x); persist("sfxMeta"); render();
+  }; });
+  $$("[data-sfx-del]").forEach(b=>{ b.onclick = async ()=>{
+    const id = b.getAttribute("data-sfx-del");
+    if(!confirm("把这段水声从盒子里删掉？")) return;
+    try{ await sfxDelete(id); }catch(e){}
+    __sfxBuf.delete(id);
+    state.sfxMeta = (state.sfxMeta || []).filter(x => x.id !== id); persist("sfxMeta"); render();
+  }; });
   const callTtsToggle = document.getElementById("call-tts-toggle");
   if(callTtsToggle) callTtsToggle.onclick = ()=>{
     state.callConfig = state.callConfig || {};
