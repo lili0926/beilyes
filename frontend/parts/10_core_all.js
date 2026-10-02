@@ -103,8 +103,8 @@
   // 点击任意地方关闭开屏
   splash.addEventListener("click", dismissSplash);
   splash.addEventListener("touchend", function(e){ e.preventDefault(); dismissSplash(); });
-  // 2.5秒后自动关闭（以防不点）
-  setTimeout(dismissSplash, 2500);
+  // 苹果一口口吃完、青苹果冒出来之后自动关闭（点一下随时跳过）
+  setTimeout(dismissSplash, 5200);
 
   // PIN 输入框 Enter 键触发登录
   document.getElementById("login-pin").addEventListener("keydown", function(e){
