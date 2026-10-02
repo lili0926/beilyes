@@ -49,11 +49,15 @@ const DoodleAlbum = (() => {
     butterfly: ['M48 50 C34 16 4 20 10 44 C14 60 34 58 48 52 C30 60 14 82 30 90 C42 94 48 74 48 58Z M52 50 C66 16 96 20 90 44 C86 60 66 58 52 52 C70 60 86 82 70 90 C58 94 52 74 52 58Z', 'M50 30 L50 76'],
     cherry: ['M30 78 a16 16 0 1 0 0.1 0Z M70 78 a16 16 0 1 0 0.1 0Z', 'M30 64 Q38 30 62 12 M70 64 Q64 34 62 12'],
     crown: ['M10 76 L16 30 L34 54 L50 18 L66 54 L84 30 L90 76Z', 'M14 84 L86 84'],
+    catears: ['M6 74 Q10 40 26 14 Q38 34 46 64 Q26 62 6 74Z M94 74 Q90 40 74 14 Q62 34 54 64 Q74 62 94 74Z', 'M16 64 Q19 44 27 30 Q34 44 38 58 Q26 58 16 64Z M84 64 Q81 44 73 30 Q66 44 62 58 Q74 58 84 64Z'],
+    dogears: ['M30 16 C10 14 2 44 6 70 C8 86 24 88 30 74 C36 60 44 40 40 26 C38 20 35 17 30 16Z M70 16 C90 14 98 44 94 70 C92 86 76 88 70 74 C64 60 56 40 60 26 C62 20 65 17 70 16Z', 'M24 32 C14 38 12 58 15 70 C18 76 24 72 26 64 C29 54 32 42 24 32Z M76 32 C86 38 88 58 85 70 C82 76 76 72 74 64 C71 54 68 42 76 32Z'],
   };
+  /* 耳朵的内耳：最后一条用另一种颜色填 */
+  const INNER = {catears: '#FFD1E1', dogears: 'rgba(255,255,255,.4)'};
   /* 最后一条是「线」（茎 / 触角 / 底边）的形状：画成描边，不填色 */
   const LINE_LAST = {clover: 1, butterfly: 1, cherry: 1, crown: 1};
-  const SHAPE_NAMES = {heart: '爱心', star: '星星', sparkle: '闪光', moon: '月亮', cloud: '云朵', bow: '蝴蝶结', flower: '小花', clover: '四叶草', paw: '猫爪', butterfly: '蝴蝶', cherry: '樱桃', crown: '皇冠'};
-  const COLORS = ['#F4A7C3', '#E77FA6', '#B9A3EC', '#9CC2EC', '#9FD3C9', '#F6D277', '#F28C7D', '#FFFFFF'];
+  const SHAPE_NAMES = {catears: '猫耳朵', dogears: '狗耳朵', heart: '爱心', star: '星星', sparkle: '闪光', moon: '月亮', cloud: '云朵', bow: '蝴蝶结', flower: '小花', clover: '四叶草', paw: '猫爪', butterfly: '蝴蝶', cherry: '樱桃', crown: '皇冠'};
+  const COLORS = ['#F4A7C3', '#E77FA6', '#B9A3EC', '#9CC2EC', '#9FD3C9', '#F6D277', '#F28C7D', '#FFFFFF', '#B98A66', '#4A4458'];
   const PENS = ['#3E3A52', '#E0566F', '#F4A7C3', '#B9A3EC', '#7FA9E0', '#7FC7A2', '#F6C453', '#FFFFFF'];
   const TAPES = [['stripe', '#F4A7C3'], ['dot', '#B9A3EC'], ['check', '#9CC2EC'], ['stripe', '#9FD3C9'], ['dot', '#F6D277'], ['plain', '#F7C6D8']];
   let svgN = 0;
@@ -79,7 +83,7 @@ const DoodleAlbum = (() => {
         + ps.map(d => `<path d="${d}" fill="none" stroke="#fff" stroke-width="13" stroke-linejoin="round" stroke-linecap="round"/>`).join('')
         + ps.map((d, k) => (line && k === ps.length - 1)
             ? `<path d="${d}" fill="none" stroke="${h(L.c)}" stroke-width="5" stroke-linecap="round"/>`
-            : `<path d="${d}" fill="${h(L.c)}" stroke="rgba(0,0,0,.08)" stroke-width="1.5"/>`).join('')
+            : `<path d="${d}" fill="${INNER[L.k] && k === ps.length - 1 ? INNER[L.k] : h(L.c)}" stroke="rgba(0,0,0,.08)" stroke-width="1.5"/>`).join('')
         + (bare ? '' : `<path d="${ps[0]}" fill="url(#hl${u})" opacity=".55"/>`) + `</g></g>`;
     }
     if(L.t === 'img') return `<g transform="${tf}"><image href="${h(L.src)}" x="-50" y="-50" width="100" height="100" preserveAspectRatio="xMidYMid meet"${sh}/></g>`;
@@ -178,20 +182,22 @@ const DoodleAlbum = (() => {
     return `<button type="button" class="dda-pol${raw && !dev ? ' raw' : ''}${dev ? ' developing' : ''}" style="--r:${rot}deg;--tape:${tape};--tr:${(rnd(id, 't') * 16 - 8).toFixed(1)}deg" ${raw && !dev ? `data-dda-dev="${h(id)}"` : `data-dda-open="${h(id)}"`} aria-label="${raw ? '还没显影的照片，点一下显影' : '照片 ' + h(a.caption || '')}">
       <span class="dda-tape"></span>
       <span class="dda-photo"><img src="${h(a.image)}" alt="" loading="lazy" draggable="false"></span>
-      <span class="dda-cap ${byOf(a) === 'me' ? 'me' : 'ai'}">${raw && !dev ? '轻轻点一下，让它显影…' : h(a.caption || '')}</span>
+      <span class="dda-cap">${raw && !dev ? '轻轻点一下，让它显影…' : ''}</span>
       <span class="dda-date">${d.getMonth() + 1}.${pad(d.getDate())}</span>
       ${raw && !dev ? '' : decoSvg(a.deco)}
-      ${(a.notes || []).length && !(raw && !dev) ? `<span class="dda-back-dot" title="背面有字">${a.notes.length}</span>` : ''}
+      ${((a.notes || []).length + (a.caption ? 1 : 0)) && !(raw && !dev) ? `<span class="dda-back-dot" title="背面有留言">${(a.notes || []).length + (a.caption ? 1 : 0)}</span>` : ''}
     </button>`;
   }
   function cover(list){
     const imgs = list.slice(-4).reverse();
+    const cvId = LSG('ddAlbumCover', ''), cv = cvId ? list.find(a => String(a.id) === cvId) : null;
     return `<div class="dda-stage">
       <button type="button" class="dda-cover${V.opening ? ' opening' : ''}" data-dda="open" aria-label="翻开相册">
         <span class="dda-under">${imgs.map((a, i) => `<img src="${h(a.image)}" alt="" style="--i:${i}">`).join('') || '<i class="dda-under-empty"></i>'}</span>
         <span class="dda-frost"></span>
+        ${cv ? `<span class="dda-window"><span class="dda-pol mini" style="--r:-4deg;--tape:#B9A3EC;--tr:-6deg"><span class="dda-tape"></span><span class="dda-photo"><img src="${h(cv.image)}" alt=""></span><span class="dda-cap"></span>${decoSvg(cv.deco)}</span></span>` : ''}
         <span class="dda-rings"><i></i><i></i><i></i></span>
-        <span class="dda-label"><small>OUR ALBUM · 우리의 앨범</small><b>我们的相册</b><em>${BOOKS[0].name} · ${list.length} 张</em></span>
+        <span class="dda-label${cv ? ' low' : ''}"><small>OUR ALBUM · 우리의 앨범</small><b>我们的相册</b><em>${BOOKS[0].name} · ${list.length} 张</em></span>
         <span class="dda-cover-tip">点一下，翻开</span>
       </button>
     </div>`;
@@ -203,22 +209,24 @@ const DoodleAlbum = (() => {
   }
   function detail(a){
     const seen = seenList(), notes = a.notes || [], who = byOf(a);
+    /* 背面的留言：贴照片时那句（以前写在白边上的）排第一，后面是你来我往的 */
+    const msgs = (a.caption ? [{by: who, text: a.caption}] : []).concat(notes);
     return `<div class="dda-mask" data-dda-mask>
       <div class="dda-big"><div class="dda-card${V.back ? ' back' : ''}">
         <div class="dda-face front">${polaroid(a, seen, true)}</div>
         <div class="dda-face rear">
-          <h4>照片背面 <small>${dayOf(a).toLocaleDateString('zh-CN')}${who === 'me' ? ' · 我贴的' : ' · ' + h(aiName()) + ' 收的'}</small></h4>
-          <div class="dda-notes">
-            ${notes.length ? notes.map(n => `<p class="dda-note ${n.by === 'me' ? 'me' : 'ai'}">${h(n.text)}<small>${n.by === 'me' ? '我' : h(aiName())}</small></p>`).join('')
-              : `<p class="dda-note none">背面还空着</p>`}
+          <div class="dda-msgs">
+            ${msgs.length ? msgs.map(n => `<p class="dda-msg ${n.by === 'me' ? 'me' : 'ai'}">${h(n.text)}<small>—— ${n.by === 'me' ? '我' : h(aiName())}</small></p>`).join('')
+              : `<p class="dda-msg none">背面还空着<small>写一句留给以后看</small></p>`}
           </div>
-          <div class="dda-note-in"><input id="dda-note" maxlength="120" placeholder="在背面写一句…" value="${h(V.note)}"><button type="button" data-dda="note">写下</button></div>
+          <div class="dda-note-in"><input id="dda-note" maxlength="80" placeholder="在背面留一句…" value="${h(V.note)}"><button type="button" data-dda="note">留下</button></div>
+          <span class="dda-back-mark">${dayOf(a).toLocaleDateString('zh-CN')} · ${who === 'me' ? '我贴的' : h(aiName()) + ' 收的'}</span>
         </div>
       </div></div>
       <div class="dda-bar">
-        <button type="button" data-dda="flip">${V.back ? '翻回正面' : `翻到背面${notes.length ? ' · ' + notes.length : ''}`}</button>
+        <button type="button" data-dda="flip">${V.back ? '翻回正面' : `翻到背面${msgs.length ? ' · ' + msgs.length : ''}`}</button>
         <button type="button" data-dda="deco"><span data-doodle="sparkle"></span>装饰</button>
-        <button type="button" data-dda="cap">改正面那句</button>
+        <button type="button" data-dda="cover">${LSG('ddAlbumCover', '') === String(a.id) ? '已是封面' : '设为封面'}</button>
         <button type="button" data-dda="export">存到手机</button>
         <button type="button" class="dda-del" data-dda="del" aria-label="删除这张"><span data-doodle="trash"></span></button>
         <button type="button" class="go" data-dda="close">放回去</button>
@@ -231,8 +239,9 @@ const DoodleAlbum = (() => {
         <div class="dda-pol big" style="--r:0deg;--tape:#B9A3EC">
           <span class="dda-tape"></span>
           <span class="dda-photo"><img src="${h(V.compose.image)}" alt=""></span>
-          <input id="dda-cap-in" class="dda-cap-in" maxlength="30" placeholder="在白边上写一句…">
+          <span class="dda-cap"></span>
         </div>
+        <input id="dda-cap-in" class="dda-compose-in" maxlength="80" placeholder="在背面留一句（可以不写）">
         <div class="dda-bar">
           <button type="button" data-dda="cancel">先不贴</button>
           <button type="button" class="go" data-dda="post">贴进相册</button>
@@ -269,7 +278,8 @@ const DoodleAlbum = (() => {
       ${subHeader('相册')}
       <p class="ddp-ko">우리의 앨범</p>
       ${shelf()}
-      ${V.open ? `<div class="ddd-tools"><button type="button" data-dda="shut"><span data-doodle="bookmark"></span>合上</button><span class="dda-count">${list.length} 张</span></div>` : ''}
+      ${V.open ? `<div class="ddd-tools"><button type="button" data-dda="shut"><span data-doodle="bookmark"></span>合上</button><span class="dda-count">${list.length} 张</span>
+        <button type="button" class="dda-recall${LSG('ddAlbumRecall', false) ? ' on' : ''}" data-dda="recall" title="开着的话，${h(aiName())} 偶尔会在聊天里提起相册里的旧照片">${LSG('ddAlbumRecall', false) ? '会提起旧照片' : '不提旧照片'}</button></div>` : ''}
       ${body}
       <label class="dda-fab" aria-label="贴一张照片"><input type="file" accept="image/*" id="dda-file" hidden><span data-doodle="plus"></span>贴一张</label>
       ${V.compose ? compose() : ''}
@@ -285,7 +295,7 @@ const DoodleAlbum = (() => {
     const E = V.ed, tab = E.tab;
     if(tab === 'st'){
       return `<div class="dda-ed-row">${COLORS.map(c => `<button type="button" class="dda-sw${E.color === c ? ' on' : ''}" style="--c:${c}" data-dde-color="${c}" aria-label="颜色"></button>`).join('')}</div>
-        <div class="dda-ed-grid">${Object.keys(SHAPES).map(k => `<button type="button" class="dda-ed-st" data-dde-add="st:${k}" aria-label="${SHAPE_NAMES[k]}"><svg viewBox="-12 -12 124 124">${layerSvg({t: 'st', k, c: E.color, x: 50, y: 50, s: 1, r: 0}, 0, 'p', true)}</svg></button>`).join('')}</div>`;
+        <div class="dda-ed-grid">${['catears', 'dogears'].concat(Object.keys(SHAPES).filter(k => k !== 'catears' && k !== 'dogears')).map(k => `<button type="button" class="dda-ed-st" data-dde-add="st:${k}" aria-label="${SHAPE_NAMES[k]}"><svg viewBox="-12 -12 124 124">${layerSvg({t: 'st', k, c: E.color, x: 50, y: 50, s: 1, r: 0}, 0, 'p', true)}</svg></button>`).join('')}</div>`;
     }
     if(tab === 'tape'){
       return `<div class="dda-ed-grid tapes">${TAPES.map(([k, c], i) => `<button type="button" class="dda-ed-tape" data-dde-add="tape:${i}"><svg viewBox="-140 -40 280 80">${layerSvg({t: 'tape', k, c, x: 0, y: 0, s: 1, r: 0}, i, 'q', true)}</svg></button>`).join('')}</div>
@@ -321,7 +331,7 @@ const DoodleAlbum = (() => {
       <div class="dda-ed-stage">
         <div class="dda-pol big ed" style="--r:0deg">
           <span class="dda-photo"><img src="${h(a.image)}" alt="" draggable="false"></span>
-          <span class="dda-cap ${byOf(a) === 'me' ? 'me' : 'ai'}">${h(a.caption || '')}</span>
+          <span class="dda-cap"></span>
           <span class="dda-date">${d.getMonth() + 1}.${pad(d.getDate())}</span>
           <svg class="dda-deco ed" id="dda-ed-svg" viewBox="0 0 1000 1250" preserveAspectRatio="none"></svg>
         </div>
@@ -462,11 +472,6 @@ const DoodleAlbum = (() => {
     g.font = '700 30px ui-monospace,Menlo,monospace'; g.fillStyle = '#FF9A3D'; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
     g.shadowColor = 'rgba(255,140,40,.7)'; g.shadowBlur = 6;
     g.fillText(`${d.getMonth() + 1}.${pad(d.getDate())}`, 915, 105); g.shadowBlur = 0;
-    if(a.caption){
-      const ff = (getComputedStyle(document.body).getPropertyValue('--dd-font') || '').trim() || 'sans-serif';
-      g.font = `46px ${ff}`; g.fillStyle = byOf(a) === 'me' ? '#D0607C' : '#5D6A92'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(a.caption, 500, 1065, 860);
-    }
     if(a.deco && a.deco.layers && a.deco.layers.length){
       const xml = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 1000 1250">${decoInner(a.deco.layers, 'x')}</svg>`;
       try{ const dim = await loadImg('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml)); g.drawImage(dim, 0, 0, W, H); }catch(e){ console.warn('[album export deco]', e); }
@@ -507,15 +512,28 @@ const DoodleAlbum = (() => {
   }
   /* ── 告诉他：她贴了照片 / 在背面写了字（只挂一轮尾部） ── */
   function tell(t){ LSS('ddAlbumTell', Object.assign({at: Date.now()}, t)); }
+  /** 开着「提起旧照片」时：偶尔（每轮 15%，一天最多两次）把一张一周前的旧照片递给他 */
+  function recallBlock(){
+    if(!LSG('ddAlbumRecall', false)) return '';
+    const today = new Date().toDateString(), st = LSG('ddAlbumRecallSt', {day: '', n: 0});
+    if(st.day !== today){ st.day = today; st.n = 0; }
+    if(st.n >= 2 || Math.random() > .15) return '';
+    const old = (state.albumData || []).filter(a => a && a.image && timeOf(a) && Date.now() - timeOf(a) > 7 * 864e5);
+    if(!old.length) return '';
+    const a = old[Math.floor(Math.random() * old.length)];
+    st.n++; LSS('ddAlbumRecallSt', st);
+    const words = [a.caption].concat((a.notes || []).map(n => (n.by === 'me' ? '她：' : '你：') + n.text)).filter(Boolean).slice(0, 4).join(' / ');
+    return `【你们相册里的一张旧照片 · ${dayOf(a).toLocaleDateString('zh-CN')}】${words ? '背面写着：' + words : '背面没写字'}。只是让你想起它——聊到沾边的话题可以自然提一句「记得那张…」，不沾边就别提。`;
+  }
   function tellBlock(){
     const t = LSG('ddAlbumTell', null);
-    if(!t) return '';
+    if(!t) return recallBlock();
     const a = (state.albumData || []).find(x => String(x.id) === String(t.id));
     if(!a){ LSS('ddAlbumTell', null); return ''; }
     t.sent = true; LSS('ddAlbumTell', t);
-    const what = t.kind === 'add' ? `她刚往你们的相册里贴了一张照片${a.caption ? `，白边上写着「${a.caption}」` : ''}。`
-      : `她在相册里一张照片（${a.caption ? `「${a.caption}」` : dayOf(a).toLocaleDateString('zh-CN') + ' 那张'}）的背面写了：「${t.note || ''}」。`;
-    return `【相册】${what}想回她就写一行 ⟪相册背面:一句话⟫，会用你的字写在那张照片背面（≤40 字）；不想回就当没看见，别硬写。`;
+    const what = t.kind === 'add' ? `她刚往你们的相册里贴了一张照片${a.caption ? `，背面留了一句「${a.caption}」` : ''}。`
+      : `她在相册里一张照片（${dayOf(a).toLocaleDateString('zh-CN')} 那张${a.caption ? `，背面原本写着「${a.caption}」` : ''}）的背面留了一句：「${t.note || ''}」。`;
+    return `【相册】${what}想回她就写一行 ⟪相册背面:一句话⟫，会写在那张照片背面（≤40 字）；不想回就当没看见，别硬写。`;
   }
   function handleBack(text){
     let s = String(text || '');
@@ -525,7 +543,7 @@ const DoodleAlbum = (() => {
     s = s.replace(RE, (_, w) => { if(!got) got = w.trim(); return ''; }).replace(/\n{3,}/g, '\n\n').trim();
     if(got && t){
       const a = (state.albumData || []).find(x => String(x.id) === String(t.id));
-      if(a){ a.notes = a.notes || []; a.notes.push({by: 'ai', text: got.slice(0, 80), time: Date.now()}); save(); if(typeof showToast === 'function') showToast(aiName() + ' 在照片背面写了一句'); }
+      if(a){ a.notes = a.notes || []; a.notes.push({by: 'ai', text: got.slice(0, 80), time: Date.now()}); save(); if(typeof showToast === 'function') showToast(aiName() + ' 在照片背面留了一句'); }
     }
     if(t && t.sent) LSS('ddAlbumTell', null);
     return s;
@@ -597,18 +615,18 @@ const DoodleAlbum = (() => {
       render();
     }
     else if(act === 'export' && a){ exportPng(a).catch(err => { if(typeof showToast === 'function') showToast('没存成：' + (err && err.message || err)); }); }
-    else if(act === 'cap' && a){
-      const c = window.prompt('正面白边上写什么？', a.caption || '');
-      if(c == null) return;
-      a.caption = c.trim().slice(0, 30); save(); render();
+    else if(act === 'cover' && a){
+      LSS('ddAlbumCover', String(a.id)); render();
+      if(typeof showToast === 'function') showToast('封面换成这张了');
     }
+    else if(act === 'recall'){ LSS('ddAlbumRecall', !LSG('ddAlbumRecall', false)); render(); }
     else if(act === 'del' && a){
       if(!window.confirm('把这张照片从相册里拿掉？')) return;
       state.albumData = (state.albumData || []).filter(x => x !== a); V.detail = null; save(); render();
     }
     else if(act === 'cancel'){ V.compose = null; render(); }
     else if(act === 'post' && V.compose){
-      const cap = String((document.getElementById('dda-cap-in') || {}).value || '').trim().slice(0, 30);
+      const cap = String((document.getElementById('dda-cap-in') || {}).value || '').trim().slice(0, 80);
       const now = Date.now();
       const item = {id: 'me' + now + '_' + Math.random().toString(36).slice(2, 6), image: V.compose.image, date: typeof _todayStr === 'function' ? _todayStr() : new Date().toISOString().slice(0, 10),
         caption: cap, by: 'me', notes: [], time: now};
