@@ -48,7 +48,7 @@
 - **新功能的模块：**
   - 现在的做法是在 `frontend/doodle/` 下各放一个 `xxx.js` + `xxx.css`，在 `00_prefix.html` 里 include。
   - 核心里只留一行钩子，形如 `if(typeof Xxx!=="undefined") return Xxx.page();`。
-  - 已有的模块：`paper`（日记/纸条/信箱）、`album`（拍立得相册）、`tree`（记忆树）、`coupon`（券本）、`body`（白蛇身体页 + 体检单）、`sigillo`（火漆回执）、`dream`（梦簿 + 梦糖 + 钱包糖果铺）。
+  - 已有的模块：`paper`（日记/纸条/信箱）、`album`（拍立得相册）、`tree`（记忆树）、`coupon`（券本）、`body`（白蛇身体页 + 体检单）、`sigillo`（火漆回执）、`dream`（梦簿 + 梦糖 + 钱包糖果铺）、`calc`（钱包 → 她生图的水晶小鱼干计算器，按键是盖在图上的透明按钮）。
 - **给他的提示词：**
   - 静态块和动态块分开放，保护缓存。
   - 每轮都会变的东西挂在 `chatTailBlock()` 的尾部，比如「新照片」「体检单医嘱」「嘴里的糖」。

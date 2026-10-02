@@ -21637,6 +21637,26 @@ function renderMcpHall(){
 }
 
 
+function walletTopLegacyHtml(w, unit){
+  return `    <div class="wal-balance">
+      <div class="wal-bal-lab">他的余额</div>
+      <div class="wal-bal-num">${esc(String(w.balance))}<span class="wal-bal-unit">${esc(unit)}</span></div>
+    </div>
+
+    <div class="wal-send">
+      <div class="wal-send-row">
+        ${[10,20,50,100].map(n=>`<button type="button" class="wal-quick" data-wal-quick="${n}">+${n}</button>`).join("")}
+      </div>
+      <div class="wal-send-row">
+        <input class="wal-in" id="wal-amt" inputmode="numeric" placeholder="金额" value="${escAttr(state.walletAmt||"")}" style="width:92px"/>
+        <input class="wal-in" id="wal-note" placeholder="附言（可空）" value="${escAttr(state.walletNote||"")}" style="flex:1"/>
+        <button type="button" class="btn-accent" id="wal-send" style="padding:9px 16px;border-radius:12px">转钱</button>
+      </div>
+      
+    </div>
+
+`;
+}
 function renderWallet(){
   const w = ensureWallet();
   const unit = walletUnit();
@@ -21675,25 +21695,9 @@ function renderWallet(){
   }).join("") || `<div class="empty-state" style="padding:18px">货架空着，加点东西给他换</div>`;
 
   return `<div class="page">
-    ${subHeader('<i data-lucide="wallet"></i> Aries 的钱包')}
+    ${subHeader(typeof CalcWallet !== "undefined" ? '<i data-lucide="calculator"></i> 小鱼干计算器' : '<i data-lucide="wallet"></i> Aries 的钱包')}
 
-    <div class="wal-balance">
-      <div class="wal-bal-lab">他的余额</div>
-      <div class="wal-bal-num">${esc(String(w.balance))}<span class="wal-bal-unit">${esc(unit)}</span></div>
-    </div>
-
-    <div class="wal-send">
-      <div class="wal-send-row">
-        ${[10,20,50,100].map(n=>`<button type="button" class="wal-quick" data-wal-quick="${n}">+${n}</button>`).join("")}
-      </div>
-      <div class="wal-send-row">
-        <input class="wal-in" id="wal-amt" inputmode="numeric" placeholder="金额" value="${escAttr(state.walletAmt||"")}" style="width:92px"/>
-        <input class="wal-in" id="wal-note" placeholder="附言（可空）" value="${escAttr(state.walletNote||"")}" style="flex:1"/>
-        <button type="button" class="btn-accent" id="wal-send" style="padding:9px 16px;border-radius:12px">转钱</button>
-      </div>
-      
-    </div>
-
+    ${typeof CalcWallet !== "undefined" ? CalcWallet.top() : walletTopLegacyHtml(w, unit)}
     ${typeof DreamBook !== "undefined" ? DreamBook.candyShop() : ""}
 
     <div class="feat-section-label" style="margin-top:18px">兑换处（${(w.shop||[]).length}）</div>
