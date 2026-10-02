@@ -624,3 +624,5 @@ img.pxname{object-fit:contain;max-width:60%}
 @keyframes mbNote{0%{opacity:0;transform:translateY(20px) rotate(-10deg) scale(.7)}20%{opacity:1}100%{opacity:0;transform:translateY(-70px) rotate(14deg) scale(1.1)}}
 .mb-shadow{position:absolute;left:18%;right:18%;bottom:8%;height:10%;border-radius:50%;background:radial-gradient(closest-side,rgba(70,50,110,.32),transparent);z-index:-1}
 @media (prefers-reduced-motion:reduce){.mb-sway,.mb-spin,.cl-bob,.cl-move,.cl-arm,.cl-torso,.mb-keyturn,.mb-notes i{animation:none!important}}
+
+.card .tag.recent{background:linear-gradient(90deg,#F7C6D9,#CDBEFF);color:#5B3A6E;font-weight:600}

@@ -7974,7 +7974,12 @@ const FEAT_GROUPS = [
     },
 ];
 function renderHomeFeat(){
-  const groups = FEAT_GROUPS;
+  // 最近用过的 4 个排最前（她 2026-10-02 要的）
+  let recent = [];
+  try{ recent = JSON.parse(localStorage.getItem("recentSubs")||"[]"); }catch(e){}
+  const allItems = FEAT_GROUPS.flatMap(g=>g.items);
+  const recItems = (Array.isArray(recent)?recent:[]).map(k=>allItems.find(f=>f.key===k)).filter(Boolean).slice(0,4);
+  const groups = recItems.length ? [{ label:"最近用过", items:recItems }].concat(FEAT_GROUPS) : FEAT_GROUPS;
   return `
     <h2 class="page-title" style="margin-bottom:4px">功能页</h2>
     ${groups.map(g=>`
@@ -26261,6 +26266,7 @@ function bindCoreNav(){
     btn.onclick=()=>{
       const key = btn.getAttribute("data-sub") || btn.dataset.sub;
       if(!key) return;
+      try{ const r = JSON.parse(localStorage.getItem("recentSubs")||"[]").filter(x=>x!==key); r.unshift(key); localStorage.setItem("recentSubs", JSON.stringify(r.slice(0,8))); }catch(e){}
       if(typeof openBiscaGame==="function" && openBiscaGame(key)) return;
       state.subPage = key;
       render();

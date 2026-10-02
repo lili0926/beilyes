@@ -526,11 +526,22 @@ const DoodleShell = (() => {
     const mail = rest.filter(f => f.key === 'mailbox');
     return mail.concat([{key:'@moments', label:'动态', tag:'日常'}], rest.filter(f => f.key !== 'mailbox'));
   }
+  /* 最近用过：每排记最近 4 个，排到最前面（她 2026-10-02：找券夹要滑二十多下） */
+  const RECENT_N = 4;
+  function recentOf(k){ try{ const r = JSON.parse(localStorage.getItem('ddRecentApps') || '{}'); return Array.isArray(r[k]) ? r[k] : []; }catch(e){ return []; } }
+  function noteRecent(k, key){
+    try{ const r = JSON.parse(localStorage.getItem('ddRecentApps') || '{}'); const a = (Array.isArray(r[k]) ? r[k] : []).filter(x => x !== key); a.unshift(key); r[k] = a.slice(0, RECENT_N); localStorage.setItem('ddRecentApps', JSON.stringify(r)); }catch(e){}
+  }
+  function appListSorted(k){
+    const base = appList(k), rec = recentOf(k).filter(key => base.some(a => a.key === key));
+    const front = rec.map(key => Object.assign({}, base.find(a => a.key === key), {tag: '最近用过', recent: true}));
+    return front.concat(base.filter(a => rec.indexOf(a.key) < 0));
+  }
   let av, car, cur = -1, kind = '', opener = null, list = [];
   function build(k){
-    list = appList(k); const tints = ['t-b','t-l','t-p'];
+    list = appListSorted(k); const tints = ['t-b','t-l','t-p'];
     $('avTitle').textContent = k === 'games' ? '游戏' : '工具';
-    car.innerHTML = list.map((a,i) => '<button class="card '+tints[i%3]+'" data-i="'+i+'" aria-label="'+h(a.label)+'"><span class="tile"><span data-doodle="'+(ICON_OF[a.key]||'sparkle')+'" data-boil="off"></span></span><span class="nm">'+h(a.label)+'</span><span class="tag">'+h(a.tag)+'</span></button>').join('');
+    car.innerHTML = list.map((a,i) => '<button class="card '+tints[i%3]+'" data-i="'+i+'" aria-label="'+h(a.label)+'"><span class="tile"><span data-doodle="'+(ICON_OF[a.key]||'sparkle')+'" data-boil="off"></span></span><span class="nm">'+h(a.label)+'</span><span class="tag'+(a.recent ? ' recent' : '')+'">'+h(a.tag)+'</span></button>').join('');
     drawIcons(car); cur = -1;
   }
   function cardsUpdate(){
@@ -568,11 +579,13 @@ const DoodleShell = (() => {
   function reopenView(r){
     const btn = home.root.querySelector('[data-open="'+r.kind+'"]');
     kind = r.kind; opener = btn; build(r.kind); fullVars(av); av.classList.remove('closing'); av.hidden = false; av.classList.add('show'); setOpened(true);
-    const c = car.children[Math.min(r.i, car.children.length-1)];
+    const at = list.findIndex(a => a.key === r.key);
+    const c = car.children[at >= 0 ? at : 0];
     requestAnimationFrame(() => { if(c){ car.scrollLeft = c.offsetLeft - (car.clientWidth - c.offsetWidth)/2; } cardsUpdate(); });
   }
   function goFeature(key){
-    ret = (key !== '@moments' && cur >= 0) ? {kind, i: cur} : null;
+    ret = (key !== '@moments' && cur >= 0) ? {kind, key} : null;
+    noteRecent(kind, key);
     av.hidden = true; av.classList.remove('show','closing'); setOpened(false);
     if(key === '@moments'){ state.tab = 'moments'; state.subPage = null; render(); return; }
     const btn = document.querySelector('#dd-subs [data-sub="'+(window.CSS && CSS.escape ? CSS.escape(key) : key)+'"]');
@@ -580,7 +593,7 @@ const DoodleShell = (() => {
   }
   function openApp(){
     const c = car.children[cur]; if(!c) return; const it = list[cur];
-    if(it.key === 'mailbox'){ chime(true); openLetters(c); return; }
+    if(it.key === 'mailbox'){ noteRecent(kind, 'mailbox'); chime(true); openLetters(c); return; }
     c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); chime(true);
     setTimeout(() => goFeature(it.key), 180);
   }
