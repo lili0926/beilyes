@@ -546,3 +546,69 @@ img.pxname{object-fit:contain;max-width:60%}
 .paper-scroll .paper-in::-webkit-scrollbar{display:none}
 .sheet.reading .paper-scroll{opacity:1;visibility:visible;pointer-events:auto}
 .sheet.reading .panel{visibility:hidden}
+
+/* ===== 立体八音盒（播放页） ===== */
+.mb-wrap{width:min(84vw,330px,44vh)!important;aspect-ratio:1}
+.mb-scene{position:absolute;inset:0;perspective:900px;perspective-origin:50% 38%;touch-action:none;cursor:grab}
+.mb-scene:active{cursor:grabbing}
+.mb-fit{position:absolute;left:50%;top:56%;width:0;height:0;transform-style:preserve-3d;transform:scale(var(--mbs,1))}
+.mb-rot,.mb-sway,.mbc{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.mb-rot{transform:rotateX(-20deg) rotateY(-30deg)}
+.mb-sway{animation:mbSway 9s ease-in-out infinite alternate}
+@keyframes mbSway{from{transform:rotateY(-7deg)}to{transform:rotateY(7deg)}}
+.mbf,.mb-ring,.mb-disc,.mb-wing{position:absolute;left:0;top:0;display:block;backface-visibility:hidden;box-sizing:border-box}
+/* 盒身：奶紫漆面 + 金边 */
+.mb-body .mbf{background:linear-gradient(180deg,#EFE6FB,#DCCDF3);box-shadow:inset 0 0 0 3px #E9C98A,inset 0 0 0 5px rgba(255,255,255,.55),inset 0 0 0 6px #D4AE6A}
+.mb-body .rt,.mb-body .bk{background:linear-gradient(180deg,#DCCDF0,#C3B0E2)}
+.mb-body .lf{background:linear-gradient(180deg,#E6DBF7,#D2C2EE)}
+.mb-body .tp{background:radial-gradient(circle at 40% 35%,#FBF7FF,#E6DAF7 70%)}
+.mb-body .bt{background:#B8A4D8;box-shadow:none}
+.mb-top-in{position:absolute;inset:12px;border:1.5px solid #E1BE7C;border-radius:10px;box-shadow:inset 0 0 0 4px rgba(255,255,255,.4)}
+.mb-top-in::before,.mb-top-in::after{content:"✦";position:absolute;color:#E1BE7C;font-size:12px}
+.mb-top-in::before{left:8px;top:4px}.mb-top-in::after{right:8px;bottom:4px}
+.mb-rim .mbf{background:linear-gradient(180deg,#F6DFA9,#D6AE62 60%,#EDCF8C)}
+.mb-rim .tp{background:transparent;border:4px solid #EBC97F;border-radius:4px}
+.mb-rim .bt{display:none}
+.mb-foot .mbf{background:linear-gradient(180deg,#F3D99B,#C99A4C);border-radius:3px}
+.mb-gold .mbf{background:linear-gradient(180deg,#F6DFA9,#C99A4C)}
+/* 正面的窗：封面嵌进去 */
+.mb-win{position:absolute;left:50%;top:10px;width:78px;height:78px;margin-left:-39px;border-radius:8px;padding:4px;box-sizing:border-box;
+  background:linear-gradient(135deg,#F8E2AE,#C9994B 55%,#F2D594);box-shadow:0 1px 2px rgba(80,50,20,.35)}
+.mbf .npv-art{width:100%!important;height:100%!important;border-radius:5px!important;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)!important;transform:none!important}
+.mbf .npv-art [data-doodle]{width:46%;height:46%}
+.mb-plate{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);padding:1px 9px;border-radius:3px;font:italic 600 8px/1.4 Georgia,serif;letter-spacing:.14em;color:#7A5A2A;background:linear-gradient(180deg,#F8E2AE,#D9B06A)}
+.mb-curl{position:absolute;top:30px;width:30px;height:30px;border:1.5px solid #E1BE7C;border-radius:50% 50% 50% 0;opacity:.85}
+.mb-curl.l{left:20px;transform:rotate(-45deg)}.mb-curl.r{right:20px;transform:rotate(135deg) scaleY(-1)}
+.mb-curl.c{left:50%;margin-left:-15px;transform:rotate(-45deg)}
+/* 转台 */
+.mb-spin{animation:mbSpin 7s linear infinite;animation-play-state:paused}
+.npv.playing .mb-spin{animation-play-state:running}
+@keyframes mbSpin{from{transform:rotateY(0deg)}to{transform:rotateY(-360deg)}}
+.mb-disc{border-radius:50%;background:repeating-conic-gradient(from 0deg,#FBE3EC 0 15deg,#F4CDDC 15deg 30deg);box-shadow:inset 0 0 0 5px #EBC97F,inset 0 0 0 7px #FFF3D6,inset 0 0 0 9px #D9B06A}
+.mb-ring{background:linear-gradient(180deg,#F6DFA9,#C99A4C);backface-visibility:visible}
+/* 小 Clawd */
+.mb-clawd{animation:mbBob .5s ease-in-out infinite alternate;animation-play-state:paused}
+.npv.playing .mb-clawd{animation-play-state:running}
+@keyframes mbBob{from{transform:translateY(0)}to{transform:translateY(-4px)}}
+.cl .mbf{background:#D97757}
+.cl .tp{background:#E8896A}
+.cl .lf,.cl .rt{background:#C5664A}
+.cl .bk{background:#C96A4E}
+.cl .bt{background:#A9523A}
+.cl-eye{position:absolute;top:7px;width:4px;height:9px;background:#2B1B17}
+.cl-eye.l{left:12px}.cl-eye.r{right:12px}
+/* 发条钥匙 */
+.mb-keyturn{animation:mbKey 2.4s linear infinite;animation-play-state:paused}
+.npv.playing .mb-keyturn{animation-play-state:running}
+@keyframes mbKey{from{transform:translate3d(28px,0,0) rotateX(0deg)}to{transform:translate3d(28px,0,0) rotateX(360deg)}}
+.mb-wing{width:34px;height:20px;margin:-10px 0 0 -17px;backface-visibility:visible;
+  background:radial-gradient(circle at 25% 50%,#F6DFA9 0 7px,#C99A4C 7.5px 9px,transparent 9.5px),radial-gradient(circle at 75% 50%,#F6DFA9 0 7px,#C99A4C 7.5px 9px,transparent 9.5px),linear-gradient(#D9B06A,#D9B06A) center/8px 6px no-repeat}
+/* 音符 + 影子 */
+.mb-notes{position:absolute;inset:0;pointer-events:none}
+.mb-notes i{position:absolute;left:50%;top:30%;font-style:normal;font-size:20px;color:#B48BDA;opacity:0}
+.npv.playing .mb-notes i{animation:mbNote 3.2s ease-out infinite}
+.mb-notes i:nth-child(1){margin-left:-60px}.mb-notes i:nth-child(2){margin-left:40px;animation-delay:.8s!important;color:#E58BA8}
+.mb-notes i:nth-child(3){margin-left:-20px;animation-delay:1.6s!important;color:#8FB5E8}.mb-notes i:nth-child(4){margin-left:64px;animation-delay:2.4s!important}
+@keyframes mbNote{0%{opacity:0;transform:translateY(20px) rotate(-10deg) scale(.7)}20%{opacity:1}100%{opacity:0;transform:translateY(-70px) rotate(14deg) scale(1.1)}}
+.mb-shadow{position:absolute;left:18%;right:18%;bottom:8%;height:10%;border-radius:50%;background:radial-gradient(closest-side,rgba(70,50,110,.32),transparent);z-index:-1}
+@media (prefers-reduced-motion:reduce){.mb-sway,.mb-spin,.mb-clawd,.mb-keyturn,.mb-notes i{animation:none!important}}

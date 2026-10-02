@@ -265,6 +265,38 @@ const DoodleShell = (() => {
 </div>
 </main></div>`;
 
+  /* ===== 立体八音盒：纯 CSS 3D（盒子 + 转台 + 体素小 Clawd + 发条钥匙），封面嵌在盒子正面的窗里 ===== */
+  function cub(cls, w, h, d, x, y, z, faces){
+    const f = (n, fw, fh, tf) => '<i class="mbf '+n+'" style="width:'+fw+'px;height:'+fh+'px;margin:'+(-fh/2)+'px 0 0 '+(-fw/2)+'px;transform:'+tf+'">'+((faces && faces[n]) || '')+'</i>';
+    return '<b class="mbc '+cls+'" style="transform:translate3d('+x+'px,'+y+'px,'+z+'px)">'
+      + f('fr', w, h, 'translateZ('+d/2+'px)') + f('bk', w, h, 'rotateY(180deg) translateZ('+d/2+'px)')
+      + f('rt', d, h, 'rotateY(90deg) translateZ('+w/2+'px)') + f('lf', d, h, 'rotateY(-90deg) translateZ('+w/2+'px)')
+      + f('tp', w, d, 'rotateX(90deg) translateZ('+h/2+'px)') + f('bt', w, d, 'rotateX(-90deg) translateZ('+h/2+'px)') + '</b>';
+  }
+  const MBOX = (() => {
+    const W = 200, H = 110, D = 136, top = -H/2;            // 盒子中心在原点，顶面 y = -55
+    const front = '<span class="mb-win"><span class="npv-art" id="npArt"><span data-doodle="music" data-boil="off"></span><i class="shine"></i></span></span><span class="mb-plate">♪ clawd</span><span class="mb-curl l"></span><span class="mb-curl r"></span>';
+    let h = cub('mb-body', W, H, D, 0, 0, 0, {fr: front, bk: '<span class="mb-curl c"></span>', tp: '<span class="mb-top-in"></span>'});
+    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b]) => { h += cub('mb-foot', 16, 10, 16, a*(W/2-10), H/2+5, b*(D/2-10)); });
+    h += cub('mb-rim', W+8, 8, D+8, 0, top-4, 0);            // 顶上一圈描金的边
+    /* 转台：圆盘 + 一圈侧边，上面站着小 Clawd，一起绕竖轴转 */
+    const R = 50, T = 10, py = top - 8 - T/2;
+    let ring = ''; for(let i = 0; i < 20; i++) ring += '<i class="mb-ring" style="transform:rotateY('+(i*18)+'deg) translateZ('+R+'px)"></i>';
+    const u = 4.2, by = py - T/2;                            // 体素一格 5px；by = 转台顶面
+    let cl = '';
+    cl += cub('cl', 12*u, 7*u, 6*u, 0, by - 3*u - 3.5*u, 0, {fr: '<span class="cl-eye l"></span><span class="cl-eye r"></span>'});
+    cl += cub('cl', 2*u, 2*u, 3*u, -7*u, by - 3*u - 4*u, 0) + cub('cl', 2*u, 2*u, 3*u, 7*u, by - 3*u - 4*u, 0);   // 两只小钳子
+    [-4.5, -1.5, 1.5, 4.5].forEach(x => { cl += cub('cl', 1.6*u, 3*u, 1.6*u, x*u, by - 1.5*u, 0); });              // 四条小腿
+    h += '<b class="mbc mb-spin" style="transform:translate3d(0,0,0)"><b class="mbc mb-plat" style="transform:translate3d(0,'+py+'px,0)">'
+      + '<i class="mb-disc" style="width:'+2*R+'px;height:'+2*R+'px;margin:'+(-R)+'px 0 0 '+(-R)+'px;transform:translateY('+(-T/2)+'px) rotateX(90deg)"></i>'
+      + ring.replace(/class="mb-ring" style="/g, 'class="mb-ring" style="width:'+(2*Math.PI*R/20+1).toFixed(1)+'px;height:'+T+'px;margin:'+(-T/2)+'px 0 0 '+(-(Math.PI*R/20+.5)).toFixed(1)+'px;') + '</b>'
+      + '<b class="mbc mb-clawd">'+cl+'</b></b>';
+    /* 发条钥匙：从右侧面伸出来，播放时一圈圈转 */
+    h += '<b class="mbc mb-key" style="transform:translate3d('+(W/2)+'px,4px,0)">'+cub('mb-gold', 26, 6, 6, 13, 0, 0)
+      + '<b class="mbc mb-keyturn" style="transform:translate3d(28px,0,0)"><i class="mb-wing" style="transform:rotateY(90deg)"></i></b></b>';
+    return '<div class="mb-scene" id="mbScene"><div class="mb-fit" id="mbFit"><div class="mb-rot" id="mbRot"><div class="mb-sway">'+h+'</div></div></div>'
+      + '<div class="mb-notes" aria-hidden="true"><i>♪</i><i>♫</i><i>♪</i><i>♬</i></div><div class="mb-shadow"></div></div>';
+  })();
   const OVER_HTML = `<div class="dd-root dd-ov" id="ovRoot">
 <section class="appview" id="appview" role="dialog" aria-modal="true" aria-labelledby="avTitle" hidden>
   <svg class="wall av-wall" id="avWall" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
@@ -296,9 +328,9 @@ const DoodleShell = (() => {
     <div class="npv-pager" id="npPager">
     <div class="npv-page" id="npPage1" aria-label="播放">
     <div class="npv-stage">
-      <div class="npv-art-wrap" id="npArtWrap">
-        <div class="npv-disc" aria-hidden="true"><svg viewBox="0 0 100 100" id="npDiscFace"></svg></div>
-        <div class="npv-art" id="npArt"><span data-doodle="music" data-boil="off"></span><i class="shine"></i></div>
+      <div class="npv-art-wrap mb-wrap" id="npArtWrap">
+        <svg viewBox="0 0 100 100" id="npDiscFace" hidden></svg>
+        ${MBOX}
       </div>
       <div class="npv-lyrics" id="npLyrics" hidden><div class="ly-scroll" id="lyScroll"></div><button class="s-btn" id="lyImport">导入 .lrc 歌词</button></div>
     </div>
@@ -785,7 +817,7 @@ const DoodleShell = (() => {
   function openNP(together){
     const plyr = $('player'); rectVars(NP, plyr, '24px'); pager.scrollLeft = 0; NP.hidden = false; NP.classList.remove('show');
     setName($('pxMusic'), 'Music', {outline:true}); paintMode(); metaKey = ''; paint();
-    requestAnimationFrame(() => requestAnimationFrame(() => { fullVars(NP); NP.classList.add('show'); setOpened(true); loopUI(); if(lyOn) setTimeout(lyTick,50);
+    requestAnimationFrame(() => requestAnimationFrame(() => { fullVars(NP); NP.classList.add('show'); setOpened(true); mbFit(); loopUI(); if(lyOn) setTimeout(lyTick,50);
       if(together){ pager.scrollTo({left:pager.clientWidth, behavior:'smooth'}); } }));
     chime(true);
   }
@@ -794,8 +826,24 @@ const DoodleShell = (() => {
     if(instant){ NP.hidden = true; setOpened(false); return; }
     rectVars(NP, $('player'), '24px'); setOpened(false); chime(false); setTimeout(() => { NP.hidden = true; }, 520);
   }
+  /* 八音盒：按播放页大小缩放；手指左右拖能转着看，松手慢慢回正 */
+  function mbFit(){ const w = $('npArtWrap'), f = $('mbFit'); if(w && f && w.clientWidth) f.style.setProperty('--mbs', (w.clientWidth / 300).toFixed(3)); }
+  function bindMbox(){
+    const sc = $('mbScene'), rot = $('mbRot'); if(!sc || !rot) return;
+    let ry = -30, rx = -20, d = null, back = 0;
+    const put = () => { rot.style.transform = 'rotateX('+rx+'deg) rotateY('+ry+'deg)'; };
+    put();
+    sc.addEventListener('pointerdown', e => { d = {x: e.clientX, y: e.clientY, ry, rx}; cancelAnimationFrame(back); try{ sc.setPointerCapture(e.pointerId); }catch(_){} });
+    sc.addEventListener('pointermove', e => { if(!d) return; ry = d.ry + (e.clientX - d.x) * .6; rx = Math.max(-50, Math.min(4, d.rx - (e.clientY - d.y) * .3)); put(); });
+    const up = () => { if(!d) return; d = null;
+      const home = () => { ry += (-30 - ry) * .06; rx += (-20 - rx) * .08; put(); if(Math.abs(ry + 30) > .3 || Math.abs(rx + 20) > .3) back = requestAnimationFrame(home); };
+      setTimeout(() => { back = requestAnimationFrame(home); }, 1200); };
+    sc.addEventListener('pointerup', up); sc.addEventListener('pointercancel', up);
+    addEventListener('resize', mbFit);
+  }
   function bindMusic(){
     NP = $('np'); pager = $('npPager');
+    bindMbox();
     const a = audioEl();
     if(a) ['timeupdate','loadedmetadata','durationchange','play','pause','emptied'].forEach(ev => a.addEventListener(ev, () => { if(!ON()) return; if(ev === 'play') loopUI(); paint(); }));
     $('npPlay').addEventListener('click', togglePlay); $('npNext').addEventListener('click', next); $('npPrev').addEventListener('click', prev);
@@ -803,7 +851,7 @@ const DoodleShell = (() => {
     $('npMode').addEventListener('click', () => { const m = P().mode, nx = m === 'seq' ? 'shuf' : m === 'shuf' ? 'one' : 'seq'; setP('mode', nx); paintMode(); blip(3); toast(MODES[nx]); });
     $('npClose').addEventListener('click', () => closeNP(false));
     document.addEventListener('keydown', e => { if(e.key === 'Escape' && ON() && NP && !NP.hidden){ if(!$('npSheet').hidden) sheetToggle(false); else closeNP(false); } });
-    $('npLy').addEventListener('click', function(){ lyOn = !lyOn; this.setAttribute('aria-pressed', lyOn); $('npLyrics').hidden = !lyOn; $('npArtWrap').hidden = lyOn; lyCur = -1; if(lyOn){ renderLyrics(); lyTick(); } blip(5); });
+    $('npLy').addEventListener('click', function(){ lyOn = !lyOn; this.setAttribute('aria-pressed', lyOn); $('npLyrics').hidden = !lyOn; $('npArtWrap').hidden = lyOn; if(!lyOn) requestAnimationFrame(mbFit); lyCur = -1; if(lyOn){ renderLyrics(); lyTick(); } blip(5); });
     $('lyScroll').addEventListener('scroll', () => { lyUserScroll = Date.now(); }, {passive:true});
     $('lyScroll').addEventListener('click', e => { const p = e.target.closest('p[data-i]'); const au = document.getElementById('mp-audio'); if(!p || !au) return; au.currentTime = lyr[+p.dataset.i].t; lyUserScroll = 0; paint(); });
     $('lyImport').addEventListener('click', () => { $('lyFile').value = ''; $('lyFile').click(); });
