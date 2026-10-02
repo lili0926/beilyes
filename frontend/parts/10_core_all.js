@@ -24778,13 +24778,22 @@ async function mcSendLetter(){
     if(ts) scheduledAt = new Date(ts).toISOString();
   }
   const res = await mcPost("/letter", { content: body, scheduledAt, author: "user" });
+  let now = false;
   if(res && res.letter){
-    showToast(res.letter.status === "delivered" ? "信已投递 📮" : "信已投递到信箱，到点送达 📮");
+    now = res.letter.status === "delivered";
+    if(now){
+      // 立刻送达的：直接交到他手里（进待发队列，和纸条一样），并记下 id 防轮询再推一遍
+      mcUserLetterToChat(res.letter, state.chatTarget || "a1");
+      state.letterSurfacedIds = [...new Set([...(state.letterSurfacedIds||[]), res.letter.id])].slice(-300);
+      try{ persist("letterSurfacedIds"); }catch(e){}
+    }
+    showToast(now ? "信送到他手里了 📮" : "信已投递到信箱，到点送到他手里 📮");
   } else {
     showToast("写信失败：后端不可用", "error");
   }
   const l = await mcFetch("/letter/list?status=all"); if(l && l.letters) state.mcLetters = l.letters;
   state.mcLetterBody = ""; state.mcLetterSched = "";
+  if(now){ state.tab = "chat"; state.subPage = null; }
   render();
 }
 async function mcAddAnnotation(){
@@ -38383,8 +38392,53 @@ function mcRecentBlock(){
   }).join("\n");
   return `\n你最近写过（别重复；信箱尤其严格——下面只要出现过「信」，本轮和接下来几轮都不要再写 ⟪写信:⟫，禁止每轮一封连写）：\n${lines}`;
 }
+/** 她写的信送达 → 以「她」的身份进待发队列，跟她下一句一起交给他。
+ *  以前和他写的信走同一条 proactivePushToChat，落成 role:"assistant" ——
+ *  他在上下文里看到的是「自己说过的一段话」，根本不知道那是她写给他的信。 */
+function mcUserLetterApiText(body, scheduledAt){
+  return `（我给你写了一封信${scheduledAt ? "，定时寄出、刚送到你手里" : ""}，读一读）\n${body}`;
+}
+function mcUserLetterToChat(r, threadId){
+  const body = String(r.content||"");
+  if(!body.trim()) return;
+  const t = threadId || state.chatTarget || "a1";
+  const msg = {
+    role:"user", type:"letter", content: mcUserLetterApiText(body, r.scheduledAt), refId: r.id,
+    snap:{ body, author:"user", scheduledAt: r.scheduledAt, deliveredAt: r.deliveredAt },
+    time: new Date().toISOString(), msgId: "m"+Date.now()+"_"+Math.random().toString(36).slice(2,6)+"_letter",
+  };
+  if(t === (state.chatTarget || "a1")){
+    state.pendingUser = state.pendingUser || [];
+    state.pendingUser.push(msg);
+    saveActiveThread();
+  } else {
+    state.chatThreads = state.chatThreads || {};
+    const th = state.chatThreads[t] || (state.chatThreads[t] = { messages:[], pendingUser:[] });
+    (th.pendingUser = th.pendingUser || []).push(msg);
+    th.unread = (th.unread || 0) + 1;
+    try{ LS.set("chatThreads", state.chatThreads); }catch(e){}
+  }
+  state.needChatScroll = true;
+}
+/** 旧数据：已经被当成「他说的话」塞进历史的她的信，改回她的身份（只跑一次） */
+function mcFixUserLetterRoles(){
+  if(state.__userLetterRoleFixed) return;
+  state.__userLetterRoleFixed = true;
+  let n = 0;
+  const fix = arr => (arr||[]).forEach(m=>{
+    if(m && m.type === "letter" && m.role === "assistant" && m.snap && m.snap.author === "user"){
+      m.role = "user";
+      m.content = mcUserLetterApiText(String(m.snap.body || m.content || ""), m.snap.scheduledAt);
+      delete m._apiFrozen; delete m.speakerId; delete m.speakerName; delete m.speakerColor; delete m.proactive;
+      n++;
+    }
+  });
+  Object.values(state.chatThreads||{}).forEach(th=> th && fix(th.messages));
+  if(n){ try{ LS.set("chatThreads", state.chatThreads); }catch(e){} }
+}
 /** 轮询已投递的信：新 delivered 的插进聊天（type=letter），本地 letterSurfacedIds 防重推 */
 async function mcPollDeliveredLetters(){
+  try{ mcFixUserLetterRoles(); }catch(e){}
   if(window.__mcLetterPollLock) return;
   if(!wakeBase()) return;
   window.__mcLetterPollLock = true;
@@ -38400,6 +38454,7 @@ async function mcPollDeliveredLetters(){
       surfaced.add(r.id); // 先标记，防止失败重试刷屏
       if(!delTs || now - delTs > 7*86400000) continue; // 7 天前的不补推
       const t = state.chatTarget || "a1";
+      if(r.author === "user"){ mcUserLetterToChat(r, t); added++; if(added >= 5) break; continue; }
       proactivePushToChat(String(r.content||"").slice(0,200), {
         from: "letter", type: "letter", refId: r.id,
         snap: { body: r.content, author: r.author, scheduledAt: r.scheduledAt, deliveredAt: r.deliveredAt },
