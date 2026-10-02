@@ -52,11 +52,17 @@ const DoodleAlbum = (() => {
     catears: ['M6 74 Q10 40 26 14 Q38 34 46 64 Q26 62 6 74Z M94 74 Q90 40 74 14 Q62 34 54 64 Q74 62 94 74Z', 'M16 64 Q19 44 27 30 Q34 44 38 58 Q26 58 16 64Z M84 64 Q81 44 73 30 Q66 44 62 58 Q74 58 84 64Z'],
     dogears: ['M30 16 C10 14 2 44 6 70 C8 86 24 88 30 74 C36 60 44 40 40 26 C38 20 35 17 30 16Z M70 16 C90 14 98 44 94 70 C92 86 76 88 70 74 C64 60 56 40 60 26 C62 20 65 17 70 16Z', 'M24 32 C14 38 12 58 15 70 C18 76 24 72 26 64 C29 54 32 42 24 32Z M76 32 C86 38 88 58 85 70 C82 76 76 72 74 64 C71 54 68 42 76 32Z'],
   };
+  /* 画笔线条款（像相机 App 里那种手画的白线）：只描边，pink 那几条填粉，dot 那几条用同色填 */
+  const LINEART = {
+    lineears: {paths: ['M10 66 Q12 40 22 20 Q34 34 44 52', 'M90 66 Q88 40 78 20 Q66 34 56 52', 'M19 54 L23 37 L33 51Z', 'M81 54 L77 37 L67 51Z'], pink: [2, 3]},
+    whiskers: {paths: ['M6 36 L26 42', 'M4 51 L26 51', 'M6 66 L26 60', 'M94 36 L74 42', 'M96 51 L74 51', 'M94 66 L74 60'], pink: []},
+    bang: {paths: ['M38 14 L41 58', 'M60 12 L58 56', 'M41.5 74 a5.5 5.5 0 1 0 0.1 0Z', 'M57.5 72 a5.5 5.5 0 1 0 0.1 0Z'], pink: [], dot: [2, 3]},
+  };
   /* 耳朵的内耳：最后一条用另一种颜色填 */
   const INNER = {catears: '#FFD1E1', dogears: 'rgba(255,255,255,.4)'};
   /* 最后一条是「线」（茎 / 触角 / 底边）的形状：画成描边，不填色 */
   const LINE_LAST = {clover: 1, butterfly: 1, cherry: 1, crown: 1};
-  const SHAPE_NAMES = {catears: '猫耳朵', dogears: '狗耳朵', heart: '爱心', star: '星星', sparkle: '闪光', moon: '月亮', cloud: '云朵', bow: '蝴蝶结', flower: '小花', clover: '四叶草', paw: '猫爪', butterfly: '蝴蝶', cherry: '樱桃', crown: '皇冠'};
+  const SHAPE_NAMES = {lineears: '线条猫耳', whiskers: '猫猫腮毛', bang: '惊叹号', catears: '猫耳朵', dogears: '狗耳朵', heart: '爱心', star: '星星', sparkle: '闪光', moon: '月亮', cloud: '云朵', bow: '蝴蝶结', flower: '小花', clover: '四叶草', paw: '猫爪', butterfly: '蝴蝶', cherry: '樱桃', crown: '皇冠'};
   const COLORS = ['#F4A7C3', '#E77FA6', '#B9A3EC', '#9CC2EC', '#9FD3C9', '#F6D277', '#F28C7D', '#FFFFFF', '#B98A66', '#4A4458'];
   const PENS = ['#3E3A52', '#E0566F', '#F4A7C3', '#B9A3EC', '#7FA9E0', '#7FC7A2', '#F6C453', '#FFFFFF'];
   const TAPES = [['stripe', '#F4A7C3'], ['dot', '#B9A3EC'], ['check', '#9CC2EC'], ['stripe', '#9FD3C9'], ['dot', '#F6D277'], ['plain', '#F7C6D8']];
@@ -77,6 +83,14 @@ const DoodleAlbum = (() => {
         + `<path d="${d}" fill="none" stroke="${L.glow ? '#fff' : h(L.c)}" stroke-width="${L.glow ? L.w * .7 : L.w}" stroke-linecap="round" stroke-linejoin="round"/>`;
     }
     const tf = `translate(${num(L.x)} ${num(L.y)}) rotate(${num(L.r || 0)}) scale(${num((L.s || 1) * 100) / 100})`;
+    if(L.t === 'st' && LINEART[L.k]){
+      const A = LINEART[L.k];
+      return `<g transform="${tf}"><g transform="translate(-50 -50)"${bare ? '' : ` filter="url(#rf${u})"`}>`
+        + A.paths.map((d, k) => A.pink.includes(k) ? `<path d="${d}" fill="#F7A3C2" stroke="#F7A3C2" stroke-width="2" stroke-linejoin="round"/>`
+          : (A.dot || []).includes(k) ? `<path d="${d}" fill="${h(L.c)}"/>`
+          : `<path d="${d}" fill="none" stroke="${h(L.c)}" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>`).join('')
+        + `</g></g>`;
+    }
     if(L.t === 'st'){
       const ps = SHAPES[L.k] || SHAPES.heart, line = LINE_LAST[L.k] && ps.length > 1;
       return `<g transform="${tf}"><g transform="translate(-50 -50)"${sh}>`
@@ -102,6 +116,7 @@ const DoodleAlbum = (() => {
     return `<defs>
         <filter id="sh${u}" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#3a2a50" flood-opacity=".28"/></filter>
         <filter id="bl${u}" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="7"/></filter>
+        <filter id="rf${u}" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="3" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="2.6" xChannelSelector="R" yChannelSelector="G" result="w"/><feDropShadow in="w" dx="0" dy="1" stdDeviation="1.4" flood-color="#2a2236" flood-opacity=".35"/></filter>
         <filter id="gw${u}" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
         <linearGradient id="hl${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></linearGradient>
       </defs>` + (layers || []).map((L, i) => layerSvg(L, i, u)).join('');
@@ -295,7 +310,7 @@ const DoodleAlbum = (() => {
     const E = V.ed, tab = E.tab;
     if(tab === 'st'){
       return `<div class="dda-ed-row">${COLORS.map(c => `<button type="button" class="dda-sw${E.color === c ? ' on' : ''}" style="--c:${c}" data-dde-color="${c}" aria-label="颜色"></button>`).join('')}</div>
-        <div class="dda-ed-grid">${['catears', 'dogears'].concat(Object.keys(SHAPES).filter(k => k !== 'catears' && k !== 'dogears')).map(k => `<button type="button" class="dda-ed-st" data-dde-add="st:${k}" aria-label="${SHAPE_NAMES[k]}"><svg viewBox="-12 -12 124 124">${layerSvg({t: 'st', k, c: E.color, x: 50, y: 50, s: 1, r: 0}, 0, 'p', true)}</svg></button>`).join('')}</div>`;
+        <div class="dda-ed-grid">${Object.keys(LINEART).map(k => `<button type="button" class="dda-ed-st line" data-dde-add="st:${k}" aria-label="${SHAPE_NAMES[k]}"><svg viewBox="-12 -12 124 124">${layerSvg({t: 'st', k, c: '#FFFFFF', x: 50, y: 50, s: 1, r: 0}, 0, 'p', true)}</svg></button>`).join('')}${['catears', 'dogears'].concat(Object.keys(SHAPES).filter(k => k !== 'catears' && k !== 'dogears')).map(k => `<button type="button" class="dda-ed-st" data-dde-add="st:${k}" aria-label="${SHAPE_NAMES[k]}"><svg viewBox="-12 -12 124 124">${layerSvg({t: 'st', k, c: E.color, x: 50, y: 50, s: 1, r: 0}, 0, 'p', true)}</svg></button>`).join('')}</div>`;
     }
     if(tab === 'tape'){
       return `<div class="dda-ed-grid tapes">${TAPES.map(([k, c], i) => `<button type="button" class="dda-ed-tape" data-dde-add="tape:${i}"><svg viewBox="-140 -40 280 80">${layerSvg({t: 'tape', k, c, x: 0, y: 0, s: 1, r: 0}, i, 'q', true)}</svg></button>`).join('')}</div>
@@ -376,7 +391,8 @@ const DoodleAlbum = (() => {
     const at = spec.indexOf(':'), kind = spec.slice(0, at), v = spec.slice(at + 1);
     const jit = () => (Math.random() - .5) * 120;
     let L = null;
-    if(kind === 'st') L = {t: 'st', k: v, c: E.color, x: 500 + jit(), y: 470 + jit(), s: 1.8, r: (Math.random() - .5) * 30};
+    if(kind === 'st' && LINEART[v]) L = {t: 'st', k: v, c: '#FFFFFF', x: v === 'bang' ? 300 : 500, y: v === 'lineears' ? 260 : v === 'bang' ? 300 : 500, s: v === 'bang' ? 1.4 : 3, r: v === 'bang' ? -12 : 0};
+    else if(kind === 'st') L = {t: 'st', k: v, c: E.color, x: 500 + jit(), y: 470 + jit(), s: 1.8, r: (Math.random() - .5) * 30};
     else if(kind === 'tape'){ const [k, c] = TAPES[+v] || TAPES[0]; L = {t: 'tape', k, c, x: 500 + jit() * .6, y: 70, s: 1.4, r: (Math.random() - .5) * 16}; }
     else if(kind === 'stamp') L = {t: 'stamp', text: v, x: 740, y: 900, s: 1, r: 0};
     else if(kind === 'emo'){ const x = (state.stickers || []).filter(z => z && z.url)[+v]; if(x) L = {t: 'img', src: x.url, x: 500 + jit(), y: 470 + jit(), s: 2.2, r: (Math.random() - .5) * 20}; }
