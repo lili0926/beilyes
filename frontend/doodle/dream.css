@@ -98,3 +98,48 @@
 .dr-chat-tx em{font-style:normal;font-size:10.5px;color:#B9AED6}
 .dr-chat-moon{position:relative;font-size:26px;color:#FFF4CF;text-shadow:0 0 12px rgba(255,244,207,.6)}
 @media (prefers-reduced-motion:reduce){.dr-stars,.dr-cloud,.dr-sleeper img,.dr-z i,.dr-bubbles i,.dr-jar .fog,.dr-jar .spk,.dr-jar.new svg,.dr-fog,.dr-chat-fog{animation:none!important}.dr-text p,.dr-trace{animation-duration:.01s!important;animation-delay:0s!important}}
+
+/* ══ 梦糖 ══ */
+.dr-candybox{margin:0 0 6px;padding:12px 14px;border-radius:20px;background:linear-gradient(180deg,#FFF8FB,#FDF1F7);box-shadow:inset 0 0 0 1px rgba(200,120,170,.14),0 10px 22px -18px rgba(150,60,110,.5);color:#4E3A4A}
+.dr-cb-hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dr-cb-hd b{font-size:14px;letter-spacing:.08em}
+.dr-cb-hd small{font-size:10.5px;color:#9C8296}
+.dr-cb-now{display:flex;align-items:center;gap:10px;margin:10px 0 6px;padding:10px;border-radius:14px;background:#fff;box-shadow:inset 0 0 0 1px rgba(200,120,170,.12)}
+.dr-cb-now.sour{background:linear-gradient(135deg,#F6FBEA,#ECF7F4)}
+.dr-cb-now.sweet{background:linear-gradient(135deg,#FFF1F7,#FFF8E6)}
+.dr-cb-now .dr-candy{flex:none;animation:drCandy 2.6s ease-in-out infinite}
+@keyframes drCandy{50%{transform:rotate(-6deg) translateY(-2px)}}
+.dr-cb-now span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dr-cb-now small{font-size:10.5px;color:#9C8296}
+.dr-cb-now b{font-size:16px}
+.dr-cb-now em{font-style:normal;font-size:12px;color:#6E5468}
+.dr-cb-now i{font-style:normal;font-size:10.5px;color:#9C8296}
+.dr-cb-empty{font-size:12px;color:#9C8296}
+.dr-jar-row{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 6px;scrollbar-width:none}
+.dr-jar-row::-webkit-scrollbar{display:none}
+.dr-cb-item{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 6px 5px;border:0;border-radius:12px;background:#fff;cursor:pointer;font:inherit;color:#4E3A4A;box-shadow:inset 0 0 0 1px rgba(200,120,170,.12)}
+.dr-cb-item b{font-size:11.5px}
+.dr-cb-item small{font-size:10px;color:#D1608F}
+.dr-cb-item:active{transform:scale(.95)}
+.dr-cb-none{font-size:11.5px;color:#9C8296;padding:6px 2px}
+.dr-cb-make{margin-top:4px;padding:6px 12px;border:1px dashed rgba(200,120,170,.45);border-radius:999px;background:none;font:inherit;font-size:12px;color:#B5578A;cursor:pointer}
+.dr-chip{flex:1;padding:8px;border-radius:10px;border:1px solid var(--border,#ddd);background:var(--bg,#fff);font:inherit;font-size:12.5px;color:inherit;cursor:pointer}
+.dr-chip.on{background:#4E3A4A;color:#fff;border-color:#4E3A4A}
+.dr-f input,.dr-f textarea{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:12px;border:1px solid var(--border,#ddd);background:var(--bg,#fff);color:inherit;font:inherit;font-size:14px}
+.dr-mk-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;font-size:12px}
+.dr-mk-list span{padding:4px 8px;border-radius:999px;background:rgba(0,0,0,.05)}
+.dr-mk-list button{border:0;background:none;margin-left:2px;cursor:pointer;color:inherit}
+/* 读梦页底下换到的糖 */
+.dr-got{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.dr-got .dr-candy{flex:none;animation:drCandy 2.6s ease-in-out infinite;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
+.dr-got span{display:flex;flex-direction:column;gap:2px}
+.dr-got small{font-size:11px;color:#CDBEFF}
+.dr-got b{font-size:17px;color:#FFF4CF}
+.dr-got em{font-style:normal;font-size:12.5px;color:#E6DEF7}
+.dr-got i{font-style:normal;font-size:10.5px;color:#B9AED6}
+/* 聊天页顶上的小胶囊 */
+.dr-candy-pill{white-space:nowrap;max-width:calc(100vw - 40px);position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 92px);transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:6px;padding:3px 12px 3px 6px;border:0;border-radius:999px;
+  font:600 11.5px/1 system-ui,sans-serif;color:#7A3D60;background:rgba(255,241,247,.94);box-shadow:0 4px 12px -6px rgba(150,60,110,.6),inset 0 0 0 1px rgba(200,120,170,.2);cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.dr-candy-pill.sour{color:#3E6E4A;background:rgba(241,250,236,.94);box-shadow:0 4px 12px -6px rgba(60,120,80,.5),inset 0 0 0 1px rgba(120,190,110,.25)}
+.dr-candy-pill .dr-candy{animation:drCandy 2.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.dr-candy{animation:none!important}}

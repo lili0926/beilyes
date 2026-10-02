@@ -12373,10 +12373,11 @@ async function dreamRunOnce(force){
 把它们做成一场梦。梦有自己的道理：场景会无端切换，人和物会彼此变形，时间不排队，因果不负责。
 不要解释，不要总结，不要清醒。就做梦。
 
-输出格式（严格遵守，三个标签都要有）：
+输出格式（严格遵守，四个标签都要有）：
 <dream>梦的正文，第一人称，现在时，300-600字</dream>
 <trace>醒来时嘴边还挂着的那半句，20字以内，取梦里情绪最重的一个意象</trace>
 <title>给这场梦起的名字，8字以内</title>
+<mood>这场梦醒来是什么滋味：只写「好梦」或「坏梦」</mood>
 
 【白天的残片】
 ${bits.join("\n") || "- （几乎空白的一夜）"}`;
@@ -12391,6 +12392,10 @@ ${bits.join("\n") || "- （几乎空白的一夜）"}`;
   const dream = (s.match(/<dream>([\s\S]*?)<\/dream>/i)||[])[1]?.trim() || "";
   const trace = (s.match(/<trace>([\s\S]*?)<\/trace>/i)||[])[1]?.trim() || "";
   const title = (s.match(/<title>([\s\S]*?)<\/title>/i)||[])[1]?.trim() || "无题之梦";
+  // 好梦 / 坏梦：模型没写就按字面猜（噩梦、哭、丢了、找不到…算坏）
+  const moodRaw = (s.match(/<mood>([\s\S]*?)<\/mood>/i)||[])[1] || "";
+  const mood = /坏|噩|bad/i.test(moodRaw) ? "bad" : /好|good/i.test(moodRaw) ? "good"
+    : (/(噩梦|惊醒|哭|丢了|找不到|离开|消失|追不上|害怕|冷|摔)/.test(dream + trace) ? "bad" : "good");
   if(!dream && !trace){
     st.lastRunDate = today;
     persist("dreamState");
@@ -12412,6 +12417,7 @@ ${bits.join("\n") || "- （几乎空白的一夜）"}`;
     st.history.push(entry);
     if(st.history.length > 150) st.history = st.history.slice(-150);
     st.lastDream.id = entry.id;
+    try{ if(typeof DreamBook !== "undefined") DreamBook.onDream(entry, mood); }catch(err){}
     dreamToChat(entry);
   }catch(e){}
   st.pendingTrace = { text: trace || title, expireAt: Date.now()+86400000, consumed: false };
@@ -35886,6 +35892,7 @@ function chatTailBlock(){
   // 相册：她刚贴了照片 / 在背面写了字 —— 只挂这一轮
   try{ const ab = (typeof DoodleAlbum!=="undefined") ? DoodleAlbum.tellBlock() : ""; if(ab) bits.push(ab); }catch(e){}
   try{ const bb = (typeof BodyPage!=="undefined") ? BodyPage.tellBlock() : ""; if(bb) bits.push(bb); }catch(e){}
+  try{ const cb = (typeof DreamBook!=="undefined") ? DreamBook.candyBlock() : ""; if(cb) bits.push(cb); }catch(e){}
   if(state.desireDriveOn){
     const sixLine = (typeof sixAxisWords === "function") ? sixAxisWords() : "";
     const feel = (state.bodyFeel||"").trim();
