@@ -8,8 +8,17 @@ const SigilloFx = (() => {
   const h = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let n = 0;
   /* 火漆：边缘不规则的一滩蜡 + 内圈 + 盘蛇印面 */
+  /* 她生的那张真火漆图（doodle/sigillo/seal.webp）；加载失败才退回下面代码画的 */
+  const IMG = 'doodle/sigillo/seal.webp';
+  let imgOk = true;
+  try{ const t = new Image(); t.onerror = () => { imgOk = false; }; t.src = IMG; }catch(e){}
   function seal(size, opt){
     opt = opt || {};
+    if(imgOk){
+      const id = 'sgw' + (++n);
+      const date = opt.date ? `<svg class="sgx-date" viewBox="0 0 100 100" aria-hidden="true"><path id="${id}t" d="M50 50 m-37.5 0 a37.5 37.5 0 1 1 75 0" fill="none"/><text font-size="5.6" letter-spacing="1.1" dy="2" fill="#FFE1DC" opacity=".88" style="paint-order:stroke" stroke="#5A0D19" stroke-width=".6"><textPath href="#${id}t" startOffset="50%" text-anchor="middle">${h(opt.date)}</textPath></text></svg>` : '';
+      return `<span class="sgx-seal sgx-img${opt.cls ? ' ' + opt.cls : ''}" style="width:${size}px;height:${size}px" aria-hidden="true"><img src="${IMG}" alt="" draggable="false" onerror="this.parentNode.classList.add('broken')">${date}</span>`;
+    }
     const id = 'sgw' + (++n), r = 46;
     let d = '';
     for(let i = 0; i <= 28; i++){
@@ -39,7 +48,7 @@ const SigilloFx = (() => {
       <span class="sgx-env__back"></span>
       <span class="sgx-env__flap"></span>
       <span class="sgx-env__body"><span class="sgx-env__to">To ${h(meName())}</span><b class="sgx-env__note">${h(note || '请查收。')}</b><span class="sgx-env__hint">SIGILLO · 轻点拆开</span></span>
-      <span class="sgx-env__seal"><span class="sgx-half l">${seal(58)}</span><span class="sgx-half r">${seal(58)}</span></span>
+      <span class="sgx-env__seal"><span class="sgx-half l">${seal(60)}</span><span class="sgx-half r">${seal(60)}</span></span>
     </button>`;
   }
   /* 封好的信 */
@@ -51,7 +60,7 @@ const SigilloFx = (() => {
     return `<button type="button" class="sg-face sgx-fold"${act ? ` data-sg-view="${h(r.id)}"` : ' disabled'}>
       <span class="sgx-fold__paper"><i></i><i></i></span>
       <span class="sgx-fold__note">${h(r.sealed_note || '已回执。')}</span>
-      <span class="sgx-fold__seal">${seal(64, {date: ds})}</span>
+      <span class="sgx-fold__seal">${seal(72, {date: ds})}</span>
       <span class="sgx-fold__meta"><b>${avg ? '★ ' + avg.toFixed(1) : ''}</b>${ds ? `<span>封缄于 ${ds}</span>` : ''}<span>轻点展开回执</span></span>
     </button>`;
   }
@@ -90,7 +99,7 @@ const SigilloFx = (() => {
     return true;
   }
   /* 封缄动画用的那一大滴火漆，挂在回执单上 */
-  function stampLayer(){ return `<span class="sgx-stamp-drop" aria-hidden="true">${seal(96)}</span>`; }
+  function stampLayer(){ return `<span class="sgx-stamp-drop" aria-hidden="true">${seal(110)}</span>`; }
   const ringHtml = () => `<span class="sgx-ring" aria-hidden="true"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5"/></svg></span>`;
 
   return {seal, envelope, folded, openAnim, onSealClick, stampLayer, ringHtml};

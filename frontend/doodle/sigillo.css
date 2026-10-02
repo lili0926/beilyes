@@ -87,3 +87,14 @@
 .sgx-fold__meta b{font:600 13px/1 Georgia,serif;color:var(--wax);letter-spacing:.06em}
 .sgx-fold__meta span:last-child{font:600 9px/1 Georgia,serif;letter-spacing:.3em;opacity:.7}
 @media (prefers-reduced-motion:reduce){.sgx-half,.sgx-env__flap,.sgx-open .sg-sheet,.sgx-stamp-drop{transition:none!important;animation:none!important}}
+
+/* 真火漆图 */
+.sgx-img{position:relative;display:block}
+.sgx-img img{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+.sgx-img .sgx-date{position:absolute;inset:0;width:100%;height:100%}
+.sgx-half .sgx-img{width:100%!important;height:100%!important}
+.sgx-env__seal{width:60px!important;height:60px!important;margin:-30px 0 0 -30px!important;top:43%!important}
+.sgx-env__body{top:62%!important;bottom:4%!important;gap:1px!important}
+.sgx-env__note{font-size:15px!important;line-height:1.25!important}
+.sgx-fold__seal{width:72px!important;height:72px!important}
+.sgx-stamp-drop{width:110px!important;height:110px!important;margin:-55px 0 0 -55px!important}
