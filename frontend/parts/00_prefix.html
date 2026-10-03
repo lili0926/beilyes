@@ -4649,6 +4649,20 @@
     <div class="ap-stage" aria-hidden="true"><div class="ap-shadow"></div><div class="ap-stack"><img class="ap-f f1" src="splash/ap1.webp" alt="" draggable="false"><img class="ap-f f2" src="splash/ap2.webp" alt="" draggable="false"><img class="ap-f f3" src="splash/ap3.webp" alt="" draggable="false"><img class="ap-f f4" src="splash/ap4.webp" alt="" draggable="false"><img class="ap-f f5" src="splash/ap5.webp" alt="" draggable="false"></div><i class="ap-c c1" style="left:78%;top:38%;width:5px;height:5px;--dx:30px;--dy:-20px"></i><i class="ap-c c1" style="left:82%;top:52%;width:4px;height:4px;--dx:36px;--dy:6px"></i><i class="ap-c c1" style="left:76%;top:62%;width:3px;height:3px;--dx:24px;--dy:22px"></i><i class="ap-c c2" style="left:22%;top:58%;width:5px;height:5px;--dx:-30px;--dy:-14px"></i><i class="ap-c c2" style="left:18%;top:70%;width:4px;height:4px;--dx:-34px;--dy:10px"></i><i class="ap-c c2" style="left:80%;top:70%;width:4px;height:4px;--dx:28px;--dy:16px"></i><i class="ap-c c3" style="left:20%;top:46%;width:5px;height:5px;--dx:-32px;--dy:-18px"></i><i class="ap-c c3" style="left:84%;top:46%;width:5px;height:5px;--dx:32px;--dy:-16px"></i><i class="ap-c c3" style="left:50%;top:78%;width:3px;height:3px;--dx:0px;--dy:26px"></i><i class="ap-c c4" style="left:30%;top:40%;width:4px;height:4px;--dx:-26px;--dy:-20px"></i><i class="ap-c c4" style="left:70%;top:40%;width:4px;height:4px;--dx:26px;--dy:-20px"></i><i class="ap-c c4" style="left:28%;top:72%;width:3px;height:3px;--dx:-20px;--dy:20px"></i><i class="ap-c c4" style="left:72%;top:72%;width:3px;height:3px;--dx:20px;--dy:20px"></i></div>
     <div class="ap-text"><h1 id="splash-brand-title">Jasmine</h1><p id="splash-brand-sub">欢迎回家</p><button id="splash-brand-tag" style="border:0;background:none;padding:12px;cursor:pointer"></button></div>
   </div>
+  <script>
+  /* 蓝闪蝶壳：开屏换成一只慢慢张开翅膀的闪蝶（青苹果留给其它壳） */
+  (function(){try{
+    var sh=JSON.parse(localStorage.getItem("uiShell")||'""'); if(sh!=="morpho") return;
+    var pr=JSON.parse(localStorage.getItem("morphoPrefs")||"{}")||{}, hr=new Date().getHours();
+    var night=pr.mode==="night"||(pr.mode!=="day"&&(hr<7||hr>=19));
+    var ci=JSON.parse(localStorage.getItem("coupleInfo")||"{}")||{}, n=0, d="";
+    if(ci.startDate){var s=new Date(ci.startDate); if(!isNaN(s)){n=Math.max(0,Math.floor((Date.now()-s)/864e5)); d=s.getFullYear()+"."+("0"+(s.getMonth()+1)).slice(-2)+"."+("0"+s.getDate()).slice(-2);}}
+    var el=document.getElementById("splash-screen"); el.classList.add("mo-splash"); if(night) el.classList.add("mo-sp-night");
+    var w=document.createElement("div"); w.className="mo-sp";
+    w.innerHTML='<img src="doodle/morpho/morpho.webp" alt=""><p>'+(d?'N° '+n+' · '+d:'')+'<b>欢迎回家</b></p>';
+    el.appendChild(w);
+  }catch(e){}})();
+  </script>
   <style>
     .apple-splash{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 42%,#FFFBF4 0,#FBF3E7 45%,#F3E6D6 100%)}
     .ap-stage{position:relative;width:min(54vw,230px);aspect-ratio:300/406;animation:apIn .5s cubic-bezier(.3,1.4,.5,1) both}

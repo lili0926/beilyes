@@ -59,13 +59,14 @@
   - `frontend/tests/*.test.cjs` 四个单测，提交前都要跑。
 - **网络：** 出口代理会拦截 freesound、wikimedia、Google Fonts，所以截图里的花体字和毛笔字会是替代字体，真机上正常。
 
-- 蓝闪蝶壳：她生的蝴蝶和鳞片图在 `frontend/doodle/morpho/`。合翅侧面那张棕色的她嫌太「虫」，没用，新消息的小蝴蝶用正面那只。设计稿在 `design/morpho/`。
+- 蓝闪蝶壳：她生的蝴蝶和鳞片图在 `frontend/doodle/morpho/`。合翅侧面那张棕色的她嫌太「虫」，没用，新消息的小蝴蝶用正面那只。设计稿在 `design/morpho/`。她要这个壳「高级」：中文用打包的思源宋体子集（`morpho/fonts/song.woff2`，来自 integrations 里的 MamoSongti），数字英文用 Playfair；子页顶栏是展签（No. xx — English）；换页淡入只在换页时触发；翅膀上隔几秒扫过一道光。
 - 她想以后做一个文艺/日式壳。第一版设计稿在 `design/wa/`，她说「很好看，留着下次做」。
 
 ## 别做的事
 
 - 别让她在对话里贴 token、key、cookie。
 - 别 push 到别的分支，别开 PR，除非她明确说要。
+- 返回键在所有壳里都是涂鸦那支手绘箭头（doodle.js 的 backAnyShell），她嫌原来的「‹ 返回」丑。
 - 别用整页重绘去处理输入框里的打字。会丢焦点、收键盘，回执单的备注框就踩过这个坑。
 
 ---

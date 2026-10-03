@@ -103,3 +103,73 @@ body.shell-morpho .bubble.mo-perched{overflow:visible}
 @keyframes moArrive{0%{transform:translate(160px,-120px) rotate(18deg);opacity:0}15%{opacity:1}55%{transform:translate(40px,-50px) rotate(-6deg)}80%{transform:translate(-6px,4px) rotate(0)}100%{transform:none}}
 @keyframes moBeat{0%,100%{scale:1 1;rotate:-14deg}50%{scale:.2 1;rotate:-14deg}}
 @media (prefers-reduced-motion:reduce){.mo-fly,.mo-perch img,.mo-perch.arrive,.mo-perch.arrive img{animation:none}}
+
+/* ══ v2 · 高级感 ══════════════════════════════════════════════
+   ① 字：中文思源宋体（子集，打包在 morpho/fonts），数字和英文 Playfair Display */
+@font-face{font-family:"MoSong";src:url(morpho/fonts/song.woff2) format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"MoPlay";src:url(morpho/fonts/playfair.woff2) format("woff2");font-weight:400 900;font-style:normal;font-display:swap}
+@font-face{font-family:"MoPlay";src:url(morpho/fonts/playfair-italic.woff2) format("woff2");font-weight:400 900;font-style:italic;font-display:swap}
+body.shell-morpho{--mo-serif:"MoSong","Noto Serif SC","Source Han Serif SC","Songti SC",serif;--mo-display:"MoPlay","Cormorant Garamond","Times New Roman",serif;
+  font-family:var(--mo-serif);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body.shell-morpho #app,body.shell-morpho button,body.shell-morpho input,body.shell-morpho textarea,body.shell-morpho select{font-family:var(--mo-serif)}
+body.shell-morpho .mo-date,body.shell-morpho .mo-tag,body.shell-morpho .mo-i,body.shell-morpho .mo-n,body.shell-morpho .mo-n small,body.shell-morpho .mo-last-hd span:last-child,body.shell-morpho .mo-ino,body.shell-morpho .mo-label{font-family:var(--mo-display)}
+body.shell-morpho .mo-n{font-weight:400;font-size:62px;letter-spacing:-.01em;font-variant-numeric:lining-nums}
+body.shell-morpho .mo-scale{font-weight:700}
+body.shell-morpho .mo-top b{font-family:var(--mo-display);font-size:12px;letter-spacing:.55em}
+/* 数字一律等宽，列表里对得齐 */
+body.shell-morpho .msg-meta-time,body.shell-morpho .mo-ist,body.shell-morpho .mo-s,body.shell-morpho .bubble-time{font-variant-numeric:tabular-nums}
+/* 细线图标再细一点 */
+body.shell-morpho svg.lucide{stroke-width:1.5}
+/* 发丝线：高分屏上是真·半像素 */
+@media (min-resolution:2dppx){
+  body.shell-morpho .mo-row,body.shell-morpho .mo-tag,body.shell-morpho .bottom-nav,body.shell-morpho .chat-header,body.shell-morpho .sub-header,body.shell-morpho .chat-input-bar{border-width:.5px}
+}
+
+/* ② 展签：子页顶栏 = 一行小小的编号英文 + 一行宋体标题 */
+body.shell-morpho .sub-header{align-items:center;padding-top:max(14px,env(safe-area-inset-top,0px));padding-bottom:12px}
+body.shell-morpho .sub-header .page-title{font-family:var(--mo-serif);font-weight:500;font-size:19px;letter-spacing:.24em;margin:0;display:flex;align-items:center;gap:8px}
+body.shell-morpho .sub-header .page-title svg,body.shell-morpho .sub-header .page-title i[data-lucide]{display:none}
+.mo-titlewrap{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mo-label{font-size:10px;font-style:italic;letter-spacing:.16em;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.shell-morpho .feat-section-label,body.shell-morpho .section-title{font-family:var(--mo-serif)}
+body.shell-morpho .card,body.shell-morpho .section-body{background:var(--card)}
+
+/* ③ 光：一道很淡的光隔几秒从翅膀上扫过去（只扫在翅膀上，用蝴蝶自己当遮罩） */
+.mo-sheen{position:absolute;inset:0;pointer-events:none;
+  -webkit-mask:url(morpho/morpho.webp) center/contain no-repeat;mask:url(morpho/morpho.webp) center/contain no-repeat;
+  background:linear-gradient(105deg,transparent 0 38%,rgba(210,245,255,.0) 40%,rgba(225,250,255,.55) 47%,rgba(255,255,255,.75) 50%,rgba(200,240,255,.35) 53%,transparent 60% 100%) no-repeat;
+  background-size:260% 100%;background-position:120% 0;mix-blend-mode:screen;animation:moSheen 7.5s cubic-bezier(.45,.05,.3,1) 1.8s infinite,moBreath 5.5s ease-in-out infinite;
+  transform:rotateX(var(--mo-rx,0deg)) rotateY(var(--mo-ry,0deg));animation-fill-mode:both}
+@keyframes moSheen{0%{background-position:120% 0}22%{background-position:-20% 0}100%{background-position:-20% 0}}
+.mo-stage:has(.mo-fly.flap) .mo-sheen{opacity:0}
+/* 夜里：展柜的灯慢慢亮起来 */
+.mo-lightup .mo-fly{animation:moLight 2.2s cubic-bezier(.3,.1,.2,1) both,moBreath 5.5s ease-in-out 2.2s infinite}
+.mo-lightup .mo-sheen{animation:moSheen 7.5s cubic-bezier(.45,.05,.3,1) 2.6s infinite,moBreath 5.5s ease-in-out 2.2s infinite}
+@keyframes moLight{0%{filter:brightness(.08) saturate(.4);opacity:.4}40%{filter:brightness(.25) saturate(.6);opacity:.8}100%{filter:var(--mo-fly) brightness(1);opacity:1}}
+/* 换页：淡入 + 微微上浮，慢而稳 */
+.mo-enter{animation:moEnter .45s cubic-bezier(.2,.7,.2,1) both}
+@keyframes moEnter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ⑤ 细节：按下去缩一点点；头像套一圈虹彩细环 */
+body.shell-morpho .mo-row:active,body.shell-morpho .mo-irow:active,body.shell-morpho .mo-last:active,body.shell-morpho .feat-card:active{transform:scale(.985);transition:transform .08s}
+body.shell-morpho .mo-row,body.shell-morpho .mo-irow,body.shell-morpho .mo-last{transition:transform .25s cubic-bezier(.2,.7,.2,1)}
+body.shell-morpho .bubble-avatar{box-shadow:0 0 0 1.5px var(--bg),0 0 0 2.5px transparent;background-clip:padding-box;position:relative}
+body.shell-morpho .bubble-avatar::after{content:"";position:absolute;inset:-3px;border-radius:50%;padding:1px;background:conic-gradient(from 200deg,#0A1F78,#46BFFF,#B8F1FF,#1E55F5,#0A1F78);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+body.shell-morpho .msg-meta-name{font-weight:500!important;letter-spacing:.12em}
+body.shell-morpho .chat-header .chat-name{font-style:normal!important}
+body.shell-morpho .msg-meta-heart{color:var(--mo-blue)!important;opacity:.6}
+@media (prefers-reduced-motion:reduce){.mo-sheen,.mo-enter,.mo-lightup .mo-fly{animation:none}}
+
+/* ④ 开屏：白底上，一只闪蝶慢慢张开翅膀；下面浮出编号 */
+#splash-screen.mo-splash{background:#F7F6F2!important}
+#splash-screen.mo-splash.mo-sp-night{background:#06080F!important}
+#splash-screen.mo-splash>*:not(.mo-sp){display:none!important}
+.mo-sp{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px}
+.mo-sp img{width:56vw;max-width:260px;filter:drop-shadow(0 22px 18px rgba(20,40,110,.18));animation:moSpOpen 2.1s cubic-bezier(.3,.1,.15,1) .2s both}
+.mo-sp-night .mo-sp img{filter:drop-shadow(0 0 26px rgba(40,120,255,.5))}
+@keyframes moSpOpen{0%{scale:.06 .96;opacity:0;translate:0 10px}18%{opacity:1}55%{scale:.55 1}72%{scale:.42 1}100%{scale:1 1;translate:0 0}}
+.mo-sp p{margin:0;font:400 italic 13px/1.6 "MoPlay","Times New Roman",serif;letter-spacing:.32em;color:#8A8F9A;opacity:0;animation:moSpTxt 1s ease 1.9s forwards}
+.mo-sp p b{display:block;font:400 11px/1 "MoSong",serif;letter-spacing:.6em;margin-top:10px;font-style:normal}
+.mo-sp-night .mo-sp p{color:#7E8AA3}
+@keyframes moSpTxt{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}

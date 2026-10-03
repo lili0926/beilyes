@@ -124,8 +124,9 @@ const MorphoShell = (() => {
     return `<div class="page mo-home">
       <div class="mo-top"><b>MORPHO</b><span class="mo-date">${WD[now.getDay()]} · ${pad(now.getDate())} ${MO[now.getMonth()]} ${now.getFullYear()}</span></div>
       <div class="mo-top2">${themeSwitch()}</div>
-      <div class="mo-stage" data-mo-fly>
+      <div class="mo-stage${lightUp() ? ' mo-lightup' : ''}" data-mo-fly>
         <img class="mo-fly" src="${IMG}" alt="" draggable="false">
+        <i class="mo-sheen" aria-hidden="true"></i>
       </div>
       <div class="mo-no"><div class="mo-n"><small>N°</small><span class="mo-scale">${n}</span></div><p>在一起的第${cnNum(n)}天</p></div>
       <div class="mo-tag"><span>Morpho peleides</span><span>${startStr() ? '采集于 ' + h(startStr()) : ''}</span></div>
@@ -194,6 +195,45 @@ const MorphoShell = (() => {
     }
   }, true);
 
+  /* ── 夜里第一次打开：展柜的灯慢慢亮起来（每次启动只亮一次） ── */
+  let lit = false;
+  function lightUp(){ if(lit || !isNight()) return false; lit = true; return true; }
+
+  /* ── 展签：每个子页顶栏上面多一行小字编号 + 英文名 ── */
+  const EN = {body:'Vitals', trip:'Journeys', explore:'Wander', phone:'Calls', vps:'Engine', music:'Listening', read:'Reading', shufang:'Study',
+    watch:'Watching', theme:'Appearance', prompts:'Prompts', tavern:'Tavern', rewrite:'Rewrite', hisphone:'His Phone', game:'Puppy', duel_gomoku:'Gomoku',
+    duel_blackjack:'Blackjack', duel_zhajinhua:'Three Cards', duel_mahjong:'Mahjong', menu:'Menu', cmdgame:'Commands', htmlgame:'Games', mcphall:'MCP Hall',
+    baby:'Nursery', roleplay:'Roleplay', calendar:'Calendar', pr:'Quick Worlds', flightchess:'Ludo', bisca_cards:'Card Room', bisca_daifugo:'Daifugo',
+    bisca_monopoly:'Monopoly', captivity:'Captivity', sparkvault:'Stardust', cabinets:'Cabinets', dream:'Dreams', mdiary:'Diary', notes:'Notes',
+    mailbox:'Letters', memory:'Memory', savedchat:'Kept', album:'Album', coupon:'Coupons', pilulier:'Pill Box', wallet:'Wallet', sayday:'My Say',
+    love:'Scores', wardrobe:'Wardrobe', sigillo:'Receipts', quest:'Quests', eatapple:'Apple', backup:'Backup', moments:'Moments', settings:'Settings'};
+  function label(key){
+    const all = allItems(), i = all.findIndex(f => f.key === key);
+    const en = EN[key] || String(key || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return (i >= 0 ? 'No. ' + pad(i + 1) + ' — ' : '') + en;
+  }
+  const EMO = /(?:\p{Extended_Pictographic}|\uFE0F|\u200D)+/gu;
+  let lastPage = '';
+  function decorate(){
+    if(state.uiShell !== 'morpho') { lastPage = ''; return; }
+    const app = document.getElementById('app'); if(!app) return;
+    /* 换页才淡入，同一页里重绘不闪 */
+    const pg = state.tab + '/' + (state.subPage || '');
+    if(pg !== lastPage){
+      const el = app.querySelector(':scope > .page, :scope > .chat-page, :scope > div > .page');
+      if(el && lastPage){ el.classList.remove('mo-enter'); void el.offsetWidth; el.classList.add('mo-enter'); }
+      lastPage = pg;
+    }
+    const hd = app.querySelector('.sub-header');
+    if(hd && state.subPage && !hd.querySelector('.mo-label')){
+      const t = hd.querySelector('.page-title, h2');
+      if(t){ const w = document.createElement('div'); w.className = 'mo-titlewrap';
+        t.replaceWith(w); w.innerHTML = `<span class="mo-label">${h(label(state.subPage))}</span>`; w.appendChild(t); }
+    }
+    /* 名字里的 emoji 收掉：高级感最怕花 */
+    app.querySelectorAll('.chat-name, .msg-meta-name').forEach(n => { const t = n.textContent, c = t.replace(EMO, '').trim(); if(c && c !== t) n.textContent = c; });
+  }
+
   /* ── 聊天：他的新消息上落一只小闪蝶 ── */
   let lastCount = -1, lastThread = '';
   function perch(){
@@ -211,6 +251,16 @@ const MorphoShell = (() => {
     b.innerHTML = `<img src="${IMG}" alt="">`;
     last.appendChild(b);
   }
+  /* 按下的那一下：一声极轻的「嗒」 */
+  let actx = null;
+  document.addEventListener('pointerdown', e => {
+    if(state.uiShell !== 'morpho') return;
+    const b = e.target && e.target.closest && e.target.closest('.mo-row, .mo-irow, .mo-last, .mo-sw button, .bottom-nav button, .send-btn.active, .back-btn');
+    if(!b) return;
+    try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+      o.type = 'triangle'; o.frequency.setValueAtTime(2400, t); o.frequency.exponentialRampToValueAtTime(1200, t + .03);
+      g.gain.setValueAtTime(.025, t); g.gain.exponentialRampToValueAtTime(.0001, t + .05); o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + .06); }catch(_){}
+  }, true);
   /* 时间跨过 7 点 / 19 点时自动换昼夜 */
   let lastNight = null;
   setInterval(() => {
@@ -226,7 +276,7 @@ const MorphoShell = (() => {
   window.addEventListener('DOMContentLoaded', () => {
     if(typeof render !== 'function') return;
     const orig = render;
-    render = function(){ const r = orig.apply(this, arguments); try{ perch(); }catch(e){} return r; };
+    render = function(){ const r = orig.apply(this, arguments); try{ decorate(); }catch(e){} try{ perch(); }catch(e){} return r; };
   });
-  return {palette, home, isNight, bodyClass, perch, cnNum};
+  return {palette, home, isNight, bodyClass, perch, decorate, label, cnNum};
 })();
