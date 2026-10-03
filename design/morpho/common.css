@@ -1,0 +1,12 @@
+:root{--bg:#06080F;--ink:#E9EEF7;--sub:rgba(220,230,245,.48);--line:rgba(160,190,255,.14);
+--iri:linear-gradient(115deg,#0B2A8C 0%,#1F5BFF 28%,#3FB6FF 46%,#9FE8FF 52%,#2E7BFF 62%,#162F9E 82%,#0A1B5E 100%)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:390px;height:844px;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:"WenQuanYi Zen Hei",sans-serif;position:relative;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 36% at 50% 26%,rgba(40,90,255,.16),transparent 70%),radial-gradient(80% 50% at 50% 110%,rgba(30,60,180,.12),transparent 70%);pointer-events:none}
+body::after{content:"";position:absolute;inset:0;opacity:.35;pointer-events:none;mix-blend-mode:screen;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .6 0 0 0 0 .7 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E")}
+.serif{font-family:"Bitstream Charter","Liberation Serif",serif}
+.it{font-style:italic}
+.cap{font-size:9.5px;letter-spacing:.32em;color:var(--sub);text-transform:uppercase}
+.iri-t{background:var(--iri);background-size:220% 100%;background-position:30% 0;-webkit-background-clip:text;background-clip:text;color:transparent}
+.hair{height:1px;background:var(--line)}
