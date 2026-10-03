@@ -70,6 +70,12 @@ const MorphoShell = (() => {
     return null;
   }
 
+  function hisAvatar(){ try{ if(typeof bubbleAvatarHtml === 'function') return bubbleAvatarHtml('them'); }catch(e){} return '<div class="bubble-avatar"></div>'; }
+  function hisName(){
+    try{ const ag = typeof agentById === 'function' ? agentById(state.chatTarget || 'a1') : null;
+      const n = String((ag && ag.name) || (state.coupleInfo && state.coupleInfo.partnerName) || '他').replace(/(?:\p{Extended_Pictographic}|\uFE0F|\u200D)+/gu, '').trim();
+      return n || '他'; }catch(e){ return '他'; }
+  }
   /* ── 目录：最近用过的四样排在首页，剩下的折在「全部」里 ── */
   const DEFAULT_PICKS = ['mailbox', 'dream', 'coupon', 'sigillo'];
   function allItems(){ try{ return FEAT_GROUPS.flatMap(g => g.items); }catch(e){ return []; } }
@@ -118,10 +124,14 @@ const MorphoShell = (() => {
         <button type="button" class="mo-row mo-all" data-mo-apps="1">
           <span class="mo-i">—</span><span class="mo-t">更多</span><span class="mo-s">${allItems().length} 样</span><span class="mo-ar">→</span></button>
       </nav>
-      <button type="button" class="mo-last" data-mo-chat>
-        <span class="mo-last-hd"><span>他 · 最后一句</span><span>${lt && !isNaN(lt) ? pad(lt.getHours()) + ':' + pad(lt.getMinutes()) : ''}</span></span>
-        <span class="mo-last-p">${lw ? h(lw.t) : '还没说话。去找他吧。'}</span>
-      </button>
+      <div class="mo-last" data-mo-chat role="button" tabindex="0">
+        <span class="mo-last-av">${hisAvatar()}</span>
+        <span class="mo-last-bd">
+          <span class="mo-last-hd"><span>${h(hisName())} · 最后一句</span><span>${lt && !isNaN(lt) ? pad(lt.getHours()) + ':' + pad(lt.getMinutes()) : ''}</span></span>
+          <span class="mo-last-p">${lw ? h(lw.t) : '还没说话。去找他吧。'}</span>
+          <span class="mo-last-go" data-mo-reply>回他 →</span>
+        </span>
+      </div>
     </div>`;
   }
   /* 标本柜：一格一样，像抽屉里的隔间；分组用罗马数字 */
@@ -210,8 +220,12 @@ const MorphoShell = (() => {
     if(t.closest('.bottom-nav button[data-tab="home"]')) state.moView = null;
     if(t.closest('[data-mo-chat]')){
       e.preventDefault(); e.stopImmediatePropagation();
+      const reply = !!t.closest('[data-mo-reply]');
       const b = document.querySelector('.bottom-nav button[data-tab="chat"]');
-      if(b) b.click(); return;
+      if(b) b.click();
+      /* 「回他」：进聊天，光标直接停在输入框里（同步聚焦，安卓才肯弹键盘） */
+      if(reply){ const inp = document.getElementById('chat-input'); if(inp){ try{ inp.focus(); }catch(_){} } }
+      return;
     }
     if(t.closest('[data-mo-fly]')){
       bindTilt();
@@ -256,10 +270,21 @@ const MorphoShell = (() => {
       if(t){ const w = document.createElement('div'); w.className = 'mo-titlewrap';
         t.replaceWith(w); w.innerHTML = `<span class="mo-label">${h(label(state.subPage))}</span>`; w.appendChild(t); }
     }
+    if(state.tab === 'settings' && !state.subPage){
+      const t = app.querySelector('.set-menu > .page-title');
+      if(t && !t.closest('.mo-titlewrap')){ const w = document.createElement('div'); w.className = 'mo-titlewrap mo-set-hd'; t.replaceWith(w); w.innerHTML = '<span class="mo-label">Archive — Settings</span>'; w.appendChild(t); }
+    }
+    const cov = app.querySelector('.wx-moments .wx-cover');
+    if(cov && !app.querySelector('.mo-plate')){
+      const pub = !!app.querySelector('.wx-tab.active[data-mo-scope="public"]');
+      const cap = document.createElement('div'); cap.className = 'mo-plate';
+      cap.innerHTML = `<span>Plate ${pub ? 'II' : 'I'} — Field Notes</span><span>${pub ? '公共' : '私人'}</span>`;
+      cov.after(cap);
+    }
     const inp = document.getElementById('chat-input');
     if(inp && state.chatMode !== 'story') inp.placeholder = '写给他……';
     /* 名字里的 emoji 收掉：高级感最怕花 */
-    app.querySelectorAll('.chat-name, .msg-meta-name').forEach(n => { const t = n.textContent, c = t.replace(EMO, '').trim(); if(c && c !== t) n.textContent = c; });
+    app.querySelectorAll('.chat-name, .msg-meta-name, .wx-author, .wx-cn, .wx-cover-name, .wx-likes b, .wx-reply-to').forEach(n => { const t = n.textContent, c = t.replace(EMO, '').trim(); if(c && c !== t) n.textContent = c; });
   }
 
   /* ── 聊天：他的新消息上落一只小闪蝶 ── */

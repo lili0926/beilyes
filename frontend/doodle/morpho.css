@@ -193,3 +193,60 @@ body.shell-morpho .bottom-nav button.active::before{top:auto;bottom:calc(5px + e
 body.shell-morpho .chat-header #chat-sidebar-open{color:var(--sub);opacity:1}
 body.shell-morpho .chat-header #chat-sidebar-open svg{stroke-width:1.2;width:20px;height:20px}
 body.shell-morpho .chat-input-bar textarea::placeholder{color:var(--sub);letter-spacing:.12em}
+
+/* ══ v4 ══ */
+/* 「他 · 最后一句」：头像 + 虹彩细环 + 回他 */
+body.shell-morpho .mo-last{display:flex;gap:14px;align-items:flex-start;padding:16px 16px 14px}
+.mo-last-av{flex-shrink:0;padding-top:2px}
+.mo-last-av .bubble-avatar{width:38px!important;height:38px!important;margin:0!important}
+.mo-last-bd{flex:1;min-width:0;display:flex;flex-direction:column}
+.mo-last-go{align-self:flex-end;margin-top:10px;font-size:11.5px;letter-spacing:.24em;color:var(--mo-blue);padding:4px 0 2px 12px;cursor:pointer}
+
+/* 设置：一本档案目录。没有圆角卡片，只有发丝线；序号是斜体小数字 */
+body.shell-morpho .set-menu{padding:0 26px 90px;counter-reset:mo-set}
+.mo-set-hd{padding:max(22px,env(safe-area-inset-top,0px)) 0 6px}
+body.shell-morpho .mo-set-hd .page-title{font-family:var(--mo-serif);font-weight:500;font-size:24px;letter-spacing:.3em;margin:0;display:flex;align-items:center}
+body.shell-morpho .mo-set-hd .page-title svg{display:none}
+body.shell-morpho .set-list{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;margin-top:18px;border-top:1px solid var(--mo-line)!important}
+body.shell-morpho .set-item{position:relative;background:transparent!important;border:0!important;border-bottom:1px solid var(--mo-line)!important;border-radius:0!important;padding:16px 0 16px 34px!important;box-shadow:none!important}
+body.shell-morpho .set-item::before{counter-increment:mo-set;content:counter(mo-set,decimal-leading-zero);position:absolute;left:0;top:19px;font:italic 400 11px/1 var(--mo-display);color:var(--sub)}
+body.shell-morpho .set-ic{background:transparent!important;color:var(--mo-blue)!important;width:22px!important;height:22px!important;border-radius:0!important;order:2;margin-left:auto}
+body.shell-morpho .set-ic svg{stroke-width:1.3;width:18px;height:18px}
+body.shell-morpho .set-tx b{font-weight:500;letter-spacing:.16em;font-size:14.5px}
+body.shell-morpho .set-tx small{letter-spacing:.04em;margin-top:3px}
+body.shell-morpho .set-item>svg:last-child,body.shell-morpho .set-item .set-go{display:none}
+body.shell-morpho .settings-footer{font-family:var(--mo-display);font-style:italic;letter-spacing:.18em;color:var(--sub);text-align:center;margin-top:26px}
+
+/* 动态：标本图版 + 田野笔记 */
+body.shell-morpho .wx-moments,body.shell-morpho .wx-moments .mo-page,body.shell-morpho .wx-feed{background:var(--bg)!important}
+body.shell-morpho .wx-tabs{background:var(--mo-glass);border-bottom:1px solid var(--mo-line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+body.shell-morpho .wx-tab{font-family:var(--mo-serif);font-weight:400;letter-spacing:.3em;font-size:13.5px}
+body.shell-morpho .wx-tab.active{font-weight:500}
+body.shell-morpho .wx-tab.active::after{width:4px;height:4px;border-radius:50%;background:var(--mo-blue);bottom:5px;box-shadow:0 0 6px var(--mo-blue)}
+body.shell-morpho .wx-cover{margin:20px 20px 0;height:210px;border-radius:2px;outline:1px solid var(--mo-line);outline-offset:6px;background-color:#1B2A6B}
+body.shell-morpho:not(.mo-night) .wx-cover{background-color:#E6E8EE}
+body.shell-morpho .wx-cover:not([style*="background-image"]){background-image:url(morpho/morpho.webp)!important;background-size:46%!important;background-position:center 42%!important;background-repeat:no-repeat!important}
+body.shell-morpho .wx-cover-shade{background:linear-gradient(to top,rgba(5,8,20,.45) 0%,transparent 45%)}
+body.shell-morpho .wx-cover-name{font-family:var(--mo-serif);font-weight:500;letter-spacing:.2em;font-size:15px;right:80px;bottom:14px}
+body.shell-morpho .wx-cover-avatar{width:56px;height:56px;border-radius:50%;right:14px;bottom:-20px;border:2px solid var(--bg);box-shadow:0 0 0 1px var(--mo-line)}
+body.shell-morpho .wx-cover-avatar>*{border-radius:50%!important}
+body.shell-morpho .wx-cover-btn,body.shell-morpho .wx-compose,body.shell-morpho .wx-friends{background:rgba(255,255,255,.18);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.35)}
+.mo-plate{display:flex;justify-content:space-between;margin:16px 20px 0;padding-right:70px;font:italic 400 10.5px/1 var(--mo-display);letter-spacing:.14em;color:var(--sub)}
+.mo-plate span:last-child{font-family:var(--mo-serif);font-style:normal;letter-spacing:.4em}
+body.shell-morpho .wx-feed{padding:18px 0 90px}
+body.shell-morpho .wx-post{background:transparent!important;border:0!important;border-bottom:1px solid var(--mo-line)!important;border-radius:0!important;box-shadow:none!important;margin:0 20px!important;padding:20px 0!important}
+body.shell-morpho .wx-av>*{border-radius:50%!important}
+body.shell-morpho .wx-author{font-family:var(--mo-serif);font-weight:500!important;letter-spacing:.14em;color:var(--text)!important}
+body.shell-morpho .wx-text{font-size:14.5px;line-height:1.9;letter-spacing:.04em}
+body.shell-morpho .wx-time{font-family:var(--mo-display);font-style:italic;letter-spacing:.06em}
+body.shell-morpho .wx-imgs img{border-radius:2px!important}
+body.shell-morpho .wx-zone{background:transparent!important;border-left:1px solid var(--mo-blue);border-radius:0!important;padding:4px 0 4px 12px!important;margin-top:10px}
+body.shell-morpho .wx-zone::before{display:none}
+body.shell-morpho .wx-heart{color:var(--mo-blue)}
+body.shell-morpho .wx-cn{color:var(--mo-blue)!important;font-weight:500}
+body.shell-morpho .wx-more{background:transparent!important;color:var(--sub)!important;letter-spacing:.1em}
+body.shell-morpho .wx-empty{font-family:var(--mo-serif);letter-spacing:.2em;color:var(--sub)}
+body.shell-morpho .wx-text,body.shell-morpho .wx-cmt,body.shell-morpho .wx-likes{color:var(--text)!important}
+body.shell-morpho .wx-likes{border-bottom:1px solid var(--mo-line)!important}
+body.shell-morpho .wx-likes b{color:var(--mo-blue)!important;font-weight:500}
+body.shell-morpho .wx-av{background:transparent!important;border-radius:50%!important;overflow:visible!important}
