@@ -56,10 +56,6 @@ body.shell-morpho .mo-top{position:sticky;top:0;z-index:5;display:flex;justify-c
 .mo-top b{font-weight:400;font-size:11px;letter-spacing:.6em;color:var(--text)}
 .mo-date,.mo-tag,.mo-i,.mo-n small,.mo-last-hd span:last-child,.mo-ino{font-family:"Cormorant Garamond","Bitstream Charter","Times New Roman",serif;font-style:italic}
 .mo-date{font-size:12px;letter-spacing:.14em;color:var(--sub)}
-.mo-top2{display:flex;justify-content:flex-end;margin-top:0}
-.mo-sw{display:inline-flex;gap:4px}
-.mo-sw button{font:inherit;font-size:10px;letter-spacing:.1em;color:var(--sub);background:transparent;border:1px solid var(--mo-line);border-radius:999px;padding:3px 8px;cursor:pointer}
-.mo-sw button.on{color:var(--text);border-color:var(--text)}
 .mo-stage{position:relative;display:flex;justify-content:center;margin:0 auto;width:min(72%,280px);perspective:700px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mo-fly{width:100%;display:block;filter:var(--mo-fly) hue-rotate(var(--mo-hue,0deg)) brightness(var(--mo-br,1));transform:rotateX(var(--mo-rx,0deg)) rotateY(var(--mo-ry,0deg));transition:filter .25s,transform .25s;animation:moBreath 5.5s ease-in-out infinite;transform-origin:50% 50%;-webkit-user-drag:none;user-select:none}
 @keyframes moBreath{0%,100%{scale:1 1}50%{scale:.94 1}}
@@ -180,3 +176,20 @@ body.shell-morpho .mo-cell:active{background:color-mix(in srgb,var(--mo-blue) 6%
 .mo-cst{font-size:9.5px;color:var(--sub);letter-spacing:.06em;min-height:1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:92%}
 .mo-cell.rec::after{content:"";position:absolute;right:8px;top:8px;width:4px;height:4px;border-radius:50%;background:var(--mo-blue);box-shadow:0 0 6px var(--mo-blue)}
 .mo-apps-ft{text-align:center;font-size:10px;letter-spacing:.2em;color:var(--sub);margin:22px 0 10px}
+
+/* ══ v3 · 主壳打磨 ══ */
+/* 日期那一行就是昼夜开关 */
+body.shell-morpho button.mo-date{background:none;border:0;padding:6px 0 6px 12px;margin:-6px 0;cursor:pointer;color:var(--sub);-webkit-tap-highlight-color:transparent}
+.mo-dn{font-style:normal;margin-left:8px;font-size:11px;color:var(--mo-blue);opacity:.8}
+.mo-dn:empty{display:none}
+body.shell-morpho .mo-stage{margin-top:14px}
+/* 底栏：只有四个宋体字，当前那个底下一个蓝点 */
+body.shell-morpho .bottom-nav button .icon{display:none}
+body.shell-morpho .bottom-nav button{font-size:13px;letter-spacing:.42em;padding:14px 0 calc(12px + env(safe-area-inset-bottom,0px));text-indent:.42em;color:var(--sub)}
+body.shell-morpho .bottom-nav{padding-bottom:0}
+body.shell-morpho .bottom-nav button.active{color:var(--text)}
+body.shell-morpho .bottom-nav button.active::before{top:auto;bottom:calc(5px + env(safe-area-inset-bottom,0px));width:4px;height:4px;border-radius:50%}
+/* 聊天顶栏：侧栏按钮收成细线 */
+body.shell-morpho .chat-header #chat-sidebar-open{color:var(--sub);opacity:1}
+body.shell-morpho .chat-header #chat-sidebar-open svg{stroke-width:1.2;width:20px;height:20px}
+body.shell-morpho .chat-input-bar textarea::placeholder{color:var(--sub);letter-spacing:.12em}

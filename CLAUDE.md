@@ -59,7 +59,7 @@
   - `frontend/tests/*.test.cjs` 四个单测，提交前都要跑。
 - **网络：** 出口代理会拦截 freesound、wikimedia、Google Fonts，所以截图里的花体字和毛笔字会是替代字体，真机上正常。
 
-- 蓝闪蝶壳：她生的蝴蝶和鳞片图在 `frontend/doodle/morpho/`。合翅侧面那张棕色的她嫌太「虫」，没用，新消息的小蝴蝶用正面那只。设计稿在 `design/morpho/`。她要这个壳「高级」：中文用打包的思源宋体子集（`morpho/fonts/song.woff2`，来自 integrations 里的 MamoSongti），数字英文用 Playfair；子页顶栏是展签（No. xx — English）；换页淡入只在换页时触发。翅膀扫光她不要，已删。首页只放最近用过的 4 样 + 「更多」，更多进「标本柜」（所有 App 一页，三列格子，state.moView="apps"）。
+- 蓝闪蝶壳：她生的蝴蝶和鳞片图在 `frontend/doodle/morpho/`。合翅侧面那张棕色的她嫌太「虫」，没用，新消息的小蝴蝶用正面那只。设计稿在 `design/morpho/`。她要这个壳「高级」：中文用打包的思源宋体子集（`morpho/fonts/song.woff2`，来自 integrations 里的 MamoSongti），数字英文用 Playfair；子页顶栏是展签（No. xx — English）；换页淡入只在换页时触发。翅膀扫光她不要，已删。首页只放最近用过的 4 样 + 「更多」，更多进「标本柜」（所有 App 一页，三列格子，state.moView="apps"）。昼夜开关就是首页右上的日期：点一下换昼夜，长按回到跟着时间。底栏只有四个宋体字。
 - 她想以后做一个文艺/日式壳。第一版设计稿在 `design/wa/`，她说「很好看，留着下次做」。
 
 ## 别做的事

@@ -96,14 +96,6 @@ const MorphoShell = (() => {
   }
   const ROMAN = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'];
 
-  function themeSwitch(){
-    const m = mode();
-    return `<span class="mo-sw" role="group" aria-label="昼夜">
-      <button type="button" data-mo-mode="day" class="${m === 'day' ? 'on' : ''}">昼</button>
-      <button type="button" data-mo-mode="night" class="${m === 'night' ? 'on' : ''}">夜</button>
-      <button type="button" data-mo-mode="auto" class="${m === 'auto' ? 'on' : ''}" title="跟着时间">自</button>
-    </span>`;
-  }
 
   /* 首页：最近用过的四样 + 「更多」；更多 = 单独一页「标本柜」，所有 App 都在里面 */
   function home(){
@@ -115,8 +107,7 @@ const MorphoShell = (() => {
         <span class="mo-s">${h(meta(f.key))}</span><span class="mo-ar">→</span></button>`).join('');
     const lt = lw && lw.at ? new Date(lw.at) : null;
     return `<div class="page mo-home">
-      <div class="mo-top"><b>MORPHO</b><span class="mo-date">${WD[now.getDay()]} · ${pad(now.getDate())} ${MO[now.getMonth()]} ${now.getFullYear()}</span></div>
-      <div class="mo-top2">${themeSwitch()}</div>
+      <div class="mo-top"><b>MORPHO</b><button type="button" class="mo-date" data-mo-date aria-label="点一下换昼夜，长按跟着时间">${WD[now.getDay()]} · ${pad(now.getDate())} ${MO[now.getMonth()]} ${now.getFullYear()}<i class="mo-dn">${mode() === 'auto' ? '' : (isNight() ? '☾' : '☼')}</i></button></div>
       <div class="mo-stage${lightUp() ? ' mo-lightup' : ''}" data-mo-fly>
         <img class="mo-fly" src="${IMG}" alt="" draggable="false">
       </div>
@@ -180,16 +171,29 @@ const MorphoShell = (() => {
     }, {passive: true});
   }
 
+  /* ── 日期那一行：点一下换昼夜，长按回到「跟着时间」 ── */
+  function setMode(m, tip){
+    prefs().mode = m; try{ persist('morphoPrefs'); }catch(_){}
+    applyThemeVars(); render();
+    if(tip && typeof showToast === 'function') showToast(tip);
+  }
+  let dateHold = null, dateLong = false;
+  document.addEventListener('pointerdown', e => {
+    if(state.uiShell !== 'morpho') return;
+    const d = e.target && e.target.closest && e.target.closest('[data-mo-date]'); if(!d) return;
+    dateLong = false; clearTimeout(dateHold);
+    dateHold = setTimeout(() => { dateLong = true; try{ navigator.vibrate && navigator.vibrate(12); }catch(_){} setMode('auto', '跟着时间走：7 点到 19 点是白天'); }, 600);
+  }, true);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => document.addEventListener(ev, () => clearTimeout(dateHold), true));
+
   /* ── 点击：昼夜 / 全部 / 去聊天 / 拍蝴蝶 ── */
   document.addEventListener('click', e => {
     if(state.uiShell !== 'morpho') return;
     const t = e.target; if(!t || !t.closest) return;
-    const md = t.closest('[data-mo-mode]');
-    if(md){
+    if(t.closest('[data-mo-date]')){
       e.preventDefault(); e.stopImmediatePropagation();
-      prefs().mode = md.getAttribute('data-mo-mode');
-      try{ persist('morphoPrefs'); }catch(_){}
-      applyThemeVars(); render(); return;
+      if(dateLong){ dateLong = false; return; }
+      setMode(isNight() ? 'day' : 'night', isNight() ? '白天' : '夜里'); return;
     }
     const ap = t.closest('[data-mo-apps]');
     if(ap){
@@ -252,6 +256,8 @@ const MorphoShell = (() => {
       if(t){ const w = document.createElement('div'); w.className = 'mo-titlewrap';
         t.replaceWith(w); w.innerHTML = `<span class="mo-label">${h(label(state.subPage))}</span>`; w.appendChild(t); }
     }
+    const inp = document.getElementById('chat-input');
+    if(inp && state.chatMode !== 'story') inp.placeholder = '写给他……';
     /* 名字里的 emoji 收掉：高级感最怕花 */
     app.querySelectorAll('.chat-name, .msg-meta-name').forEach(n => { const t = n.textContent, c = t.replace(EMO, '').trim(); if(c && c !== t) n.textContent = c; });
   }
@@ -277,7 +283,7 @@ const MorphoShell = (() => {
   let actx = null;
   document.addEventListener('pointerdown', e => {
     if(state.uiShell !== 'morpho') return;
-    const b = e.target && e.target.closest && e.target.closest('.mo-row, .mo-cell, .mo-last, .mo-sw button, .bottom-nav button, .send-btn.active, .back-btn');
+    const b = e.target && e.target.closest && e.target.closest('.mo-row, .mo-cell, .mo-last, .mo-date, .bottom-nav button, .send-btn.active, .back-btn');
     if(!b) return;
     try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
       o.type = 'triangle'; o.frequency.setValueAtTime(2400, t); o.frequency.exponentialRampToValueAtTime(1200, t + .03);
