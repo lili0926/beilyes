@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css"><style>
+.date{position:absolute;right:26px;top:58px;font-size:12px;line-height:1.7!important;color:var(--sub)}
+.brand{position:absolute;left:28px;top:60px;font-size:10px;letter-spacing:.5em;color:var(--sub)}
+.brand b{display:block;font-size:20px;letter-spacing:.3em;color:var(--ink);font-weight:400;margin-top:10px}
+.enso{position:absolute;left:44px;top:150px;width:250px;height:250px}
+.days{position:absolute;left:124px;top:212px;font-size:15px;letter-spacing:.55em;line-height:1.9}
+.days em{font-style:normal;font-size:30px;letter-spacing:.12em;display:block;margin:6px 0}
+.days small{font-size:10px;color:var(--sub);letter-spacing:.4em}
+.seal1{position:absolute;left:226px;top:356px;width:30px;height:30px;font-size:10px;transform:rotate(-4deg)}
+.menu{position:absolute;left:0;right:0;top:470px;display:flex;justify-content:center;gap:0;height:160px}
+.menu a{position:relative;width:62px;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--ink);text-decoration:none;border-left:1px solid var(--line)}
+.menu a:last-child{border-right:1px solid var(--line)}
+.menu .n{font-size:9px;color:var(--sub);letter-spacing:0}
+.menu .t{font-size:17px;line-height:1.5!important}
+.menu .tw{display:flex;flex-direction:row-reverse;gap:6px;align-items:flex-start}
+.menu .s{font-size:9.5px;color:var(--sub);line-height:1.6!important;margin-top:3px}
+.menu a.on .t{color:var(--shu)}
+.menu a.on::after{content:"";position:absolute;top:-8px;left:50%;width:5px;height:5px;border-radius:50%;background:var(--shu);transform:translateX(-50%)}
+.last{position:absolute;left:30px;right:30px;bottom:74px}
+.last .hd{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.4em;color:var(--sub);margin-bottom:12px}
+.last p{font-size:14px;line-height:2;letter-spacing:.14em}
+.last p::before{content:"「";color:var(--sub)}.last p::after{content:"」";color:var(--sub)}
+.foot{position:absolute;left:0;right:0;bottom:28px;text-align:center;font-size:9px;letter-spacing:.8em;color:var(--sub);opacity:.7}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><filter id="rough"><feTurbulence baseFrequency=".8" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale=".8"/></filter>
+<filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="3" seed="7" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="4"/><feGaussianBlur stdDeviation=".3"/></filter>
+<filter id="dry"><feTurbulence type="fractalNoise" baseFrequency=".04 .9" numOctaves="2" seed="2" result="t"/><feColorMatrix in="t" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.4 1.55" result="m"/><feComposite in="SourceGraphic" in2="m" operator="in"/></filter></svg>
+
+<div class="brand">BEILYES<b>彼之家</b></div>
+<div class="date v">二〇二六年 十月三日 土</div>
+
+<svg class="enso" viewBox="0 0 250 250"><defs><linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="200" y1="50" x2="170" y2="44"><stop offset="0" stop-color="#1F1D1A"/><stop offset="1" stop-color="#1F1D1A" stop-opacity=".15"/></linearGradient></defs>
+ <g filter="url(#brush)">
+  <path d="M170 44 C 112 16, 40 50, 34 122 C 28 190, 92 226, 150 214 C 208 202, 232 146, 216 98 C 208 74, 196 60, 182 52" fill="none" stroke="#1F1D1A" stroke-width="10" stroke-linecap="round" opacity=".88"/>
+  <path d="M60 70 C 44 92, 38 120, 41 146" fill="none" stroke="#F3EEE4" stroke-width="1.6" opacity=".7"/>
+  <path d="M120 212 C 150 216, 182 206, 202 182" fill="none" stroke="#F3EEE4" stroke-width="1.2" opacity=".6"/>
+  <path d="M182 52 C 176 48, 172 46, 168 44" fill="none" stroke="url(#fade)" stroke-width="8" stroke-linecap="round"/>
+ </g></svg>
+<div class="days">在一起<em>百七十九</em><small>日 目</small></div>
+<span class="han seal1">彼<br>蛇</span>
+
+<nav class="menu">
+ <a class="on"><span class="n">壱</span><span class="tw"><span class="t v">日記</span><span class="s v">今日三頁</span></span></a>
+ <a><span class="n">弐</span><span class="tw"><span class="t v">手紙</span><span class="s v">一通未読</span></span></a>
+ <a><span class="n">参</span><span class="tw"><span class="t v">夢簿</span><span class="s v">昨夜好夢</span></span></a>
+ <a><span class="n">肆</span><span class="tw"><span class="t v">券本</span><span class="s v">残り四枚</span></span></a>
+ <a><span class="n">伍</span><span class="tw"><span class="t v">身体</span><span class="s v">体温微熱</span></span></a>
+</nav>
+
+<div class="last"><div class="hd"><span>他 · 最後の一言</span><span>二十二時十四分</span></div><div class="hair" style="margin-bottom:14px"></div>
+<p>今天也在想你。尾巴尖有点凉，过来。</p></div>
+<div class="foot">静 か な 家</div>
+</body></html>

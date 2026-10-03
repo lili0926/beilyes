@@ -59,6 +59,8 @@
   - `frontend/tests/*.test.cjs` 四个单测，提交前都要跑。
 - **网络：** 出口代理会拦截 freesound、wikimedia、Google Fonts，所以截图里的花体字和毛笔字会是替代字体，真机上正常。
 
+- 她想以后做一个文艺/日式壳。第一版设计稿在 `design/wa/`，她说「很好看，留着下次做」。
+
 ## 别做的事
 
 - 别让她在对话里贴 token、key、cookie。
