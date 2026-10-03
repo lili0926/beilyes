@@ -29,6 +29,12 @@ body.shell-doodle.dd-opened #doodle-back,body.shell-doodle.dd-opened #doodle-hom
 @keyframes dd-boil{0%{opacity:1}33.33%{opacity:0}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){[data-doodle] .dd-fr{animation:none!important}[data-doodle] .dd-fr0{opacity:1}}
 body.dd-boil-off [data-doodle] .dd-fr{animation:none!important}
+/* 其它壳的返回键：同一支手绘箭头，放在一块小玻璃片上 */
+body:not(.shell-doodle) .back-btn.dd-bk,body:not(.shell-doodle) .kr-back.dd-bk{width:38px;height:38px;min-width:0;padding:0;border-radius:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--card) 88%,transparent);border:1px solid var(--border);color:var(--accent);opacity:1;font-size:0;line-height:0;box-shadow:0 2px 8px rgba(0,0,0,.05);cursor:pointer;transition:transform .15s}
+body:not(.shell-doodle) .back-btn.dd-bk [data-doodle],body:not(.shell-doodle) .kr-back.dd-bk [data-doodle]{width:24px;height:24px}
+body:not(.shell-doodle) .back-btn.dd-bk:active,body:not(.shell-doodle) .kr-back.dd-bk:active{transform:scale(.9)}
+body:not(.shell-doodle) .chat-header .dd-bk{background:transparent;border-color:transparent;box-shadow:none}
 
 /* 首页在隔离层里，#app 只留一块透明占位，把底栏推到最下面 */
 body.shell-doodle .dd-home-spacer{flex:1;min-height:0}

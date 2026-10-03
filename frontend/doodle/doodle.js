@@ -1259,8 +1259,23 @@ const DoodleShell = (() => {
     document.body.classList.toggle('dd-dark', dark);
     document.body.classList.toggle('dd-boil-off', !p.boil);
   }
+  /* 返回键在所有壳里都用这支手绘箭头（她 2026-10-03 要的）；涂鸦壳自己那套在下面另做 */
+  function backAnyShell(){
+    const app = document.getElementById('app'); if(!app) return;
+    const bs = app.querySelectorAll('.sub-header .back-btn, .page-head .back-btn, .chat-header #chat-exit-home.back-btn, .chat-header .kr-back');
+    if(!bs.length) return;
+    ensureDefs(document);
+    bs.forEach(b => {
+      if(b.querySelector('[data-doodle]')) return;
+      if(!b.getAttribute('aria-label')) b.setAttribute('aria-label', '返回');
+      b.classList.add('dd-bk');
+      b.innerHTML = '<span data-doodle="back" data-boil="hover"></span>';
+    });
+    drawIcons(app);
+  }
   function afterRender(){
     if(!ON()){
+      try{ backAnyShell(); }catch(e){}
       Object.values(layers).forEach(({host}) => { host.hidden = true; });
       document.body.classList.remove('dd-opened','dd-dark','dd-boil-off');
       if(TG.on) tgLeave();
