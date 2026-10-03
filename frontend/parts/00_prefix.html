@@ -108,14 +108,14 @@
 
     /* ── 聊天侧边栏 ── */
     .chat-sidebar-mask {
-      position: fixed; inset: 0; z-index: 80;
+      position: fixed; inset: 0; z-index: 110;
       background: rgba(30,24,20,.28);
       backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
       opacity: 0; pointer-events: none; transition: opacity .2s;
     }
     .chat-sidebar-mask.open { opacity: 1; pointer-events: auto; }
     .chat-sidebar {
-      position: fixed; top: 0; left: 0; bottom: 0; z-index: 81;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 111;
       width: min(320px, 88vw);
       background: var(--card);
       border-right: 1px solid var(--border);

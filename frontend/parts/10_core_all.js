@@ -5755,6 +5755,9 @@ function render(){
   }catch(e){}
   // 发送按钮会先把输入框 blur 掉，所以按上面那套记不到焦点；发消息时显式点名要收回焦点
   if(state.__refocusChat){ savedFocus = { id: "chat-input", start: 0, end: 0 }; }
+  // 侧栏里点任何东西都会整页重绘，侧栏也跟着重建 → 滚回顶上（她 2026-10-03 报的）。先记住，重绘完放回去
+  let savedSbScroll = null;
+  try{ const sb = document.querySelector(".chat-sidebar-body"); if(sb && state.chatSidebarOpen) savedSbScroll = sb.scrollTop; }catch(e){}
   // 重绘前记住消息列表滚动位置（避免点思考/开关时跳回顶部）
   let savedChatScroll = null;
   if(state.tab==="chat" && !state.needChatScroll){
@@ -5903,6 +5906,9 @@ function render(){
     } else if(box && savedChatScroll != null){
       box.scrollTop = savedChatScroll;
     }
+  }
+  if(savedSbScroll != null){
+    try{ const sb = document.querySelector(".chat-sidebar-body"); if(sb){ sb.scrollTop = savedSbScroll; requestAnimationFrame(()=>{ sb.scrollTop = savedSbScroll; }); } }catch(e){}
   }
   if(savedPageScroll != null){
     const page = document.querySelector("#app > .page") || document.querySelector(".home-panel");
@@ -23470,7 +23476,7 @@ function sbContactsCard(){
     const tag = ag.channel === "cc" ? "订阅" : "API";
     const ava = ag.avatar
       ? `<img src="${escAttr(ag.avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"/>`
-      : esc(String(ag.name || "A").slice(0, 1));
+      : esc(Array.from(String(ag.name || "A").replace(/\p{Extended_Pictographic}|\uFE0F|\u200D/gu, "").trim() || "A")[0]);
     const on = ag.id === cur;
     return `<button type="button" class="sb-file-item" data-sb-contact="${escAttr(ag.id)}" style="${on ? "background:color-mix(in srgb, var(--accent) 14%, transparent);" : ""}">
       <div class="sb-file-ico" style="overflow:hidden;border-radius:50%;${ag.avatar ? "" : "background:" + escAttr(ag.color || "var(--accent)") + ";color:#fff;font-weight:700"}">${ava}</div>

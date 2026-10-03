@@ -200,3 +200,14 @@ body.shell-doodle .dd-s-back,body.shell-doodle .dd-s-more .set-back{display:inli
 body.shell-doodle .dd-s-back [data-doodle]{width:18px;height:18px}
 body.shell-doodle .dd-s-more .set-head .page-title{display:block;margin:0;font:400 20px var(--dd-font);color:var(--dd-text);letter-spacing:.08em}
 body.shell-doodle .dd-s-more .set-head .page-title svg{display:none}
+
+/* ===== 侧边栏：跟涂鸦壳同一套卡片 ===== */
+body.shell-doodle .chat-sidebar{border-right:1px solid var(--dd-line);box-shadow:10px 0 30px -12px rgba(90,70,130,.35)}
+body.shell-doodle .chat-sidebar-head{border-bottom:1px dashed var(--dd-line);padding:14px 16px}
+body.shell-doodle .chat-sidebar-head .sb-title{font:700 18px var(--dd-font);color:var(--dd-text);letter-spacing:.1em}
+body.shell-doodle .chat-sidebar-head .sb-close{background:var(--dd-glass);border-color:var(--dd-line);color:var(--dd-text-2)}
+body.shell-doodle .chat-sidebar-body{padding:14px 14px calc(24px + env(safe-area-inset-bottom,0px))}
+body.shell-doodle .sb-card{background:var(--dd-glass);border:1.5px solid var(--dd-line);border-radius:18px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--dd-shadow)}
+body.shell-doodle .sb-card-label{font:400 13px var(--dd-font);letter-spacing:.15em;color:var(--dd-text-2);text-transform:none;margin-bottom:8px}
+body.shell-doodle .sb-file-item{border-radius:14px}
+body.shell-doodle .sb-file-name{font-family:var(--dd-font)}
