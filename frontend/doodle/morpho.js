@@ -90,7 +90,7 @@ const MorphoShell = (() => {
         case 'wallet': { const w = state.wallet || {}; return w.balance != null ? `${w.balance} 🐟` : ''; }
         case 'memory': return (state.memories || []).length ? `${state.memories.length} 条` : '';
       }
-      if(typeof bpMeta === 'function') return bpMeta(key).txt || '';
+      if(typeof bpMeta === 'function'){ const t = String(bpMeta(key).txt || ''); return t === '0' ? '' : t; }
     }catch(e){}
     return '';
   }
@@ -105,40 +105,56 @@ const MorphoShell = (() => {
     </span>`;
   }
 
+  /* 首页：最近用过的四样 + 「更多」；更多 = 单独一页「标本柜」，所有 App 都在里面 */
   function home(){
-    const now = new Date(), n = days(), lw = lastWord(), idxOpen = !!prefs().idxOpen;
+    if(state.moView === 'apps') return apps();
+    const now = new Date(), n = days(), lw = lastWord();
     const rows = picks().map((f, i) => `
       <button type="button" class="mo-row feat-card${i === 0 ? ' on' : ''}" data-sub="${h(f.key)}">
         <span class="mo-i">${ROMAN[i]}.</span><span class="mo-t">${h(f.label)}${i === 0 ? '<i class="mo-dot"></i>' : ''}</span>
         <span class="mo-s">${h(meta(f.key))}</span><span class="mo-ar">→</span></button>`).join('');
-    const pk = new Set(picks().map(f => f.key));
-    let k = 0;
-    const idx = idxOpen ? `<div class="mo-idx">${FEAT_GROUPS.map(g => {
-      const its = g.items.filter(f => !pk.has(f.key));
-      if(!its.length) return '';
-      return `<div class="mo-idx-grp">${h(g.label)}</div>` + its.map(f => { k++; const s = meta(f.key);
-        return `<button type="button" class="mo-irow feat-card" data-sub="${h(f.key)}"><span class="mo-ino">${pad(k)}</span><span class="mo-inm">${h(f.label)}</span><span class="mo-ist">${h(s)}</span></button>`; }).join('');
-    }).join('')}</div>` : '';
-    const total = allItems().length - pk.size;
     const lt = lw && lw.at ? new Date(lw.at) : null;
     return `<div class="page mo-home">
       <div class="mo-top"><b>MORPHO</b><span class="mo-date">${WD[now.getDay()]} · ${pad(now.getDate())} ${MO[now.getMonth()]} ${now.getFullYear()}</span></div>
       <div class="mo-top2">${themeSwitch()}</div>
       <div class="mo-stage${lightUp() ? ' mo-lightup' : ''}" data-mo-fly>
         <img class="mo-fly" src="${IMG}" alt="" draggable="false">
-        <i class="mo-sheen" aria-hidden="true"></i>
       </div>
       <div class="mo-no"><div class="mo-n"><small>N°</small><span class="mo-scale">${n}</span></div><p>在一起的第${cnNum(n)}天</p></div>
       <div class="mo-tag"><span>Morpho peleides</span><span>${startStr() ? '采集于 ' + h(startStr()) : ''}</span></div>
+      <div class="mo-sec"><span>最近</span><i></i><span class="mo-sec-en">Recently</span></div>
       <nav class="mo-menu">${rows}
-        <button type="button" class="mo-row mo-all" data-mo-idx="${idxOpen ? '0' : '1'}" aria-expanded="${idxOpen}">
-          <span class="mo-i">—</span><span class="mo-t">全部</span><span class="mo-s">${total} 样</span><span class="mo-ar">${idxOpen ? '↑' : '↓'}</span></button>
+        <button type="button" class="mo-row mo-all" data-mo-apps="1">
+          <span class="mo-i">—</span><span class="mo-t">更多</span><span class="mo-s">${allItems().length} 样</span><span class="mo-ar">→</span></button>
       </nav>
-      ${idx}
       <button type="button" class="mo-last" data-mo-chat>
         <span class="mo-last-hd"><span>他 · 最后一句</span><span>${lt && !isNaN(lt) ? pad(lt.getHours()) + ':' + pad(lt.getMinutes()) : ''}</span></span>
         <span class="mo-last-p">${lw ? h(lw.t) : '还没说话。去找他吧。'}</span>
       </button>
+    </div>`;
+  }
+  /* 标本柜：一格一样，像抽屉里的隔间；分组用罗马数字 */
+  const GROUP_EN = {'功能': 'Instruments', '游戏': 'Games', '日常': 'Everyday'};
+  function apps(){
+    let k = 0;
+    const rec = new Set(picks().map(f => f.key));
+    const groups = (typeof FEAT_GROUPS !== 'undefined' ? FEAT_GROUPS : []).map((g, gi) => `
+      <section class="mo-grp">
+        <div class="mo-sec"><span>${h(g.label)}</span><i></i><span class="mo-sec-en">${['I', 'II', 'III', 'IV', 'V'][gi] || ''}. ${h(GROUP_EN[g.label] || '')}</span></div>
+        <div class="mo-grid">${g.items.map(f => { k++; const m = meta(f.key);
+          return `<button type="button" class="mo-cell feat-card${rec.has(f.key) ? ' rec' : ''}" data-sub="${h(f.key)}">
+            <span class="mo-cno">${pad(k)}</span>
+            <span class="mo-cic"><i data-lucide="${h(f.icon || 'circle')}"></i></span>
+            <span class="mo-cnm">${h(f.label)}</span>
+            <span class="mo-cst">${h(m)}</span></button>`; }).join('')}</div>
+      </section>`).join('');
+    return `<div class="page mo-home mo-apps">
+      <div class="sub-header mo-apps-hd">
+        <button type="button" class="back-btn" data-mo-apps="0" aria-label="回首页">‹</button>
+        <div class="mo-titlewrap"><span class="mo-label">Cabinet — ${k || allItems().length} specimens</span><h2 class="page-title">标本柜</h2></div>
+      </div>
+      ${groups}
+      <p class="mo-apps-ft">— 点开的那样，会排到首页「最近」里 —</p>
     </div>`;
   }
 
@@ -175,13 +191,19 @@ const MorphoShell = (() => {
       try{ persist('morphoPrefs'); }catch(_){}
       applyThemeVars(); render(); return;
     }
-    const ix = t.closest('[data-mo-idx]');
-    if(ix){
+    const ap = t.closest('[data-mo-apps]');
+    if(ap){
       e.preventDefault(); e.stopImmediatePropagation();
-      prefs().idxOpen = ix.getAttribute('data-mo-idx') === '1';
-      try{ persist('morphoPrefs'); }catch(_){}
-      render(); return;
+      state.moView = ap.getAttribute('data-mo-apps') === '1' ? 'apps' : null;
+      render();
+      const pg = document.querySelector('.mo-home'); if(pg) pg.scrollTop = 0;
+      return;
     }
+    /* 从首页 / 标本柜点开的那样，记进「最近」（别处的委托可能先把点击吃掉，这里自己记一笔） */
+    const sb = t.closest('.mo-home [data-sub]');
+    if(sb){ try{ const key = sb.getAttribute('data-sub'); const r = JSON.parse(localStorage.getItem('recentSubs') || '[]').filter(x => x !== key); r.unshift(key); localStorage.setItem('recentSubs', JSON.stringify(r.slice(0, 8))); }catch(_){} }
+    /* 底栏点「首页」：回到真正的首页，不停在标本柜 */
+    if(t.closest('.bottom-nav button[data-tab="home"]')) state.moView = null;
     if(t.closest('[data-mo-chat]')){
       e.preventDefault(); e.stopImmediatePropagation();
       const b = document.querySelector('.bottom-nav button[data-tab="chat"]');
@@ -255,7 +277,7 @@ const MorphoShell = (() => {
   let actx = null;
   document.addEventListener('pointerdown', e => {
     if(state.uiShell !== 'morpho') return;
-    const b = e.target && e.target.closest && e.target.closest('.mo-row, .mo-irow, .mo-last, .mo-sw button, .bottom-nav button, .send-btn.active, .back-btn');
+    const b = e.target && e.target.closest && e.target.closest('.mo-row, .mo-cell, .mo-last, .mo-sw button, .bottom-nav button, .send-btn.active, .back-btn');
     if(!b) return;
     try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
       o.type = 'triangle'; o.frequency.setValueAtTime(2400, t); o.frequency.exponentialRampToValueAtTime(1200, t + .03);
