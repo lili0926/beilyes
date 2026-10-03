@@ -2988,6 +2988,7 @@ const state = {
   edenPlaylists: LS.get("edenPlaylists", []),
   edenMotionPaused: LS.get("edenMotionPaused", false),
   edenGardenPrefs: LS.get("edenGardenPrefs",{}),
+  morphoPrefs: LS.get("morphoPrefs",{}), // 蓝闪蝶壳：昼/夜/自动、目录展开
   doodlePrefs: LS.get("doodlePrefs",{}), // 星光涂鸦壳：主题/星光/抖线/聊天模式/播放模式等 // classic | pixel | eldritch | claude | korean | blueprint
   bpFloor: "f1", // 蓝晒壳当前楼层（不持久化：冷启动回一层，会话内切走再回来还在原楼层）
   bpDiazo: LS.get("bpDiazo", false), // 蓝晒壳晒印：false=蓝晒（蓝底白线）· true=白图（浅底蓝线）
@@ -3508,6 +3509,7 @@ if(LS.get("contextLimit", null) === 40 && !LS.get("_ctxModeV2", false)){
 function T(){
   if(state.uiShell==="eden") return EdenColorStudio.override(EdenTheme.palette());
   if(state.uiShell==="doodle") return DoodleShell.palette();
+  if(state.uiShell==="morpho" && typeof MorphoShell!=="undefined") return MorphoShell.palette(); // 蓝闪蝶：昼夜两套
   if((state.uiShell||"")==="blueprint") return bpTheme();
   if((state.uiShell||"")==="weibo") return wbTheme();
   return EdenColorStudio.override(THEMES[state.theme]||THEMES["桃气浅春"]);
@@ -4549,7 +4551,7 @@ function contrastFg(hex){
 }
 function applyThemeVars(){
   const t=T();
-  const isBp = (state.uiShell||"")==="blueprint" || state.uiShell==="eden" || state.uiShell==="doodle";
+  const isBp = (state.uiShell||"")==="blueprint" || state.uiShell==="eden" || state.uiShell==="doodle" || state.uiShell==="morpho";
   const r=document.documentElement;
   // 韩系壳：锁定浅灰黑白变量，避免主题色盘把桌面冲花
   if((state.uiShell||"")==="korean"){
@@ -4640,10 +4642,11 @@ function applyThemeVars(){
   // 字体：奈の小猫
   document.body.classList.toggle("font-kitten", state.uiFont === "kitten");
   // UI 壳：经典 / 像素农场
-  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","shell-weibo","shell-eden","shell-doodle","wb-dark","bp-diazo","rpg-chat-on");
+  document.body.classList.remove("shell-classic","shell-pixel","shell-eldritch","shell-claude","shell-korean","shell-blueprint","shell-weibo","shell-eden","shell-doodle","shell-morpho","mo-night","wb-dark","bp-diazo","rpg-chat-on");
   const sh = (state.uiShell || "classic");
   if(sh === "eden") document.body.classList.add("shell-eden");
   else if(sh === "doodle") document.body.classList.add("shell-doodle");
+  else if(sh === "morpho" && typeof MorphoShell!=="undefined") MorphoShell.bodyClass();
   else if(sh === "pixel") document.body.classList.add("shell-pixel");
   else if(sh === "eldritch") document.body.classList.add("shell-eldritch");
   else if(sh === "claude") document.body.classList.add("shell-claude");
@@ -5448,7 +5451,7 @@ function systemPromptParts(ag){
 }
 
 // 各 state key → localStorage 存储 key 的映射（restoreNativeMirrors 冷启动反查也要用）
-const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent", patSuffix:"patSuffix", sfxMeta:"sfxMeta" };
+const PERSIST_MAP={ momentsCoverPrivate:"momentsCoverPrivate", momentsCoverPublic:"momentsCoverPublic", momentCards:"momentCards", apiPresets:"apiPresets", theme:"theme", questData:"questData", questAchievements:"questAchievements", flightChess:"flight_chess_progress", streamOn:"streamOn", questEnabled:"questEnabled", pattern:"pattern", customWallpaper:"customWallpaper", bubbleStyle:"bubbleStyle", bubbleGrad:"bubbleGrad", bubbleOpacity:"bubbleOpacity", bubbleMeColor:"bubbleMeColor", bubbleThemColor:"bubbleThemColor", uiFont:"uiFont", uiShell:"uiShell", edenMotionPaused:"edenMotionPaused", edenGardenPrefs:"edenGardenPrefs", edenPlaylists:"edenPlaylists", doodlePrefs:"doodlePrefs", morphoPrefs:"morphoPrefs", bpDiazo:"bpDiazo", chatViewMode:"chatViewMode", chatStyleMode:"chatStyleMode", biscaBot:"biscaBot", rpgSprites:"rpgSprites", uiTimezone:"uiTimezone", chatProjectFiles:"chatProjectFiles", claudeQuota:"claudeQuota", weatherCache:"weatherCache", apiConfig:"apiConfig", agents:"agents", chatTarget:"chatTarget", chatMode:"chatMode", chatThreads:"chatThreads", memories:"memories", prompts:"prompts", coupleInfo:"coupleInfo", albumData:"albumData", coupons:"coupons", loveScore:"loveScore", profileMe:"profileMe", profileThem:"profileThem", htmlGameSrc:"htmlGameSrc", htmlGameName:"htmlGameName", thoughtGuide:"thoughtGuide", thoughtOn:"thoughtOn", ariesCameraOn:"ariesCameraOn", cardsToolOn:"cardsToolOn", xEnabled:"xEnabled", pocketInjectOn:"pocketInjectOn", htmlGameCollection:"htmlGameCollection", puppyCustom:"puppyCustom", wallet:"wallet", readMarks:"readMarks", cmdList:"cmdList", contextLimit:"contextLimit", musicConfig:"musicConfig", musicNow:"musicNow", musicNeteaseAuthed:"musicNeteaseAuthed", spotifyList:"spotifyList", wardrobeItems:"wardrobeItems", todayOutfit:"todayOutfit", wardrobeFeedChat:"wardrobeFeedChat", books:"books", readingNow:"readingNow", readFeedChat:"readFeedChat", watchNow:"watchNow", watchFeedChat:"watchFeedChat", baby:"baby", babyFeedChat:"babyFeedChat", babyOverhear:"babyOverhear", menuBook:"menuBook", menuShareOn:"_menuShareOn", menuOrderShareOn:"_menuOrderShareOn", mcpConfig:"mcpConfig", roleplays:"roleplays", activeRoleplayId:"activeRoleplayId", desireDriveOn:"desireDriveOn", divinationSkillOn:"divinationSkillOn", bodyVitals:"bodyVitals", sixAxis:"sixAxis", bodyFeel:"bodyFeel", bodyWant:"bodyWant", proactiveConfig:"proactiveConfig", momentsFedConfig:"momentsFedConfig", proactiveLastLocal:"proactiveLastLocal", proactiveInbox:"proactiveInbox", dreamConfig:"dreamConfig", dreamState:"dreamState", cabinets:"cabinets", cabinetFeedChat:"cabinetFeedChat", sparkVault:"sparkVault", stickers:"stickers", pocketConfig:"pocketConfig", petOn:"petOn", petPos:"petPos", callConfig:"callConfig", callRecords:"callRecords", pushStats:"pushStats", hisPhone:"hisPhone", captivityConfig:"captivityConfig", backupRemind:"backupRemind", bgGen:"bgGen", memCheckpoint:"memCheckpoint", memLastAutoAt:"memLastAutoAt", memAutoDisabled:"memAutoDisabled", memRemote:"memRemote", savedChats:"savedChats", savedCats:"savedCats", letterSurfacedIds:"letterSurfacedIds", mcUnlocked:"mcUnlocked", moments:"moments", galateaEventId:"galateaEventId", eatApple:"eatApple", myRemark:"myRemark", remarkEvents:"remarkEvents", sigillo:"sigillo", sigilloDraft:"sigilloDraft", sgNotice:"sgNotice", snake:"snake", snNotice:"snNotice", snakeOn:"snakeOn", period:"period", trip:"trip", places:"places", tripLog:"tripLog",explore:"explore", sayDay:"sayDay", guardConfig:"guardConfig", apiTimeoutSec:"apiTimeoutSec", chatHeatMap:"chatHeatMap", pillFavs:"pillFavs", pillRecent:"pillRecent", patSuffix:"patSuffix", sfxMeta:"sfxMeta" };
 // 大 base64 图片类 key：persist 时额外强制镜像到原生存储，避免占满 localStorage 5MB 配额
 // 值里含 base64 大图的键：额外镜像到 Preferences，冷启动据此恢复。
 // stickers 从「只存图片直链」改成「可以存本机选的图」之后也属于这一类了。
@@ -7238,6 +7241,7 @@ function renderHomeSwipe(){
     return renderHomeKorean();
   }
   if((state.uiShell || "") === "blueprint") return renderHomeBlueprint();
+  if(state.uiShell==="morpho" && typeof MorphoShell!=="undefined") return MorphoShell.home();
   const p = state.homePage === 0 ? "page0" : state.homePage === 2 ? "page2" : "page1";
   return `<div class="home-swipe-wrap" id="home-swipe">
     <div class="home-track ${p}" id="home-track">
@@ -25572,6 +25576,7 @@ function renderTheme(){
         <button type="button" class="sw-chip${state.uiShell==="blueprint"?" on":""}" data-ui-shell="blueprint">蓝晒</button>
         <button type="button" class="sw-chip${state.uiShell==="eden"?" on":""}" data-ui-shell="eden">伊甸天使</button>
         <button type="button" class="sw-chip${state.uiShell==="doodle"?" on":""}" data-ui-shell="doodle">星光涂鸦</button>
+        <button type="button" class="sw-chip${state.uiShell==="morpho"?" on":""}" data-ui-shell="morpho">蓝闪蝶</button>
       </div>
       <div class="sw-sec-label" style="margin-top:12px">字体</div>
       <div class="sw-chip-row">

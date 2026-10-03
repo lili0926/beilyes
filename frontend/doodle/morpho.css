@@ -1,0 +1,105 @@
+/* 蓝闪蝶壳 shell-morpho（白天）/ shell-morpho.mo-night（黑夜）
+   配色由 T() 整份换掉；这里只管形态：发丝线、留白、只有闪蝶的蓝是彩色的 */
+body.shell-morpho{
+  --mo-blue:#1A5CFF;--mo-blue2:#0E3FD0;--mo-glow:rgba(26,92,255,0);
+  --mo-line:rgba(20,23,30,.09);--mo-mine:linear-gradient(135deg,#1747E0,#1A5CFF 55%,#2E86FF);
+  --mo-fly:drop-shadow(0 22px 18px rgba(20,40,110,.18)) drop-shadow(0 4px 4px rgba(20,30,60,.12));
+  --mo-lift:0 10px 26px -18px rgba(20,40,90,.35);
+  --mo-glass:rgba(247,246,242,.82);
+}
+body.shell-morpho.mo-night{
+  --mo-blue:#46BFFF;--mo-blue2:#1E55F5;--mo-glow:rgba(40,110,255,.20);
+  --mo-line:rgba(160,190,255,.13);--mo-mine:linear-gradient(135deg,#1A3FC4,#1B5BEF 55%,#2C8BFF);
+  --mo-fly:drop-shadow(0 0 26px rgba(40,120,255,.45)) drop-shadow(0 0 2px rgba(120,200,255,.5));
+  --mo-lift:0 0 0 transparent;
+  --mo-glass:rgba(6,8,15,.78);
+}
+body.shell-morpho #app{background-color:var(--bg)}
+body.shell-morpho:not(.mo-night) #app{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .48 0 0 0 0 .42 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* ── 通用：卡片、按钮、标题都收成细线 ── */
+body.shell-morpho .card,body.shell-morpho .section-body{border:1px solid var(--mo-line);box-shadow:var(--mo-lift);border-radius:14px}
+body.shell-morpho .feat-card{border:1px solid var(--mo-line);box-shadow:none}
+body.shell-morpho .feat-icon{background:transparent;color:var(--mo-blue)}
+body.shell-morpho .feat-section-label,body.shell-morpho .section-title{font-size:10px;letter-spacing:.28em;color:var(--sub);font-weight:400}
+body.shell-morpho .page-title{font-weight:400;letter-spacing:.18em}
+body.shell-morpho .btn-accent{background:var(--mo-mine);color:#fff;border:0}
+
+/* ── 底栏：一层薄玻璃 + 一条发丝线，当前页是一点蓝 ── */
+body.shell-morpho .bottom-nav{background:var(--mo-glass);border-top:1px solid var(--mo-line);box-shadow:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+body.shell-morpho .bottom-nav button{position:relative;font-size:9.5px;letter-spacing:.2em;padding:8px 0 6px}
+body.shell-morpho .bottom-nav button .icon{opacity:.75}
+body.shell-morpho .bottom-nav button.active{color:var(--mo-blue);font-weight:400}
+body.shell-morpho .bottom-nav button.active::before{content:"";position:absolute;top:-1px;left:50%;width:18px;height:2px;border-radius:2px;background:var(--mo-blue);transform:translateX(-50%);box-shadow:0 0 8px var(--mo-blue)}
+
+/* ── 顶栏 / 子页顶栏 ── */
+body.shell-morpho .chat-header,body.shell-morpho .sub-header{background:var(--mo-glass);border-bottom:1px solid var(--mo-line);box-shadow:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+body.shell-morpho .chat-header .chat-name{font-weight:400!important;letter-spacing:.3em;font-size:15px!important}
+
+/* ── 气泡：他 = 白卡片 + 一道闪蝶蓝的边；她 = 实心闪蝶蓝 ── */
+body.shell-morpho .bubble{padding:9px 14px;line-height:1.75;letter-spacing:.02em}
+body.shell-morpho .bubble.them{background:var(--card)!important;color:var(--text)!important;border:1px solid var(--mo-line)!important;border-radius:18px 18px 18px 6px;box-shadow:var(--mo-lift)}
+body.shell-morpho .bubble.them::before{content:"";position:absolute;left:-1px;top:12px;bottom:12px;width:2px;border-radius:2px;background:linear-gradient(180deg,#46BFFF,#1E55F5)}
+body.shell-morpho .bubble.me{background:var(--mo-mine)!important;color:#fff!important;border:0!important;border-radius:18px 18px 6px 18px;box-shadow:0 8px 22px -10px rgba(30,90,255,.55),inset 0 1px 0 rgba(255,255,255,.18)}
+body.shell-morpho.mo-night .bubble.them{background:rgba(255,255,255,.035)!important}
+
+/* ── 输入条：一条胶囊，发送键是一颗闪蝶蓝 ── */
+body.shell-morpho .chat-input-bar{background:var(--mo-glass);border-top:1px solid var(--mo-line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+body.shell-morpho .chat-input-bar textarea{background:var(--card);border:1px solid var(--mo-line);border-radius:22px;padding:10px 16px}
+body.shell-morpho .send-btn{background:var(--mo-line);color:var(--sub)}
+body.shell-morpho .send-btn.active{background:conic-gradient(from 220deg,#0A1F78,#46BFFF,#B8F1FF,#1E55F5,#0A1F78);color:#fff;box-shadow:0 0 16px rgba(40,110,255,.4)}
+
+/* ══ 首页 ══ */
+body.shell-morpho .mo-home{position:relative;padding:0 26px 90px;overflow-x:hidden}
+.mo-home::before{content:"";position:absolute;left:-20%;right:-20%;top:40px;height:380px;pointer-events:none;background:radial-gradient(50% 50% at 50% 50%,var(--mo-glow),transparent 70%)}
+body.shell-morpho .mo-top{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:baseline;margin:0 -26px;padding:max(22px,env(safe-area-inset-top,0px)) 26px 12px;background:var(--mo-glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.mo-top b{font-weight:400;font-size:11px;letter-spacing:.6em;color:var(--text)}
+.mo-date,.mo-tag,.mo-i,.mo-n small,.mo-last-hd span:last-child,.mo-ino{font-family:"Cormorant Garamond","Bitstream Charter","Times New Roman",serif;font-style:italic}
+.mo-date{font-size:12px;letter-spacing:.14em;color:var(--sub)}
+.mo-top2{display:flex;justify-content:flex-end;margin-top:0}
+.mo-sw{display:inline-flex;gap:4px}
+.mo-sw button{font:inherit;font-size:10px;letter-spacing:.1em;color:var(--sub);background:transparent;border:1px solid var(--mo-line);border-radius:999px;padding:3px 8px;cursor:pointer}
+.mo-sw button.on{color:var(--text);border-color:var(--text)}
+.mo-stage{position:relative;display:flex;justify-content:center;margin:0 auto;width:min(72%,280px);perspective:700px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mo-fly{width:100%;display:block;filter:var(--mo-fly) hue-rotate(var(--mo-hue,0deg)) brightness(var(--mo-br,1));transform:rotateX(var(--mo-rx,0deg)) rotateY(var(--mo-ry,0deg));transition:filter .25s,transform .25s;animation:moBreath 5.5s ease-in-out infinite;transform-origin:50% 50%;-webkit-user-drag:none;user-select:none}
+@keyframes moBreath{0%,100%{scale:1 1}50%{scale:.94 1}}
+.mo-fly.flap{animation:moFlap .7s ease-in-out}
+@keyframes moFlap{0%,100%{scale:1 1}20%{scale:.28 1}40%{scale:1 1}60%{scale:.34 1}80%{scale:1 1}}
+.mo-no{text-align:center;margin-top:12px}
+.mo-n{font-family:"Cormorant Garamond","Bitstream Charter","Times New Roman",serif;font-size:58px;line-height:1;letter-spacing:.02em}
+.mo-n small{font-size:18px;vertical-align:top;margin-right:6px;color:var(--sub)}
+/* 数字里填的是真鳞片 */
+.mo-scale{background:url(morpho/scales.webp) 40% 40%/240px,linear-gradient(100deg,#0E3FD0,#1A5CFF 45%,#41A8FF 60%);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:700}
+.mo-no p{margin-top:12px;font-size:12px;letter-spacing:.42em;color:var(--text);opacity:.85}
+.mo-tag{display:flex;justify-content:space-between;margin:20px 36px 0;padding-top:10px;border-top:1px solid var(--mo-line);font-size:10.5px;color:var(--sub)}
+.mo-menu{margin-top:20px}
+body.shell-morpho .mo-row{display:grid;grid-template-columns:34px 1fr auto 16px;align-items:center;width:100%;height:46px;padding:0;background:transparent;border:0;border-bottom:1px solid var(--mo-line);border-radius:0;color:var(--text);font:inherit;text-align:left;cursor:pointer;box-shadow:none}
+.mo-i{font-size:12px;color:var(--sub)}
+.mo-t{font-size:14.5px;letter-spacing:.3em}
+.mo-s{font-size:10.5px;color:var(--sub);letter-spacing:.08em}
+.mo-ar{font-size:11px;color:var(--sub);text-align:right}
+body.shell-morpho .mo-row.on{border-bottom-color:var(--mo-blue)}
+.mo-row.on .mo-t,.mo-row.on .mo-ar{color:var(--mo-blue)}
+.mo-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--mo-blue);box-shadow:0 0 8px var(--mo-blue);margin-left:8px;vertical-align:middle}
+.mo-all .mo-t{letter-spacing:.3em;color:var(--sub)}
+.mo-idx{padding:4px 0 6px;animation:moIn .3s ease}
+@keyframes moIn{from{opacity:0;transform:translateY(-4px)}}
+.mo-idx-grp{font-size:9.5px;letter-spacing:.4em;color:var(--sub);margin:16px 0 4px}
+body.shell-morpho .mo-irow{display:grid;grid-template-columns:30px 1fr auto;align-items:center;width:100%;height:38px;padding:0;background:transparent;border:0;border-bottom:1px dashed var(--mo-line);border-radius:0;color:var(--text);font:inherit;text-align:left;box-shadow:none;cursor:pointer}
+.mo-ino{font-size:11px;color:var(--sub)}
+.mo-inm{font-size:13px;letter-spacing:.2em}
+.mo-ist{font-size:10px;color:var(--sub)}
+body.shell-morpho .mo-last{display:block;width:100%;margin-top:26px;padding:14px 16px;border-radius:14px;background:var(--card);border:1px solid var(--mo-line);box-shadow:var(--mo-lift);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.mo-last-hd{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.32em;color:var(--sub);margin-bottom:8px}
+.mo-last-p{display:block;font-size:13.5px;line-height:1.75;letter-spacing:.05em}
+
+/* ══ 聊天：落在他新消息上的小闪蝶 ══ */
+body.shell-morpho .bubble.mo-perched{overflow:visible}
+.mo-perch{position:absolute;right:-10px;top:-16px;width:30px;height:30px;pointer-events:none;z-index:3}
+.mo-perch img{width:100%;display:block;filter:drop-shadow(0 3px 3px rgba(20,40,110,.25));animation:moRest 6s ease-in-out infinite;transform-origin:50% 60%}
+@keyframes moRest{0%,100%{scale:.32 1;rotate:-14deg}45%{scale:.32 1;rotate:-14deg}55%{scale:.8 1;rotate:-14deg}65%{scale:.32 1;rotate:-14deg}}
+.mo-perch.arrive{animation:moArrive 1.6s cubic-bezier(.3,.7,.3,1) both}
+.mo-perch.arrive img{animation:moBeat .16s ease-in-out 8,moRest 6s ease-in-out 1.3s infinite}
+@keyframes moArrive{0%{transform:translate(160px,-120px) rotate(18deg);opacity:0}15%{opacity:1}55%{transform:translate(40px,-50px) rotate(-6deg)}80%{transform:translate(-6px,4px) rotate(0)}100%{transform:none}}
+@keyframes moBeat{0%,100%{scale:1 1;rotate:-14deg}50%{scale:.2 1;rotate:-14deg}}
+@media (prefers-reduced-motion:reduce){.mo-fly,.mo-perch img,.mo-perch.arrive,.mo-perch.arrive img{animation:none}}

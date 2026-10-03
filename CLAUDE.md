@@ -48,7 +48,7 @@
 - **新功能的模块：**
   - 现在的做法是在 `frontend/doodle/` 下各放一个 `xxx.js` + `xxx.css`，在 `00_prefix.html` 里 include。
   - 核心里只留一行钩子，形如 `if(typeof Xxx!=="undefined") return Xxx.page();`。
-  - 已有的模块：`paper`（日记/纸条/信箱）、`album`（拍立得相册）、`tree`（记忆树）、`coupon`（券本）、`body`（白蛇身体页 + 体检单）、`sigillo`（火漆回执）、`dream`（梦簿 + 梦糖 + 钱包糖果铺）、`calc`（钱包 → 她生图的水晶小鱼干计算器，按键是盖在图上的透明按钮）。
+  - 已有的模块：`paper`（日记/纸条/信箱）、`album`（拍立得相册）、`tree`（记忆树）、`coupon`（券本）、`body`（白蛇身体页 + 体检单）、`sigillo`（火漆回执）、`dream`（梦簿 + 梦糖 + 钱包糖果铺）、`calc`（钱包 → 她生图的水晶小鱼干计算器，按键是盖在图上的透明按钮）、`morpho`（蓝闪蝶壳，uiShell="morpho"，昼/夜/自动三档）。
 - **给他的提示词：**
   - 静态块和动态块分开放，保护缓存。
   - 每轮都会变的东西挂在 `chatTailBlock()` 的尾部，比如「新照片」「体检单医嘱」「嘴里的糖」。
@@ -59,6 +59,7 @@
   - `frontend/tests/*.test.cjs` 四个单测，提交前都要跑。
 - **网络：** 出口代理会拦截 freesound、wikimedia、Google Fonts，所以截图里的花体字和毛笔字会是替代字体，真机上正常。
 
+- 蓝闪蝶壳：她生的蝴蝶和鳞片图在 `frontend/doodle/morpho/`。合翅侧面那张棕色的她嫌太「虫」，没用，新消息的小蝴蝶用正面那只。设计稿在 `design/morpho/`。
 - 她想以后做一个文艺/日式壳。第一版设计稿在 `design/wa/`，她说「很好看，留着下次做」。
 
 ## 别做的事
